@@ -12038,8 +12038,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 30)
-      throw Exception('unexpected arr length: expect 30 but see ${arr.length}');
+    if (arr.length != 31)
+      throw Exception('unexpected arr length: expect 31 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -12060,17 +12060,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       gradientStartY: dco_decode_bridge_scalar(arr[16]),
       gradientEndX: dco_decode_bridge_scalar(arr[17]),
       gradientEndY: dco_decode_bridge_scalar(arr[18]),
-      offsetAmount: dco_decode_bridge_scalar(arr[19]),
-      repeatCopies: dco_decode_bridge_scalar(arr[20]),
-      repeatOffset: dco_decode_bridge_scalar(arr[21]),
-      repeatAnchorX: dco_decode_bridge_scalar(arr[22]),
-      repeatAnchorY: dco_decode_bridge_scalar(arr[23]),
-      repeatPositionX: dco_decode_bridge_scalar(arr[24]),
-      repeatPositionY: dco_decode_bridge_scalar(arr[25]),
-      repeatRotation: dco_decode_bridge_scalar(arr[26]),
-      repeatScale: dco_decode_bridge_scalar(arr[27]),
-      repeatStartOpacity: dco_decode_bridge_scalar(arr[28]),
-      repeatEndOpacity: dco_decode_bridge_scalar(arr[29]),
+      combine: dco_decode_u_32(arr[19]),
+      offsetAmount: dco_decode_bridge_scalar(arr[20]),
+      repeatCopies: dco_decode_bridge_scalar(arr[21]),
+      repeatOffset: dco_decode_bridge_scalar(arr[22]),
+      repeatAnchorX: dco_decode_bridge_scalar(arr[23]),
+      repeatAnchorY: dco_decode_bridge_scalar(arr[24]),
+      repeatPositionX: dco_decode_bridge_scalar(arr[25]),
+      repeatPositionY: dco_decode_bridge_scalar(arr[26]),
+      repeatRotation: dco_decode_bridge_scalar(arr[27]),
+      repeatScale: dco_decode_bridge_scalar(arr[28]),
+      repeatStartOpacity: dco_decode_bridge_scalar(arr[29]),
+      repeatEndOpacity: dco_decode_bridge_scalar(arr[30]),
     );
   }
 
@@ -15178,6 +15179,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_gradientStartY = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndX = sse_decode_bridge_scalar(deserializer);
     var var_gradientEndY = sse_decode_bridge_scalar(deserializer);
+    var var_combine = sse_decode_u_32(deserializer);
     var var_offsetAmount = sse_decode_bridge_scalar(deserializer);
     var var_repeatCopies = sse_decode_bridge_scalar(deserializer);
     var var_repeatOffset = sse_decode_bridge_scalar(deserializer);
@@ -15209,6 +15211,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gradientStartY: var_gradientStartY,
         gradientEndX: var_gradientEndX,
         gradientEndY: var_gradientEndY,
+        combine: var_combine,
         offsetAmount: var_offsetAmount,
         repeatCopies: var_repeatCopies,
         repeatOffset: var_repeatOffset,
@@ -18463,6 +18466,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.gradientStartY, serializer);
     sse_encode_bridge_scalar(self.gradientEndX, serializer);
     sse_encode_bridge_scalar(self.gradientEndY, serializer);
+    sse_encode_u_32(self.combine, serializer);
     sse_encode_bridge_scalar(self.offsetAmount, serializer);
     sse_encode_bridge_scalar(self.repeatCopies, serializer);
     sse_encode_bridge_scalar(self.repeatOffset, serializer);

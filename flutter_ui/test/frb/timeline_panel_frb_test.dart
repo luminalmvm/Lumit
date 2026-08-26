@@ -1548,6 +1548,7 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1647,6 +1648,7 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1718,6 +1720,7 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1761,6 +1764,78 @@ void main() {
       expect(find.text('Gradient start x'), findsOneWidget);
     });
 
+    /// The Combine row belongs to the item **above**: the first piece of art
+    /// in the list has nothing in front of it to join, and an item that joins
+    /// the run lends its path and nothing else (K-605).
+    testWidgets('a shape item after the first carries the Combine row',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      BridgeShapeItem art(String name, double x, double y) => BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: name,
+            vertices: [
+              corner(x, y),
+              corner(x + 40, y),
+              corner(x + 40, y + 40),
+              corner(x, y + 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          );
+      final layer = p.comp.addShapeLayer(
+        name: 'Art',
+        contents: [art('Base', 0, 0), art('Cutter', 20, 20)],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      // One row, on the second item — the first has nothing above it to join.
+      expect(find.text('Combine'), findsOneWidget);
+      final second = layer.getShapeContents()[1];
+      final dropdown =
+          find.byKey(ValueKey<String>('tl-shape-combine-${second.id}'));
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Subtract').last);
+      await tester.pumpAndSettle();
+
+      expect(layer.getShapeContents()[1].combine, 2);
+      // Joined, the second item lends its path and nothing else: the run wears
+      // the first item's paint and modifiers, so only one set of rows is left.
+      expect(find.text('Trim start'), findsOneWidget);
+      expect(find.text('Fill'), findsOneWidget);
+    });
+
     /// The repeater's step is nine rows of nothing until there is more than
     /// one copy to step between, so Copies is the row that opens them (K-553).
     testWidgets('a repeated shape item carries the repeater rows',
@@ -1796,6 +1871,7 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1867,6 +1943,7 @@ void main() {
             gradientStartY: const BridgeScalar.static_(0),
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),

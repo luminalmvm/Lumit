@@ -226,6 +226,11 @@ bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
 /// carries (K-555). None of the three is a number, so none of them keys, which
 /// is why they are a row kind of their own rather than more [ShapeValue]s.
 enum ShapePaint {
+  /// How this item joins the one before it: apart, union, subtract, intersect
+  /// or exclude (K-605). First, because it decides what the rest of the rows
+  /// are painting.
+  combine,
+
   /// The colour inside the path — and, where there is a ramp, the colour the
   /// ramp starts at.
   fill,
@@ -248,6 +253,7 @@ final class FoldShapePaintRow extends LayerFoldRow {
 
 /// What a shape item's paint row is called.
 String shapePaintLabel(ShapePaint which) => switch (which) {
+      ShapePaint.combine => l10n.shapeCombine,
       ShapePaint.fill => l10n.shapeFill,
       ShapePaint.gradient => l10n.shapeGradient,
       ShapePaint.gradientColour => l10n.shapeGradientColour,
@@ -670,6 +676,7 @@ BridgeShapeItem shapeItemWith(
   BridgeScalar? gradientStartY,
   BridgeScalar? gradientEndX,
   BridgeScalar? gradientEndY,
+  int? combine,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -690,6 +697,7 @@ BridgeShapeItem shapeItemWith(
         gradientStartY ?? at(ShapeValue.gradientStartY, item.gradientStartY),
     gradientEndX: gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
     gradientEndY: gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
+    combine: combine ?? item.combine,
     offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
     trimStart: at(ShapeValue.trimStart, item.trimStart),
     trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
@@ -1091,8 +1099,19 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (contentsOpen) {
-      for (final item in info.shapeContents) {
+      for (final (index, item) in info.shapeContents.indexed) {
         rows.add(FoldShapeRow(item, depth: 2));
+        // How this item joins the one before it (K-605). The first item of the
+        // list has nothing in front of it to join, so it has no such row.
+        if (index > 0) {
+          rows.add(FoldShapePaintRow(item, ShapePaint.combine, depth: 3));
+        }
+        // An item combined into the run in front of it lends its **path** and
+        // nothing else: the run is drawn once, with the paint and the modifiers
+        // of the item that starts it. Showing the rest of its rows would be a
+        // page of settings that change nothing, which is the promise K-552
+        // refused to make for a dash on a fill-only shape.
+        if (item.combine != 0) continue;
         // What the inside of the path is painted with comes first, because it
         // is what the rest of the rows modify (K-555). A shape with no fill
         // has no colour to show and nothing to ramp.

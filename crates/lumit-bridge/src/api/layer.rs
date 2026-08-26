@@ -145,6 +145,12 @@ pub struct BridgeShapeItem {
     pub gradient_start_y: BridgeScalar,
     pub gradient_end_x: BridgeScalar,
     pub gradient_end_y: BridgeScalar,
+    /// **A boolean combine** (K-605): how this item joins the item **before**
+    /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
+    /// from that one, 3 keeps only what both cover, 4 keeps only what one of
+    /// them covers. The run that makes is drawn once, with the paint and the
+    /// modifiers of the item that starts it.
+    pub combine: u32,
     /// **Offset paths** (K-554): how far the outline is pushed out of the path,
     /// in layer pixels; negative pulls it in and zero is the path itself.
     pub offset_amount: BridgeScalar,
@@ -196,6 +202,7 @@ impl BridgeShapeItem {
             gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
             gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
+            combine: item.combine,
             offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
             repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
             repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
@@ -263,6 +270,9 @@ impl BridgeShapeItem {
             )?,
             gradient_end_x: clamped_property(&self.gradient_end_x, offset, -100_000.0, 100_000.0)?,
             gradient_end_y: clamped_property(&self.gradient_end_y, offset, -100_000.0, 100_000.0)?,
+            // Five readings and no sixth: a number naming none of them draws
+            // the art on its own, which is the answer that shows something.
+            combine: if self.combine <= 4 { self.combine } else { 0 },
             // Layer pixels, out or in: both directions mean something, so only
             // the far ends are held.
             offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,

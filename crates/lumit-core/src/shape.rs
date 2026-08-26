@@ -24,7 +24,10 @@
 //! carries Trim Paths, the Repeater and the rest as entries in a nested group,
 //! where their position decides what they act on. Lumit's list is flat, so each
 //! modifier is a property of the item it modifies and the order they apply in is
-//! fixed and written down here rather than dragged: **trim, then repeat**. The
+//! fixed and written down here rather than dragged: **combine, then offset, then
+//! trim, then repeat**. A **combine** (K-605) is the one field that reaches past
+//! its own item: it says how this item's path joins the item before it, and the
+//! run that makes is drawn once with the first item's paint. The
 //! nested tree is still the long-term shape (docs/03 §9.2); nothing stored here
 //! stands in its way, because every modifier is absent from the file until it is
 //! used.
@@ -156,6 +159,21 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub gradient_end_y: Property,
+    /// **A boolean combine** (K-605): how this item joins the item **before**
+    /// it in the layer's list — 0 draws it on its own, 1 unions the two, 2
+    /// subtracts this one from that one, 3 keeps only what both cover and 4
+    /// keeps only what one of them covers.
+    ///
+    /// A run of items joined this way is drawn **once**, with the paint and the
+    /// modifiers of the *first* item in it: the ones after it lend their path
+    /// and nothing else. A combine on the very first item of the list has
+    /// nothing before it to join and draws on its own.
+    ///
+    /// A choice rather than a `Property`, for [`gradient`](Self::gradient)'s
+    /// reason: what a combine *is* does not tween, and a number half way
+    /// between subtract and intersect would have to mean something.
+    #[serde(default, skip_serializing_if = "is_flat")]
+    pub combine: u32,
     /// **Offset paths** (K-554): how far the outline is pushed **out** of the
     /// path, in layer pixels — negative pulls it in. Zero is the path itself
     /// and is absent from the file.
@@ -260,7 +278,8 @@ fn one() -> Property {
     Property::fixed(1.0)
 }
 
-/// True for a flat fill — no gradient, and so nothing written to the file.
+/// True for the zeroth reading of a choice — a flat fill, an item combined with
+/// nothing — and so nothing written to the file.
 fn is_flat(kind: &u32) -> bool {
     *kind == 0
 }
@@ -304,6 +323,7 @@ impl ShapeItem {
             gradient_start_y: Property::zero(),
             gradient_end_x: Property::zero(),
             gradient_end_y: Property::zero(),
+            combine: 0,
             offset_amount: Property::zero(),
             repeat_copies: one(),
             repeat_offset: Property::zero(),
@@ -339,22 +359,30 @@ impl ShapeItem {
     /// The order is **offset, then trim** (docs/03 §7.2.1): the offset makes
     /// the outline, and the trim cuts whatever outline there is by its length.
     fn trimmed_at(&self, t: f64) -> Option<Vec<(f64, f64)>> {
-        let amount = self.offset_amount.value_at(t);
-        if !self.trims_at(t) && amount == 0.0 {
+        if !self.trims_at(t) && self.offset_amount.value_at(t) == 0.0 {
             return None;
         }
-        let mut points = flatten_path(&self.path);
+        let points = flatten_path(&self.path);
         if points.len() < 2 {
             return None;
         }
+        Some(self.shaped(points, self.path.closed, t))
+    }
+
+    /// One polyline pushed out by this item's offset and cut by its trim — the
+    /// tail of [`trimmed_at`], shared so a **combined** run's contours (K-605)
+    /// are offset and trimmed by exactly the same arithmetic the item's own
+    /// path is.
+    fn shaped(&self, mut points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
+        let amount = self.offset_amount.value_at(t);
         if amount != 0.0 {
-            points = offset_polyline(&points, amount, self.path.closed);
+            points = offset_polyline(&points, amount, closed);
             if points.len() < 2 {
-                return Some(points);
+                return points;
             }
         }
         if !self.trims_at(t) {
-            return Some(points);
+            return points;
         }
         let (start, end) = (
             self.trim_start.value_at(t).clamp(0.0, 100.0),
@@ -362,7 +390,7 @@ impl ShapeItem {
         );
         // Degrees to per cent of the path: 360 is once round.
         let shift = self.trim_offset.value_at(t) / 3.6;
-        Some(if self.path.closed {
+        if closed {
             // A closed path has a seam to run through, so the offset moves the
             // seam rather than the window: re-start the polyline `shift` per
             // cent along, and the ordinary trim then cuts one contiguous piece
@@ -372,7 +400,7 @@ impl ShapeItem {
             // An open path has two ends. Sliding the window off either of them
             // is the window running out of path, which is what clamping says.
             crate::paint::trimmed(&points, start + shift, end + shift)
-        })
+        }
     }
 
     /// The gradient this item's fill is drawn with at `t`, placed by `to_box`
@@ -569,6 +597,14 @@ impl ShapeItem {
 /// it moves when the art is edited: a shape layer is the first kind whose size
 /// is not fixed by its source. Since K-553 it can also move as the art is
 /// *played*, because a keyed repeater puts copies somewhere new each frame.
+///
+/// **A combined run is still measured member by member** (K-605). Every
+/// boolean of two shapes lies inside the union of the two, so the box already
+/// holds it; working the combine out again here would cost the boolean a
+/// second time each frame to shave transparent pixels off the edge of a layer.
+/// A subtract or an intersect therefore leaves the layer bigger than its
+/// picture, which is the same generosity bounding a curve by its control
+/// points already allows.
 pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64, f64)> {
     let mut out: Option<(f64, f64, f64, f64)> = None;
     for item in contents {
@@ -579,6 +615,88 @@ pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64,
         });
     }
     out
+}
+
+/// The layer's contents split into the pieces that draw as **one** (K-605).
+///
+/// An item whose [`combine`](ShapeItem::combine) is 0 starts a run of its own;
+/// each item after it that names a combine joins the run in front of it. The
+/// very first item always starts a run, whatever it says, because there is
+/// nothing before it to join. A layer nobody has combined is therefore one run
+/// per item, which is the list this crate has always walked.
+fn runs(contents: &[ShapeItem]) -> Vec<std::ops::Range<usize>> {
+    let mut out: Vec<std::ops::Range<usize>> = Vec::new();
+    for (i, item) in contents.iter().enumerate() {
+        match out.last_mut() {
+            Some(run) if item.combine != 0 => run.end = i + 1,
+            _ => out.push(i..i + 1),
+        }
+    }
+    out
+}
+
+/// The contours a combined run draws at `t` (K-605), in the art's own
+/// coordinates and before the first item's offset and trim have had them.
+///
+/// The run is folded left to right — each item is combined with everything
+/// combined so far — so three items read as `(A ∪ B) − C`, which is the order
+/// they are written in. Every path is **flattened first**: the boolean works on
+/// polygons, so a curve is walked into one exactly as a trim walks it.
+///
+/// Degenerate input is a **no-op** rather than a refusal: a member with fewer
+/// than three points has no area to combine, and dropping the whole run over it
+/// would make a half-drawn path erase the art it was being joined to.
+fn combined_at(run: &[ShapeItem]) -> Vec<Vec<(f64, f64)>> {
+    use i_overlay::core::fill_rule::FillRule;
+    use i_overlay::core::overlay_rule::OverlayRule;
+    use i_overlay::float::single::SingleFloatOverlay;
+
+    /// A polygon the boolean can be handed: closed, at least a triangle, and
+    /// finite. Anything else is nothing to combine with.
+    fn polygon(item: &ShapeItem) -> Option<Vec<[f64; 2]>> {
+        let points = flatten_path(&item.path);
+        let out: Vec<[f64; 2]> = points
+            .iter()
+            .filter(|(x, y)| x.is_finite() && y.is_finite())
+            .map(|&(x, y)| [x, y])
+            .collect();
+        (out.len() >= 3).then_some(out)
+    }
+
+    let Some((first, rest)) = run.split_first() else {
+        return Vec::new();
+    };
+    let Some(subject) = polygon(first) else {
+        return Vec::new();
+    };
+    let mut acc: Vec<Vec<[f64; 2]>> = vec![subject];
+    for item in rest {
+        let rule = match item.combine {
+            1 => OverlayRule::Union,
+            2 => OverlayRule::Difference,
+            3 => OverlayRule::Intersect,
+            4 => OverlayRule::Xor,
+            // A reading nobody wrote down draws the art it was going to
+            // combine with, which is the answer that shows something.
+            _ => continue,
+        };
+        let Some(clip) = polygon(item) else { continue };
+        // **Even-odd**, because that is the one rule this crate's rasteriser
+        // fills by, for masks and shapes alike. Reading the input the same way
+        // the picture already reads it is what makes combining honest: a
+        // pentagram drawn in one stroke has a hollow middle before the union
+        // and a hollow middle after it. After Effects would fill that middle
+        // (its default is non-zero), and the day a fill rule becomes a choice
+        // this is the line that reads it.
+        let shapes = acc.overlay(&vec![clip], rule, FillRule::EvenOdd);
+        acc = shapes.into_iter().flatten().collect();
+        if acc.is_empty() {
+            return Vec::new();
+        }
+    }
+    acc.into_iter()
+        .map(|c| c.into_iter().map(|[x, y]| (x, y)).collect())
+        .collect()
 }
 
 /// Draw `contents` into a fresh `w`×`h` RGBA buffer whose extent is the box
@@ -614,17 +732,45 @@ pub fn rasterise_contents(
     let sx = f64::from(w) / (max_x - min_x).max(1e-9);
     let sy = f64::from(h) / (max_y - min_y).max(1e-9);
 
-    for item in contents {
+    for run in runs(contents) {
+        // A combined run is drawn once, with the paint and the modifiers of the
+        // **first** item in it (K-605); the ones after it lend their path and
+        // nothing else. A run of one is every shape nobody has combined.
+        let ring = run.len() > 1;
+        let Some(item) = contents.get(run.start) else {
+            continue;
+        };
         let opacity = (item.opacity.clamp(0.0, 100.0) / 100.0) as f32;
         if opacity <= 0.0 {
             continue;
         }
-        // The art at this instant, once the modifiers have had it. `None` is
-        // "nothing has changed it", which draws the bezier itself.
-        let trimmed = item.trimmed_at(t);
-        if trimmed.as_ref().is_some_and(|p| p.len() < 2) {
-            continue; // trimmed away to nothing: the first frame of a write-on
-        }
+        // The art at this instant, once the combine and the modifiers have had
+        // it. `None` is "nothing has changed it", which draws the bezier itself.
+        let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
+            Some(
+                combined_at(&contents[run.clone()])
+                    .into_iter()
+                    .map(|c| item.shaped(c, true, t))
+                    .collect(),
+            )
+        } else {
+            item.trimmed_at(t).map(|p| vec![p])
+        };
+        // A boolean's contours close on themselves; a trimmed piece has two
+        // ends whatever the path it was cut from had.
+        let closed = ring || item.path.closed;
+        let lines = match lines {
+            Some(lines) => {
+                let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
+                if lines.is_empty() {
+                    // Trimmed away to nothing (the first frame of a write-on),
+                    // or a combine that left no art at all.
+                    continue;
+                }
+                Some(lines)
+            }
+            None => None,
+        };
 
         // The copies the repeater asks for (K-553), drawn **last first** so the
         // original ends up on top of the copies made from it — which is what
@@ -641,20 +787,29 @@ pub fn rasterise_contents(
             // placed. An item nobody has repeated is placed by the identity, so
             // this is exactly the subtraction it has always been.
             let to_box = copy.then(&Affine::translation(-min_x, -min_y));
-            let placed = match &trimmed {
-                // A trimmed piece is a polyline, and a polyline is a bezier
-                // whose handles are all zero — one path type, still (K-237).
-                // Closed so the fill has something to fill: a half-trimmed
-                // circle fills as a half circle, exactly as AE draws it.
-                Some(points) => polyline_path(
-                    &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
-                    item.path.closed,
-                ),
-                None => transform_path(&item.path, &to_box),
+            let placed: Vec<BezierPath> = match &lines {
+                // A trimmed piece or a boolean's contour is a polyline, and a
+                // polyline is a bezier whose handles are all zero — one path
+                // type, still (K-237). Closed so the fill has something to
+                // fill: a half-trimmed circle fills as a half circle, exactly
+                // as AE draws it.
+                Some(lines) => lines
+                    .iter()
+                    .map(|points| {
+                        polyline_path(
+                            &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
+                            closed,
+                        )
+                    })
+                    .collect(),
+                None => vec![transform_path(&item.path, &to_box)],
             };
 
             if let Some(fill) = item.fill {
-                let coverage = crate::mask::rasterise(&placed, w, h, sx, sy);
+                // All the contours at once, so a boolean's hole is a hole: the
+                // even-odd crossings have to be counted across the whole shape,
+                // not one ring at a time (K-605).
+                let coverage = crate::mask::rasterise_paths(&placed, w, h, sx, sy);
                 // A gradient fill (K-555) is the same coverage painted with a
                 // colour that changes across it; the flat fill is the same
                 // walk with the colour worked out once.
@@ -690,11 +845,9 @@ pub fn rasterise_contents(
                 // for both, rather than two that can disagree (K-237).
                 // The outline follows the trimmed piece, and it is drawn **open**
                 // whatever the path was: a trim is what turns a closed ring into a
-                // stroke with two ends.
-                let points: Vec<(f64, f64)> = match &trimmed {
-                    Some(_) => placed.vertices.iter().map(|v| v.pos).collect(),
-                    None => flatten_path(&placed),
-                };
+                // stroke with two ends. A **boolean's** contour is a ring and is
+                // outlined all the way round, so it comes back to its first point
+                // (K-605).
                 // A copy is a scaled **drawing**, not a scaled path: its outline
                 // and its dashes grow with it, or a copy at half size would be a
                 // shape with an outline twice as heavy.
@@ -703,11 +856,23 @@ pub fn rasterise_contents(
                 // of its own (K-552). A solid outline is one piece, which is the
                 // same single run it always was.
                 let pattern: Vec<f64> = item.dash_pattern_at(t).iter().map(|d| d * scale).collect();
-                let pieces = if pattern.is_empty() {
-                    vec![points]
-                } else {
-                    dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
-                };
+                let pieces: Vec<Vec<(f64, f64)>> = placed
+                    .iter()
+                    .flat_map(|path| {
+                        let mut points: Vec<(f64, f64)> = match &lines {
+                            Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
+                            None => flatten_path(path),
+                        };
+                        if let (true, Some(&first)) = (ring, points.first()) {
+                            points.push(first);
+                        }
+                        if pattern.is_empty() {
+                            vec![points]
+                        } else {
+                            dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
+                        }
+                    })
+                    .collect();
                 let brushes: Vec<crate::paint::PaintStroke> = pieces
                     .into_iter()
                     .filter(|p| p.len() >= 2)
@@ -2047,6 +2212,194 @@ mod tests {
             100.0,
             "the default is kept"
         );
+    }
+
+    /// Two overlapping squares — A at 0..20, B at 10..30 — combined by `kind`
+    /// and drawn into their shared 30×30 box. The three probes are the corner
+    /// only A covers, the middle both cover, and the corner only B covers.
+    fn combined(kind: u32) -> (u8, u8, u8) {
+        let mut b = item(square(10.0, 10.0, 20.0));
+        b.combine = kind;
+        b.fill = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        let contents = vec![item(square(0.0, 0.0, 20.0)), b];
+        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
+        (
+            alpha_at(&rgba, 30, 5, 5),
+            alpha_at(&rgba, 30, 15, 15),
+            alpha_at(&rgba, 30, 25, 25),
+        )
+    }
+
+    #[test]
+    fn a_union_covers_what_either_path_covered() {
+        assert_eq!(combined(1), (255, 255, 255));
+    }
+
+    #[test]
+    fn a_subtract_takes_the_second_path_out_of_the_first() {
+        assert_eq!(combined(2), (255, 0, 0));
+    }
+
+    #[test]
+    fn an_intersect_keeps_only_what_both_paths_covered() {
+        assert_eq!(combined(3), (0, 255, 0));
+    }
+
+    #[test]
+    fn an_exclude_keeps_what_exactly_one_path_covered() {
+        assert_eq!(combined(4), (255, 0, 255));
+    }
+
+    #[test]
+    fn a_reading_nobody_wrote_down_leaves_the_art_it_was_joining() {
+        // 99 is no combine at all, so the run draws its first item alone.
+        assert_eq!(combined(99), (255, 255, 0));
+    }
+
+    #[test]
+    fn a_subtracted_hole_is_a_hole_and_the_ring_round_it_is_filled() {
+        // The case a single contour cannot express: one square with another
+        // taken out of its middle is two rings, and the fill has to count the
+        // crossings across both at once.
+        let mut hole = item(square(10.0, 10.0, 10.0));
+        hole.combine = 2;
+        let contents = vec![item(square(0.0, 0.0, 30.0)), hole];
+        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
+        assert_eq!(alpha_at(&rgba, 30, 15, 15), 0, "the middle is empty");
+        for (x, y) in [(5, 5), (25, 25), (5, 25), (25, 5)] {
+            assert_eq!(alpha_at(&rgba, 30, x, y), 255, "the ring at {x},{y}");
+        }
+    }
+
+    #[test]
+    fn a_run_is_painted_by_the_item_that_starts_it() {
+        // The first item is red and the second green; the combined run is red.
+        assert_eq!(combined(1), (255, 255, 255));
+        let mut b = item(square(10.0, 10.0, 20.0));
+        b.combine = 1;
+        b.fill = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        let contents = vec![item(square(0.0, 0.0, 20.0)), b];
+        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
+        assert_eq!(
+            rgb_at(&rgba, 30, 25, 25),
+            [255, 0, 0],
+            "the first item's red"
+        );
+    }
+
+    #[test]
+    fn a_combine_on_the_first_item_has_nothing_to_join_and_draws_alone() {
+        let mut only = item(square(0.0, 0.0, 20.0));
+        only.combine = 2;
+        let rgba = rasterise_contents(&[only], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert_eq!(alpha_at(&rgba, 20, 10, 10), 255);
+    }
+
+    #[test]
+    fn a_run_folds_left_to_right_so_three_items_read_in_order() {
+        // (A ∪ B) − C: the union covers 0..30, and C takes 10..20 back out.
+        let mut b = item(square(15.0, 0.0, 15.0));
+        b.combine = 1;
+        let mut c = item(square(10.0, 0.0, 10.0));
+        c.combine = 2;
+        let contents = vec![item(square(0.0, 0.0, 15.0)), b, c];
+        let rgba = rasterise_contents(&contents, 30, 10, 0.0, 0.0, 30.0, 10.0, 0.0);
+        assert_eq!(alpha_at(&rgba, 30, 5, 5), 255, "A survives");
+        assert_eq!(alpha_at(&rgba, 30, 15, 5), 0, "C cut the middle out");
+        assert_eq!(alpha_at(&rgba, 30, 25, 5), 255, "B survives");
+    }
+
+    /// A pentagram: five points, drawn in one stroke so the path crosses itself
+    /// twice on the way round. Even-odd leaves the pentagon in the middle
+    /// empty; non-zero would fill it.
+    fn pentagram(cx: f64, cy: f64, r: f64) -> BezierPath {
+        let points: Vec<(f64, f64)> = (0..5)
+            .map(|i| {
+                // Two fifths of a turn each step is what makes it one stroke.
+                let a =
+                    -std::f64::consts::FRAC_PI_2 + (i as f64) * 4.0 * std::f64::consts::PI / 5.0;
+                (cx + r * a.cos(), cy + r * a.sin())
+            })
+            .collect();
+        polyline_path(&points, true)
+    }
+
+    #[test]
+    fn a_path_that_crosses_itself_combines_the_way_it_already_filled() {
+        let hollow = |contents: &[ShapeItem]| {
+            let rgba = rasterise_contents(contents, 60, 60, 0.0, 0.0, 60.0, 60.0, 0.0);
+            (alpha_at(&rgba, 60, 30, 30), alpha_at(&rgba, 60, 30, 12))
+        };
+        let star = item(pentagram(30.0, 30.0, 28.0));
+        let alone = hollow(std::slice::from_ref(&star));
+        // Union with a square far outside the star: the star's own pixels are
+        // decided by the boolean now rather than by the rasteriser alone.
+        let mut away = item(square(0.0, 0.0, 2.0));
+        away.combine = 1;
+        let joined = hollow(&[star, away]);
+        assert_eq!(alone.0, 0, "the middle is empty on its own");
+        assert_eq!(joined.0, 0, "and empty after the union");
+        assert_eq!(alone.1, 255, "a point is solid on its own");
+        assert_eq!(joined.1, 255, "and solid after the union");
+    }
+
+    #[test]
+    fn a_combined_outline_is_drawn_all_the_way_round_the_ring() {
+        // The seam a trim leaves open, a boolean closes: the contour comes back
+        // to its first point, so there is ink on every side of the result.
+        let mut a = item(square(0.0, 0.0, 20.0));
+        a.fill = None;
+        a.stroke = Some(LinearColour([1.0, 1.0, 1.0, 1.0]));
+        a.stroke_width = 2.0;
+        let mut b = item(square(10.0, 10.0, 20.0));
+        b.combine = 1;
+        let contents = vec![a, b];
+        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
+        for (x, y) in [(10u32, 0u32), (0, 10), (25, 29), (29, 25)] {
+            assert!(
+                alpha_at(&rgba, 30, x, y) > 0,
+                "the outline reaches {x},{y}: {}",
+                alpha_at(&rgba, 30, x, y)
+            );
+        }
+        assert_eq!(alpha_at(&rgba, 30, 5, 5), 0, "and the inside is not filled");
+    }
+
+    #[test]
+    fn the_box_holds_every_member_of_a_combined_run() {
+        // Intersect draws far less than either square, and the box is still
+        // both of them — never too small, and never worked out twice.
+        let mut b = item(square(10.0, 10.0, 20.0));
+        b.combine = 3;
+        let contents = vec![item(square(0.0, 0.0, 20.0)), b];
+        assert_eq!(
+            contents_bounds(&contents, 0.0),
+            Some((0.0, 0.0, 30.0, 30.0))
+        );
+    }
+
+    #[test]
+    fn an_uncombined_item_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).unwrap();
+        assert!(!json.contains("combine"), "{json}");
+        let back: ShapeItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.combine, 0);
+
+        let mut joined = item(square(0.0, 0.0, 4.0));
+        joined.combine = 4;
+        let json = serde_json::to_string(&joined).unwrap();
+        assert!(json.contains("\"combine\":4"), "{json}");
+        assert_eq!(serde_json::from_str::<ShapeItem>(&json).unwrap().combine, 4);
+    }
+
+    #[test]
+    fn combining_a_shape_is_deterministic() {
+        let mut b = item(square(3.0, 3.0, 9.0));
+        b.combine = 2;
+        let contents = vec![item(square(0.0, 0.0, 10.0)), b];
+        let once = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
+        let twice = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
+        assert_eq!(once, twice);
     }
 
     #[test]

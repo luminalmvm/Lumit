@@ -11951,3 +11951,53 @@ the host said the right things in the right order. Four switches make them misbe
 purpose — crash on a named frame, never come back, shout endlessly, or ask for eleven
 frames like a retimer — because the only honest way to test what happens when a plugin dies
 is to have one die.
+
+## 32. Combining shapes, in plain terms
+
+A shape layer holds a list of drawn paths, and until now every one of them was drawn on its
+own: two overlapping rectangles were two overlapping rectangles. **Combining** is the pair of
+scissors that makes them one thing. Each piece of art after the first now carries a **Combine**
+choice saying how it joins the piece above it in the list — glue the two together (**Union**),
+cut this one out of that one (**Subtract**), keep only the part they share (**Intersect**), or
+keep everything except the part they share (**Exclude**). It is how you get a ring: draw a big
+circle, draw a small one on top of it, set the small one to Subtract.
+
+The pieces that are joined this way become **one drawing**. The paint — the colour, the
+outline, the trim, the repeater — comes from the piece at the top of the group, because that is
+the shape you started with; the ones below it hand over their outline and nothing else, which is
+why their own rows disappear from the panel the moment you join them. Nothing is thrown away:
+set the choice back to Apart and every setting is where you left it.
+
+### Why this needed a library
+
+Cutting one path out of another sounds like arithmetic and is not. The two outlines have to be
+chopped at every point where they cross, and then the machine has to work out which of the
+resulting fragments are on the outside of the answer and which are on the inside — including
+when the two paths touch without crossing, when three edges meet at one point, or when a path
+crosses *itself* on the way round. Every one of those is a special case, and a hand-written
+version gets nine of them right and the tenth wrong on somebody's frame at four in the morning.
+
+So Lumit does not hand-write it. It uses **iOverlay**, a small, well-tested Rust library that
+does exactly this one job. It was worth taking a new dependency for because nothing already in
+the repository could do it: Lumit's own path machinery can *draw* a path and can *cut a path by
+its length* (which is what a trim and a dash are), but neither of those tells you where two
+paths cross. The library also works on a fixed grid of whole numbers internally rather than in
+decimals, which matters here more than it sounds: it means the same two paths always produce
+the same answer, byte for byte, on every machine — the thing docs/14 asks of everything that
+touches a frame.
+
+### The two corners cut, and what they cost
+
+**The layer's box is not re-measured.** A shape layer's size is the box its art fills, and after
+a Subtract that box is bigger than the picture inside it — the cut-away part still counts. This
+is deliberate: working the combine out a second time every frame, just to shave transparent
+pixels off the edge of a layer, would cost more than it is worth. You will notice it only if you
+are looking at the layer's selection outline.
+
+**A path that crosses itself keeps the middle it already had.** Draw a five-pointed star in one
+continuous stroke and the pentagon in its centre comes out hollow, because Lumit fills by
+counting how many times a line from outside crosses the outline — an odd number means inside.
+After Effects counts differently and would fill that centre. Combining does not change the
+answer either way round: the star looks the same before and after it is joined to something,
+which is the property worth having. The day Lumit offers a fill-rule choice, this is the one
+line that reads it.

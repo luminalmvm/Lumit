@@ -591,6 +591,12 @@ opening a second viewport. Clicking it again goes back.
 - Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
   (K-551): Trim start, Trim end and Trim offset. A row rather than another control on the item's
   own row, because a property without a row has nowhere to put the stopwatch that animates it.
+- **Combine** heads the rows of every item **after the first** (K-605): an Apart / Union /
+  Subtract / Intersect / Exclude choice saying how this piece of art joins the piece above it in
+  the list. The first item has nothing in front of it to join, so it carries no such row. An item
+  set to anything but Apart shows **only** that row: it lends its path to the run and nothing
+  else, and the run is drawn with the paint and the modifiers of the item that starts it, so the
+  rest of its rows would be settings that change nothing. It does not key — a choice has no curve.
 - **Fill** and **Gradient** head an item's rows, on any item that has a fill (K-555): a colour
   swatch and a Flat / Linear / Radial choice. **Gradient colour** and the ramp's two points appear
   once the choice is not Flat. Switching a ramp on **aims it at the art's own box** — down it for

@@ -3958,6 +3958,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_start_y: BridgeScalar::Static(0.0),
         gradient_end_x: BridgeScalar::Static(0.0),
         gradient_end_y: BridgeScalar::Static(0.0),
+        combine: 0,
         offset_amount: BridgeScalar::Static(0.0),
         repeat_copies: BridgeScalar::Static(1.0),
         repeat_offset: BridgeScalar::Static(0.0),
@@ -4179,6 +4180,37 @@ fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
         shape.get_shape_contents().expect("contents")[0].gradient,
         0,
         "a reading nobody has is the flat fill"
+    );
+}
+
+/// A combine crosses as the choice it is, and a reading nobody wrote down is
+/// no combine at all (K-605).
+#[test]
+fn a_shapes_combine_round_trips_and_an_unknown_reading_draws_alone() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer(
+            "Art".into(),
+            vec![
+                shape_item("Rectangle", 0.0, 0.0, 10.0),
+                shape_item("Rectangle 2", 5.0, 5.0, 10.0),
+            ],
+        )
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[1].combine = 2;
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(shape.get_shape_contents().expect("contents")[1].combine, 2);
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[1].combine = 9;
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[1].combine,
+        0,
+        "a reading nobody has draws the art on its own"
     );
 }
 

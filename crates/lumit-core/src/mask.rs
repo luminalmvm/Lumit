@@ -545,36 +545,58 @@ pub fn resample(path: &BezierPath, target: usize) -> BezierPath {
 /// ratio so reduced-resolution decodes mask correctly. Even-odd fill,
 /// fractional-span horizontal AA, two vertical subsamples.
 pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8> {
+    rasterise_paths(std::slice::from_ref(path), w, h, sx, sy)
+}
+
+/// [`rasterise`], but for **several closed contours filled as one shape**.
+///
+/// In plain terms: a shape with a hole in it is two rings, and which pixels are
+/// inside depends on both of them at once. Rasterising each and combining the
+/// coverages afterwards is a different sum — it double-counts where two rings
+/// overlap — so the contours are walked together and the even-odd crossing
+/// count decides, exactly as it does for one ring. That is what makes a path
+/// boolean's result (K-605) fill with its holes empty: the crossings alternate
+/// in and out down every scanline, whichever ring they came from.
+///
+/// One contour hands back byte for byte what [`rasterise`] always did.
+pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8> {
     let mut coverage = vec![0u8; (w * h) as usize];
-    if path.vertices.len() < 3 || !path.closed {
-        return coverage;
-    }
 
     // Flatten cubics to polyline edges (fixed subdivision — paths are UI-drawn
     // and small; adaptive flattening arrives with the pen tool if needed).
     const SEGS: usize = 24;
-    let n = path.vertices.len();
-    let mut points: Vec<(f64, f64)> = Vec::with_capacity(n * SEGS);
-    for i in 0..n {
-        let a = &path.vertices[i];
-        let b = &path.vertices[(i + 1) % n];
-        let p0 = (a.pos.0 * sx, a.pos.1 * sy);
-        let p1 = ((a.pos.0 + a.tan_out.0) * sx, (a.pos.1 + a.tan_out.1) * sy);
-        let p2 = ((b.pos.0 + b.tan_in.0) * sx, (b.pos.1 + b.tan_in.1) * sy);
-        let p3 = (b.pos.0 * sx, b.pos.1 * sy);
-        for s in 0..SEGS {
-            let t = s as f64 / SEGS as f64;
-            let u = 1.0 - t;
-            let x = u * u * u * p0.0
-                + 3.0 * u * u * t * p1.0
-                + 3.0 * u * t * t * p2.0
-                + t * t * t * p3.0;
-            let y = u * u * u * p0.1
-                + 3.0 * u * u * t * p1.1
-                + 3.0 * u * t * t * p2.1
-                + t * t * t * p3.1;
-            points.push((x, y));
+    let mut contours: Vec<Vec<(f64, f64)>> = Vec::with_capacity(paths.len());
+    for path in paths {
+        if path.vertices.len() < 3 || !path.closed {
+            continue;
         }
+        let n = path.vertices.len();
+        let mut points: Vec<(f64, f64)> = Vec::with_capacity(n * SEGS);
+        for i in 0..n {
+            let a = &path.vertices[i];
+            let b = &path.vertices[(i + 1) % n];
+            let p0 = (a.pos.0 * sx, a.pos.1 * sy);
+            let p1 = ((a.pos.0 + a.tan_out.0) * sx, (a.pos.1 + a.tan_out.1) * sy);
+            let p2 = ((b.pos.0 + b.tan_in.0) * sx, (b.pos.1 + b.tan_in.1) * sy);
+            let p3 = (b.pos.0 * sx, b.pos.1 * sy);
+            for s in 0..SEGS {
+                let t = s as f64 / SEGS as f64;
+                let u = 1.0 - t;
+                let x = u * u * u * p0.0
+                    + 3.0 * u * u * t * p1.0
+                    + 3.0 * u * t * t * p2.0
+                    + t * t * t * p3.0;
+                let y = u * u * u * p0.1
+                    + 3.0 * u * u * t * p1.1
+                    + 3.0 * u * t * t * p2.1
+                    + t * t * t * p3.1;
+                points.push((x, y));
+            }
+        }
+        contours.push(points);
+    }
+    if contours.is_empty() {
+        return coverage;
     }
 
     // Scanline with two vertical subsamples per row.
@@ -584,11 +606,13 @@ pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8>
         for sub in 0..2 {
             let y = f64::from(row) + 0.25 + 0.5 * f64::from(sub);
             xs.clear();
-            for e in 0..points.len() {
-                let (x0, y0) = points[e];
-                let (x1, y1) = points[(e + 1) % points.len()];
-                if (y0 <= y && y1 > y) || (y1 <= y && y0 > y) {
-                    xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+            for points in &contours {
+                for e in 0..points.len() {
+                    let (x0, y0) = points[e];
+                    let (x1, y1) = points[(e + 1) % points.len()];
+                    if (y0 <= y && y1 > y) || (y1 <= y && y0 > y) {
+                        xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+                    }
                 }
             }
             xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));

@@ -13095,6 +13095,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_gradientStartY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_gradientEndY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_combine = <u32>::sse_decode(deserializer);
         let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -13127,6 +13128,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             gradient_start_y: var_gradientStartY,
             gradient_end_x: var_gradientEndX,
             gradient_end_y: var_gradientEndY,
+            combine: var_combine,
             offset_amount: var_offsetAmount,
             repeat_copies: var_repeatCopies,
             repeat_offset: var_repeatOffset,
@@ -18077,6 +18079,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.gradient_start_y.into_into_dart().into_dart(),
             self.gradient_end_x.into_into_dart().into_dart(),
             self.gradient_end_y.into_into_dart().into_dart(),
+            self.combine.into_into_dart().into_dart(),
             self.offset_amount.into_into_dart().into_dart(),
             self.repeat_copies.into_into_dart().into_dart(),
             self.repeat_offset.into_into_dart().into_dart(),
@@ -20511,6 +20514,7 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_y, serializer);
+        <u32>::sse_encode(self.combine, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);

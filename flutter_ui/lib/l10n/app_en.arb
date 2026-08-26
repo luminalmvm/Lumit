@@ -6133,6 +6133,30 @@
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "shapeCombine": "Combine",
+  "@shapeCombine": {
+    "description": "Timeline row under a shape layer's art: how this piece of art joins the piece above it in the list — apart, or one of the four boolean combines."
+  },
+  "shapeCombineApart": "Apart",
+  "@shapeCombineApart": {
+    "description": "One choice on a shape layer's Combine row: this piece of art is drawn on its own, not joined to the one above it."
+  },
+  "shapeCombineUnion": "Union",
+  "@shapeCombineUnion": {
+    "description": "One choice on a shape layer's Combine row: the combined art covers everything either path covered."
+  },
+  "shapeCombineSubtract": "Subtract",
+  "@shapeCombineSubtract": {
+    "description": "One choice on a shape layer's Combine row: this path is taken out of the one above it."
+  },
+  "shapeCombineIntersect": "Intersect",
+  "@shapeCombineIntersect": {
+    "description": "One choice on a shape layer's Combine row: only what both paths covered is kept."
+  },
+  "shapeCombineExclude": "Exclude",
+  "@shapeCombineExclude": {
+    "description": "One choice on a shape layer's Combine row: only what exactly one of the two paths covered is kept."
+  },
   "shapeDash": "Dash",
   "@shapeDash": {
     "description": "Timeline row under a shape layer's art: how long each dash of its outline is, in pixels."

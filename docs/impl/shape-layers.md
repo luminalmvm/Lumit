@@ -164,6 +164,44 @@ The gradient's points are in the art's own coordinates and are placed through
 the *copy's* transform, which is what makes a repeated copy carry its ramp
 rather than sample the original's.
 
+**Boolean combines.** The first modifier that could not be written here (K-605). Every one
+before it is arithmetic on a polyline this crate already walks — cut it by length, push it
+sideways, place a copy of it — and a boolean is not: it needs the points where two outlines
+cross, and then a decision about which of the fragments those cuts make are inside the answer.
+The ladder was climbed and nothing in the tree served. `mask::rasterise` gives coverage, not
+geometry, so combining coverages would leave a stroke with nothing honest to follow; the offset's
+own round-join walk knows nothing about intersections; there was no `lyon`, no `kurbo` and no
+`geo` in `Cargo.lock` to lean on. **`i_overlay` 8** was added for it — six small crates,
+MIT/Apache, and integer-grid inside, which is the determinism docs/14 asks for rather than
+something to be argued about afterwards.
+
+Four things fell out of it:
+
+* **The surface is one `u32` on the item, and it points backwards.** `BezierPath` is one ring
+  with no subpaths, so there was nothing inside an item to combine; the honest unit is two items
+  in the same layer. `combine` says how *this* item joins the one *before* it, which makes a run
+  out of a flat list with no new op, no new read model and no tree — the same trick K-551 played
+  to get modifiers without groups. Folding left to right means three items read `(A ∪ B) − C`,
+  in the order they are written.
+* **A run wears the first item's paint.** It has to wear somebody's, and the first item is the
+  shape you started with; the ones after it are cutters. The cost is that a member's own rows
+  describe nothing, so the panel leaves them out — the rule K-552 set for a dash on a fill-only
+  shape, applied again.
+* **Even-odd, not non-zero.** `i_overlay` will read the input either way. The rasteriser reads
+  it one way, and matching it is what makes joining a shape to something leave the shape looking
+  the same. After Effects would fill a self-crossing star's middle; Lumit's does not, before or
+  after a combine, which is the consistency worth more than the parity.
+* **The fill had to learn to count across contours.** A subtract is two rings, and which pixels
+  are inside depends on both at once — `mask::rasterise_paths` walks them together, and
+  `rasterise` is now a one-element call into it. Rasterising each ring and combining the
+  coverages afterwards would double-count every overlap.
+
+The box is **not** re-measured: every boolean of two shapes lies inside the union of the two, so
+the box the members already give is correct and never too small. A subtract leaves the layer
+larger than its picture, which is the same generosity bounding a curve by its control points
+already allows, and it costs nothing where working the combine out a second time each frame
+would.
+
 **Offset paths.** Thirty lines, and the temptation was to make it three hundred.
 The polyline is offset segment by segment, the corners that open are filled with
 a round join, and the corners that close are joined straight — which is where the

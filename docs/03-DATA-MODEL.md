@@ -868,6 +868,7 @@ struct ShapeItem {
     gradient_start_y: Property,
     gradient_end_x: Property,
     gradient_end_y: Property,
+    combine: u32,                     // 0 apart, 1 union, 2 subtract, 3 intersect, 4 exclude
     offset_amount: Property,          // layer pixels; out of the path, negative is in
     repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
     repeat_offset: Property,          // which copy the original is; may be negative
@@ -904,6 +905,23 @@ The op is `SetShapeContents` — the whole list, exactly invertible, like `SetLa
 `SetLayerPaint`.
 
 #### 7.2.1 The modifiers, and the order they apply in
+
+**A boolean combine** (K-605) is the one modifier that reaches past its own item: `combine` says
+how this item's path joins the item **before** it in the list — 0 draws it on its own, 1 unions
+the two, 2 subtracts this one from that one, 3 keeps only what both cover and 4 keeps only what
+exactly one covers. A run of items joined this way is drawn **once**, with the paint and the
+modifiers of the item that **starts** it; the ones after it lend their path and nothing else, and
+the panel leaves their own rows out for that reason. A combine on the first item of the list has
+nothing in front of it and draws alone. It is a choice rather than a `Property`, for the reason
+the gradient's kind is: what a combine *is* does not tween.
+
+The combine happens **first**, before the offset and the trim, which then act on each contour of
+the result. The fill is **even-odd**, the one rule this crate's rasteriser draws by — so a path
+that crosses itself keeps the middle it already had, where After Effects would fill it — and the
+contours of a result are drawn together rather than one at a time, which is what makes a
+subtracted hole a hole. The layer's box is still the union of the run's members: every boolean of
+two shapes lies inside that union, so the box already holds it, and a subtract simply leaves the
+layer larger than its picture.
 
 **Trim paths** (K-551) cut the item by its own **arc length**: `trim_start` and `trim_end` are a
 per cent of it, and `trim_offset` slides the pair along in degrees, 360 being once round. Per cent

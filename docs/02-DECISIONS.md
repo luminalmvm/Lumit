@@ -18359,3 +18359,73 @@ of the claim.
 applied when they are drawn is the *reading* layer's, because the consumer draws into its own
 rectangle and where the composition's camera puts that rectangle is the consumer's own
 placement (K-561). Nothing in `lumit-core` derives a camera, here as everywhere.
+
+## K-605 — Two shapes combine by pointing backwards, and the boolean is a library's
+
+**Status: DECIDED (2026-08-26).** The first half of K-564's shape operators. Amends
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and §7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and
+[impl/shape-layers.md](impl/shape-layers.md).
+
+**What combines with what.** A `BezierPath` is one ring; it has no subpaths, so there was nothing
+*inside* a shape item to combine and the honest unit is two items in the same layer. The surface
+is one number on the item — `combine: u32`, 0 apart, 1 union, 2 subtract, 3 intersect, 4 exclude —
+and it **points backwards**: it says how *this* item joins the item **before** it in the list. A
+maximal sequence of items whose combines are non-zero is a *run*, folded left to right, so three
+items read `(A ∪ B) − C` in the order they are written. A combine on the first item of the list
+has nothing in front of it and draws alone.
+
+This is K-551's trick played again. A run needs no group, no new op family, no read model and no
+Timeline hierarchy: the field sits beside `gradient`, it undoes through the same whole-list
+`SetShapeContents`, and it is absent from the file until it is used, so every `.lum` ever saved
+opens byte-identical and every frame banked for an uncombined shape stays valid. The alternative —
+a `Merge Paths` entry whose *position* in a nested list decides what it acts on, which is After
+Effects' shape — is the tree §9.2 still plans, and it re-homes this field rather than replacing
+it. The cost is named: **the run wears the first item's paint and modifiers**, because it has to
+wear somebody's and the first item is the shape you started with. The ones after it lend their
+path and nothing else, so the panel leaves their own rows out — K-552's rule about a dash row on
+a fill-only shape, applied again.
+
+**The algorithm is not ours.** Every modifier before this one is arithmetic on a polyline this
+crate already walks; a boolean is not. It needs the points where two outlines cross and then a
+decision about which fragments those cuts make are inside the answer, and getting nine degeneracies
+right and the tenth wrong is what a hand-written clipper does. The ladder was climbed and nothing
+in the tree served: `mask::rasterise` gives coverage rather than geometry (and combining coverages
+leaves a stroke with no honest outline to follow), the offset's round-join walk knows nothing about
+intersections, and `Cargo.lock` had no `lyon`, no `kurbo`, no `geo`. **`i_overlay` 8** was added to
+`lumit-core` for it: six small crates, MIT/Apache-2.0, no C, and an integer grid inside — which is
+the determinism docs/14 asks for rather than a property to argue about afterwards.
+
+**Even-odd, not non-zero.** `i_overlay` reads the input either way. This crate's rasteriser fills
+one way, for masks and shapes alike, and matching it is what makes joining a shape to something
+leave the shape looking the same: a five-pointed star drawn in one stroke has a hollow middle
+before the union and a hollow middle after it. After Effects would fill that middle — its shape
+fill rule defaults to non-zero — and the day Lumit offers a fill rule as a choice, this is the one
+line that reads it. Parity with AE mattered less than the picture not changing under the user.
+
+**The fill learned to count across contours.** A subtract is two rings and which pixels are inside
+depends on both at once, so `mask::rasterise_paths` walks a whole shape's contours together and
+`mask::rasterise` is now a one-element call into it — byte for byte what it was. Rasterising each
+ring and combining the coverages afterwards double-counts every overlap, which is the wrong sum.
+
+**The box is not re-measured.** Every boolean of two shapes lies inside the union of the two, so
+the box the members already give is correct and never too small. A subtract therefore leaves the
+layer larger than its picture, which is the same generosity bounding a curve by its control points
+already allows, and it costs nothing where working the combine out a second time each frame would.
+
+Regression tests: in `lumit-core`, `a_union_covers_what_either_path_covered`,
+`a_subtract_takes_the_second_path_out_of_the_first`,
+`an_intersect_keeps_only_what_both_paths_covered`,
+`an_exclude_keeps_what_exactly_one_path_covered`,
+`a_reading_nobody_wrote_down_leaves_the_art_it_was_joining`,
+`a_subtracted_hole_is_a_hole_and_the_ring_round_it_is_filled`,
+`a_run_is_painted_by_the_item_that_starts_it`,
+`a_combine_on_the_first_item_has_nothing_to_join_and_draws_alone`,
+`a_run_folds_left_to_right_so_three_items_read_in_order`,
+`a_path_that_crosses_itself_combines_the_way_it_already_filled`,
+`a_combined_outline_is_drawn_all_the_way_round_the_ring`,
+`the_box_holds_every_member_of_a_combined_run`, `an_uncombined_item_is_absent_from_the_file`,
+`combining_a_shape_is_deterministic`; in the bridge,
+`a_shapes_combine_round_trips_and_an_unknown_reading_draws_alone`; in Flutter,
+`a shape item after the first carries the Combine row`. New strings: `shapeCombine`,
+`shapeCombineApart`, `shapeCombineUnion`, `shapeCombineSubtract`, `shapeCombineIntersect`,
+`shapeCombineExclude`.

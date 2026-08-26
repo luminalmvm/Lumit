@@ -871,6 +871,13 @@ class BridgeShapeItem {
   final BridgeScalar gradientEndX;
   final BridgeScalar gradientEndY;
 
+  /// **A boolean combine** (K-596): how this item joins the item **before**
+  /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
+  /// from that one, 3 keeps only what both cover, 4 keeps only what one of
+  /// them covers. The run that makes is drawn once, with the paint and the
+  /// modifiers of the item that starts it.
+  final int combine;
+
   /// **Offset paths** (K-554): how far the outline is pushed out of the path,
   /// in layer pixels; negative pulls it in and zero is the path itself.
   final BridgeScalar offsetAmount;
@@ -915,6 +922,7 @@ class BridgeShapeItem {
     required this.gradientStartY,
     required this.gradientEndX,
     required this.gradientEndY,
+    required this.combine,
     required this.offsetAmount,
     required this.repeatCopies,
     required this.repeatOffset,
@@ -949,6 +957,7 @@ class BridgeShapeItem {
       gradientStartY.hashCode ^
       gradientEndX.hashCode ^
       gradientEndY.hashCode ^
+      combine.hashCode ^
       offsetAmount.hashCode ^
       repeatCopies.hashCode ^
       repeatOffset.hashCode ^
@@ -985,6 +994,7 @@ class BridgeShapeItem {
           gradientStartY == other.gradientStartY &&
           gradientEndX == other.gradientEndX &&
           gradientEndY == other.gradientEndY &&
+          combine == other.combine &&
           offsetAmount == other.offsetAmount &&
           repeatCopies == other.repeatCopies &&
           repeatOffset == other.repeatOffset &&

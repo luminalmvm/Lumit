@@ -6041,6 +6041,23 @@ class _ShapePaintRow extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: switch (which) {
+              // Apart, or one of the four ways two paths combine (K-605).
+              ShapePaint.combine => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.combine <= 4 ? item.combine : 0,
+                    options: const [0, 1, 2, 3, 4],
+                    label: (k) => switch (k) {
+                      1 => l10n.shapeCombineUnion,
+                      2 => l10n.shapeCombineSubtract,
+                      3 => l10n.shapeCombineIntersect,
+                      4 => l10n.shapeCombineExclude,
+                      _ => l10n.shapeCombineApart,
+                    },
+                    onChanged: (k) => _write((i) => shapeItemWith(i, combine: k)),
+                  ),
+                ),
               ShapePaint.gradient => SizedBox(
                   width: 96,
                   child: BareDropdown<int>(
