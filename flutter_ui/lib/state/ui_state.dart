@@ -1720,6 +1720,7 @@ class LumitUiState extends ChangeNotifier {
     if (identical(project, _sessionProject)) return;
     _sessionProject = project;
 
+    var restoredArrangement = false;
     _restoring = true;
     try {
       // Nothing from the previous document may outlive it: its comp ids, its
@@ -1749,6 +1750,7 @@ class LumitUiState extends ChangeNotifier {
       final session = workspace.sessionFor(path) ?? _embeddedSession(project!);
       if (session == null) return;
       _applyDock(session.dock);
+      restoredArrangement = true;
 
       final known = {
         for (final (comp, _) in _app.comps()) comp.internalid.toString(): comp,
@@ -1798,10 +1800,11 @@ class LumitUiState extends ChangeNotifier {
       // **A project arriving fronts the Project panel** (item 6.35) — a new
       // one, an opened one, and the empty one that replaces a closed one.
       // What is in the document is where work on it starts, and the panels
-      // left fronted belong to the document that has just gone. After the
-      // restore, because the arrangement the session carries is applied
-      // inside it and would otherwise front whatever it was saved with.
-      frontPanel(Panel.project);
+      // left fronted belong to the document that has just gone. UNLESS a
+      // session restored its own arrangement: the project opens as it was
+      // left (docs/07 §1.6, the session-restore promise), and that account
+      // includes which tabs were fronted — the more specific rule wins.
+      if (!restoredArrangement) frontPanel(Panel.project);
       // A project that opens with no composition fronted has no picture to
       // wait for, so the opening card would stand for ever waiting on a frame
       // nobody is going to ask for. In the `finally` because every early
