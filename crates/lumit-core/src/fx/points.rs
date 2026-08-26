@@ -231,12 +231,30 @@ pub enum EmitterShape {
     /// polyline emits nothing** — the documented no-op, degrade and never
     /// fault (14-ENGINEERING-RULES §4).
     MaskPath,
+    /// Uniformly along an ellipse's **outline**, by arc length (K-597).
+    EllipseOutline,
+    /// Uniformly along a rectangle's **outline**, by arc length (K-597).
+    RectangleOutline,
 }
 
 impl EmitterShape {
     /// The Choice option labels, in code order.
-    pub const OPTIONS: &'static [&'static str] =
-        &["Point", "Line", "Ellipse", "Rectangle", "Mask path"];
+    ///
+    /// The two outline shapes are **appended**, not slotted in beside the areas
+    /// they hollow out: a Choice is stored as its index (K-065), so inserting
+    /// one would silently turn every saved Mask path emitter into something
+    /// else. The dropdown reads in code order and the panel is the poorer for
+    /// it by one line, which is the price of a document that still means what
+    /// it said.
+    pub const OPTIONS: &'static [&'static str] = &[
+        "Point",
+        "Line",
+        "Ellipse",
+        "Rectangle",
+        "Mask path",
+        "Ellipse outline",
+        "Rectangle outline",
+    ];
 
     /// The shape for a stored Choice index; anything unknown is a Point, which
     /// is the declared default (a document from a newer build is rendered, not
@@ -248,8 +266,82 @@ impl EmitterShape {
             2 => EmitterShape::Ellipse,
             3 => EmitterShape::Rectangle,
             4 => EmitterShape::MaskPath,
+            5 => EmitterShape::EllipseOutline,
+            6 => EmitterShape::RectangleOutline,
             _ => EmitterShape::Point,
         }
+    }
+
+    /// Whether this shape emits along an **outline** the host flattens for it
+    /// (K-597) — the two shapes that walk a polyline of their own rather than
+    /// filling an interior.
+    #[must_use]
+    pub const fn is_outline(self) -> bool {
+        matches!(
+            self,
+            EmitterShape::EllipseOutline | EmitterShape::RectangleOutline
+        )
+    }
+}
+
+/// How many chords an ellipse's outline is flattened into (K-597).
+///
+/// The vertices sit **on** the true ellipse, so the only error is the chord
+/// cutting the corner between two of them: `r · (1 − cos(π/N))`, which at 128
+/// is three parts in ten thousand — a twentieth of a pixel on a four-hundred
+/// pixel emitter, and well inside the 10⁻⁵-of-range agreement the two render
+/// paths owe each other (K-508). Walking that polyline by arc length is
+/// **exactly** what a Mask path emitter already does, which is why there is one
+/// walk in this engine and not two.
+const OUTLINE_SEGMENTS: usize = 128;
+
+/// The emitter's own outline as a closed polyline in its **local** frame —
+/// centred on the origin, unturned — or an empty one for every shape that fills
+/// an interior instead (K-597).
+///
+/// Local rather than absolute, because [`birth_point`] then turns and places it
+/// with the same two lines every other area shape uses: an outline is a
+/// rectangle or an ellipse that has been hollowed out, not a path the user drew
+/// somewhere.
+///
+/// Both render paths call **this** function — the CPU reference once per
+/// evaluation, the GPU host once per frame on its way into the kernel's path
+/// buffer — so the two cannot come to flatten the same ellipse differently.
+#[must_use]
+pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
+    let (hw, hh) = (0.5 * e.width, 0.5 * e.height);
+    let mut points: Vec<[f32; 2]> = match e.shape {
+        EmitterShape::EllipseOutline => (0..=OUTLINE_SEGMENTS)
+            .map(|i| {
+                let a = i as f32 / OUTLINE_SEGMENTS as f32 * std::f32::consts::TAU;
+                let (s, c) = a.sin_cos();
+                [hw * c, hh * s]
+            })
+            .collect(),
+        EmitterShape::RectangleOutline => {
+            vec![[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh], [-hw, -hh]]
+        }
+        _ => return MaskPolyline::default(),
+    };
+    // A degenerate extent is a shape with nowhere to walk; one point is not a
+    // polyline, so it is given a second coincident one and every birth lands on
+    // the emitter's centre — degrade, never fault (14-ENGINEERING-RULES §4).
+    if points.len() < 2 {
+        points = vec![[0.0, 0.0], [0.0, 0.0]];
+    }
+    let mut arc = Vec::with_capacity(points.len());
+    let mut total = 0.0f32;
+    arc.push(0.0);
+    for w in points.windows(2) {
+        total += (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+        arc.push(total);
+    }
+    MaskPolyline {
+        points,
+        arc,
+        closed: true,
+        feather: 0.0,
+        expansion: 0.0,
     }
 }
 
@@ -848,10 +940,25 @@ fn turbulence(p0: [f32; 3], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32
 /// `w` is the draw through the emitter's [`depth`](Emitter::depth) (K-561),
 /// filled uniformly: a Point becomes a segment, an Ellipse a cylinder and a
 /// Rectangle a box. Line and Mask path ignore it and stay on the plane.
+///
+/// `path` is **the polyline this shape walks**: the layer's flattened mask for
+/// a Mask path emitter, and the emitter's own local outline for the two outline
+/// shapes (K-597). One argument, because both are the same question — where is
+/// `u` of the way along? — answered by the same arc-length walk.
 fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Option<[f32; 3]> {
     let (s, c) = e.angle_deg.to_radians().sin_cos();
     let (local, depth) = match e.shape {
         EmitterShape::Point => ([0.0, 0.0], (w - 0.5) * e.depth),
+        // The outline walks its own local polyline and is then turned and
+        // placed exactly as the interior it hollows out would have been, so an
+        // Ellipse and an Ellipse outline sit in the same place at the same
+        // angle. Depth fills as before: the cylinder becomes a tube.
+        EmitterShape::EllipseOutline | EmitterShape::RectangleOutline => {
+            if path.is_empty() {
+                return None;
+            }
+            (path.point_at(u * path.length()), (w - 0.5) * e.depth)
+        }
         EmitterShape::Line => ([(u - 0.5) * e.width, 0.0], 0.0),
         EmitterShape::Ellipse => {
             // √u for the radius, or the middle of the disc would be crowded:
@@ -933,6 +1040,12 @@ pub fn evaluate_with_tail(
     }
     let e = &p.emitter;
     let look = &p.particle;
+    // The polyline this emitter walks (K-597): the layer's mask for a Mask path
+    // shape, the emitter's own outline for the two outline shapes, and nothing
+    // at all for the interiors — one flattening, done once for the whole
+    // evaluation rather than per particle.
+    let outline = outline_polyline(e);
+    let walk = if e.shape.is_outline() { &outline } else { path };
     // The turbulence rate of change, by central difference at a **fixed** ε —
     // fixed, so one frame key names one picture whatever raster or refresh the
     // preview happens to be running at (particulate.md §3.2).
@@ -956,7 +1069,7 @@ pub fn evaluate_with_tail(
         }
         let Some(p0) = birth_point(
             e,
-            path,
+            walk,
             draw(p.seed, b, attr::EMIT_U),
             draw(p.seed, b, attr::EMIT_V),
             draw(p.seed, b, attr::EMIT_W),

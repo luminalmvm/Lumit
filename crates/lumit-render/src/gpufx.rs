@@ -3740,7 +3740,16 @@ impl GpuEffect for Particulate {
         let projection = sched
             .projection
             .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
-        let poly = lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p));
+        // The polyline the emitter walks. A Mask path's arrives in px@comp and
+        // takes the raster factor like every other distance (K-385); an
+        // outline's is built **from the packed emitter**, whose extents the
+        // resolve step already rescaled, so scaling it again would draw the
+        // ring at twice the size on a half-resolution preview (K-597).
+        let poly = if packed.emitter.shape.is_outline() {
+            lumit_core::fx::points::outline_polyline(&packed.emitter)
+        } else {
+            lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p))
+        };
         let path: Vec<[f32; 4]> = poly
             .points
             .iter()
@@ -3959,6 +3968,17 @@ mod tests {
         stream_agrees_with_the_cpu_reference(None);
     }
 
+    /// **Border emission, in both paths** (K-597): the kernel walks the very
+    /// polyline the CPU reference walks, because the host flattens it once and
+    /// hands the same numbers to both. A twin test rather than a second
+    /// picture: an outline the two paths disagreed about would be a ring drawn
+    /// in one place and sampled in another.
+    #[test]
+    fn the_outline_emitters_agree_between_the_two_paths() {
+        stream_agrees_with_the_cpu_reference_of(5, None);
+        stream_agrees_with_the_cpu_reference_of(6, None);
+    }
+
     /// **The same agreement, in three axes** (K-561): the four passes carry the
     /// third component, and the depth attributes are held to the same one part
     /// in 10⁵ of their range as the two that were always there.
@@ -3975,13 +3995,42 @@ mod tests {
     fn stream_agrees_with_the_cpu_reference(
         projection: Option<lumit_core::fx::points::Projection>,
     ) {
+        stream_agrees_with_the_cpu_reference_of(2, projection);
+    }
+
+    fn stream_agrees_with_the_cpu_reference_of(
+        shape: u32,
+        projection: Option<lumit_core::fx::points::Projection>,
+    ) {
         let Ok(ctx) = GpuContext::headless() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
         let fx = FxEngine::new(&ctx);
         let (w, h) = (128u32, 96u32);
-        let (inst, sched, carriage) = particulate_fixture_3d(0, 20_000, projection);
+        let (mut inst, sched, carriage) = particulate_fixture_3d(0, 20_000, projection);
+        inst.shape = shape;
+        if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
+            // **Turbulence off for the outline twin, on purpose.** What this
+            // run measures is that the two paths walk the polyline to the same
+            // point, and turbulence is a magnifier sitting on top of it: the
+            // phase runs to a thousand, where an f32 step is 6·10⁻⁵ of a
+            // lattice cell, and the noise turns one such step into a couple of
+            // thousandths of a pixel. That is the shipped fixture's own
+            // tolerance (the test above measures it at a part in 10⁶ and passes
+            // on it), and letting it ride here would answer a question about
+            // the noise rather than the one this test asks.
+            inst.turbulence_amount = 0.0;
+        }
         let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+        // The outline the emitter walks, flattened by the one function both
+        // paths call — the shipping pass does exactly this (K-597).
+        let outline = lumit_core::fx::points::outline_polyline(&packed.emitter);
+        let path: Vec<[f32; 4]> = outline
+            .points
+            .iter()
+            .zip(outline.arc.iter())
+            .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
+            .collect();
         let cpu = lumit_core::fx::points::evaluate(
             &packed,
             &sched,
@@ -4000,8 +4049,8 @@ mod tests {
             &carriage,
             &frames,
             &curves,
-            &[],
-            0.0,
+            &path,
+            outline.length(),
             0,
             carriage.projection.map(|proj| proj.m),
         );

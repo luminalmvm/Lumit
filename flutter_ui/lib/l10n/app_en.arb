@@ -1705,6 +1705,10 @@
   "@fxEllipse": {
     "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
   },
+  "fxEllipseOutline": "Ellipse outline",
+  "@fxEllipseOutline": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of an ellipse rather than anywhere inside it."
+  },
   "fxEmitRate": "Emit rate",
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
@@ -2288,6 +2292,10 @@
   "fxRectangle": "Rectangle",
   "@fxRectangle": {
     "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside a rectangle."
+  },
+  "fxRectangleOutline": "Rectangle outline",
+  "@fxRectangleOutline": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of a rectangle rather than anywhere inside it."
   },
   "fxRed": "Red",
   "@fxRed": {

@@ -8755,7 +8755,9 @@
             "Line",
             "Ellipse",
             "Rectangle",
-            "Mask path"
+            "Mask path",
+            "Ellipse outline",
+            "Rectangle outline"
           ],
           "dividers_after": []
         },

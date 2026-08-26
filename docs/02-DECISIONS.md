@@ -17941,3 +17941,50 @@ are unmoved.
 
 **Out of scope, as K-561 says**: depth-map occlusion and collision. Both are the
 "every particle must ask about every other particle" shape K-474 exists to exclude.
+
+## K-597 — Border emission is two more Shape codes, walking the walk a mask path already walks
+
+**DECIDED 2026-08-26**, off the owner's FP4 backlog line ("4.1's border emission for
+Ellipse/Rectangle emitters — outline mode, as MaskPath has"). Three things could have gone
+another way.
+
+**A shape variant, not a toggle.** The alternative was an *Emit from outline* switch beside
+Width and Height, live only for the two area shapes. It buys one row for two options and
+costs a fourth `EnabledCond` shape — a control that is meaningful only while a neighbouring
+*choice* is one of two particular values — and it makes the Shape row a lie: what an
+emitter *is* would then be spread across two rows, and the Graph panel, the preset, and
+every sentence in the manual would have to say both. Two more codes on the Shape row say it
+once. The panel is one line longer and nothing else changed.
+
+**They are appended, not slotted in beside their fills.** *Ellipse outline* would read
+better after *Ellipse*, and it cannot go there: a Choice is stored as its **index** (K-065),
+so inserting a code at 3 turns every saved Rectangle into an outline and every saved Mask
+path into a Rectangle. The alternative was a compat read (K-258) rewriting old indices on
+load, which is a migration bought entirely to improve the order of a dropdown. The dropdown
+reads Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline,
+and a document from before today means exactly what it meant.
+
+**One flattening, called by both paths.** An outline is a polyline walked by arc length,
+which is precisely what a Mask path emitter already does — so it walks the *same* code:
+`points::outline_polyline` builds the ring in the emitter's own **local** frame (vertices
+on the true curve, 128 chords for an ellipse, four sides for a rectangle), and
+`birth_point` turns and places it with the two lines every area shape already uses. The GPU
+host calls the same function and hands the result to the kernel through the buffer a mask
+path already had, so the kernel gained one branch and no new binding, and the two paths
+cannot come to flatten one ellipse differently. **Uniform by arc length rather than by
+angle** is the whole point: on a 2:1 ellipse, parameterising by angle crowds the ends of
+the long axis by a factor of two, and the test histograms eight equal lengths of perimeter
+to say so.
+
+Two consequences. The **outline is built from the packed emitter**, whose extents the
+resolve step has already rescaled to the raster, so it is *not* put through `scale_path` as
+a mask path is — a ring scaled twice would be drawn at twice the size on a half-resolution
+preview. And **Depth still fills through it** (K-561): a cylinder becomes a tube, which is
+the reading that costs nothing and surprises nobody.
+
+**Chord error, named.** The ellipse's vertices sit on the true curve; the only error is the
+chord cutting the corner between two of them, `r*(1 — cos(pi/128))` — three parts in ten
+thousand of the radius, a twentieth of a pixel on the default four-hundred-pixel emitter,
+and far inside the 10⁻⁵-of-range the two render paths owe each other (K-508). A
+closed-form inversion of the incomplete elliptic integral would be exact and would be a
+second arc-length mechanism in an engine that has one.

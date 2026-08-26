@@ -62,12 +62,12 @@ softly glowing motes over the footage.
 
 | Parameter | Kind / unit | Slider (hard) | Default | Notes |
 |---|---|---|---|---|
-| Shape | choice | Point · Line · Ellipse · Rectangle · Mask path | Point | Area shapes emit uniformly over their interior; Line along its segment; Mask path along the arc-length polyline (K-408). |
+| Shape | choice | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline | Point | Area shapes emit uniformly over their interior; Line along its segment; Mask path along the arc-length polyline (K-408); the two **outline** shapes uniformly along the perimeter of the area they hollow out, by the same arc-length walk (K-597). The outlines are appended rather than slotted in beside their fills, because a Choice is stored as its index. |
 | Position | 2D point, px@comp | open | comp centre | The `_x`/`_y` pair convention; pick-on-Viewer dropper. |
 | Position z | px@comp | −2000–2000 (open) | 0 | **K-561.** How far in front of or behind the layer's own plane the emitter sits. Nought is the plane, which is what every 2D layer draws. |
-| Width / Height | px@comp | 0–2000 (0+) | 400 / 400 | Extents for Line (Width only), Ellipse, Rectangle. Ignored by Point and Mask path. |
-| Depth | px@comp | 0–2000 (0+) | 0 | **K-561.** The extent *through* the plane, filled uniformly: Point becomes a segment, Ellipse a cylinder, Rectangle a box. Ignored by Line (one dimension by name) and by Mask path, which stays planar at the emitter's own depth — the path is where the user drew it. |
-| Emitter angle | degrees | −360–360 (open) | 0 | Rotates Line/Ellipse/Rectangle about Position, in the plane. Depth runs through that plane and is not turned by it. |
+| Width / Height | px@comp | 0–2000 (0+) | 400 / 400 | Extents for Line (Width only), Ellipse, Rectangle and the two outlines. Ignored by Point and Mask path. |
+| Depth | px@comp | 0–2000 (0+) | 0 | **K-561.** The extent *through* the plane, filled uniformly: Point becomes a segment, Ellipse a cylinder, Rectangle a box, and an outline a tube. Ignored by Line (one dimension by name) and by Mask path, which stays planar at the emitter's own depth — the path is where the user drew it. |
+| Emitter angle | degrees | −360–360 (open) | 0 | Rotates Line, Ellipse, Rectangle and the two outlines about Position, in the plane. Depth runs through that plane and is not turned by it. |
 | Mask path | mask-path reference | — | First mask | Used when Shape is Mask path; empty polyline emits nothing (the documented no-op, K-408). Static in v1, like every mask-path reference. |
 | Emit rate | none (per second) | 0–1000 (0+) | 150 | Births per second of layer time; the integral is the birth schedule (§3.1). |
 | Direction | degrees | −360–360 (open) | −90 | Launch direction in the layer's plane; −90 is up. |
@@ -412,6 +412,17 @@ Landed with the implementation, per K-007. lumit-core unless noted.
     docs/13 §2 states against a checked-in baseline, and the third axis costs one dot
     product and one divide per particle in the vertex stage — inside the noise of a row
     already reported to three decimal places, so it earns no row of its own.
+14. **Border emission** (K-597). *On the ring, not in it*: every particle from an
+    Ellipse outline satisfies the ellipse's own equation, and every one from a
+    Rectangle outline sits on a side. *Uniformly along the perimeter*: eight equal
+    lengths of arc take an eighth of the particles each — a walk parameterised by
+    angle instead would crowd the ends of a 2:1 ellipse's long axis by a factor of
+    two. *The two paths walk one polyline*: the flattening is one function the CPU
+    reference and the GPU host both call, held as a stream twin. *Nothing moved*
+    (K-258): the five codes a saved document can name mean exactly what they meant,
+    which is what appending the two new ones buys. *A degenerate outline* emits at
+    the emitter's centre and never faults.
+
 13. **The third axis** (K-561). *The flat projection is the identity*, bit for bit, at any
     `z` — the arithmetic the whole 2D guarantee rests on, and the one bit it does not
     carry (the sign of a zero) named rather than skipped. *The camera puts depth where

@@ -314,7 +314,13 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
     let c = cos(a);
     var local = vec2<f32>(0.0, 0.0);
     var depth = (w_die - 0.5) * p.em_depth;
-    if (p.shape == 1u) {
+    if (p.shape >= 5u) {
+        // The two outline shapes (K-597). The host flattened the emitter's own
+        // outline into the very buffer a mask path uses, in the emitter's local
+        // frame, so the walk is the same walk and the turn and the placement
+        // below are the ones the filled shape already gets.
+        local = pt_path_at(u * p.path_total);
+    } else if (p.shape == 1u) {
         local = vec2<f32>((u - 0.5) * p.em_wh.x, 0.0);
         depth = 0.0;
     } else if (p.shape == 2u) {

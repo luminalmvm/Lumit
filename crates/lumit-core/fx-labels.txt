@@ -187,6 +187,7 @@ Element 7
 Element 8
 Element 9
 Ellipse
+Ellipse outline
 Emboss
 Emit rate
 Emitter
@@ -465,6 +466,7 @@ Randomness
 Rate
 Rec. 709
 Rectangle
+Rectangle outline
 Rectangular to polar
 Red
 Red blur

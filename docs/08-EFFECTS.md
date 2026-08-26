@@ -5406,7 +5406,7 @@ consume them ([impl/points-stream.md](impl/points-stream.md)). The design is
 [impl/particulate.md](impl/particulate.md); this entry is the catalogue's account of it.
 
 **Parameters**, in four groups. *Emitter*: Shape (Point · Line · Ellipse · Rectangle · Mask
-path), Position (px@comp), **Position z** (px@comp, default 0 — K-561), Width / Height
+path · **Ellipse outline** · **Rectangle outline** — K-597), Position (px@comp), **Position z** (px@comp, default 0 — K-561), Width / Height
 (px@comp, 0–2000, default 400), **Depth** (px@comp, 0–2000, default 0 — K-561), Emitter
 angle, Mask path (K-408), Emit rate (per second, 0–1000, default 150), Direction (degrees,
 default −90), **Direction z** (degrees, default 0 — K-561), Spread (degrees, 0–360, default
@@ -5436,7 +5436,7 @@ keep the newest `cap` alive by birth index                   # the cap rule
 seen  = M·(x, y, z, 1) ; draw at seen.xy/seen.w, size ÷ seen.w  # the comp's camera
 ```
 
-Seven notes:
+Eight notes:
 
 - **The forces are the set with closed-form integrals** (K-474), and that is the selection
   criterion rather than a styling choice. `r` and `s` are `(1 − e^(−x))/x` and its
@@ -5466,6 +5466,18 @@ Seven notes:
   layer's clock, the birth schedule — the whole history of the Emit rate track rather than
   its value now — and, since K-561, the composition's camera. The draw builder works out all
   three, exactly as it flattens a mask polyline (§1.2).
+- **The two outline shapes emit along a perimeter** (K-597), uniformly by arc length, and
+  they are the *same walk* a Mask path emitter already does: the host flattens the ellipse
+  or the rectangle into a polyline in the emitter's own local frame — vertices on the true
+  curve, 128 chords for an ellipse — and both render paths walk that one polyline, so
+  neither can come to flatten it differently. The outline is then turned by Emitter angle
+  and placed at Position exactly as the area it hollows out would have been, and Depth
+  fills through it, so a cylinder becomes a tube. The two codes are **appended** to the
+  Shape list rather than slotted in beside their fills: a Choice is stored as its index
+  (K-065), so inserting one would quietly turn every saved Mask path emitter into a
+  Rectangle. Uniform by arc length rather than by angle is the whole point of the walk — on
+  a 2:1 ellipse, parameterising by angle crowds the ends of the long axis by a factor of
+  two.
 - **The particles live in three axes, and the composition's camera sees them** (K-561,
   K-596). A
   particle carries a depth, the closed forms integrate it under the same drag and wind

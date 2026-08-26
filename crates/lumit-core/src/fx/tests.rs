@@ -13776,6 +13776,166 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
+// ------------------------------------------- border emission (K-597)
+
+/// A still emitter of the given shape: nothing carries a particle off the
+/// outline, so where it is drawn is where it was born.
+fn outline_stream(shape: u32) -> PointsStream {
+    let e = particulate(&[
+        ("shape", EffectValue::Choice(shape)),
+        ("initial_speed", fixed(0.0)),
+        ("turbulence_amount", fixed(0.0)),
+        ("drag", fixed(0.0)),
+        ("gravity", fixed(0.0)),
+        ("width", fixed(400.0)),
+        ("height", fixed(200.0)),
+        ("emitter_angle", fixed(0.0)),
+        ("life", fixed(10.0)),
+        ("life_jitter", fixed(0.0)),
+    ]);
+    particulate_stream(&e, 2.0)
+}
+
+/// **The outline is an outline**: every particle lands *on* the ring, not
+/// inside it. The ellipse's own equation is the assertion — `(x/a)² + (y/b)² =
+/// 1` — and the chord flattening is the only slack allowed for
+/// (`OUTLINE_SEGMENTS` cuts at most three parts in ten thousand of the radius).
+#[test]
+fn an_ellipse_outline_emitter_puts_every_particle_on_the_ring() {
+    let s = outline_stream(5);
+    assert!(!s.is_empty(), "the outline emitted nothing");
+    let (cx, cy) = (960.0f32, 540.0f32);
+    let (a, b) = (200.0f32, 100.0f32);
+    for at in &s.position {
+        let (u, v) = ((at[0] - cx) / a, (at[1] - cy) / b);
+        let r = (u * u + v * v).sqrt();
+        assert!(
+            (r - 1.0).abs() < 1e-3,
+            "a particle sat at radius {r} rather than on the ring ({at:?})"
+        );
+    }
+}
+
+/// The rectangle's outline is its four sides: a particle is on one of them when
+/// it is at the full half-extent in x **or** in y, and inside both.
+#[test]
+fn a_rectangle_outline_emitter_puts_every_particle_on_a_side() {
+    let s = outline_stream(6);
+    assert!(!s.is_empty(), "the outline emitted nothing");
+    let (cx, cy) = (960.0f32, 540.0f32);
+    let (hw, hh) = (200.0f32, 100.0f32);
+    for at in &s.position {
+        let (dx, dy) = ((at[0] - cx).abs(), (at[1] - cy).abs());
+        assert!(
+            dx <= hw + 1e-3 && dy <= hh + 1e-3,
+            "a particle sat outside the rectangle at {at:?}"
+        );
+        assert!(
+            (dx - hw).abs() < 1e-3 || (dy - hh).abs() < 1e-3,
+            "a particle sat off the sides at {at:?}"
+        );
+    }
+}
+
+/// **Uniformly along the perimeter** — the property the arc-length walk exists
+/// for. Split the ring into eight equal lengths of *arc*; a walk that
+/// parameterised by angle instead would crowd the ends of the long axis and
+/// starve the flanks, which at a 2:1 aspect is a factor of two out.
+#[test]
+fn an_ellipse_outline_spreads_by_arc_length_and_not_by_angle() {
+    let e = particulate(&[
+        ("shape", EffectValue::Choice(5)),
+        ("initial_speed", fixed(0.0)),
+        ("turbulence_amount", fixed(0.0)),
+        ("emit_rate", fixed(1000.0)),
+        ("width", fixed(400.0)),
+        ("height", fixed(200.0)),
+        ("life", fixed(10.0)),
+        ("life_jitter", fixed(0.0)),
+    ]);
+    let s = particulate_stream(&e, 2.0);
+    let outline = points::outline_polyline(&particulate_params(&e).emitter);
+    let total = outline.length();
+    // Where each particle fell, as a fraction of the way round: the nearest
+    // vertex's own arc is enough resolution for a histogram of eight.
+    let mut bins = [0usize; 8];
+    for at in &s.position {
+        let (dx, dy) = (at[0] - 960.0, at[1] - 540.0);
+        let mut best = (f32::MAX, 0.0f32);
+        for (pt, arc) in outline.points.iter().zip(outline.arc.iter()) {
+            let d = (pt[0] - dx).hypot(pt[1] - dy);
+            if d < best.0 {
+                best = (d, *arc);
+            }
+        }
+        let bin = ((best.1 / total * 8.0) as usize).min(7);
+        bins[bin] += 1;
+    }
+    let n = s.len() as f64;
+    for (i, count) in bins.iter().enumerate() {
+        let share = *count as f64 / n;
+        assert!(
+            (share - 0.125).abs() < 0.04,
+            "eighth {i} of the perimeter took {share:.3} of the particles ({bins:?})"
+        );
+    }
+}
+
+/// **The filled shapes are untouched** (K-258): the two new codes are appended,
+/// so every shape a saved document can name emits exactly what it always did.
+#[test]
+fn adding_the_outline_shapes_moved_no_existing_code() {
+    for (code, shape) in [
+        (0, EmitterShape::Point),
+        (1, EmitterShape::Line),
+        (2, EmitterShape::Ellipse),
+        (3, EmitterShape::Rectangle),
+        (4, EmitterShape::MaskPath),
+        (5, EmitterShape::EllipseOutline),
+        (6, EmitterShape::RectangleOutline),
+    ] {
+        assert_eq!(EmitterShape::from_code(code), shape, "code {code}");
+    }
+    assert_eq!(EmitterShape::OPTIONS.len(), 7);
+    // A filled ellipse still fills: the interior draw is the one that was
+    // there, and the outline is a different code entirely.
+    let inside = outline_stream(2);
+    let on_ring = inside
+        .position
+        .iter()
+        .filter(|at| {
+            let (u, v) = ((at[0] - 960.0) / 200.0, (at[1] - 540.0) / 100.0);
+            ((u * u + v * v).sqrt() - 1.0).abs() < 1e-3
+        })
+        .count();
+    assert!(
+        on_ring * 20 < inside.len(),
+        "a filled ellipse put {on_ring} of {} particles exactly on its rim",
+        inside.len()
+    );
+}
+
+/// A degenerate outline is a shape with nowhere to walk: every particle lands
+/// on the emitter's centre, and nothing faults (14-ENGINEERING-RULES §4).
+#[test]
+fn an_outline_of_no_extent_emits_at_its_centre() {
+    let e = particulate(&[
+        ("shape", EffectValue::Choice(5)),
+        ("width", fixed(0.0)),
+        ("height", fixed(0.0)),
+        ("initial_speed", fixed(0.0)),
+        ("turbulence_amount", fixed(0.0)),
+    ]);
+    let s = particulate_stream(&e, 2.0);
+    assert!(!s.is_empty(), "a degenerate outline emitted nothing at all");
+    for at in &s.position {
+        assert!(
+            (at[0] - 960.0).abs() < 1e-3 && (at[1] - 540.0).abs() < 1e-3,
+            "a particle from a zero-extent outline sat at {at:?}"
+        );
+    }
+}
+
 // ------------------------------------------------ the third axis (K-561)
 
 /// A camera one `zoom` back from a layer whose plane is at `z = 0`, as the
