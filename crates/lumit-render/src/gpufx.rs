@@ -28,6 +28,8 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::LoadedLut;
 
+pub mod ofx;
+
 type Tex = wgpu::Texture;
 
 /// Which parallel input list an effect consumes a slot of
@@ -76,6 +78,9 @@ pub struct AuxSlot<'a> {
     layer: Option<&'a Tex>,
     paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
+    /// Which effect instance this op is (K-593), and the layer time its
+    /// parameters were evaluated at.
+    op: (uuid::Uuid, f64),
 }
 
 /// The borrowed slot itself, as [`crate::fxops::run_ops`] resolved it.
@@ -113,12 +118,15 @@ pub enum AuxData<'a> {
 impl<'a> AuxSlot<'a> {
     /// Bundle one op's aux data with its generic matte, its auxiliary layer
     /// and its mask path.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
         layer: Option<&'a Tex>,
         paths: &'a [lumit_core::mask::MaskPolyline],
         schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
+        instance: uuid::Uuid,
+        lt: f64,
     ) -> Self {
         Self {
             data,
@@ -126,7 +134,20 @@ impl<'a> AuxSlot<'a> {
             layer,
             paths,
             schedule,
+            op: (instance, lt),
         }
+    }
+
+    /// **Which effect instance this op is** (K-593), and the layer time its
+    /// parameters were evaluated at.
+    ///
+    /// Every built-in ignores it: a built-in's picture is a function of its bag,
+    /// and two instances with the same numbers draw the same thing. A **plugin**
+    /// needs both — the time is what its render is told the frame is, and the
+    /// instance is which live copy of it renders, and which row wears the badge
+    /// when it fails.
+    pub fn op(self) -> (uuid::Uuid, f64) {
+        self.op
     }
 
     /// **This op's birth schedule** (points-stream.md §3.3): the births this
@@ -372,6 +393,32 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Particulate,
 ];
 
+/// The passes registered while the program runs (K-593) — an OFX plugin's,
+/// today, and the user's own in time. The built-in table above is searched
+/// first, so nothing here can shadow a shipped effect.
+static REGISTERED: std::sync::RwLock<Vec<&'static dyn GpuEffect>> =
+    std::sync::RwLock::new(Vec::new());
+
+/// Add a pass discovered at run time, beside the effect definition that
+/// registered into `lumit-core`'s catalogue (K-593).
+///
+/// `false` — and nothing added — for a name the table already answers to, which
+/// is what makes a rescan idempotent. Additive and never removes, so no frame in
+/// flight can find its pass gone.
+pub fn register_gpu_effect(effect: &'static dyn GpuEffect) -> bool {
+    let name = effect.match_name();
+    let Ok(mut registered) = REGISTERED.write() else {
+        return false;
+    };
+    if GPU_EFFECTS.iter().any(|g| g.match_name() == name)
+        || registered.iter().any(|g| g.match_name() == name)
+    {
+        return false;
+    }
+    registered.push(effect);
+    true
+}
+
 /// The GPU pass for `match_name`, or `None` when the effect has no image
 /// operation of its own — the orchestration-only case, which is a passthrough
 /// rather than a fault (docs/impl/effect-registry.md §3).
@@ -383,12 +430,30 @@ pub fn gpu_effect(match_name: &str) -> Option<&'static dyn GpuEffect> {
         .iter()
         .copied()
         .find(|g| g.match_name() == match_name)
+        .or_else(|| {
+            registered_effects()
+                .into_iter()
+                .find(|g| g.match_name() == match_name)
+        })
 }
 
 /// Every name this table answers to, for the test that holds it against the
-/// catalogue.
+/// catalogue. Built-ins first, then whatever registered at run time.
 pub fn gpu_effect_names() -> impl Iterator<Item = &'static str> {
-    GPU_EFFECTS.iter().map(|g| g.match_name())
+    GPU_EFFECTS
+        .iter()
+        .copied()
+        .chain(registered_effects())
+        .map(GpuEffect::match_name)
+}
+
+/// The run-time half, copied out — a handful of thin pointers, read rather than
+/// borrowed so the callers above outlive the guard.
+fn registered_effects() -> Vec<&'static dyn GpuEffect> {
+    REGISTERED
+        .read()
+        .map(|list| list.clone())
+        .unwrap_or_default()
 }
 
 struct Blur;
@@ -4551,9 +4616,14 @@ mod tests {
     /// they are joined by a string. Every migrated effect with an image
     /// operation needs exactly one GPU pass, and every GPU pass must name an
     /// effect that exists (docs/impl/effect-registry.md §7, test 3).
+    ///
+    /// **The compile-time halves only** (K-593). The run-time pair is registered
+    /// by one call — [`ofx::register`] — which does both tables or neither, so
+    /// there is no typo left for a test to catch; walking them here would only
+    /// mean this test could see a registration another test was halfway through.
     #[test]
     fn every_migrated_effect_has_a_gpu_entry() {
-        for def in BUILTIN_DEFS.iter() {
+        for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
             if def.is_image_op() {
                 assert!(
@@ -4567,7 +4637,8 @@ mod tests {
                 );
             }
         }
-        for name in gpu_effect_names() {
+        for pass in GPU_EFFECTS {
+            let name = pass.match_name();
             assert!(
                 BUILTIN_DEFS.get(name).is_some(),
                 "the GPU table names {name}, which no effect declares"
@@ -4588,7 +4659,7 @@ mod tests {
     #[test]
     fn a_side_table_effect_declares_the_list_it_consumes() {
         use lumit_core::fx::ParamKind;
-        for def in BUILTIN_DEFS.iter() {
+        for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
             // The Matte row (K-395) is deliberately not counted: it is carried
             // by the one matte list beside `run_ops`'s dispatch, whoever
@@ -4739,6 +4810,231 @@ mod tests {
                  kernel with the wrong numbers"
             );
         }
+    }
+
+    /// A definition that arrived at run time, as a plugin's does (K-593).
+    ///
+    /// Declared here rather than driven by a real OFX bundle because what is
+    /// under test is the *seam*: `lumit-render` depends on no plugin host
+    /// (docs/05), and what it can be shown is that an effect nobody compiled in
+    /// resolves, dispatches and draws in the middle of a stack of built-ins.
+    /// `lumit-ofx` proves the other half — that a real plugin makes one of
+    /// these.
+    struct RunTimeDef {
+        schema: &'static lumit_core::fx::EffectSchema,
+        /// Whether this definition's render fails, as a disabled plugin's does.
+        fails: std::sync::atomic::AtomicBool,
+    }
+
+    impl lumit_core::fx::EffectDef for RunTimeDef {
+        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+            self.schema
+        }
+        fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {
+            if self.fails.load(std::sync::atomic::Ordering::SeqCst) {
+                return; // identity, byte for byte
+            }
+            for (i, v) in rgba.iter_mut().enumerate() {
+                if i % 4 != 3 {
+                    *v *= 0.5;
+                }
+            }
+        }
+        fn last_error(&self) -> Option<String> {
+            self.fails
+                .load(std::sync::atomic::Ordering::SeqCst)
+                .then(|| "the plugin is disabled for this session".to_owned())
+        }
+    }
+
+    /// A leaked declaration under a plugin-shaped name, as the OFX host leaks
+    /// one for a plugin it has just described.
+    fn a_run_time_def(match_name: &'static str) -> &'static RunTimeDef {
+        Box::leak(Box::new(RunTimeDef {
+            schema: Box::leak(Box::new(lumit_core::fx::EffectSchema {
+                match_name,
+                label: "Run-time effect",
+                version: 1,
+                category: lumit_core::fx::FxCategory::Utility,
+                traits: lumit_core::fx::EffectTraits {
+                    cost: lumit_core::fx::CostClass::Heavy,
+                    roi: lumit_core::fx::Roi::FullFrame,
+                    temporal: &[0],
+                    premultiplied: true,
+                    seeded: false,
+                    beat_input: false,
+                },
+                params: &[],
+                groups: &[],
+                enabled_when: &[],
+                matte: lumit_core::fx::MatteRole::None,
+            })),
+            fails: std::sync::atomic::AtomicBool::new(false),
+        }))
+    }
+
+    /// An instance of a registered effect, in the namespace a plugin's carries.
+    fn a_run_time_instance(match_name: &str) -> lumit_core::model::EffectInstance {
+        lumit_core::fx::instantiate(match_name).expect("the catalogue knows it")
+    }
+
+    /// **Built-in, plugin, built-in** (K-593): a stack with a run-time effect in
+    /// the middle of it renders the picture the whole stack describes, through
+    /// the same `run_ops` walk every built-in goes through.
+    ///
+    /// The middle op is the read-back wrapper: the picture comes off the card,
+    /// through the definition, and back on again. What it must not do is get
+    /// skipped — which is what would happen if the GPU table were built-in-only
+    /// — and what it must not do is come back in the wrong order, which is what
+    /// would happen if the arena had put it anywhere but second.
+    #[test]
+    fn a_run_time_effect_renders_between_two_builtins() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let def = a_run_time_def("ofx:test.render.stack");
+        assert!(crate::gpufx::ofx::register(def), "it registered");
+        // Both halves arrived, and the pass is the definition's own.
+        assert!(gpu_effect("ofx:test.render.stack").is_some());
+        assert!(BUILTIN_DEFS.get("ofx:test.render.stack").is_some());
+        assert!(
+            !crate::gpufx::ofx::register(def),
+            "a second registration is a rescan, not a second effect"
+        );
+
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (4u32, 4u32);
+        let source: Vec<f32> = (0..(w * h * 4))
+            .map(|i| match i % 4 {
+                3 => 1.0,
+                _ => (i % 7) as f32 / 7.0,
+            })
+            .collect();
+
+        let stack = vec![
+            lumit_core::fx::instantiate("invert").expect("a built-in"),
+            a_run_time_instance("ofx:test.render.stack"),
+            lumit_core::fx::instantiate("exposure").expect("a built-in"),
+        ];
+        let ops = lumit_core::fx::resolve_stack(
+            &stack,
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        assert_eq!(
+            ops.len(),
+            3,
+            "the plugin resolved into the middle of the stack"
+        );
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+        );
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        let mut cpu = source.clone();
+        lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
+        assert_ne!(gpu, source, "the stack passed the texture through");
+        for (i, (g, c)) in gpu.iter().zip(&cpu).enumerate() {
+            assert!(
+                (g - c).abs() < 1e-2,
+                "pixel {i}: GPU {g} vs the same stack on the CPU {c}"
+            );
+        }
+        assert!(
+            crate::gpufx::ofx::errored_ops().is_empty(),
+            "a render that worked left a badge behind"
+        );
+    }
+
+    /// **A failed plugin renders identity and badges its own row** (docs/12
+    /// §2.3, K-258's shape): the comp keeps compositing, the picture the middle
+    /// op was given comes out of it unchanged, and the instance is named so the
+    /// frontend can mark exactly that row.
+    #[test]
+    fn a_failed_run_time_effect_renders_identity_and_reports_it() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let def = a_run_time_def("ofx:test.render.errored");
+        assert!(crate::gpufx::ofx::register(def));
+        def.fails.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (4u32, 4u32);
+        let source: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 5) as f32 / 5.0).collect();
+        let inst = a_run_time_instance("ofx:test.render.errored");
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+        );
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        // The picture only ever went to fp16 and back, which is what the working
+        // texture already is — so it is the same picture, exactly.
+        let expected = lumit_gpu::fx::readback_linear_f32(
+            &ctx,
+            &lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h),
+            w,
+            h,
+        )
+        .expect("readback");
+        assert_eq!(gpu, expected, "a failed plugin changed the picture");
+
+        let badged = crate::gpufx::ofx::errored_ops();
+        assert!(
+            badged
+                .iter()
+                .any(|(id, why)| *id == inst.id && why.contains("disabled")),
+            "the failure was not filed under the row it happened on: {badged:?}"
+        );
+        // And it is forgotten once the row is gone, or once it works again.
+        crate::gpufx::ofx::clear_errored(inst.id);
+        assert!(!crate::gpufx::ofx::errored_ops()
+            .iter()
+            .any(|(id, _)| *id == inst.id));
     }
 
     /// **Shake picks its own kernel** (docs/08 §3.4, T18/K-165, K-388).

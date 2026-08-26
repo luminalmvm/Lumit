@@ -149,6 +149,53 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     })
 }
 
+/// One schema row's way **back** to the OFX parameter it came from (K-593).
+///
+/// The trip out is [`schema_of`]: a plugin's parameters become Lumit rows, and
+/// a 2-D control becomes two of them. The trip home is this: a resolved bag,
+/// keyed by [`ParamId`], has to become the `ParamSnapshot` the plugin reads its
+/// values out of, and the bag has only the hashes — the names are gone. So the
+/// routes are worked out once, from the same [`rows_of`] that minted the rows,
+/// and nothing has to guess at the reverse of a suffix rule.
+#[derive(Clone, Debug)]
+pub struct ValueRoute {
+    /// The row, as the bag keys it.
+    pub id: ParamId,
+    /// The plugin's own name for the parameter this row is part of.
+    pub name: String,
+    /// One of [`crate::ffi::param_types`] — what shape the value crosses in.
+    pub param_type: String,
+    /// Which component of the plugin's parameter this row is; nought for the
+    /// scalar kinds, which is most of them.
+    pub component: usize,
+    /// How many components the plugin's parameter has in all.
+    pub dimension: usize,
+}
+
+/// Every schema row's route home, in schema order.
+///
+/// Parameters with no row — groups, pages, vendor blobs, text, parametric
+/// curves — appear nowhere here, for the same reason they appear in no bag:
+/// there is no value of theirs for Lumit to carry.
+#[must_use]
+pub fn value_routes(plugin: &PluginDescriptor) -> Vec<ValueRoute> {
+    let mut routes = Vec::new();
+    for param in &plugin.params {
+        let rows = rows_of(param);
+        let dimension = rows.len();
+        for (component, row) in rows.iter().enumerate() {
+            routes.push(ValueRoute {
+                id: ParamId::new(row.id),
+                name: param.name.clone(),
+                param_type: param.param_type.clone(),
+                component,
+                dimension,
+            });
+        }
+    }
+    routes
+}
+
 /// What a group or page is called, and whether it starts closed.
 #[derive(Clone, PartialEq, Eq)]
 struct Owner {

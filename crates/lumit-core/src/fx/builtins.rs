@@ -41,8 +41,30 @@ pub const CHANNEL_OPTIONS: &[&str] = &["Luminance", "Alpha", "Red", "Green", "Bl
 
 /// Look a schema up by its match name. `None` for a name this build does not
 /// know — an unknown effect is preserved as an inert placeholder (K-065).
+///
+/// Since K-593 the catalogue also carries whatever registered at run time, so
+/// this answers for a scanned OFX plugin as readily as for a built-in.
 pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
     super::BUILTIN_DEFS.get(match_name).map(|d| d.schema())
+}
+
+/// What every OFX plugin's `match_name` begins with (K-593) — the host mints
+/// `ofx:<plugin identifier>`, and this is the one place the prefix is spelled,
+/// so the crate that writes it and the crate that reads it cannot drift.
+pub const OFX_MATCH_PREFIX: &str = "ofx:";
+
+/// Which namespace an entry in the catalogue belongs to, from its match name.
+///
+/// Nothing on [`EffectSchema`] says where an effect came from — a declaration
+/// is the same declaration whoever wrote it, which is the point of docs/12 §1 —
+/// so the name is what carries the provenance, and it carries it because the
+/// host minted the name.
+fn namespace_of(match_name: &str) -> EffectNamespace {
+    if match_name.starts_with(OFX_MATCH_PREFIX) {
+        EffectNamespace::Ofx
+    } else {
+        EffectNamespace::Builtin
+    }
 }
 
 /// A fresh random seed value — the per-instance Seed default (docs/08
@@ -554,7 +576,7 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
     Some(EffectInstance {
         id: uuid::Uuid::now_v7(),
         effect: EffectKey {
-            namespace: EffectNamespace::Builtin,
+            namespace: namespace_of(s.match_name),
             match_name: s.match_name.to_owned(),
             version: s.version,
             extra: serde_json::Map::new(),

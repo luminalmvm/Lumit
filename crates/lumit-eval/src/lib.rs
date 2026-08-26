@@ -854,7 +854,7 @@ fn feed_layer(
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
             h.update(b"temporal/");
-            for o in lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx)
+            for o in lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt)
                 .into_iter()
                 .filter(|&o| o != 0)
             {
@@ -2229,6 +2229,74 @@ mod tests {
         let mut plain_flagged = plain.clone();
         plain_flagged.layers[0].switches.collapse = true;
         assert_eq!(key(&doc, &plain, 1.0), key(&doc, &plain_flagged, 1.0));
+    }
+
+    /// **A plugin op keys like any other op** (K-593, docs/12 §2.1,
+    /// docs/impl/effect-registry.md §4.4).
+    ///
+    /// A plugin's parameters are ordinary stored properties — the host owns the
+    /// animation (docs/12 §2.2) — so the key that already hashes every effect's
+    /// namespace, name, version, ids and values covers a plugin for free. What
+    /// this pins is that it really does, in both directions: a control that
+    /// moves renames the frame, a version bump renames the frame (K-016, a
+    /// plugin update is new maths under the same identifier), and nothing else
+    /// does — because a key that moved for no reason would make every plugin
+    /// frame a cache miss.
+    #[test]
+    fn a_plugin_effect_keys_on_its_values_and_its_version() {
+        use lumit_core::model::{
+            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue,
+        };
+        let doc = Document::new();
+        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
+        let base = key(&doc, &plain, 1.0);
+
+        let plugin = |gain: f64, version: u32| EffectInstance {
+            id: Uuid::now_v7(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Ofx,
+                match_name: "ofx:com.example.gain".into(),
+                version,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![EffectParam {
+                id: "gain".into(),
+                value: EffectValue::Float(lumit_core::anim::Property::fixed(gain)),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
+            custom_name: None,
+            linked_pairs: Vec::new(),
+            extra: serde_json::Map::new(),
+        };
+
+        let mut with_plugin = plain.clone();
+        with_plugin.layers[0].effects.push(plugin(2.0, 1));
+        let fx_key = key(&doc, &with_plugin, 1.0);
+        assert_ne!(base, fx_key, "a live plugin is content");
+
+        // The same values on another instance key the same: the instance's own
+        // id is not content, the effect it is an instance of is.
+        let mut twin = plain.clone();
+        twin.layers[0].effects.push(plugin(2.0, 1));
+        assert_eq!(fx_key, key(&doc, &twin, 1.0));
+        assert_eq!(fx_key, key(&doc, &with_plugin, 1.0), "the key is stable");
+
+        // A control that moves renames the frame.
+        let mut turned = plain.clone();
+        turned.layers[0].effects.push(plugin(2.5, 1));
+        assert_ne!(fx_key, key(&doc, &turned, 1.0));
+
+        // So does a plugin update — new maths under the same identifier.
+        let mut updated = plain.clone();
+        updated.layers[0].effects.push(plugin(2.0, 2));
+        assert_ne!(fx_key, key(&doc, &updated, 1.0));
+
+        // Bypassed, it contributes nothing, exactly as a built-in does.
+        let mut bypassed = with_plugin.clone();
+        bypassed.layers[0].effects[0].enabled = false;
+        assert_eq!(base, key(&doc, &bypassed, 1.0));
     }
 
     /// The effect stack is content (docs/08): adding a live effect changes

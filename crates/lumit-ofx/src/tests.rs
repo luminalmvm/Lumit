@@ -984,7 +984,7 @@ fn two_parameters_that_would_share_an_id_are_refused() {
     let report = describe_bundle(&bundle);
 
     // `centre` spreads into `centre_x`, and the plugin also defined `centre_x`.
-    // A `ParamId` collision is silent (docs/impl/effect-registry.md Â§5), so it
+    // A `ParamId` collision is silent (docs/impl/effect-registry.md §5), so it
     // is caught here rather than shipped.
     assert_eq!(
         refused(&report, "com.lumitlab.testplug.duplicate"),
@@ -1908,4 +1908,224 @@ fn the_thread_suite_table_is_laid_out_as_c_lays_it_out() {
         offset_of!(OfxMultiThreadSuiteV1, mutex_try_lock),
         8 * pointer
     );
+}
+
+// ------------------------------------------ a plugin as an effect (K-593) --
+
+use crate::def::{LocalHost, OfxEffectDef, PluginHost, Rendering};
+use crate::describe::PluginDescriptor;
+use lumit_core::fx::{EffectDef, Params, Value};
+use lumit_core::model::EffectValue;
+
+/// A host that never renders — what a disabled or crashed plugin is, from the
+/// definition's side (docs/12 §2.3).
+struct DeadHost;
+
+impl PluginHost for DeadHost {
+    fn render(
+        &self,
+        _instance: uuid::Uuid,
+        _time: f64,
+        _params: &ParamSnapshot,
+        source: Frame16,
+    ) -> Rendering {
+        Rendering {
+            frame: source,
+            error: Some("the plugin is disabled for this session".to_owned()),
+        }
+    }
+
+    fn frames_needed(
+        &self,
+        _instance: uuid::Uuid,
+        _time: f64,
+        _params: &ParamSnapshot,
+    ) -> Option<Vec<i32>> {
+        None
+    }
+}
+
+/// The declaration one described plugin becomes, leaked as the catalogue holds
+/// them.
+fn a_leaked_schema(report: &ScanReport, identifier: &str, major: u32) -> &'static EffectSchema {
+    let found = found(report, identifier, major).expect("the plugin described itself");
+    Box::leak(Box::new(found.schema))
+}
+
+/// A described plugin, hosted in process, as an entry in the effect catalogue.
+///
+/// The bundle is handed to the host, and the definition is leaked into the
+/// catalogue, so both live as long as the process — which is what registration
+/// means (K-593).
+fn a_registered_plugin(test: &str, identifier: &str, major: u32) -> Option<&'static EffectSchema> {
+    let (root, bundle, report) = a_described_bundle(test)?;
+    let schema = a_leaked_schema(&report, identifier, major);
+    let descriptor = found(&report, identifier, major)?.descriptor.clone();
+    let host = std::sync::Arc::new(LocalHost::new(bundle, descriptor.clone()));
+    let def = OfxEffectDef::new(&descriptor, schema, host).leak();
+    let registered = lumit_core::fx::BUILTIN_DEFS.register(def);
+    // The temporary directory outlives nothing on purpose: the library is open
+    // and stays open, and Windows will not delete an open binary. Leaking the
+    // handle is how the test says so rather than failing on the tidy-up.
+    std::mem::forget(root);
+    registered.then_some(schema)
+}
+
+/// The seam, end to end: a real plugin describes itself, becomes an
+/// `EffectDef`, registers, and is found by the same lookup that finds Blur.
+#[test]
+fn a_plugin_registers_and_is_found_by_the_catalogue() {
+    let Some(schema) = a_registered_plugin(
+        "a_plugin_registers_and_is_found",
+        "com.lumitlab.testplug",
+        2,
+    ) else {
+        return;
+    };
+    assert_eq!(schema.match_name, "ofx:com.lumitlab.testplug");
+
+    let found = lumit_core::fx::BUILTIN_DEFS
+        .get("ofx:com.lumitlab.testplug")
+        .expect("the catalogue answers to the plugin");
+    assert!(std::ptr::eq(found.schema(), schema));
+    assert_eq!(
+        lumit_core::fx::schema("ofx:com.lumitlab.testplug").map(|s| s.label),
+        Some(schema.label)
+    );
+
+    // And it instantiates in the plugin namespace, with the plugin's own
+    // defaults, so a project that saves it round-trips as a plugin instance.
+    let inst = lumit_core::fx::instantiate("ofx:com.lumitlab.testplug")
+        .expect("the catalogue instantiates it");
+    assert_eq!(
+        inst.effect.namespace,
+        lumit_core::model::EffectNamespace::Ofx
+    );
+    assert_eq!(inst.effect.match_name, "ofx:com.lumitlab.testplug");
+    assert!(inst.params.iter().any(|p| p.id == "gain"));
+
+    // The built-in menu order is untouched by its arrival (K-137).
+    let order: Vec<&str> = lumit_core::fx::BUILTIN_DEFS
+        .iter()
+        .map(|d| d.schema().match_name)
+        .collect();
+    let builtins: Vec<&str> = lumit_core::fx::BUILTINS
+        .iter()
+        .map(|s| s.match_name)
+        .collect();
+    assert_eq!(&order[..builtins.len()], &builtins[..]);
+    assert!(order.contains(&"ofx:com.lumitlab.testplug"));
+}
+
+/// Real pixels through the definition: the bag goes out as the plugin's values,
+/// the picture goes out as fp32 and comes back multiplied by the control the
+/// host owns.
+#[test]
+fn a_plugin_definition_renders_from_the_resolved_bag() {
+    let Some(_) = a_registered_plugin("a_plugin_definition_renders", "com.lumitlab.testplug", 2)
+    else {
+        return;
+    };
+    let def = lumit_core::fx::BUILTIN_DEFS
+        .get("ofx:com.lumitlab.testplug")
+        .expect("registered");
+
+    // Gain of two, set on the instance exactly as the panel would set it.
+    let mut inst = lumit_core::fx::instantiate("ofx:com.lumitlab.testplug").expect("instantiated");
+    for param in &mut inst.params {
+        if param.id == "gain" {
+            param.value = EffectValue::Float(lumit_core::anim::Property::fixed(2.0));
+        }
+    }
+    let stack = lumit_core::fx::resolve_stack(
+        std::slice::from_ref(&inst),
+        0.0,
+        1000.0,
+        1.0,
+        &lumit_core::fx::MarkerContext::NONE,
+        std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+    );
+    let op = stack.get(0).expect("the plugin resolved to an op");
+    assert_eq!(
+        op.params.get(lumit_core::fx::ParamId::new("gain")),
+        Some(Value::Float(2.0))
+    );
+
+    let mut rgba: Vec<f32> = (0..4 * 4 * 4).map(|i| (i as f32) / 64.0).collect();
+    let before = rgba.clone();
+    def.apply_cpu_at(inst.id, 0.0, &mut rgba, 4, 4, op.params);
+    assert_eq!(def.last_error(), None, "the plugin rendered");
+    for (out, was) in rgba.iter().zip(&before) {
+        assert!(
+            (*out - was * 2.0).abs() < 0.01,
+            "expected {} doubled, got {out}",
+            was
+        );
+    }
+}
+
+/// **A disabled plugin renders identity, byte for byte** (K-258's shape,
+/// docs/12 §2.3): the layer keeps compositing and wears a badge, and the
+/// picture is not so much as rounded on its way past.
+#[test]
+fn a_disabled_plugin_renders_identity_byte_for_byte() {
+    // A declaration of its own, so this test needs no bundle at all: what is
+    // under test is what the definition does when its host will not render.
+    let schema: &'static EffectSchema = Box::leak(Box::new(EffectSchema {
+        match_name: "ofx:test.disabled",
+        label: "Disabled test plugin",
+        version: 1,
+        category: lumit_core::fx::FxCategory::Utility,
+        traits: lumit_core::fx::EffectTraits {
+            cost: lumit_core::fx::CostClass::Heavy,
+            roi: lumit_core::fx::Roi::FullFrame,
+            temporal: &[0],
+            premultiplied: true,
+            seeded: false,
+            beat_input: false,
+        },
+        params: &[],
+        groups: &[],
+        enabled_when: &[],
+        matte: lumit_core::fx::MatteRole::None,
+    }));
+    let descriptor = PluginDescriptor {
+        identifier: "test.disabled".to_owned(),
+        version: (1, 0),
+        grouping: String::new(),
+        label: "Disabled test plugin".to_owned(),
+        contexts: vec![Context::Filter],
+        params: Vec::new(),
+        clips: Vec::new(),
+        temporal: false,
+        render_thread_safety: None,
+    };
+    let def = OfxEffectDef::new(&descriptor, schema, std::sync::Arc::new(DeadHost));
+
+    // Values chosen so that a trip through the fp16 boundary would change them:
+    // an identity that rounds is not an identity.
+    let before: Vec<f32> = vec![
+        0.100_000_1,
+        1.000_000_1,
+        2.500_003,
+        0.999_999_9,
+        -0.25,
+        3.7,
+        0.0,
+        1.0,
+        0.333_333_34,
+        0.666_666_7,
+        12.345_678,
+        0.5,
+    ];
+    let mut rgba = before.clone();
+    def.apply_cpu(&mut rgba, 3, 1, Params::EMPTY);
+    assert_eq!(rgba, before, "a disabled plugin changed the picture");
+    assert_eq!(
+        def.last_error().as_deref(),
+        Some("the plugin is disabled for this session"),
+        "the failure is reported for the badge"
+    );
+    // Read once, then gone: a stale reason must never badge a later frame.
+    assert_eq!(def.last_error(), None);
 }

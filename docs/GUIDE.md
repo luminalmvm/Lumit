@@ -11473,6 +11473,74 @@ and writing to a pipe while holding a lock is how programs deadlock. They queue 
 list instead, capped, and go out between calls. Both sides cap: a plugin in a loop can
 shout as fast as it likes and neither program grows because of it.
 
+### How a plugin becomes an effect
+
+Everything above gets a picture out of a plugin. None of it makes the plugin an *effect* —
+something you can find in the Add-effect menu, drop on a layer, keyframe, and see in a
+cached frame. This is the piece that does, and the surprise is how little of it there is.
+
+Lumit's own effects are not a list of special cases in the renderer. Each one is a value
+that answers a small set of questions: what am I called, what are my controls, what do I do
+to a picture, do I read any frame but this one. The catalogue is a list of those values, and
+everything downstream — the menu, the controls panel, the keyframe editor, the cache — asks
+the value rather than checking a name against a list. That arrangement was built for this
+moment: a plugin answers exactly the same questions, so a plugin can simply *be* one more
+value in the list.
+
+**The list grows a second half.** The built-in effects are written into the program, in the
+order the menu shows them. Beside that list there is now a second one, empty when Lumit
+starts, that plugins are added to as they are found. Every lookup walks both — **built-ins
+first, always**. That ordering is not politeness: the Add-effect menu, the command palette
+and the preset browser all read the catalogue in order, so if a plugin could land in the
+middle of it, installing a plugin would silently rearrange your menu.
+
+Adding is one-way. Nothing is ever removed, and nothing is added while a frame is being
+drawn; a plugin found twice is added once. That is what makes "scan for plugins again" a
+safe thing to do rather than a thing that doubles your effects list.
+
+**These entries live forever, on purpose.** A built-in effect's description is baked into
+the program, so it is simply always there. A plugin's is worked out while Lumit is running,
+and then it has to stay put for as long as the session lasts, because a project can hold
+that effect on a layer at any moment. So it is deliberately never freed. That is the sort
+of thing that would normally be a bug, and it is written down here and in the decision log
+so nobody has to wonder: the alternative would be reference-counting an object that can
+never actually go away.
+
+**Drawing it.** Every built-in effect names a small program that runs on the graphics card.
+A plugin does not have one — its maths is inside somebody else's compiled library, and the
+only way to get a picture out of it is to hand it one. So a plugin's "graphics pass" is a
+round trip: take the picture off the card as plain numbers, give it to the plugin, put the
+answer back on the card. That is genuinely slower than a built-in, which is why a plugin
+declares itself expensive and is the first thing given up when Lumit has to cut corners to
+keep playback smooth. The OFX standard has a newer way of handing pictures over on the card
+itself; that is a later job.
+
+The nice part is that the round-trip wrapper has never heard of OFX. It talks to "an
+effect" and asks it for a picture, so the rendering crate still knows nothing about plugin
+hosting — the rule that the engine never depends on the host of anything holds exactly as
+before.
+
+**Which frames it needs.** Most effects only look at the frame you are on. A few look at
+their neighbours, and say so once, in their description — Echo always reads the frame
+before. A retiming plugin is different: how far it reaches depends on its own settings at
+this particular moment, so it is asked, per copy and per frame, and it answers. Those frames
+then matter twice over. They are decoded ahead so the plugin has them, and they are folded
+into the frame's *name* in the cache — because a frame built from five neighbours is a
+different picture from a frame built from one, and two pictures that differ must never
+share a name.
+
+**When it goes wrong.** A plugin can crash, hang, or be switched off. When that happens the
+effect hands back the picture it was given, exactly as it was given it — not "very nearly",
+exactly, down to the last bit, because an effect that is doing nothing must really do
+nothing. Beside that it files a short sentence under the row it happened on, so the layer
+can wear a quiet badge. The comp keeps compositing. Nothing pops up.
+
+**What is still missing at this end.** Lumit does not yet go looking for plugins when it
+starts, and there is no list in Preferences to switch one off. Both are the next package's;
+what this one leaves behind is a single call that adds a described plugin to the catalogue
+and gives it its round-trip pass, so the place that does the looking has one thing to do
+with what it finds.
+
 ### What exists so far
 
 The ground floor: finding and opening a bundle, handing the plugin the host in the right
@@ -11496,13 +11564,17 @@ deadlines and the three strikes. A plugin that crashes on frame 100 loses frame 
 test proves it — the session carries on into a broker that did not exist a moment earlier,
 with the same instance and the same values, and the next frame renders for real.
 
-What is not there yet is the wiring at the other end: nothing in the engine starts a broker,
-because no engine crate depends on the plugin host at all. Effects & Presets cannot list a
-discovered plugin and a composition cannot contain one; that is the next package, and the
-edge is deliberately still one-way until it lands. Beside it, three smaller gaps that are
-written down rather than papered over: writing a value back and keyframing from a plugin,
-overlays (which gracefully turn into no overlay), and the copy in and out of the shared
-block, which the block exists to make unnecessary one day.
+And on top of *that*, the section above: a described plugin becomes an entry in the effect
+catalogue, renders in the middle of a stack of built-ins, names its cached frames like any
+other effect, and says which neighbouring frames it needs.
+
+What is not there yet is the wiring at the other end: nothing in the engine goes looking for
+plugins when Lumit starts, and there is no list in Preferences to switch one off — so in
+practice the catalogue still holds only built-ins, and no engine crate depends on the plugin
+host. That is the next package, and the seam it needs is one call. Beside it, three smaller
+gaps that are written down rather than papered over: writing a value back and keyframing
+from a plugin, overlays (which gracefully turn into no overlay), and the copy in and out of
+the shared block, which the block exists to make unnecessary one day.
 
 There is also a small set of plugins of Lumit's own, `lumit-ofx-testplug`, which exist only
 so the host has something honest to be tested against — a commercial plugin cannot live in

@@ -85,6 +85,18 @@ pub struct PluginRef {
     raw: *const OfxPlugin,
 }
 
+// SAFETY: `raw` points into the loaded library's own read-only image and is
+// never written through; the [`Bundle`] that made it keeps that library open
+// for as long as the reference exists, and unloading takes the bundle by value.
+// Dispatching an action through it from two threads at once is exactly what the
+// OFX thread-safety declaration governs, and `crate::instance::render_lock` is
+// where that governing happens — a plugin that said it may not be entered twice
+// is not entered twice (K-066). Without these the definition a plugin becomes
+// (K-593) could not be `Sync`, and every effect in the catalogue is.
+unsafe impl Send for PluginRef {}
+// SAFETY: see above.
+unsafe impl Sync for PluginRef {}
+
 impl PluginRef {
     /// Whether this is an image effect of the API version this host speaks.
     #[must_use]

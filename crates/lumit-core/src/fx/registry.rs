@@ -208,6 +208,30 @@ pub trait EffectDef: Sync + Send + 'static {
     /// operation of their own.
     fn apply_cpu(&self, _rgba: &mut [f32], _w: u32, _h: u32, _p: Params<'_>) {}
 
+    /// [`apply_cpu`](EffectDef::apply_cpu), told **which instance** it is
+    /// rendering and at **what layer time** (K-593).
+    ///
+    /// The dispatch seam calls this one; the default drops the two extra facts
+    /// and calls `apply_cpu`, which is what every built-in implements and what
+    /// the oracle tests call directly. A built-in's picture is a function of its
+    /// bag and nothing else, so for all of them the two are the same call.
+    ///
+    /// A **plugin** overrides it instead, because neither fact is in the bag and
+    /// it needs both: the frame time is what the plugin is told the frame is,
+    /// and the instance is which live copy of the plugin renders it — and, when
+    /// it fails, which layer wears the badge.
+    fn apply_cpu_at(
+        &self,
+        _inst: uuid::Uuid,
+        _lt: f64,
+        rgba: &mut [f32],
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+    ) {
+        self.apply_cpu(rgba, w, h, p);
+    }
+
     /// Values derived at resolve time from things that are not parameters
     /// (docs/impl/effect-registry.md §2.4a, K-385): layer time, the marker
     /// context, a whole keyframed track.
@@ -258,6 +282,34 @@ pub trait EffectDef: Sync + Send + 'static {
     fn driver_window(&self, _p: super::params::Params<'_>) -> f64 {
         0.0
     }
+
+    /// The source-relative frame offsets **this instance** reads at this layer
+    /// time — the picture-side twin of [`driver_window`](EffectDef::driver_window).
+    ///
+    /// `None` means "whatever the schema declares", which is every built-in:
+    /// Echo's window is a fact about the effect, not about the copy of it on
+    /// this layer. An **OFX plugin's** is not — a retimer answers
+    /// `getFramesNeeded` per instance and per frame (docs/12 §2.1), and the
+    /// frames it names have to reach the frame key and the neighbour decode or
+    /// a cached frame would outlive the frames it was sampled from.
+    ///
+    /// It must stay cheap and pure: [`super::stack_temporal_window`] calls it
+    /// once per live effect per frame, from the key walk.
+    fn frames_needed(&self, _inst: &EffectInstance, _lt: f64) -> Option<Vec<i32>> {
+        None
+    }
+
+    /// Why the last frame this definition rendered was a placeholder rather
+    /// than the effect's own work, if it was (docs/12 §2.3).
+    ///
+    /// `None` for every built-in: a built-in cannot fail — a missing input is a
+    /// passthrough, never a fault. A plugin can, because it is somebody else's
+    /// code in somebody else's process, and when it does the layer wants a calm
+    /// badge rather than a stopped comp. The dispatch seam reads this straight
+    /// after the render and files it under the op's instance.
+    fn last_error(&self) -> Option<String> {
+        None
+    }
 }
 
 /// The stable name an effect is looked up by, and the schema that answers to it.
@@ -266,15 +318,60 @@ pub trait EffectDef: Sync + Send + 'static {
 /// and one place to gain an index if 35 entries ever becomes 350. It is a linear
 /// scan today, exactly as `fx::schema` was, and is called at edit time and once
 /// per effect per frame — not per pixel.
+///
+/// **Two lists, one order** (K-593). The built-ins are the compile-time slice
+/// and come first, always, so the Add-effect menu, the command palette and the
+/// preset browser see exactly the order §2.6 promised. Behind them sit the
+/// entries registered at run time — OFX plugins today, the user's own in time —
+/// which are the same [`EffectDef`] trait object arriving by another road. A
+/// plugin can therefore never reorder a built-in, and a build with no plugins
+/// scanned is byte for byte the catalogue it always was.
 pub struct Catalogue {
     defs: &'static [&'static dyn EffectDef],
+    /// The run-time half. Written once per definition at scan time and read
+    /// everywhere else; a `RwLock` rather than a plain `Vec` because "scan
+    /// time" is a moment in a running program, not a moment before `main`.
+    extra: std::sync::RwLock<Vec<&'static dyn EffectDef>>,
 }
 
 impl Catalogue {
     /// Wrap a list of definitions. `catalogue!` calls this; nothing else should
     /// need to.
     pub const fn new(defs: &'static [&'static dyn EffectDef]) -> Self {
-        Self { defs }
+        Self {
+            defs,
+            extra: std::sync::RwLock::new(Vec::new()),
+        }
+    }
+
+    /// Add a definition discovered at run time (K-593).
+    ///
+    /// `false` — and nothing added — when the catalogue already answers to that
+    /// `match_name`, whether from the built-in list or from an earlier scan. A
+    /// second registration of the same plugin is a rescan, not a second effect,
+    /// and two entries under one name would make which of them renders depend
+    /// on the order of a directory listing.
+    ///
+    /// **The definition is `&'static`**, which for a plugin means leaked: it is
+    /// discovered while the program runs and then lives as long as the session,
+    /// and leaking is the honest spelling of that lifetime. Registration is
+    /// additive and never removes, so nothing has to reason about a definition
+    /// vanishing under a frame that is already in flight.
+    pub fn register(&self, def: &'static dyn EffectDef) -> bool {
+        let name = def.schema().match_name;
+        let Ok(mut extra) = self.extra.write() else {
+            // A poisoned lock means a panic in another thread while it held the
+            // write half. Engine crates do not panic (docs/14 §4); refusing the
+            // registration is the quiet answer, never a second panic here.
+            return false;
+        };
+        if self.defs.iter().any(|d| d.schema().match_name == name)
+            || extra.iter().any(|d| d.schema().match_name == name)
+        {
+            return false;
+        }
+        extra.push(def);
+        true
     }
 
     /// The definition named `match_name`, or `None` for a name this build does
@@ -285,22 +382,50 @@ impl Catalogue {
             .iter()
             .copied()
             .find(|d| d.schema().match_name == match_name)
+            .or_else(|| {
+                self.registered()
+                    .into_iter()
+                    .find(|d| d.schema().match_name == match_name)
+            })
     }
 
-    /// Every definition, in catalogue order.
+    /// Every definition: the built-ins in catalogue order, then whatever
+    /// registered at run time, in registration order.
     pub fn iter(&self) -> impl Iterator<Item = &'static dyn EffectDef> + '_ {
+        self.defs.iter().copied().chain(self.registered())
+    }
+
+    /// The **built-ins only**, in catalogue order.
+    ///
+    /// For the rules that are statements about Lumit's own declarations rather
+    /// than about effects in general: that every effect of ours carries a Matte
+    /// row (K-395), that a Mix row comes with a Blend, that a per cent is never
+    /// a disguised distance (K-558). A plugin's rows are its own (docs/12 §2.2)
+    /// and were written by somebody who never read those conventions, so judging
+    /// them by ours would fail the build for somebody else's taste.
+    pub fn builtins(&self) -> impl Iterator<Item = &'static dyn EffectDef> + '_ {
         self.defs.iter().copied()
     }
 
-    /// How many effects this build knows.
+    /// How many effects this session knows — built in and registered.
     pub fn len(&self) -> usize {
-        self.defs.len()
+        self.defs.len() + self.registered().len()
     }
 
     /// Whether the catalogue is empty (it never is; the method exists so `len`
     /// does not draw a clippy warning).
     pub fn is_empty(&self) -> bool {
-        self.defs.is_empty()
+        self.defs.is_empty() && self.registered().is_empty()
+    }
+
+    /// The run-time half, copied out. A `Vec` of thin pointers rather than a
+    /// borrow of the guard, because the callers above want an iterator that
+    /// outlives the read and the list is a handful of entries.
+    fn registered(&self) -> Vec<&'static dyn EffectDef> {
+        self.extra
+            .read()
+            .map(|list| list.clone())
+            .unwrap_or_default()
     }
 }
 

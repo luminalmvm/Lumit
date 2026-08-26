@@ -475,6 +475,9 @@ pub struct ResolvedFx<'a> {
     /// The instance this resolved from, so a diagnostic can name the row and the
     /// auxiliary inputs can be matched up one-for-one.
     pub instance: Uuid,
+    /// The layer time this op's parameters were evaluated at (K-593) — what a
+    /// plugin's render is told the frame is. Nought for a hand-built stack.
+    pub lt: f64,
     /// The resolved parameters, in schema order.
     pub params: Params<'a>,
 }
@@ -494,6 +497,10 @@ impl std::fmt::Debug for ResolvedFx<'_> {
 struct Op {
     def: &'static dyn EffectDef,
     instance: Uuid,
+    /// The layer time this op's parameters were evaluated at (K-593). Nought
+    /// for a stack a test built by hand, which is what [`ResolvedStack::begin`]
+    /// keeps meaning.
+    lt: f64,
     span: Range<u32>,
 }
 
@@ -517,10 +524,22 @@ impl ResolvedStack {
     /// Start a new op. Parameters pushed after this belong to it, until the next
     /// `begin` or the end of the stack.
     pub fn begin(&mut self, def: &'static dyn EffectDef, instance: Uuid) {
+        self.begin_at(def, instance, 0.0);
+    }
+
+    /// [`begin`](Self::begin), told the layer time the op resolved at (K-593).
+    ///
+    /// Only one kind of effect reads it: a **plugin**, whose render is a
+    /// conversation with somebody else's code and whose `kOfxPropTime` has to be
+    /// the frame actually being asked for. Every built-in's parameters are
+    /// already evaluated by the time they reach the arena, which is why `begin`
+    /// stays the plain spelling and nothing had to change to keep working.
+    pub fn begin_at(&mut self, def: &'static dyn EffectDef, instance: Uuid, lt: f64) {
         let start = self.entries.len() as u32;
         self.ops.push(Op {
             def,
             instance,
+            lt,
             span: start..start,
         });
     }
@@ -564,6 +583,7 @@ impl ResolvedStack {
         Some(ResolvedFx {
             def: op.def,
             instance: op.instance,
+            lt: op.lt,
             params: Params::new(entries),
         })
     }

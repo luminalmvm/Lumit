@@ -17501,3 +17501,125 @@ package that puts a badge in front of a person (K-303).
 `lumit-ofx` gains three dependencies for this — `interprocess`, `bincode` and `memmap2` —
 and the workspace gains one crate, `lumit-ofx-broker`, which depends on `lumit-ofx` and
 `lumit-eval` and on nothing else.
+
+## K-593 — The catalogue takes entries at run time, and an OFX plugin becomes an effect through the same trait object as a built-in
+
+**DECIDED 2026-08-26.** The fifth package of the OFX host (K-589, K-590, K-591, K-592,
+K-061), and the one docs/impl/effect-registry.md §2.6 was written for: "third-party
+effects (OFX, docs/12) register at run time through the *same* `EffectDef` trait object,
+into a registry that starts as the built-in list — which is the seam this refactor is
+really for." This is that sentence, built.
+
+**Two lists, one order.** `Catalogue` keeps its compile-time slice and gains a second,
+run-time list beside it. `get`, `iter` and `len` walk both, **built-ins first, always**, so
+the Add-effect menu, the command palette and the preset browser see exactly the order
+K-137 promised and a plugin can never move a built-in. `lumit-render`'s `GPU_EFFECTS` gains
+the same second list for the same reason. Both registrations are additive, refuse a name
+already known — which is what makes a rescan idempotent rather than a second effect — and
+happen at scan time with no frame in flight.
+
+**The entries are leaked.** An effect discovered while the program runs lives as long as
+the session, and the catalogue holds `&'static` because a built-in's declaration is a
+compile-time constant. Leaking is the honest spelling of that lifetime rather than a leak
+in the sense that matters; K-590 already leaks the schema on the same reasoning. The
+recorded ceiling is unchanged: a rescan that re-describes a plugin it has already seen must
+reuse the definition it has, or the leak becomes a leak.
+
+**A catalogue entry and a render pass arrive together.** They are joined by a `match_name`
+string and nothing checks the join at compile time (effect-registry §5, "two registries,
+one truth"), so the run-time pair is registered by **one call** —
+`lumit_render::gpufx::ofx::register` — which does the pass first, then the catalogue, or
+neither. The agreement test that guards the compile-time tables now walks
+`Catalogue::builtins()` and the static GPU table: there is no typo left for it to catch in
+the run-time half, and walking that half would only let it see a registration another
+thread was halfway through.
+
+**`builtins()` is a second iterator, and it is not a convenience.** The rules that say
+every effect carries a Matte row (K-395), that a Mix row comes with a Blend, that a per
+cent is never a disguised distance (K-558) and that an `_x` is half of a declared pair
+(K-443) are statements about **Lumit's own declarations**. A plugin's rows are its own
+(docs/12 §2.2, K-590), written by somebody who never read those conventions, so those tests
+walk `builtins()`. The rules that are about effects in general — one name, one definition;
+no bag carries an id twice — keep walking `iter()`.
+
+**The resolve walk lets plugins in by namespace, not by silence.**
+`resolve_stack_temporal_named` filtered to `EffectNamespace::Builtin`; it now takes
+`Builtin | Ofx`. `Placeholder` stays out by name rather than by lookup: it means "a name
+this build does not know", so asking the catalogue whether some unrelated effect happens to
+share it would be asking the wrong question.
+
+**`EffectDef` gains three hooks, all defaulted, all for the same reason** — a plugin's
+picture is not a function of its bag alone:
+
+- `apply_cpu_at(instance, lt, …)` is what the dispatch seam calls; the default drops the
+  two extra facts and calls `apply_cpu`, which is what every built-in implements and what
+  the oracles call. Only a plugin overrides it. Changing `apply_cpu`'s own signature would
+  have touched every effect in the tree to tell ninety of them a fact none of them wants.
+- `frames_needed(instance, lt)` is the picture-side twin of `driver_window`: `None` means
+  "whatever the schema declares", which is every built-in, because Echo's window is a fact
+  about the effect. A retimer's is a fact about this copy of it at this frame
+  (`getFramesNeeded`, docs/12 §2.1), so `stack_temporal_window` — which now takes the layer
+  time — asks the definition, and the frames it names reach the frame key and the
+  neighbour decode. `stack_is_temporal` stays the **declaration**: it is the gate in front
+  of the window, it runs on every layer of every frame, and K-590 already widens a temporal
+  plugin's declared window to ±1 for exactly this.
+- `last_error()` is how a plugin that died, hung or was disabled tells one layer to wear a
+  badge instead of stopping the comp. Thread-local inside the definition, taken when read,
+  so two frames in flight cannot report each other's failure and a stale reason cannot
+  badge a later frame that went perfectly well.
+
+`ResolvedStack` gains the op's layer time beside its instance id (`begin_at`, with `begin`
+still meaning "no time"), and `AuxSlot` carries the pair down to the pass. That is what
+gives a plugin its `kOfxPropTime` and gives the badge the row it belongs to.
+
+**The GPU half of a plugin is a read-back, and it knows nothing about plugins.**
+`gpufx/ofx.rs` reads the working texture to linear fp32, hands it to the definition, and
+uploads what comes back — `AuxKind::None`, no matte of its own, so the generic dissolve
+spends the matte exactly as it does for any other effect on `MatteRole::Strength` (K-395).
+It talks to an `EffectDef` and nothing else, so `lumit-render` gains **no dependency** on
+`lumit-ofx` and docs/05's "engine crates never depend on the host of anything" holds. Two
+transfers per plugin op per frame is a real cost, and it is why a plugin's declared cost is
+`Heavy`; the OFX 1.5 GPU render suites (docs/12 §2.4) are the answer to it and are a later
+milestone.
+
+**A failed render is identity, byte for byte.** The definition returns without writing,
+rather than writing the input back — writing it back would put the picture through the
+fp16 boundary for nothing, and a disabled plugin would then change the picture very
+slightly, which is the one thing "renders as identity" must not mean (K-258's shape).
+
+**Two hosts, because there are two places a plugin can be.** `LocalHost` drives a bundle in
+this process — what the catalogue tests use, since proving that a plugin becomes an effect
+needs no second process — and `BrokerHost` talks to K-592's broker, which is the shipping
+arrangement (docs/12 §2.3). Both keep one live plugin instance per effect instance, made on
+first use, because a plugin may hold private state per instance. K-066's scheduling needed
+nothing new: `instance::render_lock` already chooses no lock, the instance's own lock, or
+the bundle's from the plugin's declared `kOfxImageEffectPluginRenderThreadSafety`.
+
+**The bag's way home is `schema::value_routes`**, built by the same `rows_of` that minted
+the rows — so the reverse of "a 2-D control becomes `foo_x` and `foo_y`" is never guessed
+at. Numbers, switches, choices and colours cross; a **path** does not, because the bag
+carries a file-table slot rather than the string, and a plugin's path parameter keeps the
+plugin's own default until the package that edits one lands.
+
+**The frame key needed nothing.** It already hashes every live effect's namespace, name,
+version and every parameter id and value, whatever the namespace (K-016, effect-registry
+§4.4), and a plugin's parameters are ordinary stored properties because the host owns the
+animation (docs/12 §2.2). What this package adds is the test that says so in both
+directions: a control that moves renames the frame, a plugin update renames the frame, and
+nothing else does.
+
+**Ceilings, named rather than implied.** Nothing registers a plugin in the shipping app
+yet: discovery, the per-plugin enable/disable list (docs/12 §2.6) and the badge in front of
+a person are the next package's, and this one leaves the composition root a single call to
+make. `BrokerHost` serialises a whole bundle behind one lock, because a broker owns one
+pipe and one ring — K-066's parallelism is across brokers until one broker can carry two
+conversations at once. The broker's render does not yet prefetch the neighbour frames a
+retimer asks for; the declaration reaches the decode planner and the frame key, and
+threading the decoded neighbours down to the plugin boundary is the work of the package
+that gives the dispatch seam its side tables. And `PluginRef` is now `Send + Sync`, which
+it has to be for a definition to be `Sync` as every catalogue entry is — the pointer is
+into a library the bundle keeps open, and concurrent entry is governed by the plugin's own
+declaration, which `render_lock` obeys.
+
+No `app_en.arb` key: the failure sentences are engine English that nothing in the frontend
+can reach yet, and they gain their keys with the package that shows the badge (K-303).

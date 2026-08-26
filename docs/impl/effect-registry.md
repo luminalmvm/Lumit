@@ -567,6 +567,29 @@ on link order, and the menu, the command palette and the preset browser are all
 (OFX, docs/12) register at run time through the *same* `EffectDef` trait object, into a
 registry that starts as the built-in list — which is the seam this refactor is really for.
 
+**That seam is built** (K-593). `Catalogue` keeps the compile-time slice and holds a
+run-time list beside it; `get`, `iter` and `len` walk both, **built-ins first, always**, so
+a plugin can never move a built-in in the menu. `Catalogue::register` is additive, refuses a
+`match_name` already known — which is what makes a rescan idempotent — and takes a
+`&'static dyn EffectDef`, which for a plugin means leaked: an effect discovered while the
+program runs lives as long as the session. `lumit-render`'s `GPU_EFFECTS` has the same
+second list, and the pair is registered by one call (`gpufx::ofx::register`) so the two
+tables cannot arrive separately.
+
+`Catalogue::builtins()` is the **other** iterator, and choosing between them is a real
+decision each time. A rule that is a statement about *Lumit's* declarations — every effect
+carries a Matte row (§2.5b), a Mix row comes with a Blend, a per cent is never a disguised
+distance, an `_x` is half of a declared pair — walks `builtins()`, because a plugin's rows
+are its own (docs/12 §2.2) and were written by somebody who never read this note. A rule
+about effects in general — one name, one definition; no bag carries an id twice — walks
+`iter()`.
+
+Three `EffectDef` hooks exist for the run-time half, all defaulted so no built-in changed:
+`apply_cpu_at(instance, lt, …)`, which the dispatch seam calls and whose default drops the
+two facts and calls `apply_cpu`; `frames_needed(instance, lt)`, the picture-side twin of
+`driver_window`, answering `None` for "whatever the schema declares"; and `last_error()`,
+which is how a plugin that failed badges its own row instead of stopping the comp.
+
 ## 3. What a frame does
 
 1. `resolve_stack` walks the instances, and for each enabled built-in looks the def up by

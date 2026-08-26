@@ -276,22 +276,43 @@ pub fn stack_accumulation_mb(
         })
 }
 
+/// Whether an instance is one the catalogue can answer for — a built-in, or a
+/// plugin that registered at run time (K-593). A placeholder is not: it is a
+/// name this build does not understand, kept so the project round-trips, and it
+/// renders as identity.
+fn is_catalogued(e: &EffectInstance) -> bool {
+    matches!(
+        e.effect.namespace,
+        EffectNamespace::Builtin | EffectNamespace::Ofx
+    )
+}
+
 /// The union of source-relative frame offsets a layer's live effect stack
-/// needs (docs/08 §1.3 `temporal`), always sorted and always containing 0
-/// (the current frame). `&[0]` when the stack is bypassed, empty, or every
-/// effect is a plain single-frame one — so a layer with no temporal effect
-/// pays nothing. The render pipeline decodes the layer's source at each of
-/// these offsets so a temporal effect (echo, flow motion blur, datamosh)
+/// needs at layer time `lt` (docs/08 §1.3 `temporal`), always sorted and always
+/// containing 0 (the current frame). `&[0]` when the stack is bypassed, empty,
+/// or every effect is a plain single-frame one — so a layer with no temporal
+/// effect pays nothing. The render pipeline decodes the layer's source at each
+/// of these offsets so a temporal effect (echo, flow motion blur, datamosh)
 /// can read its neighbours.
-pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool) -> Vec<i32> {
+///
+/// **Per instance, not only per effect** (K-593). A built-in's window is a fact
+/// about the effect and comes off its declaration, exactly as it always did. A
+/// plugin's is a fact about *this copy of it at this frame*: a retimer answers
+/// `getFramesNeeded` per instance and per time (docs/12 §2.1), so the definition
+/// is asked ([`EffectDef::frames_needed`](super::EffectDef::frames_needed)) and
+/// answers for itself, falling back to the declaration when it has nothing more
+/// specific to say. The frames it names are then in the frame key and in the
+/// prefetch, which is what keeps a cached frame from outliving what it sampled.
+pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool, lt: f64) -> Vec<i32> {
     let mut offsets = vec![0i32];
     if fx_on {
-        for e in effects.iter().filter(|e| e.enabled) {
-            if e.effect.namespace != EffectNamespace::Builtin {
+        for e in effects.iter().filter(|e| e.enabled && is_catalogued(e)) {
+            let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
                 continue;
-            }
-            if let Some(s) = schema(&e.effect.match_name) {
-                offsets.extend_from_slice(s.traits.temporal);
+            };
+            match def.frames_needed(e, lt) {
+                Some(own) => offsets.extend_from_slice(&own),
+                None => offsets.extend_from_slice(def.schema().traits.temporal),
             }
         }
     }
@@ -303,11 +324,18 @@ pub fn stack_temporal_window(effects: &[EffectInstance], fx_on: bool) -> Vec<i32
 /// True when any live effect in the stack reads frames other than the
 /// current one — the cheap gate the render/cache paths check before doing
 /// any neighbour-frame work.
+///
+/// Deliberately the **declaration** rather than the per-instance answer: this is
+/// the gate in front of the window, it runs on every layer of every frame, and a
+/// plugin that reads other frames at all says so at describe time (its declared
+/// window is widened to ±1 for exactly this reason, docs/12 §2.1). A plugin that
+/// declared no temporal access and then asked for another frame would be
+/// answered with the frame in hand, which is what the spec says it gets.
 pub fn stack_is_temporal(effects: &[EffectInstance], fx_on: bool) -> bool {
     fx_on
         && effects
             .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter(|e| e.enabled && is_catalogued(e))
             .any(|e| {
                 schema(&e.effect.match_name)
                     .is_some_and(|s| s.traits.temporal.iter().any(|&o| o != 0))

@@ -114,6 +114,31 @@ What the built transport pins, beyond the sketch above (K-592):
 - The prefetch hook sits between `getFramesNeeded` and `isIdentity` — the only point in
   §3's order where a frame at another time may be asked for.
 
+## 4a. Becoming an effect
+
+A described plugin is turned into an `EffectDef` (`lumit-ofx::def::OfxEffectDef`) and
+registered into the same catalogue the built-ins live in — the seam
+[effect-registry.md](effect-registry.md) §2.6 was written for (K-593). What that pins here:
+
+- **`apply_cpu` is the render.** The bag arrives keyed by hashed ids; `schema::value_routes`
+  is the way back to the plugin's own parameter names, built by the same `rows_of` that
+  minted the rows so the reverse of the `foo_x`/`foo_y` split is never guessed at. Numbers,
+  switches, choices and colours cross. A **path** does not — the bag carries a file-table
+  slot rather than the string — so a plugin's path parameter keeps its declared default.
+- **The GPU pass is a read-back** (`lumit-render::gpufx::ofx`): working texture → linear
+  fp32 → the definition → back. It talks to an `EffectDef` and nothing else, so
+  `lumit-render` depends on no plugin host. `AuxKind::None`, no matte of its own.
+- **`getFramesNeeded` is asked per instance and per frame** through
+  `EffectDef::frames_needed`, and the offsets it answers reach `stack_temporal_window` — and
+  through it the frame key and the neighbour decode. The static declaration §3's describe
+  produced is the fallback and the gate.
+- **A failed render is identity, byte for byte**: the definition returns without writing,
+  and files a sentence under the instance for the badge.
+- **Two hosts.** `LocalHost` drives a bundle in this process; `BrokerHost` drives §4's
+  broker, which is the shipping arrangement. Both pool one live plugin instance per effect
+  instance. Thread safety needs nothing new — `instance::render_lock` already turns the
+  plugin's declaration into no lock, the instance's, or the bundle's (K-066).
+
 ## 5. Test plan
 
 1. Conformance bench first: **openfx-misc** (Natron's plugin set, ~80 plugins, source

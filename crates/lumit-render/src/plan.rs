@@ -440,7 +440,7 @@ pub fn collect_comp_jobs(
                 let temporal =
                     if lumit_core::fx::stack_is_temporal(&layer.effects, layer.switches.fx) {
                         let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
-                        lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx)
+                        lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt)
                             .into_iter()
                             .filter(|&o| o != 0)
                             .map(|o| {

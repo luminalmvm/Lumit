@@ -46,6 +46,7 @@
 //! reach runs its body inside a catch (see [`suites`]).
 
 pub mod bundle;
+pub mod def;
 pub mod describe;
 pub mod ffi;
 pub mod handles;
@@ -65,6 +66,7 @@ pub mod suites;
 mod tests;
 
 pub use bundle::{Bundle, BundleError};
+pub use def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering};
 pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejection, ScanReport};
 pub use handles::{Handle, HandleKind, HandleRegistry};
 pub use image::{Frame16, Image, RectI, RowOrder};

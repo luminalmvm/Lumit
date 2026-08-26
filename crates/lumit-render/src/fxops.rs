@@ -701,6 +701,8 @@ pub fn run_ops(
                     fitted_layer_input.as_ref(),
                     mask_paths_of_op,
                     schedule,
+                    resolved.instance,
+                    resolved.lt,
                 ),
             );
             // A grown raster (K-542). The two passes below and every op after

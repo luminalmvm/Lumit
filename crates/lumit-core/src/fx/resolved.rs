@@ -332,10 +332,18 @@ pub fn resolve_stack_temporal_named(
 ) -> (Vec<Uuid>, ResolvedStack) {
     let mut ids = Vec::new();
     let mut out = ResolvedStack::new();
-    for e in effects
-        .iter()
-        .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-    {
+    // Built-ins and the plugins that registered at run time (K-593) — the
+    // catalogue answers for both, and a lookup that misses resolves to nothing
+    // either way. A Placeholder is excluded by name: it is a name this build
+    // does not know, and asking the catalogue for it would be asking whether
+    // some unrelated effect happens to share it.
+    for e in effects.iter().filter(|e| {
+        e.enabled
+            && matches!(
+                e.effect.namespace,
+                EffectNamespace::Builtin | EffectNamespace::Ofx
+            )
+    }) {
         let lt = if e.sample_temporally {
             sample_lt
         } else {
@@ -457,7 +465,7 @@ pub(super) fn resolve_into_arena(
     context: Arc<ExpressionContext>,
     drivers: &ResolvedDrivers,
 ) {
-    bags.begin(def, e.id);
+    bags.begin_at(def, e.id, lt);
     for p in def.schema().params {
         let driven = if drivers.is_empty() {
             None
