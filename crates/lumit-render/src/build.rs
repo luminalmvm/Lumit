@@ -950,6 +950,9 @@ pub fn build_comp_draws_at(
             fx: Default::default(),
             lut_files: Vec::new(),
             nested: Some(nested),
+            // A comp's layers were each interpreted as themselves while it was
+            // realised; the picture that comes out is already working-space.
+            colour_space: None,
         })
     };
 
@@ -1029,6 +1032,7 @@ pub fn build_comp_draws_at(
             fx,
             lut_files,
             nested: None,
+            colour_space: crate::colour::footage_colour_space(doc, &src.kind),
         })
     };
 
@@ -1796,6 +1800,7 @@ pub fn build_comp_draws_at(
                 fx,
                 lut_files,
                 nested,
+                colour_space: crate::colour::footage_colour_space(doc, &src.kind),
             })
         });
 

@@ -57,6 +57,13 @@ pub struct MatteDraw {
     /// masks/effects toggles do not apply to a comp reference — the comp
     /// renders as itself, its layers' own masks and effects included.
     pub nested: Option<Box<NestedInputDraw>>,
+    /// The matte source's own OCIO colour space (K-490), carried for the same
+    /// reason and read the same way as [`DrawSource::Pixels::colour_space`]: a
+    /// matte drawn from footage is image content, and log footage read as
+    /// though it were sRGB gates by the wrong shape. `None` — a source that is
+    /// not footage, one nobody has assigned, and a Precomp matte, whose layers
+    /// were each interpreted as themselves when the nested comp was realised.
+    pub colour_space: Option<String>,
 }
 
 /// A depth-of-field depth input packaged for the compositor (docs/impl/
@@ -89,6 +96,12 @@ pub struct DofInputDraw {
     /// source-mode masks/effects toggles do not apply to a comp reference —
     /// the comp renders as itself, its layers' own effects included.
     pub nested: Option<Box<NestedInputDraw>>,
+    /// The referenced layer's own OCIO colour space (K-490), as
+    /// [`MatteDraw::colour_space`] carries a matte's: a Light wrap background
+    /// plate or a Texturize texture is a picture, and it is interpreted through
+    /// the space its footage item was tagged with rather than the built-in
+    /// assumption. `None` for anything that is not tagged footage.
+    pub colour_space: Option<String>,
 }
 
 /// What a layer-input parameter resolves to for one effect op (docs/impl/

@@ -70,11 +70,13 @@ pub struct Realiser<'a> {
     /// one, or any of the test builders — means every source linearises
     /// through the built-in interpretation, which is what this always did.
     ///
-    /// ponytail: footage pixels only. A matte, a light-wrap plate and a
-    /// mask's coverage raster still take the built-in path; the first two are
-    /// image content and would want the same treatment, and the upgrade is to
-    /// carry the space name on `LayerInputDraw` as it is carried on
-    /// `DrawSource::Pixels`.
+    /// Every source of **image content** reads through it: a layer's own pixels
+    /// ([`DrawSource::Pixels`]), a matte source's ([`crate::draw::MatteDraw`]),
+    /// and a layer input's — a Light wrap background plate, a Texturize texture
+    /// ([`crate::draw::DofInputDraw`]). A mask's coverage raster is not image
+    /// content: it is a shape's alpha, drawn by Lumit rather than decoded from
+    /// anybody's camera, so it has no colour space to be interpreted through and
+    /// takes the built-in path deliberately.
     pub colour_inputs: Option<&'a crate::colour::InputTransforms>,
     /// The flow backend a composite measurement runs on (docs/08 §3.2, K-565),
     /// held by the render's owner beside the caches above and for the same
@@ -236,7 +238,15 @@ impl Realiser<'_> {
                     let src = self
                         .engine
                         .upload_srgb8(&self.ctx, &d.rgba, d.tex_w, d.tex_h);
-                    self.engine.linearise(&self.ctx, &src)
+                    // Through the referenced layer's own colour space (K-490):
+                    // a background plate is a picture like any other, and it is
+                    // read as what it is rather than as what the layer reading
+                    // it happens to be.
+                    self.engine.linearise_through(
+                        &self.ctx,
+                        &src,
+                        self.input_transform(&d.colour_space),
+                    )
                 };
                 // Effects-and-masks depth (K-142): run the depth layer's own
                 // stack on its texture before it is resampled, when the consumer's
@@ -1024,7 +1034,10 @@ impl Realiser<'_> {
                 })
             })
             .collect();
-        // Layer-space mask textures (Precomp masks — GPU mask pass).
+        // Layer-space mask textures (Precomp masks — GPU mask pass). No colour
+        // space is applied to one and none ever will be: this raster is a
+        // shape's coverage, drawn here from the mask's own geometry, not image
+        // content that arrived in somebody's colour space (K-490).
         let mask_textures: Vec<Option<wgpu::Texture>> = layers
             .iter()
             .zip(&grown)
@@ -1075,7 +1088,15 @@ impl Realiser<'_> {
                         let src = self
                             .engine
                             .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
-                        self.engine.linearise(&self.ctx, &src)
+                        // Through the matte source's own colour space (K-490),
+                        // as its own picture would be: log footage read as
+                        // sRGB gates by the wrong shape, and a matte is
+                        // nothing but a shape.
+                        self.engine.linearise_through(
+                            &self.ctx,
+                            &src,
+                            self.input_transform(&m.colour_space),
+                        )
                     };
                     // After-effects matte (K-decision): run the matte source's own
                     // stack on its texture before it gates the consumer, so a keyed

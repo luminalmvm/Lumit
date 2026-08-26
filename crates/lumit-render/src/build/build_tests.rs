@@ -1162,3 +1162,125 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
     assert_eq!(sizes(Some(Uuid::now_v7())), straight);
     assert!(straight.0 > 0.0 && straight.0 < 368.0, "{straight:?}");
 }
+
+/// **A matte is image content** (K-490, docs/impl/ocio.md §5.2): a track matte
+/// drawn from a footage layer carries that item's colour space to the realiser,
+/// exactly as the layer's own pixels do, so log footage used as a matte is
+/// interpreted rather than assumed. The layer being gated keeps its own space,
+/// whatever the matte's is.
+#[test]
+fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
+    use lumit_core::model::{
+        FootageItem, LayerInputSource, MatteChannel, MatteRef, MediaRef, ProjectItem,
+    };
+
+    let footage = |name: &str, space: Option<&str>| FootageItem {
+        sequence: None,
+        id: Uuid::now_v7(),
+        name: name.into(),
+        media: MediaRef {
+            relative_path: name.into(),
+            absolute_path: name.into(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        colour_space: space.map(str::to_owned),
+        extra: serde_json::Map::new(),
+    };
+    let plate = footage("plate.mov", Some("ACEScct"));
+    let holdout = footage("holdout.mov", Some("srgb_texture"));
+
+    let layer = |item: Uuid, name: &str| Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: name.into(),
+        kind: LayerKind::Footage { item },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        effects: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let matte_layer = layer(holdout.id, "holdout");
+    let mut gated = layer(plate.id, "plate");
+    gated.matte = Some(MatteRef {
+        layer: matte_layer.id,
+        channel: MatteChannel::Alpha,
+        inverted: false,
+        source: LayerInputSource::None,
+    });
+
+    let comp = Composition {
+        id: Uuid::now_v7(),
+        name: "Comp".into(),
+        width: 640,
+        height: 360,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: vec![gated.clone(), matte_layer.clone()],
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+
+    let pixels = |l: &Layer| CompLayerPixels {
+        layer: l.id,
+        width: 640,
+        height: 360,
+        rgba: vec![0u8; 640 * 360 * 4],
+        natural_w: 640,
+        natural_h: 360,
+        temporal: Vec::new(),
+        flow_fields: Vec::new(),
+        source_key: 0,
+    };
+    let (gp, mp) = (pixels(&gated), pixels(&matte_layer));
+    let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    map.insert(gated.id, &gp);
+    map.insert(matte_layer.id, &mp);
+
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Footage(plate));
+    doc.items.push(ProjectItem::Footage(holdout));
+    let doc = std::sync::Arc::new(doc);
+    let mut visited = vec![comp.id];
+    let draws = build_comp_draws(&doc, &comp, 0.0, &map, &mut visited);
+
+    let gated_draw = draws
+        .iter()
+        .find(|d| d.matte.is_some())
+        .expect("the gated layer draws with its matte");
+    assert_eq!(
+        gated_draw.matte.as_ref().unwrap().colour_space.as_deref(),
+        Some("srgb_texture"),
+        "the matte reads through the space its own footage was tagged with"
+    );
+    match &gated_draw.source {
+        DrawSource::Pixels { colour_space, .. } => assert_eq!(
+            colour_space.as_deref(),
+            Some("ACEScct"),
+            "and the layer it gates keeps its own"
+        ),
+        other => panic!(
+            "footage draws pixels, not {:?}",
+            std::mem::discriminant(other)
+        ),
+    }
+}

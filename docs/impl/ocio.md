@@ -418,7 +418,13 @@ never the hardware filter, which breaks CPU/GPU equality).
 - **Input transforms** run where linearisation already runs: the decode compute pass
   (docs/06 §3.2) applies the item's artefact instead of the fixed sRGB/Rec.709 curves
   — same pass, new tables, still no CPU round trip. Stills uploaded through
-  `upload_srgb8` take a linearise-pass variant with the same artefact.
+  `upload_srgb8` take a linearise-pass variant with the same artefact. **Every
+  source of image content takes it**, not only a layer's own picture: a track
+  matte's source and a layer input's plate (a Light wrap background, a Texturize
+  texture) carry their own item's space on the draw and linearise through it, so
+  log footage gates and wraps as what it is. A mask's coverage raster does not —
+  it is a shape's alpha drawn from the mask geometry, not content that arrived in
+  anybody's colour space.
 - **The display/view transform** runs where the display transform already runs: the
   `ColourEngine` display pass (`colour.wgsl`), as a pipeline variant binding the
   shaper (1D texture) and cube (3D texture) after the existing exposure/tone-map
