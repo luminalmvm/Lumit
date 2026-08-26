@@ -31,10 +31,18 @@
 //!
 //! The binary (`src/main.rs`) runs all six and writes the JSON; each scenario is
 //! also an `#[ignore]`d test, so one budget can be measured on its own.
+//!
+//! One thing here is not a stopwatch. [`ofx`] fetches and builds the free OFX
+//! plugin sets the host's conformance pass is run against
+//! (docs/impl/ofx-host.md §5) — the same fetch-rather-than-commit trick
+//! [`media`] plays with video, in the crate that already shells out to other
+//! people's tools. Its own binary is `src/bin/ofx-bench.rs`; the perf run never
+//! touches it.
 
 pub mod baseline;
 pub mod comp;
 pub mod media;
+pub mod ofx;
 pub mod scenarios;
 
 pub use baseline::Baseline;

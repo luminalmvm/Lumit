@@ -417,9 +417,32 @@ unsafe extern "C" fn param_get_value_at_time(
     guard(|| unsafe { write_value(param, [v0, v1, v2, v3]) })
 }
 
+/// A parameter handle that names a live parameter, or the error a plugin is
+/// required to expect.
+///
+/// The entry points below do nothing yet, but "nothing" is still an answer, and
+/// a forged handle must be told apart from a real one it cannot serve
+/// (docs/impl/ofx-host.md §5 item 2). Answering `kOfxStatErrUnsupported` to a
+/// number a plugin invented tells it the feature is missing when the truth is
+/// that its handle is rubbish — and it is the one code that would have it try
+/// again with the same handle somewhere else.
+fn live_param(param: OfxParamHandle) -> Result<(), Status> {
+    state().params.get(Handle::from_ptr(param)).map(|_| ())
+}
+
+/// As [`live_param`], for the entry points that take the bag rather than one
+/// parameter.
+fn live_param_set(param_set: OfxParamSetHandle) -> Result<(), Status> {
+    let effect = effect_of(param_set)?;
+    state().effects.get(effect).map(|_| ())
+}
+
 unsafe extern "C" fn param_get_derivative(param: OfxParamHandle, time: OfxTime) -> c_int {
-    let _ = (param, time);
-    Status::ErrUnsupported.code()
+    let _ = time;
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_get_integral(
@@ -427,26 +450,37 @@ unsafe extern "C" fn param_get_integral(
     time1: OfxTime,
     time2: OfxTime,
 ) -> c_int {
-    let _ = (param, time1, time2);
-    Status::ErrUnsupported.code()
+    let _ = (time1, time2);
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_set_value(param: OfxParamHandle) -> c_int {
-    let _ = param;
-    Status::ErrUnsupported.code()
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_set_value_at_time(param: OfxParamHandle, time: OfxTime) -> c_int {
-    let _ = (param, time);
-    Status::ErrUnsupported.code()
+    let _ = time;
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_get_num_keys(
     param: OfxParamHandle,
     number_of_keys: *mut c_uint,
 ) -> c_int {
-    let _ = (param, number_of_keys);
-    Status::ErrUnsupported.code()
+    let _ = number_of_keys;
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_get_key_time(
@@ -454,8 +488,11 @@ unsafe extern "C" fn param_get_key_time(
     nth_key: c_uint,
     time: *mut OfxTime,
 ) -> c_int {
-    let _ = (param, nth_key, time);
-    Status::ErrUnsupported.code()
+    let _ = (nth_key, time);
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_get_key_index(
@@ -464,18 +501,26 @@ unsafe extern "C" fn param_get_key_index(
     direction: c_int,
     index: *mut c_int,
 ) -> c_int {
-    let _ = (param, time, direction, index);
-    Status::ErrUnsupported.code()
+    let _ = (time, direction, index);
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_delete_key(param: OfxParamHandle, time: OfxTime) -> c_int {
-    let _ = (param, time);
-    Status::ErrUnsupported.code()
+    let _ = time;
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_delete_all_keys(param: OfxParamHandle) -> c_int {
-    let _ = param;
-    Status::ErrUnsupported.code()
+    guard(|| {
+        live_param(param)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 unsafe extern "C" fn param_copy(
@@ -484,8 +529,12 @@ unsafe extern "C" fn param_copy(
     dst_offset: OfxTime,
     frame_range: *const OfxRangeD,
 ) -> c_int {
-    let _ = (param_to, param_from, dst_offset, frame_range);
-    Status::ErrUnsupported.code()
+    let _ = (dst_offset, frame_range);
+    guard(|| {
+        live_param(param_to)?;
+        live_param(param_from)?;
+        Err(Status::ErrUnsupported)
+    })
 }
 
 /// An edit block is an undo grouping. Lumit's undo is the host's own
@@ -493,11 +542,10 @@ unsafe extern "C" fn param_copy(
 /// nothing to undo, so both ends succeed and record nothing. Answering an error
 /// here would have plugins that wrap every change in one give up on the change.
 unsafe extern "C" fn param_edit_begin(param_set: OfxParamSetHandle, name: *const c_char) -> c_int {
-    let _ = (param_set, name);
-    Status::Ok.code()
+    let _ = name;
+    guard(|| live_param_set(param_set))
 }
 
 unsafe extern "C" fn param_edit_end(param_set: OfxParamSetHandle) -> c_int {
-    let _ = param_set;
-    Status::Ok.code()
+    guard(|| live_param_set(param_set))
 }

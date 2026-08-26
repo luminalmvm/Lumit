@@ -81,6 +81,28 @@ pub fn clear_errored(instance: Uuid) {
     }
 }
 
+/// Run one definition's own CPU render and file whatever it says about it.
+///
+/// This is the pass below, minus the two transfers: the picture goes to the
+/// definition as plain floats and the badge comes back. It is a function rather
+/// than three lines inside [`CpuPass::run`] because the failure path — a plugin
+/// that died, hung or was switched off — has to be provable without a graphics
+/// card, and the seam that turns "the plugin failed" into "the layer wears a
+/// badge" is exactly these two calls in this order
+/// (docs/impl/ofx-host.md §5 item 4).
+pub fn apply_and_note(
+    def: &'static dyn EffectDef,
+    instance: Uuid,
+    lt: f64,
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: Params<'_>,
+) {
+    def.apply_cpu_at(instance, lt, rgba, w, h, p);
+    note(instance, def.last_error());
+}
+
 /// Record, or clear, one op's failure.
 fn note(instance: Uuid, error: Option<String>) {
     let Ok(mut table) = ERRORED.lock() else {
@@ -125,8 +147,7 @@ impl GpuEffect for CpuPass {
             );
             return tex.clone();
         };
-        self.0.apply_cpu_at(instance, lt, &mut rgba, w, h, p);
-        note(instance, self.0.last_error());
+        apply_and_note(self.0, instance, lt, &mut rgba, w, h, p);
         lumit_gpu::fx::upload_linear_f32(ctx, &rgba, w, h)
     }
 }

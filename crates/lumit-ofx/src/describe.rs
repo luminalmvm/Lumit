@@ -329,12 +329,33 @@ pub fn describe_bundle(bundle: &Bundle) -> ScanReport {
     report
 }
 
-/// Run the describe sequence at one plugin.
+/// Run the describe sequence at one plugin, in the first context this host can
+/// drive.
 ///
 /// # Errors
 ///
 /// A [`Rejection`] naming why this plugin is not an effect Lumit can offer.
 pub fn describe(plugin: &PluginRef) -> Result<PluginDescriptor, Rejection> {
+    describe_in(plugin, None)
+}
+
+/// Run the describe sequence at one plugin in the context of your choosing.
+///
+/// `None` is [`describe`]: the first context the plugin declared that this host
+/// drives, which is what the scan uses because an effect appears once in the
+/// menu. The conformance bench passes each of them in turn instead
+/// (docs/impl/ofx-host.md §5): a plugin is a **different effect** in each
+/// context — different clips, different parameters — and one that describes
+/// beautifully as a filter can still fail as a general effect.
+///
+/// # Errors
+///
+/// A [`Rejection`] naming why this plugin is not an effect Lumit can offer in
+/// that context.
+pub fn describe_in(
+    plugin: &PluginRef,
+    only: Option<Context>,
+) -> Result<PluginDescriptor, Rejection> {
     match plugin.load_status {
         Some(Status::Ok) => {}
         other => return Err(Rejection::NotLoaded(other.unwrap_or(Status::ErrFatal))),
@@ -353,9 +374,20 @@ pub fn describe(plugin: &PluginRef) -> Result<PluginDescriptor, Rejection> {
         .into_iter()
         .filter(|context| declared.iter().any(|name| name == context.ofx_name()))
         .collect();
-    let Some(&context) = contexts.first() else {
+    let chosen = match only {
+        Some(wanted) => contexts.iter().copied().find(|&have| have == wanted),
+        None => contexts.first().copied(),
+    };
+    let Some(context) = chosen else {
         return Err(Rejection::NoDrivenContext { declared });
     };
+    // The context that was actually driven leads the list: everything
+    // downstream — the instance, the host, the schema — takes the first as the
+    // one the parameters and clips below belong to.
+    let mut contexts = contexts;
+    if let Some(at) = contexts.iter().position(|&have| have == context) {
+        contexts.swap(0, at);
+    }
 
     // The context descriptor starts as a copy of what the plugin said about
     // itself, plus the context: a plugin that reads its own grouping back

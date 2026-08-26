@@ -9,6 +9,7 @@
 //! plugin is waiting for one, and never lets a raw integer wander further in.
 
 use std::ffi::c_int;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A status code as the OFX C API spells it: a plain `int`.
 pub type OfxStatus = c_int;
@@ -94,5 +95,50 @@ pub fn finish(result: StatusResult) -> OfxStatus {
     match result {
         Ok(()) => Status::Ok.code(),
         Err(status) => status.code(),
+    }
+}
+
+/// How many statuses there are, which is how many counters the tally keeps.
+const STATUS_COUNT: usize = 15;
+
+/// One counter per status, bumped as the host answers
+/// (docs/impl/ofx-host.md §5).
+///
+/// # In plain terms
+///
+/// The conformance bench asks a hard question — *did any of the eighty plugins
+/// make a suite call the host had to refuse?* — and the only place that can
+/// answer it is the host itself, at the moment it hands the number back. A
+/// plugin never reports its own bad handle; it swallows the code and carries
+/// on, which is exactly how a host bug hides behind a picture that came out
+/// looking right.
+///
+/// So every suite entry point tallies what it returned. Relaxed atomics and no
+/// allocation: this is on the path of every property read a plugin makes, and
+/// the tally must cost nothing worth measuring.
+static ANSWERED: [AtomicU64; STATUS_COUNT] = [const { AtomicU64::new(0) }; STATUS_COUNT];
+
+/// Tally one answer. Called by the suites' guards and by nothing else.
+pub(crate) fn record(code: OfxStatus) {
+    let index = usize::try_from(code).unwrap_or(usize::MAX);
+    if let Some(slot) = ANSWERED.get(index) {
+        slot.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// How many times the host has answered `status` since the last [`forget`].
+#[must_use]
+pub fn answered(status: Status) -> u64 {
+    let index = usize::try_from(status.code()).unwrap_or(usize::MAX);
+    ANSWERED
+        .get(index)
+        .map_or(0, |slot| slot.load(Ordering::Relaxed))
+}
+
+/// Start the tally again from nought — what a harness does before the pass it
+/// wants the count for.
+pub fn forget() {
+    for slot in &ANSWERED {
+        slot.store(0, Ordering::Relaxed);
     }
 }

@@ -9810,3 +9810,174 @@ fn a_plugin_can_be_switched_off_and_the_answer_holds_immediately() {
     assert!(crate::api::effect::set_plugin_enabled("blur".to_owned(), false).is_ok());
     assert!(!lumit_ofx::discover::is_disabled("blur"));
 }
+
+/// The badge path, end to end through the bridge: a plugin whose render fails
+/// hands back its input unchanged, the comp carries on, and **the layer wears a
+/// badge with the plugin's own sentence under it** (docs/12 §2.3, the Gate-4
+/// demo in docs/16 line 85). The next frame that works takes the badge off
+/// again.
+///
+/// The failure here is filed by the definition, not fabricated by the test: a
+/// host that answers "the plugin stopped answering" is what a crashed broker,
+/// a missed deadline and a plugin switched off mid-session all look like from
+/// this side of the seam (docs/impl/ofx-host.md §5 item 4). That a *crash*
+/// really does end in that answer, in another process, is the broker crate's
+/// own test — it needs a second process and this needs none.
+#[test]
+fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    /// A host that fails on demand. Failing means: the picture goes back
+    /// untouched and a sentence comes with it.
+    struct Moody {
+        failing: AtomicBool,
+        why: String,
+    }
+
+    impl lumit_ofx::PluginHost for Moody {
+        fn render(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            _params: &lumit_ofx::ParamSnapshot,
+            source: lumit_ofx::Frame16,
+        ) -> lumit_ofx::Rendering {
+            if self.failing.load(Ordering::SeqCst) {
+                return lumit_ofx::Rendering {
+                    frame: source,
+                    error: Some(self.why.clone()),
+                };
+            }
+            lumit_ofx::Rendering {
+                frame: source,
+                error: None,
+            }
+        }
+
+        fn frames_needed(
+            &self,
+            _instance: Uuid,
+            _time: f64,
+            _params: &lumit_ofx::ParamSnapshot,
+        ) -> Option<Vec<i32>> {
+            None
+        }
+    }
+
+    /// Register one plugin definition backed by `host`, and hand back the
+    /// definition and the name it answers to.
+    fn a_registered_plugin(
+        identifier: &str,
+        host: Arc<dyn lumit_ofx::PluginHost>,
+    ) -> (&'static dyn lumit_core::fx::EffectDef, String) {
+        let descriptor = lumit_ofx::PluginDescriptor {
+            identifier: identifier.to_owned(),
+            version: (1, 0),
+            grouping: "Lumit/Test".to_owned(),
+            label: "Moody".to_owned(),
+            contexts: vec![lumit_ofx::Context::Filter],
+            params: Vec::new(),
+            clips: Vec::new(),
+            temporal: false,
+            render_thread_safety: None,
+        };
+        let schema: &'static lumit_core::fx::EffectSchema = Box::leak(Box::new(
+            lumit_ofx::schema_of(&descriptor).expect("a plugin with no parameters has a schema"),
+        ));
+        let name = schema.match_name.to_owned();
+        let def = lumit_ofx::OfxEffectDef::new(&descriptor, schema, host).leak();
+        assert!(
+            lumit_render::gpufx::ofx::register(def),
+            "the catalogue and the pass table both took {name}"
+        );
+        (def, name)
+    }
+
+    let failed_why = "the plugin stopped answering";
+    let moody = Arc::new(Moody {
+        failing: AtomicBool::new(true),
+        why: failed_why.to_owned(),
+    });
+    let (def, name) = a_registered_plugin("com.lumitlab.moody", moody.clone());
+
+    let instance = lumit_core::fx::instantiate(&name).expect("the plugin is in the catalogue");
+    let mut rgba = vec![0.25_f32; 4 * 4 * 4];
+    let before = rgba.clone();
+    lumit_render::gpufx::ofx::apply_and_note(
+        def,
+        instance.id,
+        0.0,
+        &mut rgba,
+        4,
+        4,
+        lumit_core::fx::Params::EMPTY,
+    );
+
+    // **Identity, byte for byte.** A failed plugin costs the layer its effect,
+    // never its picture.
+    assert_eq!(
+        rgba, before,
+        "a failed render left the frame exactly as it was"
+    );
+
+    let badged =
+        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+    assert_eq!(badged.badge_reason.as_deref(), Some("plugin_failed"));
+    assert_eq!(
+        badged.badge_detail.as_deref(),
+        Some(failed_why),
+        "the plugin's own words are shown verbatim beneath the badge"
+    );
+    assert!(
+        crate::api::effect::BADGE_REASONS.contains(&"plugin_failed"),
+        "the reason is a key the frontend can translate"
+    );
+
+    // The session carries on: the next frame works, and the badge goes.
+    moody.failing.store(false, Ordering::SeqCst);
+    lumit_render::gpufx::ofx::apply_and_note(
+        def,
+        instance.id,
+        1.0,
+        &mut rgba,
+        4,
+        4,
+        lumit_core::fx::Params::EMPTY,
+    );
+    let cleared =
+        crate::api::effect::read_instance_info(&instance, lumit_core::time::Rational::ZERO);
+    assert_eq!(cleared.badge_reason, None);
+    assert_eq!(cleared.badge_detail, None);
+
+    // A plugin switched off files the reason as a **key**, and the badge says
+    // "switched off" rather than reporting somebody's failure.
+    let disabled = Arc::new(Moody {
+        failing: AtomicBool::new(true),
+        why: lumit_ofx::DISABLED_REASON.to_owned(),
+    });
+    let (off_def, off_name) = a_registered_plugin("com.lumitlab.moody.off", disabled);
+    let off = lumit_core::fx::instantiate(&off_name).expect("the plugin is in the catalogue");
+    lumit_render::gpufx::ofx::apply_and_note(
+        off_def,
+        off.id,
+        0.0,
+        &mut rgba,
+        4,
+        4,
+        lumit_core::fx::Params::EMPTY,
+    );
+    let switched_off =
+        crate::api::effect::read_instance_info(&off, lumit_core::time::Rational::ZERO);
+    assert_eq!(
+        switched_off.badge_reason.as_deref(),
+        Some("plugin_disabled")
+    );
+    assert_eq!(
+        switched_off.badge_detail, None,
+        "a key is never shown to a person as a sentence"
+    );
+
+    lumit_render::gpufx::ofx::clear_errored(instance.id);
+    lumit_render::gpufx::ofx::clear_errored(off.id);
+}

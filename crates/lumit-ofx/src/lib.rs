@@ -68,7 +68,9 @@ mod tests;
 
 pub use bundle::{Bundle, BundleError};
 pub use def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering};
-pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejection, ScanReport};
+pub use describe::{
+    describe, describe_bundle, describe_in, Context, PluginDescriptor, Rejection, ScanReport,
+};
 pub use discover::{
     scan, DiscoveredPlugin, Hosting, ScanOptions, ScanOutcome, DISABLED_REASON, SCAN_FRAME,
 };

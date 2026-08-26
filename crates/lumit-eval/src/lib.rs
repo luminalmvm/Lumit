@@ -3190,6 +3190,125 @@ mod tests {
         assert_ne!(k(&layer(true), 1.0), k(&layer(true), 1.5));
     }
 
+    /// A retimer **plugin** asks for five frames either side of the one being
+    /// rendered — per instance, per frame, through `getFramesNeeded`
+    /// (docs/12 §2.1) — and those eleven frames are what this layer's frame
+    /// depends on. So the key moves when any one of them changes and stands
+    /// when a frame outside the window does; a cached frame can never outlive
+    /// what the plugin sampled to make it.
+    ///
+    /// The window itself is asserted in `lumit-core`; this is the same window
+    /// end to end, at the place the cache is actually decided
+    /// (docs/impl/ofx-host.md §5 item 3).
+    #[test]
+    fn a_plugins_eleven_sampled_frames_are_what_its_key_depends_on() {
+        use lumit_core::fx::{
+            CostClass, EffectDef, EffectSchema, EffectTraits, FxCategory, MatteRole, Roi,
+        };
+
+        /// A plugin that reads t ± 5, whatever the frame and whatever the
+        /// instance — the smallest thing that is a retimer.
+        struct Retimer;
+        impl EffectDef for Retimer {
+            fn schema(&self) -> &'static EffectSchema {
+                // Declared ±1: the widening the host applies at describe time
+                // when a plugin says it reads other frames at all. It is the
+                // gate; the per-instance answer below is the window.
+                Box::leak(Box::new(EffectSchema {
+                    match_name: "ofx:test.eval.retimer",
+                    label: "Retimer",
+                    version: 1,
+                    category: FxCategory::Utility,
+                    traits: EffectTraits {
+                        cost: CostClass::Heavy,
+                        roi: Roi::FullFrame,
+                        temporal: &[-1, 0, 1],
+                        premultiplied: true,
+                        seeded: false,
+                        beat_input: false,
+                    },
+                    params: &[],
+                    groups: &[],
+                    enabled_when: &[],
+                    matte: MatteRole::None,
+                }))
+            }
+
+            fn frames_needed(
+                &self,
+                _inst: &lumit_core::model::EffectInstance,
+                _lt: f64,
+            ) -> Option<Vec<i32>> {
+                Some((-5..=5).collect())
+            }
+        }
+
+        // A schema is looked up by name once and must answer the same pointer
+        // every time, so the leak happens once here rather than per call.
+        let def: &'static Retimer = Box::leak(Box::new(Retimer));
+        assert!(
+            lumit_core::fx::BUILTIN_DEFS.register(def),
+            "the catalogue took the plugin"
+        );
+
+        /// The stub stamper with one frame changed: exactly the shape of "the
+        /// footage under this layer was re-imported and frame N is different
+        /// now".
+        struct Bumped(u64);
+        impl SourceStamper for Bumped {
+            fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+                let frame = (lt * 60.0).round().max(0.0) as u64;
+                let identity = if frame == self.0 {
+                    format!("stub:{item}:changed")
+                } else {
+                    format!("stub:{item}")
+                };
+                Some((identity, frame))
+            }
+        }
+
+        let doc = Arc::new(Document::new());
+        let item = Uuid::now_v7();
+        let mut layer = text_layer("", 0.0, 10.0, 0.0);
+        layer.kind = LayerKind::Footage { item };
+        layer
+            .effects
+            .push(lumit_core::fx::instantiate("ofx:test.eval.retimer").expect("it registered"));
+        let comp = comp_with(vec![layer]);
+
+        // One second in, at sixty frames a second: the frame being rendered is
+        // 60 and the plugin reads 55 to 65.
+        let at = |stamper: &dyn SourceStamper| {
+            comp_frame_key(&doc, &comp, 1.0, Quality::default(), stamper).unwrap()
+        };
+        let base = at(&StubStamper);
+        for inside in [55_u64, 59, 61, 65] {
+            assert_ne!(
+                base,
+                at(&Bumped(inside)),
+                "frame {inside} is one the plugin samples, so the cached frame is stale"
+            );
+        }
+        for outside in [54_u64, 66, 120] {
+            assert_eq!(
+                base,
+                at(&Bumped(outside)),
+                "frame {outside} is outside the plugin's window and must retire nothing"
+            );
+        }
+
+        // And the gate in front of the window is the declaration: bypass the
+        // stack and the neighbours leave the key altogether.
+        let mut bypassed = comp.clone();
+        bypassed.layers[0].switches.fx = false;
+        let plain = comp_frame_key(&doc, &bypassed, 1.0, Quality::default(), &StubStamper).unwrap();
+        assert_eq!(
+            plain,
+            comp_frame_key(&doc, &bypassed, 1.0, Quality::default(), &Bumped(55)).unwrap(),
+            "a bypassed stack samples nothing but its own frame"
+        );
+    }
+
     /// K-094 covers Flow motion blur too: its temporal window is {0, 1}, so the
     /// existing neighbour-key block already hashes the +1 source frame it reads
     /// (the frame the flow field is measured against). A motion-blur layer's

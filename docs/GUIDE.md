@@ -11599,6 +11599,60 @@ box in the middle of the screen, never something that stops playback. A plugin t
 question is told "you decide" — which is the answer OFX itself defines for a host that
 cannot ask anybody.
 
+### Proving it against plugins we did not write
+
+Every test up to here has been the host against plugins Lumit wrote, and there is a limit
+to what that proves: our own plugins agree with us about everything. The real test is
+somebody else's code, and there is a good free supply of it — Natron's **openfx-misc**,
+about eighty effects, and **ntsc-rs**. Neither can live in this repository, so Lumit does
+what it already does for the benchmark's video clips: it *fetches and builds* them into a
+folder, once, and leaves them there. A machine with no compiler, or no network, gets a
+sentence saying so and the tests carry on against Lumit's own plugins — a green suite for
+somebody who has not built eighty plugins, and a real one on the machine that has.
+
+The pass itself is dull on purpose. For every plugin, in every shape of effect it says it
+can be, ask it to describe itself, make a live copy, hand it a picture, and check what
+comes back is a picture — the right size, and no pixel that is "not a number", which is the
+value that quietly poisons everything downstream of it once it reaches a composite. What
+comes out is a table: passed, rejected, failed, one row apiece.
+
+**Rejected is not failed**, and keeping the two apart is most of the value. This host hands
+out one kind of picture — full frames of floating-point colour with an alpha — and drives
+two of the four shapes an effect can take. A plugin that needs something else is turned
+away at the door with a reason, and the reason is a row in the table. Only the third column
+is a bug.
+
+One assertion in there could not be made at all until this pass existed: *did any plugin
+make a request the host had to refuse?* A plugin that asks with a handle we do not
+recognise gets an error code back, shrugs, and carries on — so the picture can come out
+looking perfectly right while the host has been quietly saying no all the way through.
+That is what a host bug looks like from the outside. So the host now keeps a count of every
+answer it gives, and the pass fails if "that is not a handle" or "that is not a value" was
+ever one of them.
+
+### Handing every door a key that does not fit
+
+The other half of the same idea, done properly. A handle is a number the host invented; a
+plugin can hand back any number at all, and some do. The unit tests seed that with a
+handful of bad ones by hand. The fuzzing test builds a corpus — numbers nobody minted,
+numbers that named something now destroyed, numbers of the right shape for the wrong kind
+of thing, and thousands of randomly mangled ones — and puts every single one of them
+through every single entry point of all six suites. Same seed every run, so a failure can
+be reproduced rather than chased.
+
+The answer must always be the same: "that is not a handle", and nothing else. Not a crash,
+and — this is the part that only running it found — not "I do not support that". Some
+entry points are for features Lumit has not built yet, and they used to answer "not
+supported" to everything, including handles that were rubbish. That is a small lie with a
+real consequence: it tells the plugin the *feature* is missing, so it tries the same broken
+handle somewhere else instead of throwing it away. They check the handle first now.
+
+Assertions can only say the host *answered*. Whether it read a byte it had no business
+reading on the way is a different question, and the only thing that answers it is a
+sanitiser — a compiler mode that puts a guard around every allocation and stops the program
+the moment anything touches the wrong one. So this one test also runs in a job of its own,
+built that way, on a longer run than a developer's test would take.
+
 ### What exists so far
 
 The ground floor: finding and opening a bundle, handing the plugin the host in the right

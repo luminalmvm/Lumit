@@ -27,20 +27,27 @@ pub mod property;
 
 /// Run a suite entry point's body, converting its answer — or its panic —
 /// into the status code the plugin is waiting for.
+/// Every answer is tallied on its way out ([`crate::status::answered`]): the
+/// conformance bench's question — did any plugin make a call the host had to
+/// refuse — has no other place to be answered from (docs/impl/ofx-host.md §5).
 pub(crate) fn guard(body: impl FnOnce() -> StatusResult) -> OfxStatus {
-    match catch_unwind(AssertUnwindSafe(body)) {
+    let code = match catch_unwind(AssertUnwindSafe(body)) {
         Ok(result) => finish(result),
         Err(_) => Status::ErrFatal.code(),
-    }
+    };
+    crate::status::record(code);
+    code
 }
 
 /// As [`guard`], for the entry points whose successful answer is a code other
 /// than `kOfxStatOK` — the message suite answers a question with a reply.
 pub(crate) fn guard_code(body: impl FnOnce() -> Status) -> OfxStatus {
-    match catch_unwind(AssertUnwindSafe(body)) {
+    let code = match catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status.code(),
         Err(_) => Status::ErrFatal.code(),
-    }
+    };
+    crate::status::record(code);
+    code
 }
 
 /// Borrow a C string the plugin passed in.

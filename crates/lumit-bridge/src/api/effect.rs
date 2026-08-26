@@ -149,10 +149,20 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                     || schema.category.label().to_owned(),
                     |found| found.grouping.clone(),
                 ),
-                namespace: if plugin.is_some() {
-                    NAMESPACE_OFX
-                } else {
+                // **Built-in means in the compile-time slice**, not "the scan
+                // has never heard of it". The two agree for every plugin that
+                // arrived through the scan, which is every plugin in a running
+                // Lumit; they part company for a definition registered by some
+                // other route, and calling that one a built-in would have the
+                // frontend offer to do built-in things to somebody else's
+                // effect (K-595).
+                namespace: if lumit_core::fx::BUILTIN_DEFS
+                    .builtins()
+                    .any(|def| def.schema().match_name == schema.match_name)
+                {
                     NAMESPACE_BUILTIN
+                } else {
+                    NAMESPACE_OFX
                 }
                 .to_owned(),
                 inputs,

@@ -6,7 +6,7 @@
 //! point a handle it was never given and checks that the answer is a status
 //! code and that nothing moved.
 
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
 
@@ -1089,6 +1089,117 @@ fn a_parameter_defined_twice_under_one_name_is_refused() {
     crate::describe::release_descriptor(effect);
 }
 
+/// The animation half of the parameter suite is not built, and says so — but it
+/// must say **which** no. A forged handle is `kOfxStatErrBadHandle` at every
+/// entry point of every suite; `kOfxStatErrUnsupported` there would tell a
+/// plugin the feature is missing when the truth is that its handle is rubbish,
+/// and it is the one answer that would have it try the same handle elsewhere.
+///
+/// The conformance fuzz target (`tests/handle_fuzz.rs`) is what found this;
+/// this is the seed it grew from, kept because it is the smaller thing to read
+/// (docs/impl/ofx-host.md §5 item 2).
+#[test]
+fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
+    let effect = a_live_descriptor();
+    let params = &crate::suites::parameter::SUITE;
+    let suite = &crate::suites::image_effect::SUITE;
+    let mut param_set: *mut c_void = std::ptr::null_mut();
+    let mut props: *mut c_void = std::ptr::null_mut();
+    let mut handle: *mut c_void = std::ptr::null_mut();
+    let mut keys: c_uint = 0;
+
+    // SAFETY: a live handle and valid out-parameters throughout.
+    unsafe {
+        assert_eq!(
+            (suite.get_param_set)(effect.as_ptr(), &raw mut param_set),
+            Status::Ok.code()
+        );
+        assert_eq!(
+            (params.param_define)(
+                param_set,
+                c"OfxParamTypeDouble".as_ptr(),
+                c"amount".as_ptr(),
+                &raw mut props,
+            ),
+            Status::Ok.code()
+        );
+        assert_eq!(
+            (params.param_get_handle)(
+                param_set,
+                c"amount".as_ptr(),
+                &raw mut handle,
+                &raw mut props,
+            ),
+            Status::Ok.code()
+        );
+
+        // A real parameter: the feature is genuinely missing.
+        assert_eq!(
+            (params.param_get_num_keys)(handle, &raw mut keys),
+            Status::ErrUnsupported.code()
+        );
+        assert_eq!(
+            (params.param_set_value)(handle),
+            Status::ErrUnsupported.code()
+        );
+        assert_eq!(
+            (params.param_edit_begin)(param_set, c"edit".as_ptr()),
+            Status::Ok.code()
+        );
+        assert_eq!((params.param_edit_end)(param_set), Status::Ok.code());
+
+        // The same calls with a handle nobody minted: a different no.
+        let forged = 0xdead_beef_usize as *mut c_void;
+        assert_eq!(
+            (params.param_get_num_keys)(forged, &raw mut keys),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_get_key_time)(forged, 0, std::ptr::null_mut()),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_get_key_index)(forged, 0.0, 0, std::ptr::null_mut()),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_set_value)(forged),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_set_value_at_time)(forged, 0.0),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_get_derivative)(forged, 0.0),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_get_integral)(forged, 0.0, 1.0),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_delete_key)(forged, 0.0),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_delete_all_keys)(forged),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_copy)(forged, forged, 0.0, std::ptr::null()),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!(
+            (params.param_edit_begin)(forged, c"edit".as_ptr()),
+            Status::ErrBadHandle.code()
+        );
+        assert_eq!((params.param_edit_end)(forged), Status::ErrBadHandle.code());
+    }
+
+    crate::describe::release_descriptor(effect);
+}
+
 #[test]
 fn the_definition_suites_refuse_a_forged_handle() {
     let effect = a_live_descriptor();
@@ -1338,6 +1449,20 @@ fn a_probe(bundle: &Bundle) -> Option<libloading::Library> {
     unsafe { libloading::Library::new(bundle.path()) }.ok()
 }
 
+/// The image ledger is process-wide, and so is the assertion two tests below
+/// make about it: *every picture the host handed a plugin was let go of*. That
+/// question has no answer while another test's render is in flight — the count
+/// it reads would be somebody else's — so every test that hands images to a
+/// plugin takes this first. It is the only lock in the suite, it is held for
+/// the length of one test, and a test that fails while holding it poisons
+/// nothing worth keeping.
+fn image_ledger() -> std::sync::MutexGuard<'static, ()> {
+    static LEDGER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LEDGER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// The whole of an instance's life in one arrangement: create, render, destroy.
 fn render_once(
     bundle: &Bundle,
@@ -1361,6 +1486,7 @@ fn render_once(
 /// process.
 #[test]
 fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_frame_goes_through_a_plugin") else {
         return;
     };
@@ -1414,6 +1540,7 @@ fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
 /// float — which is well inside the docs/08 §1.6 tolerance of two fp16 ULP.
 #[test]
 fn a_passthrough_plugin_returns_the_input_unchanged() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_passthrough_plugin_returns") else {
         return;
     };
@@ -1434,6 +1561,7 @@ fn a_passthrough_plugin_returns_the_input_unchanged() {
 /// because the host told it to, and the picture comes back the right way up.
 #[test]
 fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_negative_row_bytes_image") else {
         return;
     };
@@ -1467,6 +1595,7 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
 /// transcribes.
 #[test]
 fn the_action_order_is_the_one_the_note_lists() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("the_action_order") else {
         return;
     };
@@ -1518,6 +1647,7 @@ fn the_action_order_is_the_one_the_note_lists() {
 /// renders — never inside one, which is the thing Sapphire relies on.
 #[test]
 fn a_changed_control_fires_wrapped_and_between_renders() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_changed_control_fires") else {
         return;
     };
@@ -1587,6 +1717,7 @@ fn a_changed_control_fires_wrapped_and_between_renders() {
 /// than a race with a sleep in it.
 #[test]
 fn concurrent_renders_follow_the_plugins_own_declaration() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("concurrent_renders") else {
         return;
     };
@@ -1653,6 +1784,7 @@ fn concurrent_renders_follow_the_plugins_own_declaration() {
 /// output, and no begin, render or end is dispatched.
 #[test]
 fn an_identity_plugin_short_circuits_to_its_input() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("an_identity_plugin") else {
         return;
     };
@@ -1691,6 +1823,7 @@ fn an_identity_plugin_short_circuits_to_its_input() {
 /// output buffer goes with it rather than to the caller.
 #[test]
 fn a_failed_render_is_an_error_and_not_a_half_written_frame() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_failed_render") else {
         return;
     };
@@ -1729,6 +1862,7 @@ fn a_failed_render_is_an_error_and_not_a_half_written_frame() {
 /// the plugin is asked anything at all.
 #[test]
 fn a_stale_epoch_stops_the_render_before_the_plugin_is_asked() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("a_stale_epoch") else {
         return;
     };
@@ -1770,6 +1904,7 @@ fn a_stale_epoch_stops_the_render_before_the_plugin_is_asked() {
 /// forged-handle path every suite call already walks.
 #[test]
 fn releasing_an_image_twice_is_a_status() {
+    let _ledger = image_ledger();
     let Some((_root, bundle, report)) = a_described_bundle("releasing_an_image_twice") else {
         return;
     };

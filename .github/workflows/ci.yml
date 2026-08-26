@@ -648,6 +648,108 @@ jobs:
           -p lumit-track
           --fail-under-lines 80
 
+  # The OFX host's conformance pass against real third-party plugins
+  # (docs/impl/ofx-host.md §5 item 1). Items 3 and 4 of that plan — a retimer's
+  # sampled frames reaching the frame key, and a failed plugin badging its layer
+  # through the bridge — are ordinary tests and run in the three suite jobs
+  # above; what needs a job of its own is the bench, because it is eighty
+  # plugins that have to be built before anything can be asked of them.
+  #
+  # The FFmpeg and libclang setup is the `linux` job's: `lumit-bench` reaches
+  # `lumit-render`, which reaches `lumit-media`, so the runner that fetches the
+  # plugins is a runner that compiles the engine.
+  #
+  # LUMIT_REQUIRE_OFX_BENCH is deliberately NOT set yet: nobody has watched this
+  # job build openfx-misc from source on a hosted runner, and a gate is only
+  # worth having where it has been shown to hold (the same reasoning as
+  # LUMIT_REQUIRE_GPU in the `linux` job). Until then the runner prints why the
+  # bench is absent and the pass runs against Lumit's own test plugin. Flip it on
+  # the day a run proves the build works — that is the overview's open question
+  # about how the bench reaches CI, answered by evidence rather than by hope.
+  ofx-conformance:
+    name: OFX conformance bench (openfx-misc, ntsc-rs)
+    runs-on: ubuntu-latest
+    env:
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      LUMIT_OFX_BENCH: ${{ github.workspace }}/target/ofx-bench
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             pkg-config libasound2-dev libgl-dev libegl-dev             libxkbcommon-dev libxkbcommon-x11-dev             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev             libwayland-dev libclang-18-dev cmake
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      # The **bundles only**, not the checkouts they were built from: the
+      # runner's `ensure` hands back a folder that already has bundles in it
+      # without looking at a compiler, so a green run pays for the eighty
+      # plugins once and never unpacks their source again.
+      - name: Cache the built bench
+        uses: actions/cache@v4
+        with:
+          path: target/ofx-bench/*.ofx.bundle
+          key: ofx-bench-${{ runner.os }}-v1
+      - name: Fetch and build the bench (openfx-misc, ntsc-rs)
+        run: cargo run --release -p lumit-bench --bin ofx-bench
+      - name: Describe, instance and render every plugin in every context
+        run: cargo test -p lumit-ofx --test conformance -- --nocapture
+      - name: The pass/fail table, for the pull request
+        if: always()
+        run: |
+          if [ -f target/ofx-conformance.md ]; then
+            {
+              echo "## OFX conformance"
+              cat target/ofx-conformance.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Keep the table
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ofx-conformance
+          path: target/ofx-conformance.md
+          if-no-files-found: ignore
+
+  # Handle fuzzing under AddressSanitizer (docs/impl/ofx-host.md §5 item 2).
+  # A job of its own because it is the one thing in the tree that needs a
+  # nightly compiler: `-Zsanitizer=address` is unstable. The ordinary suites
+  # keep running the same target unsanitised, where it is a fast assertion about
+  # status codes; here it is the other half of the promise — that refusing a
+  # forged handle also never reads a byte it should not have.
+  #
+  # std is not rebuilt with the sanitiser (`-Zbuild-std` would, and costs a
+  # whole standard library per run): the host's own code is instrumented, which
+  # is where handles are decoded. Leak detection is off because the host leaks
+  # deliberately — the `OfxHost` a plugin holds must outlive everything
+  # (docs/impl/ofx-host.md §1) and registry slots are never reused.
+  ofx-handle-fuzz:
+    name: OFX handle fuzzing (ASan)
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -Zsanitizer=address
+      ASAN_OPTIONS: detect_leaks=0
+      # A longer soak than a developer's `cargo test` runs, since this job does
+      # nothing else.
+      LUMIT_OFX_FUZZ_ITERS: 20000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p lumit-ofx --test handle_fuzz --target x86_64-unknown-linux-gnu
+
   no-hex-outside-theme:
     name: design-token lint (no hex literals outside the theme module)
     runs-on: ubuntu-latest

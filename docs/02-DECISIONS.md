@@ -17709,3 +17709,89 @@ their list.
 New `app_en.arb` keys: `effectsPlugins`, `effectFromPlugin`, `effectBuiltIn`,
 `switchPluginOff`, `badgePluginFailed`, `badgePluginDisabled`, `badgePluginMissing`,
 `badgeUnknownEffect`.
+
+
+## K-595 — The OFX host is run against plugins nobody here wrote, the bench is built rather than committed, and the host counts its own refusals
+
+**DECIDED 2026-08-26.** The seventh and last OFX package adds no host feature. It runs
+`docs/impl/ofx-host.md` §5 as written, folds what that found back into the six packages
+before it, and turns the automatable part into a gate. The note keeps its authority: where
+this contradicted it, the note was amended in the same commit.
+
+**The conformance bench is fetched and built, never committed.** docs/12 §2.5 names two
+free plugin sets — openfx-misc (Natron's eighty-odd) and ntsc-rs — and neither belongs in a
+public repository: one is a large third-party tree, the other is somebody else's release
+binary. So `lumit-bench` gains `ofx::ensure`, which clones and builds them into one folder
+and is idempotent — a folder that already holds bundles is handed straight back without
+looking at a compiler, so a vendored or prebuilt drop reaches the harness through exactly
+the same path. This is the answer to the overview's open question about how the bench
+reaches CI, and it is answered with the qualifier attached: the job does not yet *insist*
+on the bench. `LUMIT_REQUIRE_OFX_BENCH` turns a named skip into a failure and is set the
+day a run proves the source build works on a hosted runner — the same reasoning, and the
+same shape, as `LUMIT_REQUIRE_GPU`. A machine without the bench runs the same pass against
+Lumit's own test plugins and says so, which is what keeps a developer who has not built
+eighty plugins on a green suite.
+
+**The host tallies every status it answers.** The note asked the pass to assert that no
+suite call came back `kOfxStatErrBadHandle` or `kOfxStatErrValue`, and nothing could read
+that: a plugin swallows the code and carries on, so the picture comes out looking right
+while the host has been refusing calls all the way through. Every suite guard now counts
+its answer in a relaxed atomic, `status::answered` reads the tally and `status::forget`
+resets it. It costs one increment per suite call and it is the only place that question can
+be answered from.
+
+**Every context, not the first.** `describe_in` drives a plugin in a named context.
+The scan still takes the first drivable one — an effect appears once in a menu — but a
+plugin is a *different effect* in each context, and a conformance pass that only ever asked
+for one was only ever testing half of them.
+
+**A forged handle is `kOfxStatErrBadHandle` at every entry point, built or not.** The fuzz
+target found the parameter suite's unbuilt half — keyframing, writing a value, derivatives
+— answering `kOfxStatErrUnsupported` to handles nobody had minted. Two different noes, and
+the wrong one was being given: "unsupported" says the *feature* is missing, which has a
+plugin try the same rubbish handle somewhere else. They resolve the handle first now and
+each carries a regression test. The four image-memory entry points are deliberately left
+as they are: this host has no image-memory arena at all, so there is no registry for a
+handle to be absent from and `kOfxStatErrUnsupported` is the true answer to every one of
+them.
+
+**Fuzzing is a test, and the sanitiser is a job.** `tests/handle_fuzz.rs` puts a corpus of
+forged, stale, wrong-kind, freed and randomly mutated handles through every entry point of
+all six suites, deterministic by seed, with the length and the seed as environment
+variables. It runs in the ordinary suite as a fast assertion about status codes, and again
+in a CI job of its own on nightly under AddressSanitizer, which is the half assertions
+cannot make — that refusing a handle also never read a byte it should not have. Leak
+detection is off there, because this host leaks on purpose: the `OfxHost` a plugin holds
+outlives everything and registry slots are never reused (K-589).
+
+**The crash and the badge are tested apart, and that is deliberate.** The process dying
+needs a second process and stays in the broker's own crate (K-592); the badge needs the
+whole seam from the definition to the bridge's read model, and is asserted there — a failed
+render is identity byte for byte, the layer wears `plugin_failed` with the plugin's own
+sentence beneath it, a switched-off plugin wears `plugin_disabled` with none, and the next
+frame that works takes the badge off. `lumit-render`'s plugin pass grows one small seam for
+it, `gpufx::ofx::apply_and_note` — the pass minus its two GPU transfers — so that "this
+plugin failed" reaching "this layer is badged" is provable without a graphics card.
+
+**The commercial pass is a checklist, and its result belongs in a pull request.** Twixtor
+and RSMB have licence servers and cannot be in CI. `docs/impl/ofx-host.md` §5 gains the
+five-step manual pass — including the unhappy half, where the licence is pulled and the
+layer must wear a calm badge — and says the result is recorded in the pull request that ran
+it, not in a document that would rot.
+
+**Built-in means "in the compile-time slice".** The browser listing decided provenance by
+asking the *scan* whether it had heard of an effect, which is the same answer for every
+plugin in a running Lumit and the wrong one for a definition registered by any other route
+— it would be offered to the frontend as one of ours. It now asks the catalogue's built-in
+half directly, which is the question that was always meant.
+
+**One flake, found by running the suite rather than by reading it.** P3's image ledger is
+process-wide, and two of its tests assert that every picture the host handed a plugin was
+let go of. That question has no answer while another test's render is in flight, and on a
+loaded machine it failed about one run in three. The tests that hand images to a plugin now
+take one lock for the length of the test. A red CI blocks everything (K-007), and a test
+that is red one time in three is worse than a missing one.
+
+**`quirks.json` is still empty, and that is a result.** No plugin has earned an entry from
+the runs made so far. The table's purpose is unchanged (K-589): the day the bench forces
+one, it is a line of data rather than an `if identifier ==` in the code.

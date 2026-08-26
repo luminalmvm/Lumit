@@ -168,15 +168,89 @@ registered into the same catalogue the built-ins live in — the seam
 
 1. Conformance bench first: **openfx-misc** (Natron's plugin set, ~80 plugins, source
    available) then **ntsc-rs** — both free; run describe→render across contexts, assert no
-   bad-handle returns, valid output.
+   bad-handle returns, valid output. **Landed** as `crates/lumit-ofx/tests/conformance.rs`
+   over a runner in `crates/lumit-bench` (`ofx::ensure`, its binary `ofx-bench`), and the
+   CI job `OFX conformance bench`. What running it pinned (K-595):
+
+   - **The bench is fetched and built, never committed.** Same trade as the reference
+     media: a runner clones each project and builds it into one folder, is idempotent, and
+     a folder that already holds bundles needs no compiler at all — so a vendored or
+     prebuilt drop works through the same path. The overview's open question is answered
+     that way, with the honest qualifier that the job does not yet *insist*:
+     `LUMIT_REQUIRE_OFX_BENCH` turns a missing bench from a named skip into a failure, and
+     it is set the day a run proves the source build works on a hosted runner.
+   - **The host tallies every status it answers** (`status::answered`, bumped in the
+     suites' guard). "Assert no bad-handle returns" had nowhere to read from before that:
+     a plugin swallows the code and carries on, which is exactly how a host bug hides
+     behind a picture that came out looking right.
+   - **Every context, not the first.** `describe_in` drives one named context, because a
+     plugin is a different effect in each — different clips, different parameters — and
+     the scan's "first drivable one" is a menu decision, not a conformance one.
+   - **A rejection is a row, not a failure**: a context this host does not drive, a
+     describe that failed, a parameter set Lumit cannot declare. The table counts them
+     separately and the assertion is only about the third column.
+
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
-   status codes, zero UB (run under ASan in CI).
+   status codes, zero UB (run under ASan in CI). **Landed** as
+   `crates/lumit-ofx/tests/handle_fuzz.rs` — every entry point of all six suites against a
+   corpus of forged, stale, wrong-kind, freed and randomly mutated handles, deterministic
+   by seed, with the CI job `OFX handle fuzzing (ASan)` running it on nightly under
+   AddressSanitizer (leak detection off: this host leaks the `OfxHost` and its registry
+   slots on purpose, §1). It found one thing, folded back into the parameter suite: the
+   entry points that are **not built yet** answered `kOfxStatErrUnsupported` to a handle
+   nobody minted. A forged handle is `kOfxStatErrBadHandle` at every entry point of every
+   suite, built or not — "unsupported" tells a plugin the feature is missing when the
+   truth is that its handle is rubbish, and it is the one answer that would have it try
+   the same handle somewhere else.
+
 3. Temporal: a test plugin requesting frames t±5 — prefetch batching delivers all frames
    in one shipment. **Landed** as `crates/lumit-ofx-broker/tests/broker.rs`, asserting the
-   shipment count and not only the pixels.
+   shipment count and not only the pixels — and, end to end through the engine, as
+   `lumit-eval`'s `a_plugins_eleven_sampled_frames_are_what_its_key_depends_on`: the eleven
+   frames the plugin asks for are the ones the layer's frame key depends on, so a change to
+   any of them retires the cached frame and a change outside the window retires nothing.
+
 4. Crash isolation: plugin that segfaults on frame 100 → broker restarts, session
    continues, layer shows badge (the Gate-4 demo, [16-ROADMAP.md](../16-ROADMAP.md)).
    **Landed** in the same file. The broker tests live in the broker's own crate because
-   `CARGO_BIN_EXE_…` exists only for tests in the package that owns the binary.
+   `CARGO_BIN_EXE_…` exists only for tests in the package that owns the binary. The
+   **badge** half is asserted through the bridge instead
+   (`lumit-bridge`'s `a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it`):
+   a failed render is identity byte for byte, the layer wears `plugin_failed` with the
+   plugin's own sentence beneath it, a switched-off one wears `plugin_disabled` with no
+   sentence, and the next frame that works takes the badge off. Splitting it that way is
+   deliberate: the process dying needs a second process, the badge needs the whole seam
+   from the definition to the read model, and neither test can prove the other's half.
+
 5. Real targets: Twixtor and RSMB demo builds render inside Lumit matching their Vegas
    output on the same input within codec tolerance.
+
+### How to run the commercial pass
+
+Twixtor and RSMB are paid plugins with licence servers; they cannot be in CI, and no
+harness here pretends otherwise. This is the checklist, run by hand on the Windows
+machine before a release that claims OFX support, with the result recorded in the pull
+request that ran it rather than in a document that would rot:
+
+1. Install the demo builds into `C:\Program Files\Common Files\OFX\Plugins`. Start
+   Lumit and open **Effects & presets**: each vendor's own grouping should be a heading,
+   with its effects under it. A plugin that is not there is a line in the scan report —
+   read it before assuming anything.
+2. Drop a 1080p clip with real motion on the timeline (the bench media generator's
+   `ref_a.mp4` will do). Add Twixtor, set it to half speed, and scrub. What is being
+   watched: the frames either side arrive (§4's prefetch — a retimer with no neighbours
+   renders a stutter, not an error), the controls in Effect controls are the plugin's own
+   in the plugin's own order, and nothing modal ever appears.
+3. Export the same range from Vegas with the same plugin and settings, and compare the two
+   files frame by frame. Within codec tolerance is the bar; a *structural* difference —
+   frames in the wrong order, a frame repeated, motion going the wrong way — is a failure
+   and belongs in `quirks.json` with an entry saying what was done about it.
+4. Repeat with RSMB on the same clip, which exercises the same path with a much shorter
+   temporal window.
+5. Then the unhappy half, which is the part worth having: pull the licence (or let the
+   demo expire), and check the layer wears a calm badge with the plugin's own words under
+   it and the comp still composites. Switch the plugin off in the browser's context menu
+   mid-session and check the layer keeps its picture.
+
+Record in the pull request: the plugin versions, the machine, which of the five steps
+passed, and any quirks entry the run earned. A pass with no quirks entry is a result too.
