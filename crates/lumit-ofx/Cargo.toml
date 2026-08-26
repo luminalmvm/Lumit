@@ -8,6 +8,11 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+# The effect declaration a described plugin becomes: an OFX effect and a
+# built-in are the same kind of thing to everything downstream (docs/12 §1), so
+# the schema types come from the same place. The edge runs one way only —
+# nothing in the engine depends on the plugin host.
+lumit-core = { path = "../lumit-core" }
 # The bundle binary is a plain DLL/dylib opened at run time; libloading is the
 # portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
 libloading = "0.8"

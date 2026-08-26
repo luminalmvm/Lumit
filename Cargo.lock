@@ -1643,6 +1643,7 @@ name = "lumit-ofx"
 version = "0.2.0"
 dependencies = [
  "libloading",
+ "lumit-core",
  "lumit-ofx-testplug",
  "serde",
  "serde_json",

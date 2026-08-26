@@ -11258,6 +11258,59 @@ value as a whole number, it gets an error rather than a silently converted answe
 Rust error is ever allowed to travel back into the plugin's own code: every function a
 plugin can call is wrapped so that even a bug in Lumit comes back as an error code.
 
+### A plugin describes itself, and we turn that into the same schema a built-in has
+
+Once a plugin is loaded, it has told Lumit almost nothing — a reverse-domain name and a
+version number. **Describe** is the conversation where it says the rest: what it is called,
+what menu it belongs under, what shapes of effect it can be, which pictures it wants, and
+what controls it has. It happens once, at start-up, before any copy of the effect exists on
+any layer, which is exactly why the answer can be kept and reused for the rest of the
+session.
+
+The order matters, and it is the order OFX fixes. First "describe yourself", where the
+plugin fills in its name and grouping and says which **contexts** it can work in — a
+context being the shape of the effect, one picture in and one out, or many in, or none in
+at all. Then Lumit picks one of those and asks again, "describe yourself *as that*", and
+only now does the plugin declare its inputs and its controls. The same plugin can be a
+different effect in two contexts, which is why the second question exists at all. Lumit
+drives two contexts today, the one-in-one-out filter and the general many-in one; a plugin
+that can only be something else — a generator that makes pictures out of nothing, say — is
+turned away **with a written reason**, and the rest of the plugins in the same file carry on
+being scanned. One plugin Lumit cannot drive must never cost you the other seventy-nine.
+
+What comes out is the important part. Lumit's own effects are each declared once, in a
+single block that says the effect's name, its family, how expensive it is, and every control
+it has: what kind each control is, what it is called, what it defaults to, what range it
+runs over, and — for anything numeric — **what the number means**, pixels or degrees or a
+plain count. Everything downstream reads that one declaration: the Add-effect menu, the
+Effect Controls panel, keyframes, expressions, the cache. A plugin has just given us the
+same facts in OFX's vocabulary, and Lumit writes them down in its own, so that from there
+on a plugin effect and a built-in are the same kind of thing to everything that touches
+them. That is the whole point of doing it this way rather than giving plugins a panel of
+their own.
+
+Three translations are worth knowing about, because they are where the two vocabularies
+genuinely differ:
+
+- **A point becomes two rows.** Lumit has never had a "point" control; a point is two
+  neighbouring number rows whose names end `_x` and `_y`, which the panel draws as one row
+  with a link between them. So a plugin's Centre arrives as `centre_x` and `centre_y` and
+  is drawn exactly the way a built-in's Centre is.
+- **Distances are pixels at composition size.** OFX lets a number say what it means, and
+  the spatial ones are declared as distances, which Lumit records in its single distance
+  unit so a preview at half resolution scales them without anybody remembering to. An angle
+  is degrees. Everything else is a plain number, deliberately: a control Lumit cannot
+  honestly label is better left unlabelled than labelled wrongly.
+- **A few controls have no row at all.** A vendor's private blob of data, a free-text field,
+  a curve the plugin evaluates itself: Lumit has nothing to draw for these. They are not
+  silently dropped — the blob is carried through a save and handed back untouched, and each
+  one is listed in the scan report, so "this plugin has a control Lumit cannot show" is a
+  line somebody can read rather than a mystery.
+
+Groups and pages, the plugin's own way of tidying its controls, become the panel's
+collapsible sections, so a plugin with thirty controls arrives already organised the way its
+author organised it.
+
 ### Quirks are a file, not code
 
 Every OFX host in the world implements the standard slightly differently, and every
@@ -11275,11 +11328,21 @@ a special case nobody can find later.
 The ground floor: finding and opening a bundle, handing the plugin the host in the right
 order (the host first, always, before any action — a plugin's load handler immediately
 asks the host for things), and answering three of its simplest needs: read and write named
-values, allocate memory, say something to the user. Effects, parameters, clips and actual
-rendering come next, and they all stand on the handle rule above.
+values, allocate memory, say something to the user. On top of that, the describe
+conversation above: a plugin can now declare itself and come out the other side as an
+effect Lumit knows how to list, lay out and keyframe.
 
-There is also a small plugin of Lumit's own, `lumit-ofx-testplug`, which exists only so the
-host has something honest to be tested against — a commercial plugin cannot live in the
-repository and a free one would change underneath the tests. It is a real OFX plugin, and
-it keeps a count of what it was told and when, so a test can prove the host said the right
-things in the right order.
+What is not there yet is everything that needs a *live* copy of the effect. A described
+plugin has controls but no values in them, no pictures to work on, and nothing to render
+into, so every part of the host that belongs to a running instance says plainly that it is
+not available rather than pretending — which is an answer the standard requires plugins to
+cope with, and one they meet in every host while a feature is still catching up.
+
+There is also a small set of plugins of Lumit's own, `lumit-ofx-testplug`, which exist only
+so the host has something honest to be tested against — a commercial plugin cannot live in
+the repository and a free one would change underneath the tests. They are real OFX plugins,
+and between them they give the host each of its answers something to answer: one with a
+control of every kind there is, a second version of the same plugin, one that only works in
+a shape Lumit cannot drive, one that refuses to describe itself, and one whose controls
+collide. They also keep a count of what they were told and when, so a test can prove the
+host said the right things in the right order.

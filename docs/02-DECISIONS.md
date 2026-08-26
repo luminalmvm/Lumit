@@ -17228,3 +17228,92 @@ so `setHost`-before-load is provable rather than assumed. It is a dev-dependency
 as locally, with no extra job step. Its describe and render answer
 `kOfxStatErrMissingHostFeature` until the image effect and parameter suites exist, because
 there is nothing to describe a parameter *to* before then.
+
+## K-590 — A plugin describes itself into an `EffectSchema`, and a plugin Lumit cannot drive is a reason in a report rather than a silence
+
+**DECIDED 2026-08-26.** The second package of the OFX host (K-589, K-061). `lumit-ofx`
+now speaks the definition half of the image effect and parameter suites, drives
+`kOfxActionDescribe` and `kOfxImageEffectActionDescribeInContext` in the order
+docs/impl/ofx-host.md §3 fixes, and turns what a plugin says about itself into the same
+`EffectSchema` a built-in carries. docs/12 §2.1 and §2.2 say what must happen; neither
+changes here. What is decided is how the two vocabularies meet.
+
+**A plugin effect and a built-in are the same declaration.** `lumit-ofx` gains one
+dependency, `lumit-core`, so that a described plugin becomes an `EffectSchema` and a
+`ParamSchema` list rather than a parallel shape the panel, the bridge and the cache would
+each have to learn. The edge runs one way only: **no engine crate depends on `lumit-ofx`**,
+and none does yet. The strings a plugin supplies are leaked once — an `EffectSchema` is
+`'static` because a built-in's is a compile-time constant, and a discovered plugin's lives
+for the session, which is what leaking it says. Recorded ceiling: a rescan re-leaks, so the
+rescan path reuses the schema it already holds for an identifier and version it has seen.
+
+**The mapping is written down, not rediscovered.** A double declaring one of OFX's spatial
+`kOfxParamPropDoubleType` values is `Unit::Px` — px@comp, K-419's single distance unit; an
+angle is `Unit::Degrees`; **everything else is `Unit::Raw`**, the normalised spatial types
+included, because a normalised coordinate runs nought to one where Lumit's per cent runs
+nought to a hundred and a wrong unit rider is worse than none. A 2-D or 3-D parameter
+becomes two or three rows suffixed `_x`/`_y`/`_z`, since Lumit has no point *kind* and a
+point has always been two adjacent number rows the panel folds (K-443) — a plugin's Centre
+therefore draws exactly as a built-in's. A choice keeps its option labels in the plugin's
+order. A push button is a `ParamKind::Action` (K-417); a string in a path mode is a
+`ParamKind::File` (K-111). Groups and pages become `ParamGroup` runs, which is docs/12
+§2.2's "pages/groups become the Effect Controls layout"; the host still advertises
+`kOfxParamHostPropMaxPages` = 0, because the panel has no tabs, and a plugin that defines a
+page anyway has it drawn as a group rather than dropped.
+
+**Three kinds of control have no row, and are reported rather than lost.** A custom
+parameter's vendor blob is stored and round-tripped uninterpreted (docs/12 §2.2), a string
+that is not a path is text and Lumit has no text row, and a parametric parameter is a
+function rather than the control points Lumit's curve is made of (K-412). Each is listed by
+`PluginDescriptor::unrepresented`, so "this plugin has a control Lumit cannot show" is a
+line in the report.
+
+**Traits: `cost = Heavy`, `roi = FullFrame`, `matte = MatteRole::None`.** Heavy because a
+plugin is somebody else's code across a process boundary and degradation should give it up
+first; full-frame because the host advertises no tile support and a padding claimed on a
+plugin's behalf would be a claim nobody made. **No matte row is injected**: K-395's Matte,
+Invert and Channel are for built-ins, where the row means something the dispatch seam
+carries out — a plugin's rows are its own, and an injected Matte would be a control the
+plugin has never heard of and nothing would consume. `temporal` follows the plugin's own
+`kOfxImageEffectPropTemporalClipAccess`: `&[0]` when it claims none, and a declared-but-not-
+yet-enumerated `&[-1, 0, 1]` when it does, refined per instance from `getFramesNeeded` in a
+later package. Widening is the safe direction — an offset included and never asked for
+costs one hash input, one omitted costs a wrong frame served from the cache. The category
+is `FxCategory::Utility`: none of Lumit's ten families is a claim anyone may make about
+somebody else's effect, and the plugin's own OFX grouping is what places it in Effects &
+Presets (docs/12 §2.6).
+
+**Contexts: filter and general are driven; the rest are rejected with a reason.**
+docs/impl/ofx-host.md §3 names those two, and they cover the whole test bench. docs/12
+§2.1 lists four for the finished host, and gives the rule for the gap outright — *plugins
+adapt or are rejected at describe time with a report entry* — so a plugin whose only
+context is one this package cannot drive is turned away with a written reason and **the
+scan carries on**. One plugin Lumit cannot drive must never cost the user the other
+seventy-nine in the bundle. The host's own supported-contexts table still says four, which
+is docs/12's claim for the host, not this package's: generator and transition arrive with
+the packages that can render them.
+
+**A `ParamId` collision is refused rather than shipped.** `paramDefine` answers
+`kOfxStatErrExists` to a name already taken, and the schema builder refuses the whole
+effect when two rows would hash to one `ParamId` — including the case only Lumit can
+create, a 2-D `centre` spread into `centre_x` beside a separately declared `centre_x`.
+docs/impl/effect-registry.md §5 calls the collision silent, which is precisely why it is
+made loud here: a plugin's parameter names are not ours to choose.
+
+**A param set is a face of an effect, not a second object.** `OfxParamSetHandle` is the
+effect's handle with the kind swapped (`HandleKind::ParamSet`), so there is no second
+registry to keep in step, and an effect handle passed where a param set was meant is still
+`kOfxStatErrBadHandle`. Descriptors and every property set hanging off them are destroyed
+when the describe finishes, whether it succeeded or was rejected — the OFX lifetime rule,
+and what stops a rejected plugin leaving property sets behind for the session.
+
+**Everything an instance owns answers `kOfxStatErrUnsupported`.** Ten of the image effect
+suite's thirteen entry points and eight of the parameter suite's eighteen belong to a live
+effect with values and pictures, and none exists yet. Saying so is the honest answer and
+one the spec requires plugins to expect; `abort` is the exception, because it answers a
+plain int and nought is the answer that lets work continue.
+
+The reasons a rejection carries are English text in the engine. They are not user-facing
+yet — nothing in the frontend can reach them, because no engine crate depends on
+`lumit-ofx` — and they gain their `app_en.arb` keys and `engine_labels.dart` entries in the
+package that puts the scan report in front of a person (K-303).

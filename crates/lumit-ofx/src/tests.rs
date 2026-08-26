@@ -10,9 +10,13 @@ use std::ffi::{c_char, c_int, c_void, CStr};
 use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
 
+use lumit_core::fx::EffectSchema;
+
 use crate::bundle::{scan_dir, Bundle, BUNDLE_ARCH_DIR};
+use crate::describe::{describe_bundle, Context, DescribedPlugin, Rejection, ScanReport};
 use crate::ffi::{
-    prop_keys as keys, OfxHost, OfxMemorySuiteV1, OfxMessageSuiteV1, OfxPlugin, OfxPropertySuiteV1,
+    prop_keys as keys, OfxHost, OfxImageEffectSuiteV1, OfxMemorySuiteV1, OfxMessageSuiteV1,
+    OfxParameterSuiteV1, OfxPlugin, OfxPropertySuiteV1,
 };
 use crate::handles::{Handle, HandleKind, HandleRegistry};
 use crate::host::{dump, host, host_props_handle, state};
@@ -392,11 +396,12 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     assert!(!ask(c"OfxMemorySuite", 1).is_null());
     assert!(!ask(c"OfxMessageSuite", 1).is_null());
 
+    assert!(!ask(c"OfxImageEffectSuite", 1).is_null());
+    assert!(!ask(c"OfxParameterSuite", 1).is_null());
+
     // Not built yet, and an honest null is the whole point: overlays degrade
     // to no overlay rather than to a crash.
     assert!(ask(c"OfxInteractSuite", 1).is_null());
-    assert!(ask(c"OfxImageEffectSuite", 1).is_null());
-    assert!(ask(c"OfxParameterSuite", 1).is_null());
     assert!(ask(c"OfxMultiThreadSuite", 1).is_null());
 
     // A version we do not have is a null, not the version we do have.
@@ -687,7 +692,10 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
     let mut bundle = Bundle::open(&binary)
         .map_err(|error| error.to_string())
         .expect("the test plugin is an OFX plugin");
-    assert_eq!(bundle.plugins().len(), 1);
+    assert_eq!(
+        bundle.plugins().len(),
+        lumit_ofx_testplug::PLUGIN_COUNT as usize
+    );
     let plugin = &bundle.plugins()[0];
     assert_eq!(plugin.identifier, "com.lumitlab.testplug");
     assert_eq!(plugin.version, (1, 0));
@@ -697,19 +705,27 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
 
     bundle.load();
     assert_eq!(bundle.plugins()[0].load_status, Some(Status::Ok));
-    assert_eq!(read(b"LumitTestPlugSetHostCalls\0"), 1);
+    assert_eq!(
+        read(b"LumitTestPlugSetHostCalls\0"),
+        lumit_ofx_testplug::PLUGIN_COUNT
+    );
     assert_eq!(read(b"LumitTestPlugHostSeenBeforeLoad\0"), 1);
 
-    // Loading twice does not hand the plugin a second host.
+    // Loading twice does not hand the plugins a second host.
     bundle.load();
-    assert_eq!(read(b"LumitTestPlugSetHostCalls\0"), 1);
+    assert_eq!(
+        read(b"LumitTestPlugSetHostCalls\0"),
+        lumit_ofx_testplug::PLUGIN_COUNT
+    );
 
-    // The plugin got the three suites this host has and not the one it has
-    // not, which is the whole of `fetchSuite` proved from the plugin's side.
+    // The plugin got the five suites this host has and not the one it has not,
+    // which is the whole of `fetchSuite` proved from the plugin's side.
     let mask = read(b"LumitTestPlugSuiteMask\0");
     let expected = lumit_ofx_testplug::SUITE_PROPERTY
         | lumit_ofx_testplug::SUITE_MEMORY
-        | lumit_ofx_testplug::SUITE_MESSAGE;
+        | lumit_ofx_testplug::SUITE_MESSAGE
+        | lumit_ofx_testplug::SUITE_IMAGE_EFFECT
+        | lumit_ofx_testplug::SUITE_PARAMETER;
     assert_eq!(u32::try_from(mask), Ok(expected));
 
     // And its load message came back through the message suite.
@@ -748,5 +764,456 @@ fn the_standard_plugin_location_is_always_searched() {
             .map(|path| path.ends_with("OFX") || path.ends_with("Plugins")),
         Some(true),
         "the standard location is missing from {paths:?}"
+    );
+}
+
+// ---------------------------------------------------------------- describe --
+
+/// A loaded bundle of the five test plugins, or `None` if the plugin was not
+/// built. The temporary directory is handed back with it: dropping it would
+/// take the binary out from under the loaded library.
+fn a_loaded_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle)> {
+    let root = tempfile::tempdir().ok()?;
+    let Some(binary) = a_bundle_in(root.path()) else {
+        skipped(test);
+        return None;
+    };
+    let mut bundle = Bundle::open(&binary).ok()?;
+    bundle.load();
+    Some((root, bundle))
+}
+
+/// One plugin from a scan, by identifier and major version.
+fn found<'a>(report: &'a ScanReport, identifier: &str, major: u32) -> Option<&'a DescribedPlugin> {
+    report.effects.iter().find(|effect| {
+        effect.descriptor.identifier == identifier && effect.descriptor.version.0 == major
+    })
+}
+
+/// Why one plugin was turned away.
+fn refused<'a>(report: &'a ScanReport, identifier: &str) -> Option<&'a Rejection> {
+    report
+        .rejected
+        .iter()
+        .find(|entry| entry.identifier == identifier)
+        .map(|entry| &entry.reason)
+}
+
+/// A schema as one stable block of text: the assertion is the whole shape at
+/// once, so a change to any of it is a change somebody has to type.
+fn render(schema: &EffectSchema) -> String {
+    let mut out = format!(
+        "match_name = {}\nlabel = {}\nversion = {}\ncategory = {:?}\ncost = {:?}\n\
+         roi = {:?}\ntemporal = {:?}\npremultiplied = {}\nmatte = {:?}\n",
+        schema.match_name,
+        schema.label,
+        schema.version,
+        schema.category,
+        schema.traits.cost,
+        schema.traits.roi,
+        schema.traits.temporal,
+        schema.traits.premultiplied,
+        schema.matte,
+    );
+    for param in schema.params {
+        out.push_str(&format!(
+            "param {} | {} | {:?} | {:?}\n",
+            param.id, param.label, param.kind, param.unit
+        ));
+    }
+    for group in schema.groups {
+        out.push_str(&format!(
+            "group {} | {:?} | collapsed {}\n",
+            group.label, group.params, group.collapsed
+        ));
+    }
+    out
+}
+
+#[test]
+fn a_plugin_describes_itself_into_the_schema_a_built_in_has() {
+    let Some((_root, bundle)) = a_loaded_bundle("a_plugin_describes_itself_into_the_schema") else {
+        return;
+    };
+    let report = describe_bundle(&bundle);
+    let full = found(&report, "com.lumitlab.testplug", 1).expect("the full plugin described");
+
+    // What it said about itself.
+    assert_eq!(full.descriptor.label, "Test plug");
+    assert_eq!(full.descriptor.grouping, "Lumit/Test");
+    assert_eq!(
+        full.descriptor.contexts,
+        vec![Context::Filter, Context::General],
+        "a plugin offering both is driven as the simpler one"
+    );
+    assert!(full.descriptor.temporal, "it declared temporal clip access");
+    assert_eq!(
+        full.descriptor
+            .clips
+            .iter()
+            .map(|clip| clip.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Source", "Output"]
+    );
+    // The two controls Lumit has no row for are reported, never silently lost.
+    assert_eq!(
+        full.descriptor.unrepresented(),
+        vec![
+            ("caption", "OfxParamTypeString"),
+            ("vendorBlob", "OfxParamTypeCustom"),
+        ]
+    );
+
+    let expected = "\
+match_name = ofx:com.lumitlab.testplug
+label = Test plug
+version = 1
+category = Utility
+cost = Heavy
+roi = FullFrame
+temporal = [-1, 0, 1]
+premultiplied = true
+matte = None
+param gain | Gain | Float { default: 0.5, slider: (0.0, 2.0), hard: (Some(0.0), Some(4.0)) } | Raw
+param rotation | Rotation | Angle { default: 45.0, dial_step: 1.0 } | Degrees
+param centre_x | Centre X | Float { default: 0.0, slider: (-100.0, 100.0), hard: (None, None) } | Px
+param centre_y | Centre Y | Float { default: 0.0, slider: (-100.0, 100.0), hard: (None, None) } | Px
+param offset_x | Offset X | Float { default: 1.0, slider: (0.0, 1.0), hard: (None, None) } | Raw
+param offset_y | Offset Y | Float { default: 2.0, slider: (0.0, 1.0), hard: (None, None) } | Raw
+param offset_z | Offset Z | Float { default: 3.0, slider: (0.0, 1.0), hard: (None, None) } | Raw
+param count | Count | Int { default: 3, slider: (1, 10), hard: (Some(1), Some(10)) } | Raw
+param size_x | Size X | Int { default: 640, slider: (0, 100), hard: (None, None) } | Raw
+param size_y | Size Y | Int { default: 480, slider: (0, 100), hard: (None, None) } | Raw
+param enabled | Enabled | Bool { default: true } | Raw
+param mode | Mode | Choice { options: [\"Soft\", \"Hard\", \"Wild\"], default: 1, dividers_after: [] } | Raw
+param tint | Tint | Colour { default: [0.25, 0.5, 0.75, 1.0], range: (0.0, 1.0) } | Raw
+param wash | Wash | Colour { default: [1.0, 0.0, 0.0, 1.0], range: (0.0, 1.0) } | Raw
+param lutPath | LUT file | File { filter: [], filter_name: \"All files\" } | Raw
+param trigger | Trigger | Action | Raw
+group Advanced | [\"offset_x\", \"offset_y\", \"offset_z\", \"count\"] | collapsed true
+group Files | [\"lutPath\", \"trigger\"] | collapsed false
+";
+    assert_eq!(render(&full.schema), expected);
+
+    // A point is two adjacent number rows, which is what makes the panel fold
+    // it into one (K-443), and the convention applies to a plugin's rows
+    // unchanged. The 3-D Offset folds its x and y and leaves z beside them,
+    // which is what the rule says and what a built-in with those three ids
+    // would get.
+    assert_eq!(
+        full.schema
+            .pairs()
+            .map(|pair| pair.stem)
+            .collect::<Vec<_>>(),
+        vec!["centre", "offset"]
+    );
+}
+
+#[test]
+fn a_context_this_host_cannot_drive_is_a_reason_and_not_the_end_of_the_scan() {
+    let Some((_root, bundle)) = a_loaded_bundle("a_context_this_host_cannot_drive") else {
+        return;
+    };
+    let report = describe_bundle(&bundle);
+
+    let reason = refused(&report, "com.lumitlab.testplug.generator")
+        .expect("a generator-only plugin is turned away");
+    assert_eq!(
+        reason,
+        &Rejection::NoDrivenContext {
+            declared: vec!["OfxImageEffectContextGenerator".to_owned()],
+        }
+    );
+    // The reason is a sentence somebody can read, not a code.
+    assert!(reason
+        .to_string()
+        .contains("OfxImageEffectContextGenerator"));
+
+    // And the rest of the bundle came through it untouched, which is the whole
+    // point: one plugin Lumit cannot drive must not cost the others.
+    assert!(found(&report, "com.lumitlab.testplug", 1).is_some());
+    assert!(found(&report, "com.lumitlab.testplug", 2).is_some());
+}
+
+#[test]
+fn a_plugin_that_fails_to_describe_yields_no_schema_and_no_panic() {
+    let Some((_root, bundle)) = a_loaded_bundle("a_plugin_that_fails_to_describe") else {
+        return;
+    };
+    let report = describe_bundle(&bundle);
+
+    assert_eq!(
+        refused(&report, "com.lumitlab.testplug.broken"),
+        Some(&Rejection::DescribeFailed(Status::Failed))
+    );
+    assert!(found(&report, "com.lumitlab.testplug.broken", 1).is_none());
+}
+
+#[test]
+fn two_versions_of_one_identifier_are_two_schemas() {
+    let Some((_root, bundle)) = a_loaded_bundle("two_versions_of_one_identifier") else {
+        return;
+    };
+    let report = describe_bundle(&bundle);
+
+    let first = found(&report, "com.lumitlab.testplug", 1).expect("version one described");
+    let second = found(&report, "com.lumitlab.testplug", 2).expect("version two described");
+
+    // Same match name, different version: the pair is the cache key, so two
+    // versions of one plugin are two effects that can sit in one project.
+    assert_eq!(first.schema.match_name, second.schema.match_name);
+    assert_ne!(first.schema.version, second.schema.version);
+    assert_ne!(first.schema, second.schema);
+    assert_eq!(second.schema.label, "Test plug mark two");
+    assert_eq!(second.schema.params.len(), 1);
+    // The one that never claimed temporal access does not get it advertised.
+    assert_eq!(second.schema.traits.temporal, &[0]);
+}
+
+#[test]
+fn two_parameters_that_would_share_an_id_are_refused() {
+    let Some((_root, bundle)) = a_loaded_bundle("two_parameters_that_would_share_an_id") else {
+        return;
+    };
+    let report = describe_bundle(&bundle);
+
+    // `centre` spreads into `centre_x`, and the plugin also defined `centre_x`.
+    // A `ParamId` collision is silent (docs/impl/effect-registry.md Â§5), so it
+    // is caught here rather than shipped.
+    assert_eq!(
+        refused(&report, "com.lumitlab.testplug.duplicate"),
+        Some(&Rejection::DuplicateParamId {
+            first: "centre_x".to_owned(),
+            second: "centre_x".to_owned(),
+        })
+    );
+    assert!(found(&report, "com.lumitlab.testplug.duplicate", 1).is_none());
+}
+
+// ------------------------------------------- the two new suites, through C --
+
+/// A live descriptor, and the handle the plugin would hold. Released by the
+/// caller.
+fn a_live_descriptor() -> Handle {
+    crate::describe::new_descriptor(crate::describe::base_property_set("com.example.test"))
+        .expect("room for one descriptor")
+}
+
+#[test]
+fn a_parameter_defined_twice_under_one_name_is_refused() {
+    let effect = a_live_descriptor();
+    let mut param_set: *mut c_void = std::ptr::null_mut();
+    let suite = &crate::suites::image_effect::SUITE;
+    let params = &crate::suites::parameter::SUITE;
+
+    // SAFETY: a live handle and valid out-parameters throughout.
+    unsafe {
+        assert_eq!(
+            (suite.get_param_set)(effect.as_ptr(), &raw mut param_set),
+            Status::Ok.code()
+        );
+        let mut props: *mut c_void = std::ptr::null_mut();
+        assert_eq!(
+            (params.param_define)(
+                param_set,
+                c"OfxParamTypeDouble".as_ptr(),
+                c"amount".as_ptr(),
+                &raw mut props,
+            ),
+            Status::Ok.code()
+        );
+        assert!(!props.is_null());
+
+        // The same name again is `kOfxStatErrExists`, not a second row.
+        assert_eq!(
+            (params.param_define)(
+                param_set,
+                c"OfxParamTypeDouble".as_ptr(),
+                c"amount".as_ptr(),
+                &raw mut props,
+            ),
+            Status::ErrExists.code()
+        );
+
+        // A type this host has never heard of is refused rather than stored.
+        assert_eq!(
+            (params.param_define)(
+                param_set,
+                c"OfxParamTypeQuaternion".as_ptr(),
+                c"spin".as_ptr(),
+                &raw mut props,
+            ),
+            Status::ErrUnsupported.code()
+        );
+
+        // A defined parameter can be found again, and its properties read.
+        let mut handle: *mut c_void = std::ptr::null_mut();
+        assert_eq!(
+            (params.param_get_handle)(
+                param_set,
+                c"amount".as_ptr(),
+                &raw mut handle,
+                &raw mut props,
+            ),
+            Status::Ok.code()
+        );
+        let mut back: *mut c_void = std::ptr::null_mut();
+        assert_eq!(
+            (params.param_get_property_set)(handle, &raw mut back),
+            Status::Ok.code()
+        );
+        assert_eq!(back, props);
+
+        // The value half is not here yet, and says so rather than lying.
+        assert_eq!(
+            (params.param_get_value)(handle),
+            Status::ErrUnsupported.code()
+        );
+    }
+
+    crate::describe::release_descriptor(effect);
+}
+
+#[test]
+fn the_definition_suites_refuse_a_forged_handle() {
+    let effect = a_live_descriptor();
+    let forged = [
+        ("null", std::ptr::null_mut::<c_void>()),
+        ("garbage", 0xdead_beef_usize as *mut c_void),
+        (
+            "wrong kind",
+            Handle::encode(HandleKind::Clip, 0)
+                .expect("index nought fits")
+                .as_ptr(),
+        ),
+        (
+            "past the end",
+            Handle::encode(HandleKind::ImageEffect, 1 << 30)
+                .expect("the index fits in the field")
+                .as_ptr(),
+        ),
+    ];
+
+    let suite = &crate::suites::image_effect::SUITE;
+    let params = &crate::suites::parameter::SUITE;
+    let mut out: *mut c_void = std::ptr::null_mut();
+
+    for (name, handle) in forged {
+        // SAFETY: valid out-parameters; the handle is the thing under test, and
+        // each entry point must reject it without following it.
+        unsafe {
+            assert_eq!(
+                (suite.get_property_set)(handle, &raw mut out),
+                Status::ErrBadHandle.code(),
+                "getPropertySet accepted a {name} handle"
+            );
+            assert_eq!(
+                (suite.get_param_set)(handle, &raw mut out),
+                Status::ErrBadHandle.code(),
+                "getParamSet accepted a {name} handle"
+            );
+            assert_eq!(
+                (suite.clip_define)(handle, c"Source".as_ptr(), &raw mut out),
+                Status::ErrBadHandle.code(),
+                "clipDefine accepted a {name} handle"
+            );
+            assert_eq!(
+                (params.param_define)(
+                    handle,
+                    c"OfxParamTypeDouble".as_ptr(),
+                    c"amount".as_ptr(),
+                    &raw mut out,
+                ),
+                Status::ErrBadHandle.code(),
+                "paramDefine accepted a {name} param set"
+            );
+            assert_eq!(
+                (params.param_get_property_set)(handle, &raw mut out),
+                Status::ErrBadHandle.code(),
+                "paramGetPropertySet accepted a {name} handle"
+            );
+        }
+    }
+
+    // An effect handle is not a param set, and a param set is not an effect:
+    // the kinds are the whole of the check.
+    // SAFETY: as above.
+    unsafe {
+        assert_eq!(
+            (params.param_define)(
+                effect.as_ptr(),
+                c"OfxParamTypeDouble".as_ptr(),
+                c"amount".as_ptr(),
+                &raw mut out,
+            ),
+            Status::ErrBadHandle.code()
+        );
+        let param_set = effect
+            .recast(HandleKind::ParamSet)
+            .expect("an effect handle recasts");
+        assert_eq!(
+            (suite.get_property_set)(param_set.as_ptr(), &raw mut out),
+            Status::ErrBadHandle.code()
+        );
+    }
+
+    crate::describe::release_descriptor(effect);
+}
+
+#[test]
+fn the_instance_half_of_the_image_effect_suite_says_it_is_not_here() {
+    let suite = &crate::suites::image_effect::SUITE;
+    let mut out: *mut c_void = std::ptr::null_mut();
+    let mut bounds = crate::ffi::OfxRectD::default();
+
+    // SAFETY: valid out-parameters; each of these is a stub that must answer a
+    // status a plugin expects rather than pretend.
+    unsafe {
+        assert_eq!(
+            (suite.clip_get_property_set)(std::ptr::null_mut(), &raw mut out),
+            Status::ErrUnsupported.code()
+        );
+        assert_eq!(
+            (suite.clip_get_image)(std::ptr::null_mut(), 0.0, std::ptr::null(), &raw mut out),
+            Status::ErrUnsupported.code()
+        );
+        assert_eq!(
+            (suite.clip_get_region_of_definition)(std::ptr::null_mut(), 0.0, &raw mut bounds),
+            Status::ErrUnsupported.code()
+        );
+        // `abort` is the one that is not a status, and nought is what lets a
+        // render carry on. Nothing is cancellable yet, so nothing is cancelled.
+        assert_eq!((suite.abort)(std::ptr::null_mut()), 0);
+    }
+}
+
+#[test]
+fn the_two_new_suite_tables_are_laid_out_as_c_lays_them_out() {
+    let pointer = size_of::<*const c_void>();
+
+    // Thirteen entry points, in the order the header declares them.
+    assert_eq!(size_of::<OfxImageEffectSuiteV1>(), 13 * pointer);
+    assert_eq!(offset_of!(OfxImageEffectSuiteV1, get_property_set), 0);
+    assert_eq!(offset_of!(OfxImageEffectSuiteV1, clip_define), 2 * pointer);
+    assert_eq!(offset_of!(OfxImageEffectSuiteV1, abort), 8 * pointer);
+    assert_eq!(
+        offset_of!(OfxImageEffectSuiteV1, image_memory_unlock),
+        12 * pointer
+    );
+
+    // Eighteen, likewise.
+    assert_eq!(size_of::<OfxParameterSuiteV1>(), 18 * pointer);
+    assert_eq!(offset_of!(OfxParameterSuiteV1, param_define), 0);
+    assert_eq!(
+        offset_of!(OfxParameterSuiteV1, param_get_property_set),
+        3 * pointer
+    );
+    assert_eq!(
+        offset_of!(OfxParameterSuiteV1, param_get_num_keys),
+        10 * pointer
+    );
+    assert_eq!(
+        offset_of!(OfxParameterSuiteV1, param_edit_end),
+        17 * pointer
     );
 }

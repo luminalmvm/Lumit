@@ -21,6 +21,7 @@
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
+use crate::describe::EffectDescriptor;
 use crate::ffi::{prop_keys as keys, prop_values as values, suite_names, OfxHost};
 use crate::handles::{Handle, HandleKind, HandleRegistry};
 use crate::props::{PropValue, PropertySet};
@@ -47,6 +48,12 @@ pub struct HostMessage {
 pub struct HostState {
     /// Every property set the host owns, including its own.
     pub props: HandleRegistry<PropertySet>,
+    /// Every effect descriptor a describe pass has minted. An instance is the
+    /// same kind of handle and lands in the same registry (P4).
+    pub effects: HandleRegistry<EffectDescriptor>,
+    /// Every parameter, as the property set it is: a parameter *is* its
+    /// properties until it has a value, which is P3's business.
+    pub params: HandleRegistry<Handle>,
     /// The host's own property set, once it exists.
     pub host_props: Option<Handle>,
     /// Live plugin allocations: address to size. Keeping the addresses means
@@ -66,6 +73,8 @@ impl HostState {
         let host_props = props.insert(host_property_set()).ok();
         Self {
             props,
+            effects: HandleRegistry::new(HandleKind::ImageEffect),
+            params: HandleRegistry::new(HandleKind::Param),
             host_props,
             allocations: std::collections::BTreeMap::new(),
             messages: Vec::new(),
@@ -156,6 +165,8 @@ unsafe extern "C" fn fetch_suite(
         (suite_names::PROPERTY, 1) => std::ptr::from_ref(&suites::property::SUITE).cast(),
         (suite_names::MEMORY, 1) => std::ptr::from_ref(&suites::memory::SUITE).cast(),
         (suite_names::MESSAGE, 1) => std::ptr::from_ref(&suites::message::SUITE).cast(),
+        (suite_names::IMAGE_EFFECT, 1) => std::ptr::from_ref(&suites::image_effect::SUITE).cast(),
+        (suite_names::PARAMETER, 1) => std::ptr::from_ref(&suites::parameter::SUITE).cast(),
         _ => std::ptr::null(),
     }
 }

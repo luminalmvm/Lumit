@@ -34,10 +34,9 @@ const INDEX_MASK: usize = (1 << INDEX_BITS) - 1;
 const KIND_SHIFT: u32 = INDEX_BITS;
 const MAGIC_SHIFT: u32 = INDEX_BITS + 8;
 
-/// What sort of object a handle names. Only [`HandleKind::PropertySet`] has a
-/// registry in this package; the rest are named so that a lookup of the wrong
-/// kind is a thing that can be written, tested, and rejected before any of
-/// them exists.
+/// What sort of object a handle names. [`HandleKind::Clip`] has no registry
+/// yet; it is named so that a lookup of the wrong kind is a thing that can be
+/// written, tested, and rejected before the object it names exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum HandleKind {
@@ -49,6 +48,15 @@ pub enum HandleKind {
     Param = 3,
     /// An `OfxImageClipHandle`.
     Clip = 4,
+    /// An `OfxParamSetHandle` — the bag of parameters hanging off one effect.
+    ///
+    /// It has **no registry of its own**: a param set is not a separate object,
+    /// it is one face of an effect, so its handle carries the same index as the
+    /// effect's and differs only in this kind. That is what
+    /// [`Handle::recast`] is for. Keeping the kind distinct rather than handing
+    /// the effect handle straight back is what stops an effect handle being
+    /// accepted where a param set was meant, and the other way round.
+    ParamSet = 5,
 }
 
 impl HandleKind {
@@ -104,8 +112,22 @@ impl Handle {
             2 => Some(HandleKind::ImageEffect),
             3 => Some(HandleKind::Param),
             4 => Some(HandleKind::Clip),
+            5 => Some(HandleKind::ParamSet),
             _ => None,
         }
+    }
+
+    /// The same index under another kind, or `None` if this is not one of ours.
+    ///
+    /// The one use is the effect/param-set pair (see [`HandleKind::ParamSet`]):
+    /// two names for two faces of one object, so the second name is the first
+    /// with the kind swapped rather than a second registry to keep in step.
+    #[must_use]
+    pub const fn recast(self, kind: HandleKind) -> Option<Self> {
+        if self.kind().is_none() {
+            return None;
+        }
+        Self::encode(kind, self.index())
     }
 
     const fn index(self) -> usize {

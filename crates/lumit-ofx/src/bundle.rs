@@ -14,7 +14,7 @@
 //! given, and a plugin given nothing will read a null pointer. Only after that
 //! comes `kOfxActionLoad`, and at the end `kOfxActionUnload`, once.
 
-use std::ffi::{c_int, CStr, CString};
+use std::ffi::{c_int, c_void, CStr, CString};
 use std::path::{Path, PathBuf};
 
 use libloading::{Library, Symbol};
@@ -24,6 +24,7 @@ use crate::ffi::{
     actions, OfxGetNumberOfPluginsFn, OfxGetPluginFn, OfxPlugin, K_OFX_GET_NUMBER_OF_PLUGINS,
     K_OFX_GET_PLUGIN, K_OFX_IMAGE_EFFECT_PLUGIN_API,
 };
+use crate::handles::Handle;
 use crate::host::host;
 use crate::status::Status;
 
@@ -89,6 +90,46 @@ impl PluginRef {
     #[must_use]
     pub fn is_supported_image_effect(&self) -> bool {
         self.api == K_OFX_IMAGE_EFFECT_PLUGIN_API
+    }
+
+    /// Dispatch one action at this plugin.
+    ///
+    /// The three handles are Lumit's own, never addresses (see
+    /// [`crate::handles`]), and `None` is the null the no-argument actions
+    /// take. Taking them as handles rather than pointers is what keeps this
+    /// door safe to walk through: there is no raw pointer for a caller to get
+    /// wrong.
+    ///
+    /// **No host lock may be held across this call** (docs/14 §7): the plugin
+    /// re-enters the suites from inside the action, and a lock held here would
+    /// deadlock on the first property it reads. The raw `OfxPlugin` stays
+    /// private to this module so that every call into a plugin goes through
+    /// this one door.
+    #[must_use]
+    pub fn action(
+        &self,
+        action: &str,
+        handle: Option<Handle>,
+        in_args: Option<Handle>,
+        out_args: Option<Handle>,
+    ) -> Status {
+        let pointer =
+            |handle: Option<Handle>| handle.map_or(std::ptr::null_mut::<c_void>(), Handle::as_ptr);
+        let (handle, in_args, out_args) = (pointer(handle), pointer(in_args), pointer(out_args));
+        // SAFETY: `raw` points into the library the owning `Bundle` holds open;
+        // a `PluginRef` cannot outlive it, because `unload` clears the list
+        // before dropping the library.
+        let plugin = unsafe { &*self.raw };
+        let Some(main_entry) = plugin.main_entry else {
+            return Status::ErrFatal;
+        };
+        let Ok(action) = CString::new(action) else {
+            return Status::ErrValue;
+        };
+        // SAFETY: the plugin's own entry point, given a valid action name and
+        // the handles the caller minted.
+        let code = unsafe { main_entry(action.as_ptr(), handle, in_args, out_args) };
+        Status::from_code(code)
     }
 }
 
@@ -233,7 +274,7 @@ impl Bundle {
                 // will re-enter the suites from inside it.
                 unsafe { set_host(host) };
             }
-            plugin.load_status = Some(main_entry(raw, actions::LOAD));
+            plugin.load_status = Some(plugin.action(actions::LOAD, None, None, None));
         }
     }
 
@@ -247,9 +288,7 @@ impl Bundle {
                 if plugin.load_status != Some(Status::Ok) {
                     continue;
                 }
-                // SAFETY: as in `load`; the library is still open here.
-                let raw = unsafe { &*plugin.raw };
-                let _ = main_entry(raw, actions::UNLOAD);
+                let _ = plugin.action(actions::UNLOAD, None, None, None);
                 plugin.load_status = None;
             }
             self.loaded = false;
@@ -265,27 +304,6 @@ impl Drop for Bundle {
     fn drop(&mut self) {
         self.unload();
     }
-}
-
-/// Call an action that takes no arguments.
-fn main_entry(plugin: &OfxPlugin, action: &str) -> Status {
-    let Some(main_entry) = plugin.main_entry else {
-        return Status::ErrFatal;
-    };
-    let Ok(action) = CString::new(action) else {
-        return Status::ErrValue;
-    };
-    // SAFETY: the plugin's own entry point, given a valid action name and the
-    // null handle and argument sets that the no-argument actions take.
-    let code = unsafe {
-        main_entry(
-            action.as_ptr(),
-            std::ptr::null(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        )
-    };
-    Status::from_code(code)
 }
 
 /// Copy a C string out of a plugin, or `None` if it is null or not text.

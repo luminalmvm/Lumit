@@ -21,6 +21,38 @@ use crate::status::OfxStatus;
 /// [`crate::handles`].
 pub type OfxPropertySetHandle = *mut c_void;
 
+/// `OfxImageEffectHandle` — a described effect, or an instance of one.
+pub type OfxImageEffectHandle = *mut c_void;
+/// `OfxParamSetHandle` — the bag of parameters hanging off an effect.
+pub type OfxParamSetHandle = *mut c_void;
+/// `OfxParamHandle` — one parameter.
+pub type OfxParamHandle = *mut c_void;
+/// `OfxImageClipHandle` — one image input or output.
+pub type OfxImageClipHandle = *mut c_void;
+/// `OfxImageMemoryHandle` — a block of image memory the host owns.
+pub type OfxImageMemoryHandle = *mut c_void;
+
+/// `OfxTime` — a frame number, as a decimal so a plugin can ask between two.
+pub type OfxTime = f64;
+
+/// `OfxRectD`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OfxRectD {
+    pub x1: f64,
+    pub y1: f64,
+    pub x2: f64,
+    pub y2: f64,
+}
+
+/// `OfxRangeD`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OfxRangeD {
+    pub min: f64,
+    pub max: f64,
+}
+
 /// The API name a plugin must declare to be an image effect.
 pub const K_OFX_IMAGE_EFFECT_PLUGIN_API: &str = "OfxImageEffectPluginAPI";
 /// The version of that API this host implements (spec 1.4 semantics).
@@ -221,6 +253,133 @@ pub struct OfxMessageSuiteV1 {
     ) -> OfxStatus,
 }
 
+/// `OfxImageEffectSuiteV1` — thirteen entry points, in the order the header
+/// declares them. The order **is** the ABI.
+///
+/// This package builds the *definition* half only: the three a plugin uses
+/// while it is describing itself. Everything from `clip_get_handle` onwards
+/// belongs to an instance, and no instance exists yet, so each of those answers
+/// `kOfxStatErrUnsupported` — a code the spec already requires plugins to cope
+/// with, and an honest one, because the feature genuinely is not here.
+#[repr(C)]
+pub struct OfxImageEffectSuiteV1 {
+    pub get_property_set: unsafe extern "C" fn(
+        image_effect: OfxImageEffectHandle,
+        prop_handle: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub get_param_set: unsafe extern "C" fn(
+        image_effect: OfxImageEffectHandle,
+        param_set: *mut OfxParamSetHandle,
+    ) -> OfxStatus,
+    pub clip_define: unsafe extern "C" fn(
+        image_effect: OfxImageEffectHandle,
+        name: *const c_char,
+        property_set: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub clip_get_handle: unsafe extern "C" fn(
+        image_effect: OfxImageEffectHandle,
+        name: *const c_char,
+        clip: *mut OfxImageClipHandle,
+        property_set: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub clip_get_property_set: unsafe extern "C" fn(
+        clip: OfxImageClipHandle,
+        prop_handle: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub clip_get_image: unsafe extern "C" fn(
+        clip: OfxImageClipHandle,
+        time: OfxTime,
+        region: *const OfxRectD,
+        image_handle: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub clip_release_image: unsafe extern "C" fn(image_handle: OfxPropertySetHandle) -> OfxStatus,
+    pub clip_get_region_of_definition: unsafe extern "C" fn(
+        clip: OfxImageClipHandle,
+        time: OfxTime,
+        bounds: *mut OfxRectD,
+    ) -> OfxStatus,
+    /// The one entry point that is not a status: nought means carry on.
+    pub abort: unsafe extern "C" fn(image_effect: OfxImageEffectHandle) -> c_int,
+    pub image_memory_alloc: unsafe extern "C" fn(
+        instance_handle: OfxImageEffectHandle,
+        n_bytes: usize,
+        memory_handle: *mut OfxImageMemoryHandle,
+    ) -> OfxStatus,
+    pub image_memory_free: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
+    pub image_memory_lock: unsafe extern "C" fn(
+        memory_handle: OfxImageMemoryHandle,
+        returned_ptr: *mut *mut c_void,
+    ) -> OfxStatus,
+    pub image_memory_unlock: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
+}
+
+/// `OfxParameterSuiteV1` — eighteen entry points, in header order.
+///
+/// Eight of them are **C-variadic** in the header (`paramGetValue` and its
+/// relatives take the out-parameters as trailing arguments, one per dimension).
+/// Rust cannot define a C-variadic function on stable, and the same argument
+/// [`OfxMessageSuiteV1`] records applies: the fixed prefix is ABI-identical on
+/// every platform this host targets, and none of the eight reads a trailing
+/// argument in this package — they answer `kOfxStatErrUnsupported`, because
+/// nothing has a value until an instance exists (P3).
+#[repr(C)]
+pub struct OfxParameterSuiteV1 {
+    pub param_define: unsafe extern "C" fn(
+        param_set: OfxParamSetHandle,
+        param_type: *const c_char,
+        name: *const c_char,
+        property_set: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub param_get_handle: unsafe extern "C" fn(
+        param_set: OfxParamSetHandle,
+        name: *const c_char,
+        param: *mut OfxParamHandle,
+        property_set: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub param_set_get_property_set: unsafe extern "C" fn(
+        param_set: OfxParamSetHandle,
+        prop_handle: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub param_get_property_set: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        prop_handle: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+    pub param_get_value: unsafe extern "C" fn(param: OfxParamHandle) -> OfxStatus,
+    pub param_get_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    pub param_get_derivative:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    pub param_get_integral:
+        unsafe extern "C" fn(param: OfxParamHandle, time1: OfxTime, time2: OfxTime) -> OfxStatus,
+    pub param_set_value: unsafe extern "C" fn(param: OfxParamHandle) -> OfxStatus,
+    pub param_set_value_at_time:
+        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    pub param_get_num_keys:
+        unsafe extern "C" fn(param: OfxParamHandle, number_of_keys: *mut c_uint) -> OfxStatus,
+    pub param_get_key_time: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        nth_key: c_uint,
+        time: *mut OfxTime,
+    ) -> OfxStatus,
+    pub param_get_key_index: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        time: OfxTime,
+        direction: c_int,
+        index: *mut c_int,
+    ) -> OfxStatus,
+    pub param_delete_key: unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    pub param_delete_all_keys: unsafe extern "C" fn(param: OfxParamHandle) -> OfxStatus,
+    pub param_copy: unsafe extern "C" fn(
+        param_to: OfxParamHandle,
+        param_from: OfxParamHandle,
+        dst_offset: OfxTime,
+        frame_range: *const OfxRangeD,
+    ) -> OfxStatus,
+    pub param_edit_begin:
+        unsafe extern "C" fn(param_set: OfxParamSetHandle, name: *const c_char) -> OfxStatus,
+    pub param_edit_end: unsafe extern "C" fn(param_set: OfxParamSetHandle) -> OfxStatus,
+}
+
 /// Suite names, as `fetchSuite` spells them.
 pub mod suite_names {
     /// `kOfxPropertySuite`
@@ -229,9 +388,11 @@ pub mod suite_names {
     pub const MEMORY: &str = "OfxMemorySuite";
     /// `kOfxMessageSuite`
     pub const MESSAGE: &str = "OfxMessageSuite";
-    /// `kOfxImageEffectSuite` — not implemented in this package.
+    /// `kOfxImageEffectSuite` — the definition half only (see
+    /// [`OfxImageEffectSuiteV1`]).
     pub const IMAGE_EFFECT: &str = "OfxImageEffectSuite";
-    /// `kOfxParameterSuite` — not implemented in this package.
+    /// `kOfxParameterSuite` — the definition half only (see
+    /// [`OfxParameterSuiteV1`]).
     pub const PARAMETER: &str = "OfxParameterSuite";
     /// `kOfxMultiThreadSuite` — not implemented in this package.
     pub const MULTI_THREAD: &str = "OfxMultiThreadSuite";
@@ -295,6 +456,97 @@ pub mod prop_keys {
     pub const PARAM_MAX_PARAMETERS: &str = "OfxParamHostPropMaxParameters";
     pub const PARAM_MAX_PAGES: &str = "OfxParamHostPropMaxPages";
     pub const PARAM_PAGE_ROW_COLUMN_COUNT: &str = "OfxParamHostPropPageRowColumnCount";
+
+    pub const SHORT_LABEL: &str = "OfxPropShortLabel";
+    pub const LONG_LABEL: &str = "OfxPropLongLabel";
+
+    pub const PARAM_TYPE: &str = "OfxParamPropType";
+    pub const PARAM_DEFAULT: &str = "OfxParamPropDefault";
+    pub const PARAM_MIN: &str = "OfxParamPropMin";
+    pub const PARAM_MAX: &str = "OfxParamPropMax";
+    pub const PARAM_DISPLAY_MIN: &str = "OfxParamPropDisplayMin";
+    pub const PARAM_DISPLAY_MAX: &str = "OfxParamPropDisplayMax";
+    pub const PARAM_DOUBLE_TYPE: &str = "OfxParamPropDoubleType";
+    pub const PARAM_STRING_MODE: &str = "OfxParamPropStringMode";
+    pub const PARAM_CHOICE_OPTION: &str = "OfxParamPropChoiceOption";
+    pub const PARAM_PARENT: &str = "OfxParamPropParent";
+    pub const PARAM_PAGE_CHILD: &str = "OfxParamPropPageChild";
+    pub const PARAM_HINT: &str = "OfxParamPropHint";
+    pub const PARAM_ANIMATES: &str = "OfxParamPropAnimates";
+    pub const PARAM_GROUP_OPEN: &str = "OfxParamPropGroupOpen";
+
+    pub const CLIP_OPTIONAL: &str = "OfxImageClipPropOptional";
+    pub const CLIP_IS_MASK: &str = "OfxImageClipPropIsMask";
+}
+
+/// The parameter types `paramDefine` accepts — every standard type, spelled as
+/// the C headers spell them.
+pub mod param_types {
+    pub const INTEGER: &str = "OfxParamTypeInteger";
+    pub const DOUBLE: &str = "OfxParamTypeDouble";
+    pub const BOOLEAN: &str = "OfxParamTypeBoolean";
+    pub const CHOICE: &str = "OfxParamTypeChoice";
+    pub const RGBA: &str = "OfxParamTypeRGBA";
+    pub const RGB: &str = "OfxParamTypeRGB";
+    pub const DOUBLE_2D: &str = "OfxParamTypeDouble2D";
+    pub const INTEGER_2D: &str = "OfxParamTypeInteger2D";
+    pub const DOUBLE_3D: &str = "OfxParamTypeDouble3D";
+    pub const INTEGER_3D: &str = "OfxParamTypeInteger3D";
+    pub const STRING: &str = "OfxParamTypeString";
+    pub const CUSTOM: &str = "OfxParamTypeCustom";
+    pub const GROUP: &str = "OfxParamTypeGroup";
+    pub const PAGE: &str = "OfxParamTypePage";
+    pub const PUSH_BUTTON: &str = "OfxParamTypePushButton";
+    /// A curve a plugin evaluates itself. Accepted by `paramDefine` — refusing
+    /// a type the spec defines is how a plugin fails to describe at all — but
+    /// it has no schema row, because Lumit's own curve is its *control points*
+    /// (K-412) and a parametric parameter is a function, not points.
+    pub const PARAMETRIC: &str = "OfxParamTypeParametric";
+
+    /// Every type above, for the "is this a type at all" check.
+    pub const ALL: &[&str] = &[
+        INTEGER,
+        DOUBLE,
+        BOOLEAN,
+        CHOICE,
+        RGBA,
+        RGB,
+        DOUBLE_2D,
+        INTEGER_2D,
+        DOUBLE_3D,
+        INTEGER_3D,
+        STRING,
+        CUSTOM,
+        GROUP,
+        PAGE,
+        PUSH_BUTTON,
+        PARAMETRIC,
+    ];
+}
+
+/// `kOfxParamPropDoubleType` — what a double *means*, which is the only thing
+/// that says whether it is a distance (docs/impl/effect-registry.md §2.2).
+pub mod double_types {
+    pub const PLAIN: &str = "OfxParamDoubleTypePlain";
+    pub const ANGLE: &str = "OfxParamDoubleTypeAngle";
+    pub const SCALE: &str = "OfxParamDoubleTypeScale";
+    pub const TIME: &str = "OfxParamDoubleTypeTime";
+    pub const ABSOLUTE_TIME: &str = "OfxParamDoubleTypeAbsoluteTime";
+    pub const X: &str = "OfxParamDoubleTypeX";
+    pub const X_ABSOLUTE: &str = "OfxParamDoubleTypeXAbsolute";
+    pub const Y: &str = "OfxParamDoubleTypeY";
+    pub const Y_ABSOLUTE: &str = "OfxParamDoubleTypeYAbsolute";
+    pub const XY: &str = "OfxParamDoubleTypeXY";
+    pub const XY_ABSOLUTE: &str = "OfxParamDoubleTypeXYAbsolute";
+}
+
+/// `kOfxParamPropStringMode`.
+pub mod string_modes {
+    pub const SINGLE_LINE: &str = "OfxParamStringIsSingleLine";
+    pub const MULTI_LINE: &str = "OfxParamStringIsMultiLine";
+    pub const FILE_PATH: &str = "OfxParamStringIsFilePath";
+    pub const DIRECTORY_PATH: &str = "OfxParamStringIsDirectoryPath";
+    pub const LABEL: &str = "OfxParamStringIsLabel";
 }
 
 /// The property *values* that are themselves fixed strings.
@@ -306,7 +558,14 @@ pub mod prop_values {
     pub const CONTEXT_GENERAL: &str = "OfxImageEffectContextGeneral";
     pub const CONTEXT_GENERATOR: &str = "OfxImageEffectContextGenerator";
     pub const CONTEXT_TRANSITION: &str = "OfxImageEffectContextTransition";
+    /// The retimer context, which docs/12 §2.1 defers: real retimers ship as
+    /// filter or general effects.
+    pub const CONTEXT_RETIMER: &str = "OfxImageEffectContextRetimer";
+    pub const CONTEXT_PAINT: &str = "OfxImageEffectContextPaint";
     pub const RENDER_THREAD_SAFETY_FULLY_SAFE: &str = "OfxImageEffectRenderFullySafe";
+    pub const TYPE_IMAGE_EFFECT: &str = "OfxTypeImageEffect";
+    pub const TYPE_PARAMETER: &str = "OfxTypeParameter";
+    pub const TYPE_CLIP: &str = "OfxTypeClip";
 }
 
 /// The message types of `OfxMessageSuiteV1`.

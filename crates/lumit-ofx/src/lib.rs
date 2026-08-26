@@ -9,11 +9,14 @@
 //! and it will be handed pictures and asked for pictures back. This crate is
 //! the side of that conversation Lumit speaks.
 //!
-//! What this package builds is the ground floor: opening a bundle, telling
-//! the plugin honestly what sort of host it has landed in, and answering the
-//! three simplest of its questions — read and write properties, allocate
-//! memory, say something to the user. Effects, parameters, clips and rendering
-//! come next, and everything they add stands on the two ideas here.
+//! The ground floor is opening a bundle, telling the plugin honestly what sort
+//! of host it has landed in, and answering the three simplest of its
+//! questions — read and write properties, allocate memory, say something to the
+//! user. On top of that sits **describe** ([`describe`]): the conversation
+//! where a plugin says what it is called, what shapes of effect it can be, and
+//! what controls it has, and where Lumit writes that answer down as the same
+//! declaration a built-in effect carries ([`schema`]). Instances, values and
+//! rendering come next, and everything they add stands on the two ideas here.
 //!
 //! **Honesty.** The host describes itself in a table of properties, and every
 //! answer in it is one the rest of Lumit keeps. Claiming to support tiled
@@ -39,11 +42,13 @@
 //! reach runs its body inside a catch (see [`suites`]).
 
 pub mod bundle;
+pub mod describe;
 pub mod ffi;
 pub mod handles;
 pub mod host;
 pub mod props;
 pub mod quirks;
+pub mod schema;
 pub mod status;
 pub mod suites;
 
@@ -52,7 +57,9 @@ pub mod suites;
 mod tests;
 
 pub use bundle::{Bundle, BundleError};
+pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejection, ScanReport};
 pub use handles::{Handle, HandleKind, HandleRegistry};
 pub use props::{Element, PropValue, PropertySet};
 pub use quirks::{Quirks, QuirksTable};
+pub use schema::schema_of;
 pub use status::{OfxStatus, Status};
