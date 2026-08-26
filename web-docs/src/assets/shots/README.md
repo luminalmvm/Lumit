@@ -45,13 +45,23 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `toolbar.png` | [/panels/toolbar/](/panels/toolbar/) | The toolbar. One tool is armed at a time; groups open a flyout. |
 | `viewer-bar.png` | [/panels/viewer/](/panels/viewer/) | The Viewer bar. |
 | `viewer.png` | [/panels/viewer/](/panels/viewer/) | The Viewer, with a layer selected and its transform gizmo showing. |
+| `export-queue.png` | [/use/export/](/use/export/) | The export queue, with one composition waiting. |
+| `welcome.png` | [/start/install/](/start/install/) | The welcome screen: the three cards and the RECENT well. |
+| `nodes-workspace.png` | [/use/workspaces/](/use/workspaces/) | The Nodes workspace: the graph across the window, Viewer beside it. |
+| `graph-panel.png` | - | The Node graph panel: a wired image chain and a driver. No page for it yet. |
+| `effects-presets-ofx.png` | [/panels/effects-presets/](/panels/effects-presets/) | An OFX plugin's own heading in the panel, under the folded built-in categories. |
+| `layers-shut.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, everything shut: summary diamonds on the bars. |
+| `layers-open.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, a layer twirled open: shaped marks on two lanes. |
+| `layers-selected.png` | [/panels/timeline/](/panels/timeline/) | The same, with one keyframe picked. |
+| `graph-mode.png` | [/panels/timeline/](/panels/timeline/) | Graph mode: the opacity curve of the picked property. |
 
 ## Waiting on the feature
 
-Two shots were asked for before the thing they show existed, so they are off the list
+One shot was asked for before the thing it shows existed, so it is off the list
 until it does:
 
-- `export-queue.png` - there is no export queue. Export is a single dialogue that
-  writes one composition.
 - `interpretation.png` - footage interpretation is not built. There is nowhere to
   override a file's frame rate, alpha, or colour space.
+
+Proxies, which were on this list beside it, are built: `project-panel.png` shows a
+row wearing the `proxy` badge.
