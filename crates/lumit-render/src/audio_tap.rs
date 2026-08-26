@@ -28,6 +28,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
@@ -46,28 +47,72 @@ pub const TAP_RATE: u32 = 48_000;
 /// 23 MB a minute, so this is roughly ten minutes of track.
 const CACHE_BUDGET_BYTES: usize = 256 * 1024 * 1024;
 
+/// One cache entry: when it was last read, and what was decoded (`None` for a
+/// file that would not decode).
+type Entry = (u64, Option<Arc<AudioBuffer>>);
+
 /// Decoded tracks by file, shared across every render in the process — the
 /// preview's, the export's and the thumbnailer's alike, because what a file
 /// sounds like is a fact about the file.
 ///
 /// A failed decode is remembered as `None`, so a missing file is not reopened
 /// once per driver per frame.
-static DECODED: LazyLock<Mutex<HashMap<PathBuf, Option<Arc<AudioBuffer>>>>> =
+static DECODED: LazyLock<Mutex<HashMap<PathBuf, Entry>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Ticks once per read, so entries can be ordered by how recently they were
+/// touched. A counter, not a clock: two reads in the same microsecond still
+/// order, and nothing here depends on the machine's time.
+static TOUCH: AtomicU64 = AtomicU64::new(0);
+
+fn entry_bytes(buffer: &Option<Arc<AudioBuffer>>) -> usize {
+    buffer
+        .as_ref()
+        .map_or(0, |b| b.samples.len() * std::mem::size_of::<f32>())
+}
+
+/// Drop the least recently read tracks until the cache fits `budget`.
+///
+/// Ordering is by last read, so a comp whose two long tracks drive two
+/// parameters keeps whichever it is reading and evicts the one it left behind,
+/// rather than clearing everything and re-decoding both every frame.
+fn evict_to_budget(cache: &mut HashMap<PathBuf, Entry>, budget: usize) {
+    let mut total: usize = cache.values().map(|(_, b)| entry_bytes(b)).sum();
+    if total <= budget {
+        return;
+    }
+    let mut oldest_first: Vec<(u64, PathBuf)> = cache
+        .iter()
+        .map(|(path, (touched, _))| (*touched, path.clone()))
+        .collect();
+    oldest_first.sort_unstable();
+    for (_, path) in oldest_first {
+        if total <= budget {
+            return;
+        }
+        if let Some((_, buffer)) = cache.remove(&path) {
+            total -= entry_bytes(&buffer);
+        }
+    }
+}
 
 /// The decoded track at `path`, from the cache or by decoding it now.
 ///
 /// ponytail: the decode happens on whichever thread asked, so the first frame
 /// that reads a driven parameter waits for the whole file — the same trade the
-/// media index makes, and the same one the mixer makes on its own thread. Hand
-/// it to the decode-ahead worker if a long track ever shows as a stall.
+/// media index makes, and the same one the mixer makes on its own thread. If
+/// opening a project whose parameters are audio-driven holds the first frame
+/// for more than a second on an ordinary track (a few minutes of stereo), hand
+/// `decoded` to the decode-ahead worker so the wait happens before the frame is
+/// asked for.
 fn decoded(path: &Path) -> Option<Arc<AudioBuffer>> {
     // The lock is never held across the decode (14-ENGINEERING-RULES §5): FFmpeg
     // is FFI and takes as long as the file is long. Two threads racing the same
     // new file decode it twice and agree on the answer, which is cheaper than
     // holding a global lock for a second.
-    if let Ok(cache) = DECODED.lock() {
-        if let Some(hit) = cache.get(path) {
+    if let Ok(mut cache) = DECODED.lock() {
+        if let Some((touched, hit)) = cache.get_mut(path) {
+            *touched = TOUCH.fetch_add(1, Ordering::Relaxed);
             return hit.clone();
         }
     }
@@ -75,19 +120,9 @@ fn decoded(path: &Path) -> Option<Arc<AudioBuffer>> {
         .ok()
         .map(Arc::new);
     if let Ok(mut cache) = DECODED.lock() {
-        cache.insert(path.to_path_buf(), decoded.clone());
-        // ponytail: over budget, everything but this file goes. A comp with two
-        // long tracks driving two parameters would then decode both every
-        // frame; make it least-recently-used if that is ever a real project
-        // rather than a hypothetical one.
-        let bytes: usize = cache
-            .values()
-            .flatten()
-            .map(|b| b.samples.len() * std::mem::size_of::<f32>())
-            .sum();
-        if bytes > CACHE_BUDGET_BYTES {
-            cache.retain(|key, _| key == path);
-        }
+        let touched = TOUCH.fetch_add(1, Ordering::Relaxed);
+        cache.insert(path.to_path_buf(), (touched, decoded.clone()));
+        evict_to_budget(&mut cache, CACHE_BUDGET_BYTES);
     }
     decoded
 }
@@ -225,6 +260,45 @@ mod tests {
             extra: serde_json::Map::new(),
         }));
         (doc, comp_id, layer_id)
+    }
+
+    /// Two tracks under a budget with room for one: the one just read stays,
+    /// the one left behind goes. A comp driving two parameters from two long
+    /// tracks therefore alternates rather than re-decoding both every frame.
+    #[test]
+    fn the_least_recently_read_track_is_the_one_evicted() {
+        let track = |seconds: usize| {
+            Some(Arc::new(AudioBuffer {
+                rate: TAP_RATE,
+                samples: vec![0.0; seconds * TAP_RATE as usize * 2],
+            }))
+        };
+        let one_track = entry_bytes(&track(1));
+        let budget = one_track + one_track / 2;
+
+        let mut cache: HashMap<PathBuf, Entry> = HashMap::new();
+        cache.insert(PathBuf::from("a.wav"), (0, track(1)));
+        cache.insert(PathBuf::from("b.wav"), (1, track(1)));
+        evict_to_budget(&mut cache, budget);
+        assert_eq!(
+            cache.keys().collect::<Vec<_>>(),
+            vec![&PathBuf::from("b.wav")],
+            "the track read last is the one kept"
+        );
+
+        // Reading a again makes b the older of the two, and the next eviction
+        // reverses — which is the alternation, not the thrash.
+        cache.insert(PathBuf::from("a.wav"), (2, track(1)));
+        evict_to_budget(&mut cache, budget);
+        assert_eq!(
+            cache.keys().collect::<Vec<_>>(),
+            vec![&PathBuf::from("a.wav")],
+            "and the one left behind is the one dropped"
+        );
+
+        // Under budget, nothing is touched.
+        evict_to_budget(&mut cache, budget);
+        assert_eq!(cache.len(), 1, "a cache that fits is left alone");
     }
 
     /// A layer that is not footage, or footage whose file is not there, reads
