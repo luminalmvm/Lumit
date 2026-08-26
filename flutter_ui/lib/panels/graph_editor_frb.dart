@@ -22,11 +22,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/src/rust/api/project.dart';
-import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:provider/provider.dart';
 
@@ -36,75 +33,23 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
-import 'easing_curve.dart';
-import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
-import 'text_animator_rows_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_snap.dart';
-import 'transform_rows_frb.dart';
+import 'graph_channels.dart';
+import 'graph_edits.dart';
+import 'graph_key_fields.dart';
+import 'graph_painters.dart';
 
-/// A value drag in flight **in the layer area**, published for the graph pane to
-/// draw (K-333).
-///
-/// The row stages its value in Dart and commits once on release (K-192), so the
-/// read model — and therefore the curve — still holds the old one until the
-/// pointer comes up. The pane cannot ask for it, because it is not in the
-/// document; the row publishes it here instead, exactly as a bar drag publishes
-/// its travel for the waveform lane (`BarDragPreview`, K-172). Null between
-/// gestures.
-///
-/// The layer plus one channel selector — a transform axis, an effect
-/// parameter, or the Retime — is what the two sides have in common, so
-/// dragging Position x leaves y where it is. An **unkeyed** property is drawn
-/// at its new value and gains no diamond: the drag is not planting a key, and
-/// a glyph would say it was.
-final ValueNotifier<RowValueDrag?> rowValueDrag = ValueNotifier(null);
-
-/// One tick of a layer-area value drag: which channel, and what it holds.
-class RowValueDrag {
-  final String layer;
-
-  /// A transform axis (`BridgeTransformProp.name`), or null.
-  final String? prop;
-
-  /// An effect parameter, or nulls.
-  final String? effectId;
-  final String? paramId;
-
-  /// The layer's Retime channel.
-  final bool retime;
-
-  final int frame;
-  final double value;
-
-  const RowValueDrag({
-    required this.layer,
-    this.prop,
-    this.effectId,
-    this.paramId,
-    this.retime = false,
-    required this.frame,
-    required this.value,
-  });
-
-  /// Whether [channel] is the curve this drag is editing.
-  bool matches(GraphChannel channel) {
-    if (channel.entry.layer.internallayerId.toString() != layer) return false;
-    if (prop != null) return channel.prop?.name == prop;
-    if (effectId != null) {
-      return channel.effect?.id.toString() == effectId &&
-          channel.param?.id == paramId;
-    }
-    return retime && channel.retime;
-  }
-}
-
-/// Which reading of the curve is on screen (docs/07 §5.1).
-enum GraphLens { value, speed }
-
+// The pane was one file; it is now six. Everything the pane's callers and its
+// tests reached for through this library is still reachable through it.
+export 'graph_channels.dart';
+export 'graph_clipboard.dart';
+export 'graph_edits.dart';
+export 'graph_key_fields.dart';
+export 'graph_painters.dart';
 /// How wide a keyframe's grab target is, and a tangent handle's. Both are
 /// bigger than the glyph they carry: these are small marks that must be
 /// caught first time, and a miss on a handle is worse than a miss on empty
@@ -128,1182 +73,6 @@ const double _selectedKeyGlyph = 12;
 /// grabbable everywhere else along its length (P5).
 const double _boxGrab = 10;
 
-/// How wide the **value gutter** is: the drawing's 34px strip down the right
-/// of the graph, on a translucent ground, where every value label lives
-/// (§12A.2 — "value labels live in a fixed right-hand gutter, never on the
-/// curve").
-const double graphGutterWidth = 34;
-
-/// One animatable channel on the graph: a single scalar curve, where it came
-/// from, and how to write it back.
-class GraphChannel {
-  /// The fold-row path of the property row this channel belongs to — the
-  /// outline's selection speaks in these.
-  final String path;
-
-  /// Unique per curve: a two-axis property has one channel per axis.
-  final String id;
-  final String label;
-
-  /// Its stroke: an index into the theme's `curve` palette, assigned in
-  /// selection order so the outline can tint the row's text to match.
-  final int colourIndex;
-  final BridgeScalar scalar;
-  final BridgeLayerEntry entry;
-
-  /// Set for a transform channel; null for an effect parameter.
-  final BridgeTransformProp? prop;
-
-  /// Set for an effect parameter channel.
-  final BridgeEffectInstanceInfo? effect;
-  final BridgeParamInfo? param;
-
-  /// True for the layer's Retime channel (K-197), which is neither a transform
-  /// property nor an effect parameter but reads and writes like both.
-  final bool retime;
-
-  /// Set for one of a mask's values (K-340): the mask it belongs to, and which
-  /// of its values this is.
-  final BridgeMask? mask;
-  final MaskValue? maskValue;
-
-  /// Which point a per-point feather channel belongs to (K-545); `-1` on every
-  /// other channel.
-  final int maskVertex;
-
-  /// Set for one of a Text layer's animator numbers (K-609): which animator in
-  /// the layer's list, and which of its numbers this is.
-  final int animator;
-  final TextAnimatorValue? animatorValue;
-
-  /// True for a mask's **shape** (K-344). A path has no value to plot, so what
-  /// this channel carries is the interpolation parameter — counted up, one per
-  /// key — and both lenses draw its *slope*: the rate the shape is changing
-  /// at. That is the one honest curve a path has, and it is what After Effects
-  /// draws for a mask path.
-  bool get isMaskPath => maskValue == MaskValue.path;
-
-  const GraphChannel({
-    required this.path,
-    required this.id,
-    required this.label,
-    required this.colourIndex,
-    required this.scalar,
-    required this.entry,
-    this.prop,
-    this.effect,
-    this.param,
-    this.retime = false,
-    this.mask,
-    this.maskValue,
-    this.maskVertex = -1,
-    this.animator = -1,
-    this.animatorValue,
-  });
-
-  List<BridgeKeyframe> get keys => keysOf(scalar);
-  bool get isStatic => scalar is BridgeScalar_Static;
-  double get staticValue => switch (scalar) {
-        BridgeScalar_Static(:final field0) => field0,
-        BridgeScalar_Keyframed() => 0,
-        BridgeScalar_Expression() => 0,
-      };
-}
-
-/// The channels the selected property paths resolve to, in selection order —
-/// entirely from the read model, so building them costs no bridge calls.
-///
-/// A transform row yields one channel per axis (Position → x and y, the AE
-/// red/green pair); a float effect parameter yields one. Volume is not in the
-/// read model (K-184's deliberate exceptions) and is skipped — docs/TODO.md.
-List<GraphChannel> graphChannels({
-  required List<BridgeLayerEntry> layers,
-  required List<String> selected,
-}) {
-  final out = <GraphChannel>[];
-  for (final path in selected) {
-    final cut = path.indexOf('/');
-    if (cut <= 0) continue;
-    final layerId = path.substring(0, cut);
-    BridgeLayerEntry? entry;
-    for (final e in layers) {
-      if (e.layer.internallayerId.toString() == layerId) {
-        entry = e;
-        break;
-      }
-    }
-    if (entry == null) continue;
-
-    // Retime (K-197): one channel, source time in seconds. An ordinary curve
-    // here — the lens, the handles and the interp buttons all treat it as one.
-    if (path == retimePath(layerId)) {
-      if (entry.info.retime case final scalar?) {
-        out.add(GraphChannel(
-          path: path,
-          id: path,
-          label: '${entry.info.name} · Retime',
-          colourIndex: out.length,
-          scalar: scalar,
-          entry: entry,
-          retime: true,
-        ));
-      }
-      continue;
-    }
-
-    if (path.startsWith('${transformPath(layerId)}/')) {
-      final lead = path.substring(path.lastIndexOf('/') + 1);
-      for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
-        if (group.axes.first.prop.name != lead) continue;
-        for (final axis in group.axes) {
-          out.add(GraphChannel(
-            path: path,
-            id: '$path@${axis.prop.name}',
-            label: group.axes.length == 1
-                ? '${entry.info.name} · ${group.label}'
-                : '${entry.info.name} · ${group.label} ${_axisLetter(group.axes.indexOf(axis))}',
-            colourIndex: out.length,
-            scalar: read(entry.info.transform, axis.prop),
-            entry: entry,
-            prop: axis.prop,
-          ));
-        }
-        break;
-      }
-      continue;
-    }
-
-    if (path.startsWith('${effectsPath(layerId)}/')) {
-      final rest = path.substring(effectsPath(layerId).length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final effectId = rest.substring(0, slash);
-      final paramId = rest.substring(slash + 1);
-      for (final fx in entry.info.effects) {
-        if (fx.id.toString() != effectId) continue;
-        for (final param in cachedListParameters(fx.name)) {
-          if (param.id != paramId) continue;
-          // A Slider is a Float inside a closed range (K-414): the kind is the
-          // control, not the storage, so it keeps every float affordance —
-          // docs/08 §1.2 names the graph editor among them.
-          if (param.kind is! BridgeParamKind_Float &&
-              param.kind is! BridgeParamKind_Slider) {
-            continue;
-          }
-          BridgeScalar? scalar;
-          for (final v in fx.values) {
-            if (v.id == param.id && v.value is BridgeEffectValue_Float) {
-              scalar = (v.value as BridgeEffectValue_Float).field0;
-            }
-          }
-          if (scalar == null) continue;
-          out.add(GraphChannel(
-            path: path,
-            id: path,
-            label:
-                '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
-            colourIndex: out.length,
-            scalar: scalar,
-            entry: entry,
-            effect: fx,
-            param: param,
-          ));
-        }
-      }
-      continue;
-    }
-
-    // A Text layer's animator numbers (K-609). They come off the read model
-    // like a mask's do, so a curve here costs no bridge call to draw.
-    if (path.startsWith('${animatorsPath(layerId)}/')) {
-      final rest = path.substring(animatorsPath(layerId).length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final index = int.tryParse(rest.substring(0, slash));
-      final valueName = rest.substring(slash + 1);
-      if (index == null || index >= entry.info.textAnimators.length) continue;
-      final value = TextAnimatorValue.values
-          .where((v) => v.name == valueName)
-          .firstOrNull;
-      if (value == null) continue;
-      final animator = entry.info.textAnimators[index];
-      out.add(GraphChannel(
-        path: path,
-        id: path,
-        label: '${entry.info.name} · ${animator.name} · '
-            '${textAnimatorValueLabel(value)}',
-        colourIndex: out.length,
-        scalar: textAnimatorScalarOf(animator, value),
-        entry: entry,
-        animator: index,
-        animatorValue: value,
-      ));
-      continue;
-    }
-
-    // A mask's numbers (K-340). Its shape is deliberately absent: a path has no
-    // value axis to draw against, so it keeps its lane diamonds and no curve.
-    if (path.startsWith('${masksPath(layerId)}/')) {
-      final rest = path.substring(masksPath(layerId).length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final maskId = rest.substring(0, slash);
-      // A per-point feather row's path carries the point after its name
-      // (K-545): `.../vertexFeather/3`.
-      final rawValue = rest.substring(slash + 1);
-      final tail = rawValue.indexOf('/');
-      final valueName = tail < 0 ? rawValue : rawValue.substring(0, tail);
-      final vertex =
-          tail < 0 ? -1 : int.tryParse(rawValue.substring(tail + 1)) ?? -1;
-      for (final mask in entry.info.masks) {
-        if (mask.id.toString() != maskId) continue;
-        final value =
-            MaskValue.values.where((v) => v.name == valueName).firstOrNull;
-        if (value == null) break;
-        // The shape's channel carries its keys as the counted-up interpolation
-        // parameter (K-344); a still shape has none and draws nothing.
-        if (value == MaskValue.path && mask.pathKeys.isEmpty) break;
-        out.add(GraphChannel(
-          path: path,
-          id: path,
-          label: '${entry.info.name} · ${mask.name} · '
-              '${maskValueLabel(value, vertex)}',
-          colourIndex: out.length,
-          scalar: value == MaskValue.path
-              ? BridgeScalar.keyframed(mask.pathKeys)
-              : maskScalarOf(mask, value, vertex),
-          entry: entry,
-          mask: mask,
-          maskValue: value,
-          maskVertex: vertex,
-        ));
-        break;
-      }
-    }
-  }
-  return out;
-}
-
-String _axisLetter(int i) => switch (i) { 0 => 'x', 1 => 'y', _ => 'z' };
-
-/// Commit new scalars for a set of channels in the fewest ops: one
-/// `setTransforms` batch per layer for its transform channels (one undo step),
-/// one staged `setEffects` per layer for its effect channels.
-void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
-  // Transform channels, grouped by layer.
-  final transforms = <String,
-      (LayerReference, List<BridgeTransformProp>, List<BridgeScalar>)>{};
-  final effects =
-      <String, (LayerReference, Map<String, Map<String, BridgeScalar>>)>{};
-  edits.forEach((channel, next) {
-    final layerId = channel.entry.layer.internallayerId.toString();
-    if (channel.prop != null) {
-      final slot = transforms[layerId] ??= (channel.entry.layer, [], []);
-      slot.$2.add(channel.prop!);
-      slot.$3.add(next);
-    } else if (channel.retime) {
-      // One Retime per layer, so there is nothing to batch: the write is
-      // already one op and therefore one undo step.
-      channel.entry.layer.setRetimeProperty(value: next);
-    } else if (channel.effect != null && channel.param != null) {
-      final slot = effects[layerId] ??= (channel.entry.layer, {});
-      (slot.$2[channel.effect!.id.toString()] ??= {})[channel.param!.id] = next;
-    } else if (channel.animatorValue case final value?) {
-      // One number of one animator, written through the whole document —
-      // which is the op (K-609), so two curves on one animator are two writes
-      // and two undo steps, exactly as two on one mask are.
-      writeTextAnimatorScalar(
-        layer: channel.entry.layer,
-        index: channel.animator,
-        value: value,
-        to: next,
-      );
-    } else if (channel.isMaskPath && channel.mask != null) {
-      // A shape key holds a path, not a number, so only its time and its eases
-      // can be written — which is exactly what a graph edit changes (K-344).
-      channel.entry.layer.setMaskPathKeys(
-        id: channel.mask!.id,
-        keys: keysOf(next),
-      );
-    } else if (channel.mask case final mask?) {
-      // A mask edit takes the whole mask, so there is nothing to batch per
-      // property; two curves on one mask are two writes and two undo steps,
-      // which is what `SetLayerMasks` costs until it grows a per-key op.
-      channel.entry.layer.setMask(
-        mask: maskWithScalar(mask, channel.maskValue!, next,
-            channel.maskVertex),
-        at: null,
-      );
-    }
-  });
-  for (final (layer, props, values) in transforms.values) {
-    layer.setTransforms(props: props, values: values);
-  }
-  for (final (layer, byEffect) in effects.values) {
-    final staged = layer.getEffects();
-    for (final instance in staged) {
-      final wanted = byEffect[instance.id().toString()];
-      if (wanted == null) continue;
-      wanted.forEach((paramId, scalar) {
-        instance.setValue(id: paramId, value: BridgeEffectValue.float(scalar));
-      });
-    }
-    layer.setEffects(effects: staged);
-  }
-}
-
-/// Show the edits a gesture is *about* to make, without making them: the same
-/// scalars [commitChannelEdits] writes on release, rendered through the
-/// engine's patched clone.
-///
-/// **Why this exists.** A drag is one op on release (K-192), so between the
-/// first move and the mouse-up the document still holds the old curve and the
-/// Viewer still shows it. On a transform or an effect that is merely awkward;
-/// on a **Retime** it is the whole edit — you are choosing which frame of the
-/// source to land on, by eye, against a picture that will not move until you
-/// let go. Every other live drag in the editor already previews (transform
-/// rows, effect rows, paint, masks, clip envelopes); the graph is where curves
-/// are actually shaped, and it was the one place that did not.
-///
-/// **One layer, one kind, per gesture.** A preview request patches a single
-/// layer's single state (see `RenderCompRequestWithPreview`), so this previews
-/// the grabbed channel's layer and the channels that patch the same way; a
-/// selection spanning several layers or a transform *and* an effect at once
-/// shows the rest on release, as it always did. That is what a gesture is in
-/// practice: one property of one layer.
-void previewChannelEdits({
-  required CompositionReference comp,
-  required Map<GraphChannel, BridgeScalar> edits,
-  required int frame,
-  required double scale,
-}) {
-  if (edits.isEmpty) return;
-  final lead = edits.keys.first;
-  final layer = lead.entry.layer;
-  final layerId = layer.internallayerId.toString();
-  bool sameLayer(GraphChannel c) =>
-      c.entry.layer.internallayerId.toString() == layerId;
-  final bigFrame = BigInt.from(frame);
-
-  if (lead.retime) {
-    comp.renderFrameWithRetime(
-      frame: bigFrame,
-      scale: scale,
-      layer: layer,
-      retime: edits[lead]!,
-    );
-    return;
-  }
-
-  if (lead.prop != null) {
-    var transform = layer.getTransform();
-    edits.forEach((channel, next) {
-      if (!sameLayer(channel) || channel.prop == null) return;
-      transform = writeScalar(transform, channel.prop!, next);
-    });
-    comp.renderFrameWithTransformPreview(
-      frame: bigFrame,
-      scale: scale,
-      layer: layer,
-      transform: transform,
-    );
-    return;
-  }
-
-  if (lead.effect == null || lead.param == null) return;
-  final staged = layer.getEffects();
-  for (final instance in staged) {
-    edits.forEach((channel, next) {
-      if (!sameLayer(channel) ||
-          channel.effect == null ||
-          channel.param == null) {
-        return;
-      }
-      if (channel.effect!.id.toString() != instance.id().toString()) return;
-      instance.setValue(
-          id: channel.param!.id, value: BridgeEffectValue.float(next));
-    });
-  }
-  comp.renderFrameWithPreview(
-    frame: bigFrame,
-    scale: scale,
-    layer: layer,
-    effects: staged,
-  );
-}
-
-/// [keys] with a key of [value] at [frame] — replacing the one already there,
-/// because two keys at one time is not a curve the engine will take (K-301).
-List<BridgeKeyframe> _withKeyAt(
-  List<BridgeKeyframe> keys,
-  double frame,
-  double value,
-  double fps,
-  int fpsNum,
-  int fpsDen,
-) {
-  final merged = <double, BridgeKeyframe>{
-    for (final k in keys) _keyFrame(k, fps): k,
-  };
-  merged[frame] = BridgeKeyframe(
-    time: timeOfSubframe(frame, fpsNum, fpsDen),
-    value: value,
-    interpIn: const BridgeSideInterp.linear(),
-    interpOut: const BridgeSideInterp.linear(),
-  );
-  final frames = merged.keys.toList()..sort();
-  return [for (final f in frames) merged[f]!];
-}
-
-/// A key's position on the frame axis, fractional (a key may sit between
-/// frames with the magnet off).
-double _keyFrame(BridgeKeyframe key, double fps) =>
-    rationalSeconds(key.time) * fps;
-
-/// A number as this pane's readouts write it: whole numbers plain, everything
-/// else to two places — the same hand the dope sheet's own numbers are set in.
-String graphNumberText(double v) =>
-    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
-
-/// One side of `keys[index]` as a bezier reaching [percent] of its span, at
-/// the speed the side already reads.
-///
-/// The tangent handle's own commit, reached by typing instead of by dragging
-/// — the graph's Key readout row writes influence with it, and so does the
-/// numeric-entry popover (§3.3, §6.2). A side that was linear becomes a
-/// bezier that looks exactly as it did, which is the only way to give a
-/// straight side a reach at all.
-BridgeSideInterp sideWithInfluence(
-        List<BridgeKeyframe> keys, int index, bool isOut, double percent) =>
-    BridgeSideInterp.bezier(BridgeBezierSide(
-      speed: sideSpeedAtKey(keys, index, isOut: isOut),
-      influence: (percent / 100).clamp(1e-3, 1.0).toDouble(),
-    ));
-
-/// Set one or both sides of every selected key to [side] — the F9 family and
-/// the bottom bar's Linear / Bezier / Hold buttons. `inSide`/`outSide` pick
-/// which sides change (ease-in touches only the in side, and so on).
-void applyInterpToSelection({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required BridgeSideInterp side,
-  bool inSide = true,
-  bool outSide = true,
-}) {
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    final keys = channel.keys;
-    var touched = false;
-    final next = <BridgeKeyframe>[];
-    for (var i = 0; i < keys.length; i++) {
-      if (selectedKeys.contains('${channel.id}#$i')) {
-        touched = true;
-        next.add(BridgeKeyframe(
-          time: keys[i].time,
-          value: keys[i].value,
-          interpIn: inSide ? side : keys[i].interpIn,
-          interpOut: outSide ? side : keys[i].interpOut,
-        ));
-      } else {
-        next.add(keys[i]);
-      }
-    }
-    if (touched) edits[channel] = BridgeScalar.keyframed(next);
-  }
-  if (edits.isNotEmpty) commitChannelEdits(edits);
-}
-
-/// Put both sides of every selected key into [mode] — the bottom bar's
-/// Tangents Auto / Clamp / Free (docs/impl/timeline-interaction.md §6.3).
-///
-/// The mode is stored **per side**, and this sets both, because the strip's
-/// unit is the key: a side is aimed one at a time by dragging its handle,
-/// which is also what takes it back to Free. The ease each side is carrying
-/// travels inside the automatic side ([withTangentMode]), so a round trip out
-/// to Auto and back hands the custom ease over unchanged.
-void applyTangentModeToSelection({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required TangentMode mode,
-}) {
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    final keys = channel.keys;
-    var touched = false;
-    final next = <BridgeKeyframe>[];
-    for (var i = 0; i < keys.length; i++) {
-      if (!selectedKeys.contains('${channel.id}#$i')) {
-        next.add(keys[i]);
-        continue;
-      }
-      touched = true;
-      next.add(BridgeKeyframe(
-        time: keys[i].time,
-        value: keys[i].value,
-        interpIn: withTangentMode(keys[i].interpIn, mode),
-        interpOut: withTangentMode(keys[i].interpOut, mode),
-      ));
-    }
-    if (touched) edits[channel] = BridgeScalar.keyframed(next);
-  }
-  if (edits.isNotEmpty) commitChannelEdits(edits);
-}
-
-/// Plant a key at [frame] on every channel here, each taking the value its own
-/// curve already reads there — so the picture does not move. Adding a key is a
-/// place to grab, not an edit (docs/07 §4.3, K-500 §2.1's lane gesture).
-///
-/// A channel with nothing keyed is left alone: the gesture is *"plant a key on
-/// this keyed row"*, and turning a static property into an animated one is the
-/// stopwatch's job, not a Ctrl-click's. A channel that already has a key on
-/// that frame is left alone too, because two keys at one time is not a curve
-/// the engine will take (K-301). A mask's **shape** channel is skipped: a path
-/// key holds a whole path, which the mask's own control plants.
-///
-/// Returns whether anything was written. One call, so a two-axis row's key
-/// lands on both axes in one op — one undo step, as a lane diamond is one key.
-bool plantKeyOnChannels({
-  required List<GraphChannel> channels,
-  required double frame,
-  required double fps,
-  required int fpsNum,
-  required int fpsDen,
-}) {
-  final seconds = frame / (fps <= 0 ? 1 : fps);
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    if (channel.isMaskPath) continue;
-    final keys = channel.keys;
-    if (keys.isEmpty) continue;
-    if (keys.any((k) => _keyFrame(k, fps).round() == frame.round())) continue;
-    edits[channel] = BridgeScalar.keyframed(_withKeyAt(
-        keys, frame, evaluateKeys(keys, seconds), fps, fpsNum, fpsDen));
-  }
-  if (edits.isEmpty) return false;
-  commitChannelEdits(edits);
-  return true;
-}
-
-/// Remove every key in [selectedKeys] from [channels] — the graph's Delete and
-/// the lane key menu's *Delete key* are the same removal (K-500 §2.1).
-///
-/// The last key of a curve leaves a static value holding what it held: a
-/// property that has lost its animation still has to read something.
-///
-/// Returns whether anything was written.
-bool deleteKeysFromChannels({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-}) {
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    final keys = channel.keys;
-    final rest = <BridgeKeyframe>[];
-    var removed = false;
-    double? lastRemoved;
-    for (var i = 0; i < keys.length; i++) {
-      if (selectedKeys.contains('${channel.id}#$i')) {
-        removed = true;
-        lastRemoved = keys[i].value;
-      } else {
-        rest.add(keys[i]);
-      }
-    }
-    if (!removed) continue;
-    edits[channel] = rest.isEmpty
-        ? BridgeScalar.static_(lastRemoved ?? 0)
-        : BridgeScalar.keyframed(rest);
-  }
-  if (edits.isEmpty) return false;
-  commitChannelEdits(edits);
-  return true;
-}
-
-/// Every selected key's frame, across every channel — what the block tools
-/// measure before they move anything (K-458).
-///
-/// The span a Reverse mirrors within is the *selection's*, not each channel's:
-/// three rows selected together are one block, and mirroring each row inside
-/// its own extent would slide the rows apart rather than turn the block round.
-List<double> selectedKeyFrames({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required double fps,
-}) {
-  final out = <double>[];
-  for (final channel in channels) {
-    final keys = channel.keys;
-    for (var i = 0; i < keys.length; i++) {
-      if (selectedKeys.contains('${channel.id}#$i')) {
-        out.add(_keyFrame(keys[i], fps));
-      }
-    }
-  }
-  return out;
-}
-
-/// Give every selected key a new time, [frameOf] deciding where each one goes
-/// from where it is and which channel it is on (K-458).
-///
-/// The shared body of Reverse and of the Ease popover's Stagger. Each channel's
-/// list is rebuilt whole and **re-sorted**, because a move can change the order
-/// keys come in — that is the point of a reverse — and the engine refuses a
-/// curve whose times do not strictly ascend. A channel whose result would put
-/// two keys on the same time is left alone rather than written wrong, and a
-/// channel is written only if something on it actually moved.
-///
-/// [swapSides] mirrors each moved key's in and out interpolation as well as its
-/// time. Reverse wants it: a key that eased slowly *out* of itself is, played
-/// backwards, a key that eases slowly *into* itself, and a reverse that left the
-/// sides alone would turn the times round while leaving the motion's shape
-/// pointing the way it was. Stagger does not: a stagger is a shift, and a shift
-/// changes nothing about how the movement runs.
-void moveSelectedKeys({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required double fps,
-  required int fpsNum,
-  required int fpsDen,
-  required double Function(GraphChannel channel, double frame) frameOf,
-  bool swapSides = false,
-}) {
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    final keys = channel.keys;
-    var touched = false;
-    final next = <BridgeKeyframe>[];
-    for (var i = 0; i < keys.length; i++) {
-      if (!selectedKeys.contains('${channel.id}#$i')) {
-        next.add(keys[i]);
-        continue;
-      }
-      final was = _keyFrame(keys[i], fps);
-      final now = frameOf(channel, was);
-      if (now == was && !swapSides) {
-        next.add(keys[i]);
-        continue;
-      }
-      touched = true;
-      next.add(BridgeKeyframe(
-        time: timeOfSubframe(now, fpsNum, fpsDen),
-        value: keys[i].value,
-        interpIn: swapSides ? keys[i].interpOut : keys[i].interpIn,
-        interpOut: swapSides ? keys[i].interpIn : keys[i].interpOut,
-      ));
-    }
-    if (!touched) continue;
-    next.sort(
-        (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
-    // Two keys landing on one time is a curve the engine must refuse, so the
-    // channel keeps what it had rather than being written into a state that
-    // cannot be saved.
-    var clash = false;
-    for (var i = 1; i < next.length; i++) {
-      if (rationalSeconds(next[i].time) <= rationalSeconds(next[i - 1].time)) {
-        clash = true;
-        break;
-      }
-    }
-    if (!clash) edits[channel] = BridgeScalar.keyframed(next);
-  }
-  if (edits.isNotEmpty) commitChannelEdits(edits);
-}
-
-/// Reverse the selection in time: the block plays backwards where it stands
-/// (K-458, the Keys mode bottom bar).
-///
-/// Each key's new time is its old one reflected through the middle of the
-/// block, so the earliest becomes the latest and the whole run stays exactly
-/// where it was on the Timeline. **The value travels with its key** — this
-/// re-times keys, it does not shuffle values under fixed times — and each key's
-/// two eases swap, because the side that was leaving is now the side arriving.
-///
-/// Wrap the call in [asOneUndoStep]: a selection spanning two layers is two
-/// writes, and Reverse is one press.
-void reverseSelection({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required double fps,
-  required int fpsNum,
-  required int fpsDen,
-}) {
-  final frames = selectedKeyFrames(
-      channels: channels, selectedKeys: selectedKeys, fps: fps);
-  if (frames.length < 2) return;
-  var lo = frames.first;
-  var hi = frames.first;
-  for (final f in frames) {
-    if (f < lo) lo = f;
-    if (f > hi) hi = f;
-  }
-  final sum = lo + hi;
-  moveSelectedKeys(
-    channels: channels,
-    selectedKeys: selectedKeys,
-    fps: fps,
-    fpsNum: fpsNum,
-    fpsDen: fpsDen,
-    swapSides: true,
-    frameOf: (_, frame) => sum - frame,
-  );
-}
-
-/// Fan the selection out in time: each row's keys pushed [step] frames further
-/// than the row before it, so a run of properties arrives one after another
-/// rather than together (K-458, the Ease popover's Stagger).
-///
-/// [order] is the list of property paths, top to bottom as the outline lists
-/// them — a channel's rank is where its own path sits in it, so the two axes of
-/// one Position stagger *together*, which is what makes them still one row.
-void staggerSelection({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required List<String> order,
-  required double step,
-  required StaggerOrder direction,
-  required double fps,
-  required int fpsNum,
-  required int fpsDen,
-}) {
-  if (step == 0 || order.length < 2) return;
-  moveSelectedKeys(
-    channels: channels,
-    selectedKeys: selectedKeys,
-    fps: fps,
-    fpsNum: fpsNum,
-    fpsDen: fpsDen,
-    frameOf: (channel, frame) {
-      final rank = order.indexOf(channel.path);
-      if (rank < 0) return frame;
-      return staggeredFrame(frame,
-          rank: rank, rows: order.length, step: step, order: direction);
-    },
-  );
-}
-
-/// Stamp one normalised [curve] onto every **span** the selection covers — the
-/// easing editor's Apply.
-///
-/// A shape describes the travel *between* two keys, so the unit of work here is
-/// a span rather than a key: a span takes the curve when both of its ends are
-/// selected. Selecting a run of keys therefore eases the whole run, and
-/// selecting a lone key does nothing, having named no travel.
-///
-/// Each span converts the shape separately, against its own chord slope
-/// ([EasingCurve.sidesFor]) — the same drawn ease over a 400-pixel move and a
-/// 40-pixel one stores different speeds, and must, or only one of them would
-/// look like the shape that was drawn. A key in the middle of a run takes its
-/// in-side from the span behind it and its out-side from the span ahead.
-void applyEasingToSelection({
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required EasingCurve curve,
-}) {
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (final channel in channels) {
-    final keys = channel.keys;
-    final next = [...keys];
-    var touched = false;
-    for (var i = 0; i + 1 < keys.length; i++) {
-      if (!selectedKeys.contains('${channel.id}#$i') ||
-          !selectedKeys.contains('${channel.id}#${i + 1}')) {
-        continue;
-      }
-      final t1 = rationalSeconds(keys[i].time);
-      final t2 = rationalSeconds(keys[i + 1].time);
-      final dt = t2 - t1;
-      // Two keys on the same frame have no travel to shape, and dividing by
-      // that gap is how a curve becomes infinities. Leave the pair alone.
-      if (dt <= 0) continue;
-      final sides = curve.sidesFor((keys[i + 1].value - keys[i].value) / dt);
-      next[i] = BridgeKeyframe(
-        time: next[i].time,
-        value: next[i].value,
-        interpIn: next[i].interpIn,
-        interpOut: sides.out,
-      );
-      next[i + 1] = BridgeKeyframe(
-        time: next[i + 1].time,
-        value: next[i + 1].value,
-        interpIn: sides.inTo,
-        interpOut: next[i + 1].interpOut,
-      );
-      touched = true;
-    }
-    if (touched) edits[channel] = BridgeScalar.keyframed(next);
-  }
-  if (edits.isNotEmpty) commitChannelEdits(edits);
-}
-
-// ---------------------------------------------------------------------------
-// The keyframe clipboard (docs/07 §5.3, K-196).
-// ---------------------------------------------------------------------------
-
-/// One copied channel: where it came from (for the AE text's property line)
-/// and its keys with full easing fidelity.
-///
-/// A row with **no keyframes at all** copies too (K-301): it has a value, and
-/// a value is the thing being copied. Such a clip carries [staticValue] and no
-/// keys, and pastes as a value rather than as a curve.
-class GraphClipChannel {
-  final GraphChannel source;
-  final List<BridgeKeyframe> keys;
-  final double? staticValue;
-  const GraphClipChannel(this.source, this.keys, {this.staticValue});
-}
-
-/// The in-app keyframe clipboard: full fidelity, and the one a paste prefers.
-/// Module-level so it survives panel rebuilds and pastes across layers.
-List<GraphClipChannel> graphKeyClipboard = const [];
-
-/// The running build's version, for the clipboard header — taken from the
-/// engine's own boot log (`lumit-bridge 0.1.0`), so there is one source of
-/// truth for it. Asked once per session; a copy is a gesture, not a paint.
-String? _version;
-String lumitVersion() {
-  final held = _version;
-  if (held != null) return held;
-  try {
-    final first = bootLog().firstOrNull ?? '';
-    final parts = first.trim().split(RegExp(r'\s+'));
-    return _version = parts.length > 1 ? parts.last : 'unknown';
-  } catch (_) {
-    return _version = 'unknown';
-  }
-}
-
-/// Copy the selected keys. The in-app clipboard keeps everything; the system
-/// clipboard gets the tab-separated keyframe table (docs/07 §5.3) — values
-/// *and* easing — so a copied ramp can be scripted, inspected, or carried into
-/// another tool.
-///
-/// **Returns whether anything was taken** (K-529). It used to return nothing
-/// at all, so a caller could not tell a copy that captured a curve from one
-/// that captured nothing — and the Timeline's caller reported success either
-/// way, which swallowed `Ctrl+C` and left the previous copy on the clipboard
-/// for the next Paste to put down. A copy that took nothing says so, and the
-/// chord falls through to whatever else the selection offers.
-bool copySelectedKeys({
-  required CompositionReference comp,
-  required List<GraphChannel> channels,
-  required Set<String> selectedKeys,
-  required double fps,
-}) {
-  final copied = <GraphClipChannel>[];
-  for (final channel in channels) {
-    final keys = channel.keys;
-    final hit = [
-      for (var i = 0; i < keys.length; i++)
-        if (selectedKeys.contains('${channel.id}#$i')) keys[i],
-    ];
-    if (hit.isNotEmpty) copied.add(GraphClipChannel(channel, hit));
-  }
-  if (copied.isEmpty) return false;
-  graphKeyClipboard = copied;
-
-  // The text mirror. The axes of one property fold into a single group with an
-  // X/Y[/Z] column each, over the union of their key frames.
-  final settings = comp.getSettings();
-  final groups = <LumitClipGroup>[];
-  final done = <GraphClipChannel>{};
-  for (final clip in copied) {
-    if (done.contains(clip)) continue;
-    final prop = clip.source.prop;
-    if (prop != null) {
-      final siblings = [
-        for (final other in copied)
-          if (other.source.path == clip.source.path) other,
-      ];
-      done.addAll(siblings);
-      groups.add(_transformClipGroup(clip.source, siblings, fps));
-    } else {
-      done.add(clip);
-      groups.add(LumitClipGroup(
-        property: [
-          l10n.workspaceEffects,
-          effectLabelOf(clip.source.effect?.name ?? ''),
-          clip.source.param?.label ?? '',
-        ],
-        columns: [l10n.clipboardValueColumn],
-        rows: [
-          for (final k in clip.keys)
-            LumitClipRow(
-              frame: _keyFrame(k, fps),
-              values: [k.value],
-              eases: [(k.interpIn, k.interpOut)],
-            ),
-        ],
-      ));
-    }
-  }
-  Clipboard.setData(ClipboardData(
-    text: lumitClipboardText(
-      version: lumitVersion(),
-      fps: fps,
-      width: settings.width.toInt(),
-      height: settings.height.toInt(),
-      groups: groups,
-    ),
-  ));
-  return true;
-}
-
-/// Copy **whole rows** — every key of an animated channel, or the plain value
-/// of one that has none (K-301). What `Ctrl+C` does with property rows selected
-/// and no individual keyframes picked.
-///
-/// A row that is not animated still has a value, and that value is what a user
-/// selecting the row and pressing Copy is asking for; before this the chord
-/// found no keys, gave up, and quietly copied the whole layer instead.
-///
-/// Returns whether anything was copied.
-bool copyChannels({
-  required CompositionReference comp,
-  required List<GraphChannel> channels,
-  required double fps,
-}) {
-  if (channels.isEmpty) return false;
-  graphKeyClipboard = [
-    for (final channel in channels)
-      if (channel.scalar case BridgeScalar_Static(:final field0))
-        GraphClipChannel(channel, const [], staticValue: field0)
-      else
-        GraphClipChannel(channel, channel.keys),
-  ];
-
-  // The system clipboard gets the keyframe table for whatever is animated, and
-  // — when nothing is — the plain numbers, tab-joined, which is what a value
-  // copied out of Lumit is useful as anywhere else (it is also exactly what a
-  // value field's own right-click Copy writes).
-  final animated = [
-    for (final clip in graphKeyClipboard)
-      if (clip.keys.isNotEmpty) clip,
-  ];
-  if (animated.isEmpty) {
-    Clipboard.setData(ClipboardData(
-      text: graphKeyClipboard.map((c) => '${c.staticValue}').join('\t'),
-    ));
-    return true;
-  }
-  copySelectedKeys(
-    comp: comp,
-    channels: [for (final clip in animated) clip.source],
-    selectedKeys: {
-      for (final clip in animated)
-        for (var i = 0; i < clip.keys.length; i++) '${clip.source.id}#$i',
-    },
-    fps: fps,
-  );
-  // `copySelectedKeys` has just replaced the in-app clipboard with the animated
-  // rows alone; put the full set — static rows included — back.
-  graphKeyClipboard = [
-    for (final channel in channels)
-      if (channel.scalar case BridgeScalar_Static(:final field0))
-        GraphClipChannel(channel, const [], staticValue: field0)
-      else
-        GraphClipChannel(channel, channel.keys),
-  ];
-  return true;
-}
-
-/// The property line and columns for a transform property's copied axes.
-LumitClipGroup _transformClipGroup(
-    GraphChannel lead, List<GraphClipChannel> axes, double fps) {
-  final (name, unit) = switch (lead.prop!) {
-    BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => (
-        l10n.transformAnchorPoint,
-        l10n.unitPixels
-      ),
-    BridgeTransformProp.positionX ||
-    BridgeTransformProp.positionY ||
-    BridgeTransformProp.positionZ =>
-      (l10n.transformPosition, l10n.unitPixels),
-    BridgeTransformProp.scaleX || BridgeTransformProp.scaleY => (
-        l10n.transformScale,
-        l10n.unitPercent
-      ),
-    BridgeTransformProp.rotation => (l10n.transformRotation, l10n.unitDegrees),
-    BridgeTransformProp.rotationX => (
-        l10n.transformRotationX,
-        l10n.unitDegrees
-      ),
-    BridgeTransformProp.rotationY => (
-        l10n.transformRotationY,
-        l10n.unitDegrees
-      ),
-    BridgeTransformProp.opacity => (l10n.transformOpacity, l10n.unitPercent),
-  };
-  // The union of the axes' key frames: an axis with no key on some frame
-  // contributes the value its curve reads there, so every row is complete.
-  final frames = <double>{};
-  for (final axis in axes) {
-    for (final k in axis.keys) {
-      frames.add(_keyFrame(k, fps));
-    }
-  }
-  final sorted = frames.toList()..sort();
-  final columns = axes.length == 1
-      ? [unit]
-      : [
-          for (var i = 0; i < axes.length; i++)
-            '${_axisLetter(i).toUpperCase()} $unit'
-        ];
-
-  /// The key an axis has exactly on `frame`, if any — the one whose easing
-  /// the row carries. A filled-in value has no key, and so no easing.
-  BridgeKeyframe? keyAt(GraphClipChannel axis, double frame) {
-    for (final k in axis.keys) {
-      if ((_keyFrame(k, fps) - frame).abs() < 1e-9) return k;
-    }
-    return null;
-  }
-
-  return LumitClipGroup(
-    property: [l10n.transformSection, name],
-    columns: columns,
-    rows: [
-      for (final f in sorted)
-        LumitClipRow(
-          frame: f,
-          values: [
-            for (final axis in axes)
-              keyAt(axis, f)?.value ??
-                  evaluateKeys(axis.keys, f / (fps <= 0 ? 1 : fps)),
-          ],
-          eases: [
-            for (final axis in axes)
-              switch (keyAt(axis, f)) {
-                final BridgeKeyframe k => (k.interpIn, k.interpOut),
-                _ => (
-                    const BridgeSideInterp.linear(),
-                    const BridgeSideInterp.linear()
-                  ),
-              },
-          ],
-        ),
-    ],
-  );
-}
-
-/// Paste the clipboard into the currently selected channels, the earliest key
-/// landing on the playhead. The in-app clipboard pastes first; failing that,
-/// keyframe text on the system clipboard is parsed — with its easing when it
-/// carries any. Channels are matched in order.
-///
-/// [project] is what makes a paste **one undo step** (K-458): a clipboard that
-/// came off three properties on two layers writes one op per layer per kind,
-/// and one press of Ctrl+V is one press. Optional, so a caller with no project
-/// to hand — a widget test — pastes exactly as it always did.
-Future<bool> pasteKeysAtPlayhead({
-  required List<GraphChannel> channels,
-  required int playheadFrame,
-  required double fps,
-  required int fpsNum,
-  required int fpsDen,
-  ProjectReference? project,
-}) async {
-  if (channels.isEmpty) return false;
-
-  // A value copied from a row with no keyframes pastes as a value (K-301): onto
-  // a target that is not animated it simply replaces the number, and onto one
-  // that is it sets a key at the playhead — which is what "put this value here"
-  // means on a row that already moves.
-  final statics = <double?>[
-    for (final clip in graphKeyClipboard) clip.staticValue,
-  ];
-
-  // (channel keys to merge in) per target channel, times as comp frames.
-  var sources = <List<(double, BridgeKeyframe)>>[];
-  if (graphKeyClipboard.isNotEmpty) {
-    sources = [
-      for (final clip in graphKeyClipboard)
-        [for (final k in clip.keys) (_keyFrame(k, fps), k)],
-    ];
-  } else {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    final parsed = text == null ? null : parseClipboardText(text);
-    if (parsed == null) return false;
-    // The table's frames are in whatever rate it was written at; carry them
-    // across as real time rather than as frame numbers.
-    for (final group in parsed.groups) {
-      final columns = group.rows.isEmpty ? 0 : group.rows.first.values.length;
-      for (var c = 0; c < columns; c++) {
-        sources.add([
-          for (final row in group.rows)
-            if (c < row.values.length)
-              (
-                row.frame / parsed.fps * fps,
-                BridgeKeyframe(
-                  // Placeholder time; rewritten with the shift below.
-                  time: const BridgeRational(num: 0, den: 1),
-                  value: row.values[c],
-                  interpIn: c < row.eases.length
-                      ? row.eases[c].$1
-                      : const BridgeSideInterp.linear(),
-                  interpOut: c < row.eases.length
-                      ? row.eases[c].$2
-                      : const BridgeSideInterp.linear(),
-                ),
-              ),
-        ]);
-      }
-    }
-  }
-  if (sources.isEmpty) return false;
-
-  var earliest = double.infinity;
-  for (final source in sources) {
-    for (final (frame, _) in source) {
-      if (frame < earliest) earliest = frame;
-    }
-  }
-  // Values only: nothing has a time, so there is no shift to work out and the
-  // paste is not about the playhead at all.
-  if (!earliest.isFinite && statics.every((v) => v == null)) return false;
-  final shift = earliest.isFinite ? playheadFrame - earliest : 0.0;
-
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (var i = 0; i < channels.length && i < sources.length; i++) {
-    final channel = channels[i];
-    final value = i < statics.length ? statics[i] : null;
-    if (value != null) {
-      edits[channel] = channel.isStatic
-          ? BridgeScalar.static_(value)
-          : BridgeScalar.keyframed([
-              for (final k in _withKeyAt(
-                channel.keys,
-                playheadFrame.toDouble(),
-                value,
-                fps,
-                fpsNum,
-                fpsDen,
-              ))
-                k,
-            ]);
-      continue;
-    }
-    // Merge on frames: a pasted key replaces one already at its frame — two
-    // keys at one time is not a curve the engine will take.
-    final merged = <double, BridgeKeyframe>{
-      for (final k in channel.keys) _keyFrame(k, fps): k,
-    };
-    for (final (frame, key) in sources[i]) {
-      final at = frame + shift;
-      merged[at] = BridgeKeyframe(
-        time: timeOfSubframe(at, fpsNum, fpsDen),
-        value: key.value,
-        interpIn: key.interpIn,
-        interpOut: key.interpOut,
-      );
-    }
-    final frames = merged.keys.toList()..sort();
-    edits[channel] =
-        BridgeScalar.keyframed([for (final f in frames) merged[f]!]);
-  }
-  if (edits.isEmpty) return false;
-  asOneUndoStep(project, () => commitChannelEdits(edits));
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // The pane.
@@ -1947,7 +716,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     for (final channel in widget.channels) {
       final keys = channel.keys;
       for (var i = 0; i < keys.length; i++) {
-        final x = widget.axis.xOf(_keyFrame(keys[i], widget.fps));
+        final x = widget.axis.xOf(keyFrame(keys[i], widget.fps));
         final hit = widget.lens == GraphLens.value
             ? rect.contains(
                 Offset(x, _keyY(channel, i, range, height, isOut: true)))
@@ -2026,7 +795,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (channel == null) return;
 
     final keys = channel.keys;
-    final taken = {for (final k in keys) _keyFrame(k, widget.fps).round()};
+    final taken = {for (final k in keys) keyFrame(k, widget.fps).round()};
     if (taken.contains(frame.round())) return;
     final time = timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
 
@@ -2168,7 +937,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     for (final channel in widget.channels) {
       if (channel.id != id) continue;
       if (index < 0 || index >= channel.keys.length) return null;
-      return _keyFrame(channel.keys[index], widget.fps);
+      return keyFrame(channel.keys[index], widget.fps);
     }
     return null;
   }
@@ -2247,7 +1016,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // other — but two keys may not share a frame, which refuses the channel.
       final placed = <(double frame, BridgeKeyframe key, bool moved)>[];
       for (var i = 0; i < keys.length; i++) {
-        final base = _keyFrame(keys[i], widget.fps);
+        final base = keyFrame(keys[i], widget.fps);
         if (!movedIdx.contains(i)) {
           placed.add((base, keys[i], false));
           continue;
@@ -2314,7 +1083,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // The gesture's travel is already in [shown] — folded in by [_withMove]
     // so that the handles and the curve move with the glyph rather than after
     // it — so there is nothing to add here.
-    var x = widget.axis.xOf(_keyFrame(key, widget.fps));
+    var x = widget.axis.xOf(keyFrame(key, widget.fps));
     var y = _keyY(channel, index, range, height, isOut: isOut);
     // A speed-lens dot in flight: sideways under the pointer, and the side
     // being dragged sits at the speed the pointer is asking for.
@@ -2353,7 +1122,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       for (var i = 0; i < keys.length; i++) {
         if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
         final point = _keyPoint(channel, i, range, height, isOut: true);
-        final frame = _keyFrame(keys[i], widget.fps);
+        final frame = keyFrame(keys[i], widget.fps);
         count++;
         if (point.dx < left) left = point.dx;
         if (point.dx > right) right = point.dx;
@@ -2770,14 +1539,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       _HandleDrag drag, List<BridgeKeyframe> keys) {
     final perFrame = widget.axis.perFrame;
     if (perFrame <= 0) return null;
-    final base = _keyFrame(keys[drag.index], widget.fps);
+    final base = keyFrame(keys[drag.index], widget.fps);
     var frame =
         (base + drag.dxPx / perFrame).clamp(0.0, widget.frames.toDouble());
     if (widget.magnet) frame = frame.roundToDouble();
     if ((frame - base).abs() < 1e-9) return null;
     for (var i = 0; i < keys.length; i++) {
       if (i == drag.index) continue;
-      if ((_keyFrame(keys[i], widget.fps) - frame).abs() < 1e-9) return null;
+      if ((keyFrame(keys[i], widget.fps) - frame).abs() < 1e-9) return null;
     }
     final at = timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
     if (isEnvelope(drag.channel)) {
@@ -2842,7 +1611,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// [keys] with the row drag's value written into the key at its frame —
   /// matched to the **nearest half frame**, never by float equality (K-336).
   ///
-  /// `_withKeyAt` merged by exact double frame, and a key's frame comes back
+  /// `withKeyAt` merged by exact double frame, and a key's frame comes back
   /// through rational-to-float maths: frame 50 at 60 fps reads 49.999…, which
   /// is not 50.0, so the drag's key was *inserted beside* the document's
   /// instead of replacing it. One extra key shifts every later index, and the
@@ -2855,7 +1624,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final out = <BridgeKeyframe>[];
     var replaced = false;
     for (final k in keys) {
-      if (!replaced && (_keyFrame(k, widget.fps) - row.frame).abs() < 0.5) {
+      if (!replaced && (keyFrame(k, widget.fps) - row.frame).abs() < 0.5) {
         out.add(BridgeKeyframe(
           time: k.time,
           value: row.value,
@@ -2876,7 +1645,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       interpIn: const BridgeSideInterp.linear(),
       interpOut: const BridgeSideInterp.linear(),
     );
-    final at = out.indexWhere((k) => _keyFrame(k, widget.fps) > row.frame);
+    final at = out.indexWhere((k) => keyFrame(k, widget.fps) > row.frame);
     if (at < 0) {
       out.add(planted);
     } else {
@@ -2940,7 +1709,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // the whole frame it will land on (K-333) and a key taken off either end
       // of the composition draws where it will actually come to rest.
       final (frame, value) =
-          move(channel, _keyFrame(key, widget.fps), key.value);
+          move(channel, keyFrame(key, widget.fps), key.value);
       moved[i] = BridgeKeyframe(
         time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
         value: value,
@@ -2964,7 +1733,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // Not keyed: one point carries the whole flat line to its new height, and
       // only for the drawing.
       if (painting) {
-        return _withKeyAt(const [], row.frame.toDouble(), row.value, widget.fps,
+        return withKeyAt(const [], row.frame.toDouble(), row.value, widget.fps,
             widget.fpsNum, widget.fpsDen);
       }
     }
@@ -2989,15 +1758,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final keys = channel.keys;
     if (index < 0 || index >= keys.length) return;
     final key = keys[index];
-    final frame = _keyFrame(key, widget.fps);
+    final frame = keyFrame(key, widget.fps);
     // The frame field is bounded by the key's neighbours: a typed time that
     // crossed one would re-sort the curve under the popover, which is holding
     // an index into it. Everything else about crossing keys stays the drag's
     // business, where the list is rebuilt on release.
     final gap = widget.magnet ? 1.0 : 0.01;
-    var lower = index > 0 ? _keyFrame(keys[index - 1], widget.fps) + gap : 0.0;
+    var lower = index > 0 ? keyFrame(keys[index - 1], widget.fps) + gap : 0.0;
     var upper = index + 1 < keys.length
-        ? _keyFrame(keys[index + 1], widget.fps) - gap
+        ? keyFrame(keys[index + 1], widget.fps) - gap
         : widget.frames.toDouble();
     if (upper < lower) {
       lower = frame;
@@ -3044,7 +1813,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       final key = keys[index];
       final f = frame.clamp(0.0, widget.frames.toDouble());
       for (var i = 0; i < keys.length; i++) {
-        if (i != index && (_keyFrame(keys[i], widget.fps) - f).abs() < 1e-9) {
+        if (i != index && (keyFrame(keys[i], widget.fps) - f).abs() < 1e-9) {
           return;
         }
       }
@@ -3513,7 +2282,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           top: point.dy + 6,
           child: HintPill(
             text: l10n.graphKeyHint(
-              _keyFrame(key, widget.fps).round(),
+              keyFrame(key, widget.fps).round(),
               graphNumberText(value),
               (sideInfluence(key.interpIn) * 100).round(),
               (sideInfluence(key.interpOut) * 100).round(),
@@ -3656,7 +2425,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     width: chosen ? _selectedKeyGlyph : _keyGlyph,
                     height: chosen ? _selectedKeyGlyph : _keyGlyph,
                     child: CustomPaint(
-                      painter: _KeyGlyphPainter(
+                      painter: KeyGlyphPainter(
                         key_: keys[i],
                         // Selected is `text_primary` — the one colour
                         // selection speaks in. Not the accent: its jobs are
@@ -3681,7 +2450,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   /// The draggable tangent endpoints for selected keys.
   // The theme is not asked for here: the ring paints itself from it
-  // ([_HandleRing]), so the dot's colours live where the dot is drawn.
+  // ([HandleRing]), so the dot's colours live where the dot is drawn.
   List<Widget> _tangentHandles((double, double) range, double height) {
     final out = <Widget>[];
     for (final channel in widget.channels) {
@@ -3732,7 +2501,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               },
               // A generous target around a small dot: a handle that takes two
               // attempts to grab loses the keyframe's selection on the miss.
-              child: _HandleRing(size: grab),
+              child: HandleRing(size: grab),
             ),
           ));
         }
@@ -3778,168 +2547,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Numeric entry (docs/07 §5.3).
-// ---------------------------------------------------------------------------
 
-/// The popover's width and its label column — the Ease popover's own two
-/// measures, so the two small boxes the graph opens read as one family.
-const double _keyFieldsWidth = 168;
-const double _keyFieldsLabel = 46;
-
-/// Open the **numeric entry** box on one keyframe: its exact frame, its exact
-/// value, and how far each of its two eases reaches.
-///
-/// [onApply] is called with all four numbers on every change, so the caller
-/// writes one key rather than four separate edits, and the box stays up — the
-/// point of typing numbers is usually to type more than one. It carries no
-/// buttons for the same reason every value well in the application carries
-/// none: a field commits what it holds.
-Future<void> showKeyFieldsPopover({
-  required BuildContext context,
-  required Offset position,
-  required double frame,
-  required double value,
-  required double inPercent,
-  required double outPercent,
-  required double minFrame,
-  required double maxFrame,
-  required void Function(
-          double frame, double value, int inPercent, int outPercent)
-      onApply,
-}) =>
-    showLumitPopup<void>(
-      context: context,
-      position: position,
-      builder: (close) => _KeyFieldsPopover(
-        frame: frame,
-        value: value,
-        inPercent: inPercent,
-        outPercent: outPercent,
-        minFrame: minFrame,
-        maxFrame: maxFrame,
-        onApply: onApply,
-      ),
-    );
-
-class _KeyFieldsPopover extends StatefulWidget {
-  final double frame;
-  final double value;
-  final double inPercent;
-  final double outPercent;
-  final double minFrame;
-  final double maxFrame;
-  final void Function(double frame, double value, int inPercent, int outPercent)
-      onApply;
-
-  const _KeyFieldsPopover({
-    required this.frame,
-    required this.value,
-    required this.inPercent,
-    required this.outPercent,
-    required this.minFrame,
-    required this.maxFrame,
-    required this.onApply,
-  });
-
-  @override
-  State<_KeyFieldsPopover> createState() => _KeyFieldsPopoverState();
-}
-
-class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
-  /// The four numbers as the box holds them. Kept here rather than read back
-  /// off the key, because the box outlives the channel snapshot it opened on
-  /// (see `_applyKeyFields`): what it shows is what was typed into it.
-  late double _frame = widget.frame;
-  late double _value = widget.value;
-  late double _in = widget.inPercent;
-  late double _out = widget.outPercent;
-
-  void _apply() => widget.onApply(_frame, _value, _in.round(), _out.round());
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: _keyFieldsWidth,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _row(t, l10n.graphKeyFrameField, 'graph-fields-frame', _frame,
-              min: widget.minFrame,
-              max: widget.maxFrame,
-              decimals: 0, set: (v) {
-            _frame = v;
-            _apply();
-          }),
-          _row(t, l10n.graphKeyValueField, 'graph-fields-value', _value,
-              min: -100000, max: 100000, decimals: 2, set: (v) {
-            _value = v;
-            _apply();
-          }),
-          _row(t, l10n.graphEaseIn, 'graph-fields-in', _in,
-              min: 0,
-              max: 100,
-              decimals: 0,
-              suffix: l10n.unitSymbolPercent, set: (v) {
-            _in = v;
-            _apply();
-          }),
-          _row(t, l10n.graphEaseOut, 'graph-fields-out', _out,
-              min: 0,
-              max: 100,
-              decimals: 0,
-              suffix: l10n.unitSymbolPercent, set: (v) {
-            _out = v;
-            _apply();
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(
-    LumitTheme t,
-    String label,
-    String key,
-    double value, {
-    required num min,
-    required num max,
-    required int decimals,
-    String? suffix,
-    required ValueChanged<double> set,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          children: [
-            SizedBox(
-              width: _keyFieldsLabel,
-              child: Text(label,
-                  style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: DragValueField(
-                key: ValueKey<String>(key),
-                value: value,
-                min: min,
-                max: max,
-                decimals: decimals,
-                suffix: suffix,
-                keyed: true,
-                onChanged: (v) => setState(() => set(v.toDouble())),
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-// ---------------------------------------------------------------------------
-// Painters.
-// ---------------------------------------------------------------------------
+/// How wide the **value gutter** is: the drawing's 34px strip down the right
+/// of the graph, on a translucent ground, where every value label lives
+/// (§12A.2 — "value labels live in a fixed right-hand gutter, never on the
+/// curve").
+const double graphGutterWidth = 34;
 
 /// The grid, the value-axis labels, and every channel's curve.
 class _GraphPainter extends CustomPainter {
@@ -4094,7 +2707,7 @@ class _GraphPainter extends CustomPainter {
           ..color = paint.color.withValues(alpha: 0.35)
           ..strokeWidth = 1;
         for (var i = 0; i < keys.length; i++) {
-          final x = axis.xOf(_keyFrame(keys[i], f));
+          final x = axis.xOf(keyFrame(keys[i], f));
           final yIn = _yOf(sideSpeedAtKey(keys, i, isOut: false), range, size);
           final yOut = _yOf(sideSpeedAtKey(keys, i, isOut: true), range, size);
           if ((yIn - yOut).abs() > 1) {
@@ -4226,132 +2839,4 @@ class _HandlesPainter extends CustomPainter {
 
   @override
   bool? hitTest(Offset position) => false;
-}
-
-/// A keyframe's glyph, coded by interpolation: diamond for linear, circle for
-/// an eased (bezier) key, square for hold — the same coding the lanes will
-/// learn (docs/07 §4.3). On the speed lens every dot is a circle.
-class _KeyGlyphPainter extends CustomPainter {
-  final BridgeKeyframe key_;
-  final Color colour;
-  final bool speedDot;
-  const _KeyGlyphPainter({
-    required this.key_,
-    required this.colour,
-    required this.speedDot,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = colour;
-    final half = size.width / 2;
-    // An automatic side is an eased side: it has a tangent, so its key is a
-    // circle like any other eased one.
-    if (speedDot ||
-        key_.interpIn is BridgeSideInterp_Bezier ||
-        key_.interpOut is BridgeSideInterp_Bezier ||
-        key_.interpIn is BridgeSideInterp_Auto ||
-        key_.interpOut is BridgeSideInterp_Auto) {
-      canvas.drawCircle(Offset(half, half), half - 1, paint);
-      return;
-    }
-    if (key_.interpOut is BridgeSideInterp_Hold) {
-      canvas.drawRect(
-          Rect.fromLTWH(1, 1, size.width - 2, size.height - 2), paint);
-      return;
-    }
-    canvas.drawPath(
-      Path()
-        ..moveTo(half, 0)
-        ..lineTo(size.width, half)
-        ..lineTo(half, size.height)
-        ..lineTo(0, half)
-        ..close(),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_KeyGlyphPainter old) =>
-      old.colour != colour ||
-      old.speedDot != speedDot ||
-      old.key_.interpIn != key_.interpIn ||
-      old.key_.interpOut != key_.interpOut;
-}
-
-/// A tangent endpoint's dot: the drawing's **hollow ring** — a `text_primary`
-/// stroke round a hole punched in the pane's own ground, so the curve running
-/// under it does not read as running through it.
-class _HandleDotPainter extends CustomPainter {
-  final Color colour;
-  final Color fill;
-
-  /// The pointer is over the ring's target: the stroke comes up to full
-  /// strength, and goes back down when it leaves (P1 — nothing at rest).
-  final bool hovered;
-
-  const _HandleDotPainter(
-      {required this.colour, required this.fill, this.hovered = false});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centre = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2 - 1;
-    canvas.drawCircle(centre, r, Paint()..color = fill);
-    canvas.drawCircle(
-      centre,
-      r,
-      Paint()
-        ..color = hovered ? colour : colour.withValues(alpha: 0.8)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_HandleDotPainter old) =>
-      old.colour != colour || old.fill != fill || old.hovered != hovered;
-}
-
-/// A tangent handle's dot with its own hover state, so brightening one ring
-/// repaints that ring rather than rebuilding the pane under the pointer.
-class _HandleRing extends StatefulWidget {
-  final double size;
-  const _HandleRing({required this.size});
-
-  @override
-  State<_HandleRing> createState() => _HandleRingState();
-}
-
-class _HandleRingState extends State<_HandleRing> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return MouseRegion(
-      // A handle swings: the drag that matters is the vertical one, and the
-      // cursor says so before the button goes down (P2).
-      cursor: SystemMouseCursors.resizeUpDown,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: Center(
-          child: SizedBox(
-            width: 8,
-            height: 8,
-            child: CustomPaint(
-              painter: _HandleDotPainter(
-                colour: t.textPrimary,
-                fill: t.surface0,
-                hovered: _hovered,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

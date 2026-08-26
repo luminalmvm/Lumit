@@ -1,0 +1,360 @@
+// The graph editor's channel model: what a curve is, where it came from, and
+// the small helpers every part of the pane reads keys through. Split out of
+// graph_editor_frb.dart, which re-exports it.
+
+import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+
+import 'effect_param_row_frb.dart';
+import 'graph_maths.dart';
+import 'layer_fold_frb.dart';
+import 'text_animator_rows_frb.dart';
+import 'transform_rows_frb.dart';
+
+
+/// A value drag in flight **in the layer area**, published for the graph pane to
+/// draw (K-333).
+///
+/// The row stages its value in Dart and commits once on release (K-192), so the
+/// read model — and therefore the curve — still holds the old one until the
+/// pointer comes up. The pane cannot ask for it, because it is not in the
+/// document; the row publishes it here instead, exactly as a bar drag publishes
+/// its travel for the waveform lane (`BarDragPreview`, K-172). Null between
+/// gestures.
+///
+/// The layer plus one channel selector — a transform axis, an effect
+/// parameter, or the Retime — is what the two sides have in common, so
+/// dragging Position x leaves y where it is. An **unkeyed** property is drawn
+/// at its new value and gains no diamond: the drag is not planting a key, and
+/// a glyph would say it was.
+final ValueNotifier<RowValueDrag?> rowValueDrag = ValueNotifier(null);
+
+/// One tick of a layer-area value drag: which channel, and what it holds.
+class RowValueDrag {
+  final String layer;
+
+  /// A transform axis (`BridgeTransformProp.name`), or null.
+  final String? prop;
+
+  /// An effect parameter, or nulls.
+  final String? effectId;
+  final String? paramId;
+
+  /// The layer's Retime channel.
+  final bool retime;
+
+  final int frame;
+  final double value;
+
+  const RowValueDrag({
+    required this.layer,
+    this.prop,
+    this.effectId,
+    this.paramId,
+    this.retime = false,
+    required this.frame,
+    required this.value,
+  });
+
+  /// Whether [channel] is the curve this drag is editing.
+  bool matches(GraphChannel channel) {
+    if (channel.entry.layer.internallayerId.toString() != layer) return false;
+    if (prop != null) return channel.prop?.name == prop;
+    if (effectId != null) {
+      return channel.effect?.id.toString() == effectId &&
+          channel.param?.id == paramId;
+    }
+    return retime && channel.retime;
+  }
+}
+
+/// Which reading of the curve is on screen (docs/07 §5.1).
+enum GraphLens { value, speed }
+
+/// One animatable channel on the graph: a single scalar curve, where it came
+/// from, and how to write it back.
+class GraphChannel {
+  /// The fold-row path of the property row this channel belongs to — the
+  /// outline's selection speaks in these.
+  final String path;
+
+  /// Unique per curve: a two-axis property has one channel per axis.
+  final String id;
+  final String label;
+
+  /// Its stroke: an index into the theme's `curve` palette, assigned in
+  /// selection order so the outline can tint the row's text to match.
+  final int colourIndex;
+  final BridgeScalar scalar;
+  final BridgeLayerEntry entry;
+
+  /// Set for a transform channel; null for an effect parameter.
+  final BridgeTransformProp? prop;
+
+  /// Set for an effect parameter channel.
+  final BridgeEffectInstanceInfo? effect;
+  final BridgeParamInfo? param;
+
+  /// True for the layer's Retime channel (K-197), which is neither a transform
+  /// property nor an effect parameter but reads and writes like both.
+  final bool retime;
+
+  /// Set for one of a mask's values (K-340): the mask it belongs to, and which
+  /// of its values this is.
+  final BridgeMask? mask;
+  final MaskValue? maskValue;
+
+  /// Which point a per-point feather channel belongs to (K-545); `-1` on every
+  /// other channel.
+  final int maskVertex;
+
+  /// Set for one of a Text layer's animator numbers (K-609): which animator in
+  /// the layer's list, and which of its numbers this is.
+  final int animator;
+  final TextAnimatorValue? animatorValue;
+
+  /// True for a mask's **shape** (K-344). A path has no value to plot, so what
+  /// this channel carries is the interpolation parameter — counted up, one per
+  /// key — and both lenses draw its *slope*: the rate the shape is changing
+  /// at. That is the one honest curve a path has, and it is what After Effects
+  /// draws for a mask path.
+  bool get isMaskPath => maskValue == MaskValue.path;
+
+  const GraphChannel({
+    required this.path,
+    required this.id,
+    required this.label,
+    required this.colourIndex,
+    required this.scalar,
+    required this.entry,
+    this.prop,
+    this.effect,
+    this.param,
+    this.retime = false,
+    this.mask,
+    this.maskValue,
+    this.maskVertex = -1,
+    this.animator = -1,
+    this.animatorValue,
+  });
+
+  List<BridgeKeyframe> get keys => keysOf(scalar);
+  bool get isStatic => scalar is BridgeScalar_Static;
+  double get staticValue => switch (scalar) {
+        BridgeScalar_Static(:final field0) => field0,
+        BridgeScalar_Keyframed() => 0,
+        BridgeScalar_Expression() => 0,
+      };
+}
+
+/// The channels the selected property paths resolve to, in selection order —
+/// entirely from the read model, so building them costs no bridge calls.
+///
+/// A transform row yields one channel per axis (Position → x and y, the AE
+/// red/green pair); a float effect parameter yields one. Volume is not in the
+/// read model (K-184's deliberate exceptions) and is skipped — docs/TODO.md.
+List<GraphChannel> graphChannels({
+  required List<BridgeLayerEntry> layers,
+  required List<String> selected,
+}) {
+  final out = <GraphChannel>[];
+  for (final path in selected) {
+    final cut = path.indexOf('/');
+    if (cut <= 0) continue;
+    final layerId = path.substring(0, cut);
+    BridgeLayerEntry? entry;
+    for (final e in layers) {
+      if (e.layer.internallayerId.toString() == layerId) {
+        entry = e;
+        break;
+      }
+    }
+    if (entry == null) continue;
+
+    // Retime (K-197): one channel, source time in seconds. An ordinary curve
+    // here — the lens, the handles and the interp buttons all treat it as one.
+    if (path == retimePath(layerId)) {
+      if (entry.info.retime case final scalar?) {
+        out.add(GraphChannel(
+          path: path,
+          id: path,
+          label: '${entry.info.name} · Retime',
+          colourIndex: out.length,
+          scalar: scalar,
+          entry: entry,
+          retime: true,
+        ));
+      }
+      continue;
+    }
+
+    if (path.startsWith('${transformPath(layerId)}/')) {
+      final lead = path.substring(path.lastIndexOf('/') + 1);
+      for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
+        if (group.axes.first.prop.name != lead) continue;
+        for (final axis in group.axes) {
+          out.add(GraphChannel(
+            path: path,
+            id: '$path@${axis.prop.name}',
+            label: group.axes.length == 1
+                ? '${entry.info.name} · ${group.label}'
+                : '${entry.info.name} · ${group.label} ${axisLetter(group.axes.indexOf(axis))}',
+            colourIndex: out.length,
+            scalar: read(entry.info.transform, axis.prop),
+            entry: entry,
+            prop: axis.prop,
+          ));
+        }
+        break;
+      }
+      continue;
+    }
+
+    if (path.startsWith('${effectsPath(layerId)}/')) {
+      final rest = path.substring(effectsPath(layerId).length + 1);
+      final slash = rest.indexOf('/');
+      if (slash <= 0) continue;
+      final effectId = rest.substring(0, slash);
+      final paramId = rest.substring(slash + 1);
+      for (final fx in entry.info.effects) {
+        if (fx.id.toString() != effectId) continue;
+        for (final param in cachedListParameters(fx.name)) {
+          if (param.id != paramId) continue;
+          // A Slider is a Float inside a closed range (K-414): the kind is the
+          // control, not the storage, so it keeps every float affordance —
+          // docs/08 §1.2 names the graph editor among them.
+          if (param.kind is! BridgeParamKind_Float &&
+              param.kind is! BridgeParamKind_Slider) {
+            continue;
+          }
+          BridgeScalar? scalar;
+          for (final v in fx.values) {
+            if (v.id == param.id && v.value is BridgeEffectValue_Float) {
+              scalar = (v.value as BridgeEffectValue_Float).field0;
+            }
+          }
+          if (scalar == null) continue;
+          out.add(GraphChannel(
+            path: path,
+            id: path,
+            label:
+                '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
+            colourIndex: out.length,
+            scalar: scalar,
+            entry: entry,
+            effect: fx,
+            param: param,
+          ));
+        }
+      }
+      continue;
+    }
+
+    // A Text layer's animator numbers (K-609). They come off the read model
+    // like a mask's do, so a curve here costs no bridge call to draw.
+    if (path.startsWith('${animatorsPath(layerId)}/')) {
+      final rest = path.substring(animatorsPath(layerId).length + 1);
+      final slash = rest.indexOf('/');
+      if (slash <= 0) continue;
+      final index = int.tryParse(rest.substring(0, slash));
+      final valueName = rest.substring(slash + 1);
+      if (index == null || index >= entry.info.textAnimators.length) continue;
+      final value = TextAnimatorValue.values
+          .where((v) => v.name == valueName)
+          .firstOrNull;
+      if (value == null) continue;
+      final animator = entry.info.textAnimators[index];
+      out.add(GraphChannel(
+        path: path,
+        id: path,
+        label: '${entry.info.name} · ${animator.name} · '
+            '${textAnimatorValueLabel(value)}',
+        colourIndex: out.length,
+        scalar: textAnimatorScalarOf(animator, value),
+        entry: entry,
+        animator: index,
+        animatorValue: value,
+      ));
+      continue;
+    }
+
+    // A mask's numbers (K-340). Its shape is deliberately absent: a path has no
+    // value axis to draw against, so it keeps its lane diamonds and no curve.
+    if (path.startsWith('${masksPath(layerId)}/')) {
+      final rest = path.substring(masksPath(layerId).length + 1);
+      final slash = rest.indexOf('/');
+      if (slash <= 0) continue;
+      final maskId = rest.substring(0, slash);
+      // A per-point feather row's path carries the point after its name
+      // (K-545): `.../vertexFeather/3`.
+      final rawValue = rest.substring(slash + 1);
+      final tail = rawValue.indexOf('/');
+      final valueName = tail < 0 ? rawValue : rawValue.substring(0, tail);
+      final vertex =
+          tail < 0 ? -1 : int.tryParse(rawValue.substring(tail + 1)) ?? -1;
+      for (final mask in entry.info.masks) {
+        if (mask.id.toString() != maskId) continue;
+        final value =
+            MaskValue.values.where((v) => v.name == valueName).firstOrNull;
+        if (value == null) break;
+        // The shape's channel carries its keys as the counted-up interpolation
+        // parameter (K-344); a still shape has none and draws nothing.
+        if (value == MaskValue.path && mask.pathKeys.isEmpty) break;
+        out.add(GraphChannel(
+          path: path,
+          id: path,
+          label: '${entry.info.name} · ${mask.name} · '
+              '${maskValueLabel(value, vertex)}',
+          colourIndex: out.length,
+          scalar: value == MaskValue.path
+              ? BridgeScalar.keyframed(mask.pathKeys)
+              : maskScalarOf(mask, value, vertex),
+          entry: entry,
+          mask: mask,
+          maskValue: value,
+          maskVertex: vertex,
+        ));
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+String axisLetter(int i) => switch (i) { 0 => 'x', 1 => 'y', _ => 'z' };
+
+
+/// [keys] with a key of [value] at [frame] — replacing the one already there,
+/// because two keys at one time is not a curve the engine will take (K-301).
+List<BridgeKeyframe> withKeyAt(
+  List<BridgeKeyframe> keys,
+  double frame,
+  double value,
+  double fps,
+  int fpsNum,
+  int fpsDen,
+) {
+  final merged = <double, BridgeKeyframe>{
+    for (final k in keys) keyFrame(k, fps): k,
+  };
+  merged[frame] = BridgeKeyframe(
+    time: timeOfSubframe(frame, fpsNum, fpsDen),
+    value: value,
+    interpIn: const BridgeSideInterp.linear(),
+    interpOut: const BridgeSideInterp.linear(),
+  );
+  final frames = merged.keys.toList()..sort();
+  return [for (final f in frames) merged[f]!];
+}
+
+/// A key's position on the frame axis, fractional (a key may sit between
+/// frames with the magnet off).
+double keyFrame(BridgeKeyframe key, double fps) =>
+    rationalSeconds(key.time) * fps;
+
+/// A number as this pane's readouts write it: whole numbers plain, everything
+/// else to two places — the same hand the dope sheet's own numbers are set in.
+String graphNumberText(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
