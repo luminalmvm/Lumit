@@ -41,6 +41,7 @@ import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
+import 'text_animator_rows_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_snap.dart';
 import 'transform_rows_frb.dart';
@@ -170,6 +171,11 @@ class GraphChannel {
   /// other channel.
   final int maskVertex;
 
+  /// Set for one of a Text layer's animator numbers (K-609): which animator in
+  /// the layer's list, and which of its numbers this is.
+  final int animator;
+  final TextAnimatorValue? animatorValue;
+
   /// True for a mask's **shape** (K-344). A path has no value to plot, so what
   /// this channel carries is the interpolation parameter — counted up, one per
   /// key — and both lenses draw its *slope*: the rate the shape is changing
@@ -191,6 +197,8 @@ class GraphChannel {
     this.mask,
     this.maskValue,
     this.maskVertex = -1,
+    this.animator = -1,
+    this.animatorValue,
   });
 
   List<BridgeKeyframe> get keys => keysOf(scalar);
@@ -305,6 +313,34 @@ List<GraphChannel> graphChannels({
       continue;
     }
 
+    // A Text layer's animator numbers (K-609). They come off the read model
+    // like a mask's do, so a curve here costs no bridge call to draw.
+    if (path.startsWith('${animatorsPath(layerId)}/')) {
+      final rest = path.substring(animatorsPath(layerId).length + 1);
+      final slash = rest.indexOf('/');
+      if (slash <= 0) continue;
+      final index = int.tryParse(rest.substring(0, slash));
+      final valueName = rest.substring(slash + 1);
+      if (index == null || index >= entry.info.textAnimators.length) continue;
+      final value = TextAnimatorValue.values
+          .where((v) => v.name == valueName)
+          .firstOrNull;
+      if (value == null) continue;
+      final animator = entry.info.textAnimators[index];
+      out.add(GraphChannel(
+        path: path,
+        id: path,
+        label: '${entry.info.name} · ${animator.name} · '
+            '${textAnimatorValueLabel(value)}',
+        colourIndex: out.length,
+        scalar: textAnimatorScalarOf(animator, value),
+        entry: entry,
+        animator: index,
+        animatorValue: value,
+      ));
+      continue;
+    }
+
     // A mask's numbers (K-340). Its shape is deliberately absent: a path has no
     // value axis to draw against, so it keeps its lane diamonds and no curve.
     if (path.startsWith('${masksPath(layerId)}/')) {
@@ -372,6 +408,16 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
     } else if (channel.effect != null && channel.param != null) {
       final slot = effects[layerId] ??= (channel.entry.layer, {});
       (slot.$2[channel.effect!.id.toString()] ??= {})[channel.param!.id] = next;
+    } else if (channel.animatorValue case final value?) {
+      // One number of one animator, written through the whole document —
+      // which is the op (K-609), so two curves on one animator are two writes
+      // and two undo steps, exactly as two on one mask are.
+      writeTextAnimatorScalar(
+        layer: channel.entry.layer,
+        index: channel.animator,
+        value: value,
+        to: next,
+      );
     } else if (channel.isMaskPath && channel.mask != null) {
       // A shape key holds a path, not a number, so only its time and its eases
       // can be written — which is exactly what a graph edit changes (K-344).

@@ -31,6 +31,7 @@ import 'package:lumit_flutter/src/rust/api/retime.dart';
 
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
+import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
 /// One row of a layer's fold-out.
@@ -296,6 +297,20 @@ final class FoldStrokeValueRow extends LayerFoldRow {
       : super(depth);
 }
 
+/// One of an animator's numbers on a row of its own under it (K-609) — the
+/// three that say which letters are reached, then the five property groups. A
+/// row rather than another number squeezed onto the animator's own row, for
+/// the reason [FoldMaskValueRow] gives: a property without a row has nowhere to
+/// put the stopwatch that animates it.
+final class FoldAnimatorValueRow extends LayerFoldRow {
+  final int index;
+  final BridgeTextAnimator animator;
+  final TextAnimatorValue value;
+  const FoldAnimatorValueRow(this.index, this.animator, this.value,
+      {required int depth})
+      : super(depth);
+}
+
 /// One control of a footage layer's Flow group (K-088, K-331). Which control
 /// is the [kind]; all of them read and write the whole group in one op, so a
 /// row needs nothing but its own identity.
@@ -393,6 +408,11 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
+      FoldAnimatorValueRow(:final animator, :final value) =>
+        switch (textAnimatorScalarOf(animator, value)) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       // A shape item's numbers key like any other scalar; its **shape** keys as
       // whole paths, and those keys carry their own eases and a counted-up
       // value (K-344, K-606), so the lane draws their diamonds and the graph
@@ -470,6 +490,10 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
       FoldMaskValueRow(:final mask, :final value) => (
           group: mask.name,
           label: maskValueLabel(value)
+        ),
+      FoldAnimatorValueRow(:final animator, :final value) => (
+          group: animator.name,
+          label: textAnimatorValueLabel(value)
         ),
       _ => null,
     };
@@ -951,6 +975,19 @@ bool moveLaneKeys({
       );
       return true;
 
+    case FoldAnimatorValueRow(:final index, :final animator, :final value):
+      final scalar = textAnimatorScalarOf(animator, value);
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      writeTextAnimatorScalar(
+        layer: entry.layer,
+        index: index,
+        value: value,
+        to: BridgeScalar.keyframed(next),
+      );
+      return true;
+
     case FoldStrokeValueRow(:final stroke, :final value):
       final scalar = strokeScalarOf(stroke, value);
       if (scalar is! BridgeScalar_Keyframed) return false;
@@ -982,6 +1019,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
+      FoldAnimatorValueRow(:final index, :final value) =>
+        '${animatorPath(layerId, index)}/${value.name}',
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         '${masksPath(layerId)}/${mask.id}/${value.name}'
@@ -1051,6 +1090,16 @@ String? effectIdOfPath(String path) {
   if (parts.length != 3 || parts[1] != 'effects') return null;
   return parts[2];
 }
+
+/// The path of a Text layer's Animators group (K-609).
+String animatorsPath(String layerId) => '$layerId/animators';
+
+/// The path of one animator within it. Its **index**, because an animator has
+/// no id of its own and the list has no reordering — so a selection survives
+/// every edit except deleting an animator above it, which is an explicit act
+/// after which a stale selection is what every other list here does too.
+String animatorPath(String layerId, int index) =>
+    '${animatorsPath(layerId)}/$index';
 
 /// The path of a layer's Masks group.
 String masksPath(String layerId) => '$layerId/masks';
@@ -1193,6 +1242,40 @@ List<LayerFoldRow> layerFoldRows({
           // nothing for them to aim (K-555).
           if (isGradientValue(value) && item.gradient == 0) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
+        }
+      }
+    }
+  }
+
+  // Animators, above Masks because they are part of the layer's own picture:
+  // the letters are moved as the words are drawn, and the masks then gate what
+  // was drawn (K-609, docs/06 render order). Like every other group here the
+  // heading appears only once there is something under it.
+  if (info.textAnimators.isNotEmpty) {
+    final animatorsOpen = open.contains(animatorsPath(id));
+    rows.add(FoldGroupRow(
+      path: animatorsPath(id),
+      label: l10n.textAnimatorsSection,
+      open: animatorsOpen,
+      depth: 1,
+    ));
+    if (animatorsOpen) {
+      for (var i = 0; i < info.textAnimators.length; i++) {
+        final animator = info.textAnimators[i];
+        // Each animator is a heading with its own twirl rather than a plain
+        // row, because it carries twelve numbers: a mask's four can all stand
+        // open, and twelve times however many animators cannot.
+        final path = animatorPath(id, i);
+        final animatorOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: animator.name,
+          open: animatorOpen,
+          depth: 2,
+        ));
+        if (!animatorOpen) continue;
+        for (final value in TextAnimatorValue.values) {
+          rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));
         }
       }
     }

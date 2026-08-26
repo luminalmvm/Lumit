@@ -70,6 +70,7 @@ import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
+import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
@@ -4269,6 +4270,21 @@ class _FoldRow extends StatelessWidget {
           onSeek: onSeek,
           onChanged: onChanged,
         ),
+      FoldAnimatorValueRow(:final index, :final animator, :final value) =>
+        _AnimatorValueRow(
+          comp: comp,
+          layer: layer,
+          index: index,
+          animator: animator,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+        ),
       FoldStrokeValueRow(:final stroke, :final value) => _StrokeValueRow(
           comp: comp,
           layer: layer,
@@ -5754,6 +5770,131 @@ class _StrokeValueRowState extends State<_StrokeValueRow> {
       max: 100,
       decimals: 1,
       suffix: '%',
+      onCommit: _commitKeyed,
+    );
+  }
+}
+
+/// One of an animator's numbers in the Timeline (K-609) — a range end, a push,
+/// a fade — on the same shape of row a stroke's write-on uses.
+///
+/// **No live preview while it drags**, unlike the mask and stroke rows beside
+/// it: a text document has no preview call of its own, so the value is staged
+/// on the row and the picture catches up when the drag is let go. The op, the
+/// undo step and the committed value are the same either way; only the
+/// in-flight picture is.
+class _AnimatorValueRow extends StatefulWidget {
+  final CompositionReference comp;
+  final LayerReference layer;
+  final int index;
+  final BridgeTextAnimator animator;
+  final TextAnimatorValue value;
+  final ValueColumn valueColumn;
+  final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
+
+  const _AnimatorValueRow({
+    required this.comp,
+    required this.layer,
+    required this.index,
+    required this.animator,
+    required this.value,
+    required this.valueColumn,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  @override
+  State<_AnimatorValueRow> createState() => _AnimatorValueRowState();
+}
+
+class _AnimatorValueRowState extends State<_AnimatorValueRow> {
+  double? _staged;
+
+  BridgeScalar get _scalar =>
+      textAnimatorScalarOf(widget.animator, widget.value);
+
+  String get _rowKey => 'tl-anim-${widget.index}-${widget.value.name}';
+
+  void _write(BridgeScalar v) {
+    setState(() => _staged = null);
+    try {
+      writeTextAnimatorScalar(
+        layer: widget.layer,
+        index: widget.index,
+        value: widget.value,
+        to: v,
+      );
+      widget.onChanged();
+    } catch (_) {
+      // The animator or its layer went away mid-drag.
+    }
+  }
+
+  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+
+  void _commitKeyed(double v) =>
+      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        KeyframeControlsFrb(
+          scalars: [_scalar],
+          onWrite: (s) => _write(s.first),
+          comp: widget.comp,
+          playheadFrame: widget.playheadFrame,
+          onSeek: widget.onSeek,
+          rowKey: _rowKey,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(textAnimatorValueLabel(widget.value),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 72, child: _field()),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
+  }
+
+  Widget _field() {
+    final key = ValueKey<String>(_rowKey);
+    final scalar = _scalar;
+    if (scalar is! BridgeScalar_Keyframed) {
+      final stored =
+          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      return DragValueField(
+        key: key,
+        value: stored,
+        min: -100000,
+        max: 100000,
+        decimals: 1,
+        onChanged: _commitStatic,
+        onChangeLive: (v) => setState(() => _staged = v.toDouble()),
+        onChangeEnd: _commitStatic,
+        onDragCancel: () => setState(() => _staged = null),
+      );
+    }
+    // Animated: the field shows what the curve reads at the playhead, and an
+    // edit writes the key there.
+    return KeyedValueField(
+      fieldKey: key,
+      value:
+          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      min: -100000,
+      max: 100000,
+      decimals: 1,
       onCommit: _commitKeyed,
     );
   }

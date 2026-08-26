@@ -9,6 +9,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/graph_editor_frb.dart';
+import 'package:lumit_flutter/panels/layer_fold_frb.dart';
+import 'package:lumit_flutter/panels/text_animator_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -90,6 +93,53 @@ void main() {
       await tester.pump();
       expect(text.getText()!.animators, isEmpty);
       expect(text.getText()!.text, 'Lumit');
+    });
+
+    testWidgets(
+        'an animator gets fold rows and the graph editor gets its curves',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('text-animator-add')));
+      await tester.pump();
+
+      final entry = p.comp.getModel().layers.single;
+      final id = entry.layer.internallayerId.toString();
+      expect(entry.info.textAnimators.length, 1,
+          reason: 'the read model carries the animators');
+
+      // The fold: a heading, the animator's own twirl, and a row per number.
+      final rows = layerFoldRows(
+        entry: entry,
+        open: everyFoldPath,
+        hasAudio: false,
+      );
+      expect(
+        rows.whereType<FoldGroupRow>().map((r) => r.path),
+        contains(animatorsPath(id)),
+      );
+      expect(
+        rows.whereType<FoldAnimatorValueRow>().map((r) => r.value).toSet(),
+        TextAnimatorValue.values.toSet(),
+        reason: 'every number an animator has needs a row to key it on',
+      );
+
+      // The graph editor resolves one of those rows to a curve, with no bridge
+      // call and no second model (K-184).
+      final path = '${animatorPath(id, 0)}/${TextAnimatorValue.rangeOffset.name}';
+      expect(foldRowPath(id, rows.whereType<FoldAnimatorValueRow>().firstWhere(
+          (r) => r.value == TextAnimatorValue.rangeOffset)), path);
+      final channels = graphChannels(layers: [entry], selected: [path]);
+      expect(channels.length, 1);
+      expect(channels.single.scalar, const BridgeScalar.static_(0));
+      expect(channels.single.label, contains('Range offset'));
+
+      // And a graph edit on it lands on the document.
+      commitChannelEdits({channels.single: const BridgeScalar.static_(40)});
+      expect(text.getText()!.animators.first.selector.offset,
+          const BridgeScalar.static_(40));
     });
 
     testWidgets('a layer with no letters has no animators section',

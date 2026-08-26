@@ -340,6 +340,115 @@ BridgeTextAnimator animatorWith(
       fillB: fillB ?? a.fillB,
     );
 
+/// Which of an animator's animatable numbers a row carries (K-609).
+///
+/// The three range numbers first, because they decide *which letters* the rest
+/// reach, then the five property groups in the order they read: where the
+/// letter is, how it is turned, how big, how faded, what colour.
+enum TextAnimatorValue {
+  rangeStart,
+  rangeEnd,
+  rangeOffset,
+  positionX,
+  positionY,
+  rotation,
+  scaleX,
+  scaleY,
+  opacity,
+  fillR,
+  fillG,
+  fillB,
+}
+
+/// What one of an animator's numbers is called — shared by the Timeline row,
+/// the graph channel and anything else that has to name one.
+String textAnimatorValueLabel(TextAnimatorValue value) => switch (value) {
+      TextAnimatorValue.rangeStart => l10n.textAnimatorRangeStart,
+      TextAnimatorValue.rangeEnd => l10n.textAnimatorRangeEnd,
+      TextAnimatorValue.rangeOffset => l10n.textAnimatorRangeOffset,
+      TextAnimatorValue.positionX => '${l10n.transformPosition} x',
+      TextAnimatorValue.positionY => '${l10n.transformPosition} y',
+      TextAnimatorValue.rotation => l10n.transformRotation,
+      TextAnimatorValue.scaleX => '${l10n.transformScale} x',
+      TextAnimatorValue.scaleY => '${l10n.transformScale} y',
+      TextAnimatorValue.opacity => l10n.transformOpacity,
+      TextAnimatorValue.fillR => '${l10n.textAnimatorFillOffset} r',
+      TextAnimatorValue.fillG => '${l10n.textAnimatorFillOffset} g',
+      TextAnimatorValue.fillB => '${l10n.textAnimatorFillOffset} b',
+    };
+
+/// Which of [a]'s numbers [value] names.
+BridgeScalar textAnimatorScalarOf(
+        BridgeTextAnimator a, TextAnimatorValue value) =>
+    switch (value) {
+      TextAnimatorValue.rangeStart => a.selector.start,
+      TextAnimatorValue.rangeEnd => a.selector.end,
+      TextAnimatorValue.rangeOffset => a.selector.offset,
+      TextAnimatorValue.positionX => a.positionX,
+      TextAnimatorValue.positionY => a.positionY,
+      TextAnimatorValue.rotation => a.rotation,
+      TextAnimatorValue.scaleX => a.scaleX,
+      TextAnimatorValue.scaleY => a.scaleY,
+      TextAnimatorValue.opacity => a.opacity,
+      TextAnimatorValue.fillR => a.fillR,
+      TextAnimatorValue.fillG => a.fillG,
+      TextAnimatorValue.fillB => a.fillB,
+    };
+
+/// [a] with the one number [value] names replaced.
+BridgeTextAnimator animatorWithScalar(
+        BridgeTextAnimator a, TextAnimatorValue value, BridgeScalar to) =>
+    switch (value) {
+      TextAnimatorValue.rangeStart =>
+        animatorWith(a, selector: selectorWith(a.selector, start: to)),
+      TextAnimatorValue.rangeEnd =>
+        animatorWith(a, selector: selectorWith(a.selector, end: to)),
+      TextAnimatorValue.rangeOffset =>
+        animatorWith(a, selector: selectorWith(a.selector, offset: to)),
+      TextAnimatorValue.positionX => animatorWith(a, positionX: to),
+      TextAnimatorValue.positionY => animatorWith(a, positionY: to),
+      TextAnimatorValue.rotation => animatorWith(a, rotation: to),
+      TextAnimatorValue.scaleX => animatorWith(a, scaleX: to),
+      TextAnimatorValue.scaleY => animatorWith(a, scaleY: to),
+      TextAnimatorValue.opacity => animatorWith(a, opacity: to),
+      TextAnimatorValue.fillR => animatorWith(a, fillR: to),
+      TextAnimatorValue.fillG => animatorWith(a, fillG: to),
+      TextAnimatorValue.fillB => animatorWith(a, fillB: to),
+    };
+
+/// Write one of [layer]'s animators back with one number replaced — the write
+/// path every row outside the Animators section shares.
+///
+/// The whole document goes, because that is the op: reading it here rather
+/// than carrying it on the row is deliberate, since this only ever runs on a
+/// commit and never while anything is being drawn (K-184).
+void writeTextAnimatorScalar({
+  required LayerReference layer,
+  required int index,
+  required TextAnimatorValue value,
+  required BridgeScalar to,
+}) {
+  final document = layer.getText();
+  if (document == null || index >= document.animators.length) return;
+  layer.setText(
+    document: BridgeTextDocument(
+      text: document.text,
+      expression: document.expression,
+      size: document.size,
+      fill: document.fill,
+      path: document.path,
+      pathOffset: document.pathOffset,
+      animators: [
+        for (var i = 0; i < document.animators.length; i++)
+          if (i == index)
+            animatorWithScalar(document.animators[i], value, to)
+          else
+            document.animators[i],
+      ],
+    ),
+  );
+}
+
 /// [selector] with one field replaced, for the same reason.
 BridgeRangeSelector selectorWith(
   BridgeRangeSelector s, {

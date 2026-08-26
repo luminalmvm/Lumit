@@ -18705,10 +18705,18 @@ because its weights change per frame.
 Transform, Source and Retime move between that panel and the Timeline's fold because they exist
 in both (K-193); the Animators section has no Timeline home yet, so hiding it with them would
 hide the whole feature from anybody who has not turned the layer cards on. Every number in it is
-keyable from its own row — the stopwatch and the ◄ ◆ ► navigator every effect parameter has — and
-the read model already carries the animators beside the masks and the strokes, so the Timeline's
-fold rows and the graph editor's curves are a wiring job on top of what is here rather than a
-second model. **Not built yet:** those fold rows and graph channels, and renaming an animator.
+keyable from its own row — the stopwatch and the ◄ ◆ ► navigator every effect parameter has.
+
+**The Timeline's fold and the graph editor get them from the read model**, beside the masks and
+the strokes, so a lane's diamonds and a curve cost no bridge call to draw (K-184). An animator is
+a **heading with its own twirl** in the fold rather than a plain row, because it carries twelve
+numbers: a mask's four can all stand open, twelve times however many animators cannot. Its path
+is its **index**, since an animator has no id of its own and the list has no reordering — a
+selection survives every edit but deleting an animator above it, which is an explicit act.
+The Timeline row has **no live preview while it drags**, unlike the mask and stroke rows beside
+it: a text document has no preview call of its own, so the value is staged on the row and the
+picture catches up on release. The op, the undo step and the committed value are the same either
+way. **Not built yet:** renaming an animator, reordering the list, and that preview call.
 
 **Spaces go with the word before them.** Counting words, a run of whitespace takes the index of
 the word it follows (leading whitespace takes the first word's), so a range sweeping a sentence
