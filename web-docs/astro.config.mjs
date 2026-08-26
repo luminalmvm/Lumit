@@ -110,6 +110,7 @@ r.addEventListener("input",set);set()})})`,
                         "use/shapes",
                         "use/paint",
                         "use/camera",
+                        "use/tracking",
                       ],
                     },
                     {
