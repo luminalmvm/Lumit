@@ -29,7 +29,11 @@
 
 .EXAMPLE
     .\scripts\check.ps1
-    The full engine pass. Minutes, not seconds.
+    The full engine pass. Formatting, clippy and every crate but lumit-gpu take
+    minutes; the single-threaded lumit-gpu run after them is hours on this
+    machine, because close to a hundred WGSL kernels are each checked against a
+    CPU oracle one at a time. Use -Crate while working and leave the whole pass
+    to CI, or to a machine you are not using.
 #>
 [CmdletBinding()]
 param(

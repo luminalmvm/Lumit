@@ -224,6 +224,14 @@ cargo test -p lumit-gpu -- --test-threads=1
 The GPU crate is always single-threaded. Its tests share one graphics device and
 tread on each other when run in parallel.
 
+**That is why a bare `check.ps1` is not a before-every-commit command.**
+Formatting, clippy and every crate but `lumit-gpu` take minutes. The
+single-threaded GPU run after them takes hours on this machine: close to a
+hundred WGSL kernels, each rendered and compared against a CPU oracle, one at a
+time, on top of everything else that crate tests.
+Use `-Crate` while you work, let CI do the whole pass, and run the bare version
+on a machine you are not otherwise using.
+
 Everything, the way CI does it:
 
 ```powershell
