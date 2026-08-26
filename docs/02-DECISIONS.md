@@ -18772,3 +18772,39 @@ undo half a gesture at a time (`EffectStackEditor.writeAll`).
 Tests: in Flutter, `a chained pair scales a keyed half key by key` — the curve untouched while
 the pair is separate, every key doubled with times and sides held when it is chained, one undo
 restoring both halves, and a nought factor writing nothing.
+
+## K-610 — A snapshot photographs the visible region, at the resolution it is drawn at
+
+**Status: DECIDED (2026-08-26).** Amends [07-UI-SPEC.md](07-UI-SPEC.md) §2.2 item 14; the
+mechanism of K-416 and the two marks of K-532 are untouched.
+
+**The bound moves, the number does not.** The Viewer photographs its picture through a
+`RepaintBoundary` around the picture alone, and that boundary is the *comp* at the current
+magnification rather than the panel: an HD comp at 400 % is 7680 logical pixels across, at
+800 % it is 15360 (K-230's number). Photographing the whole of that at the device's own
+ratio asks for hundreds of millions of pixels on a button carrying no warning, so the
+capture used to be scaled down until it fitted the panel's own resolution. Safe, and softer
+than the live picture it exists to be held against — a before/after at 400 % compared a
+sharp picture with a quarter-resolution copy of itself.
+
+**So the bounds handed to the capture are what the panel can actually show**, and the
+resolution stays at the device's ratio. The ceiling is the same one — a snapshot is never
+more pixels than the panel has — but the pixels it does store are the pixels on screen,
+which is the comparison the affordance is for. What is off screen is dropped; nothing on
+screen is sampled below the resolution it is drawn at.
+
+**The photograph goes back over the region it came from.** The stored picture is held as a
+*fraction* of the picture's rectangle, not as pixels, and is drawn against the rectangle as
+it stands when Show is held — so a zoom or a pan taken since puts the same part of the comp
+back over itself. A snapshot taken while the whole picture was on screen is the whole
+picture, exactly as before, which is the common case and is unchanged.
+
+**A picture with nothing on screen is not photographed.** Panned entirely off the panel the
+visible region is empty, and Take stands down rather than storing an empty picture — the
+same shape of answer as a boundary that has not painted yet.
+
+Tests: in Flutter, `viewer_snapshot_crop_test.dart` — a picture four times the panel keeps
+every one-pixel stripe of the region on screen where the panel-resolution capture averages
+them away, a picture that fits crops to the whole of itself, and a picture panned off the
+panel crops to nothing; and in `viewer_panel_frb_test.dart`, the 400 % snapshot is still no
+larger than the panel and is shown over the slice it was taken from.

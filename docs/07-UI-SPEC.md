@@ -445,9 +445,14 @@ Every control on either strip keeps the behaviour its item below defines. The it
     comparison is not a lying picture, it is a second picture. A snapshot MUST NOT store
     more pixels than the panel can show: the boundary is the picture's rectangle, which
     at high magnification is the comp and not the panel (an HD comp at 400 % is 7680
-    pixels across), so the capture is scaled down to the panel's own resolution rather
-    than allocating for pixels nobody can see. Photographing only the visible region,
-    which would keep full detail while zoomed in, is owed (docs/TODO.md).
+    pixels across), so what is photographed is the **visible region** of that rectangle
+    and not the whole of it (K-610) — never more pixels than the panel has, and every
+    one of them at the resolution the live picture is drawn at, which is what a
+    before/after at 400 % needs. The stored picture MUST go back over the part of the
+    live picture it was taken from, so a zoom or pan since compares like with like; a
+    snapshot taken while the whole picture was on screen therefore covers the whole of
+    it, as before. A picture panned entirely off the panel has nothing to photograph and
+    Take MUST stand down rather than store an empty picture.
 
 Items 12 and 13 both persist **per comp** with the project, and while either is engaged
 the Viewer MUST say the picture is not the export — item 8's badge is where that lives,

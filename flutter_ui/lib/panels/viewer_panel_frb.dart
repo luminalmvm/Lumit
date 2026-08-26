@@ -152,6 +152,23 @@ Future<Uint8List?> captureViewerPicturePng() async {
   }
 }
 
+/// Which part of [picture] the [panel] around it can actually show, in the
+/// picture's own coordinates (K-610).
+///
+/// The whole of it while the picture fits; the panel's own rectangle, slid onto
+/// the picture, once magnification has taken the rest off screen. Empty when the
+/// two do not meet at all — a picture panned right off the panel.
+///
+/// Only the offset between the two is used, because between the picture and the
+/// panel there is nothing but [Positioned]: the magnification is in the
+/// picture's *size*, not in a transform over it.
+Rect visiblePictureCrop(RenderRepaintBoundary picture, RenderBox panel) {
+  final origin = picture.localToGlobal(Offset.zero, ancestor: panel);
+  return (Offset.zero & panel.size)
+      .shift(-origin)
+      .intersect(Offset.zero & picture.size);
+}
+
 class ViewerPanelFrb extends StatefulWidget {
   const ViewerPanelFrb({super.key});
 
@@ -250,6 +267,12 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// it is ever asked for (K-416); one is what a before/after actually needs.
   dartui.Image? _snapshot;
 
+  /// Which slice of the picture that snapshot is, as fractions of the picture's
+  /// own rectangle — null while there is no snapshot. Held as fractions rather
+  /// than pixels because the picture it goes back over is the one on screen
+  /// *now*, at whatever magnification has happened since.
+  Rect? _snapshotArea;
+
   /// Whether the Show button is being held down this instant.
   bool _showingSnapshot = false;
 
@@ -263,23 +286,36 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     super.dispose();
   }
 
-  /// Photograph the picture as it stands.
+  /// Photograph the picture as it stands — the part of it on screen (K-610).
   ///
   /// At the device's own pixel ratio, so a snapshot held against the live
-  /// picture is the same sharpness rather than a softer copy of it — **but
-  /// never at more pixels than the panel itself has**. The boundary is the
-  /// picture's rectangle, which is the *comp* at this magnification and not the
-  /// panel: at 800 % on an HD comp it is 15360 pixels across (K-230's number),
-  /// and photographing that whole would ask for gigabytes of pixels nobody can
-  /// see, on a button that must never be a risk to press.
+  /// picture is the same sharpness rather than a softer copy of it, and **never
+  /// more pixels than the panel itself has**, because the bounds are the panel's
+  /// and not the picture's. The boundary is the picture's rectangle, which is
+  /// the *comp* at this magnification and not the panel: at 800 % on an HD comp
+  /// it is 15360 pixels across (K-230's number), and photographing that whole
+  /// would ask for gigabytes of pixels nobody can see, on a button that must
+  /// never be a risk to press. What is off screen is what is dropped; what is on
+  /// screen keeps every pixel it is drawn with.
   Future<void> _takeSnapshot() async {
     final boundary = _pictureKey.currentContext?.findRenderObject();
-    if (boundary is! RenderRepaintBoundary) return;
-    final ratio =
-        MediaQuery.devicePixelRatioOf(context) * _snapshotFit(boundary);
+    final panel = context.findRenderObject();
+    if (boundary is! RenderRepaintBoundary || panel is! RenderBox) return;
+    // The layer rather than the render object, because only the layer takes a
+    // rectangle: `RenderRepaintBoundary.toImage` is this same call with the
+    // whole of the boundary passed in, and there is no other way to ask for
+    // part of it. The field is protected for subclasses of [RenderObject]; the
+    // cast to [OffsetLayer] is the one the framework's own `toImage` makes.
+    // ignore: invalid_use_of_protected_member
+    final layer = boundary.layer;
+    final picture = boundary.size;
+    if (layer is! OffsetLayer || !panel.hasSize || picture.isEmpty) return;
+    final crop = visiblePictureCrop(boundary, panel);
+    if (crop.isEmpty) return;
+    final ratio = MediaQuery.devicePixelRatioOf(context);
     final dartui.Image shot;
     try {
-      shot = await boundary.toImage(pixelRatio: ratio);
+      shot = await layer.toImage(crop, pixelRatio: ratio);
     } catch (_) {
       // A boundary that has not been painted yet has nothing to hand over.
       return;
@@ -289,31 +325,19 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       return;
     }
     final old = _snapshot;
-    setState(() => _snapshot = shot);
+    setState(() {
+      _snapshot = shot;
+      _snapshotArea = Rect.fromLTRB(
+        crop.left / picture.width,
+        crop.top / picture.height,
+        crop.right / picture.width,
+        crop.bottom / picture.height,
+      );
+    });
     // After the frame, not during the swap: the old image may be on screen this
     // very instant (Show held while Take is pressed), and disposing an image a
     // live [RawImage] still points at is a crash rather than a saving.
     WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
-  }
-
-  /// How much of the device pixel ratio a snapshot may use: 1 while the picture
-  /// fits the panel, and less once it is bigger, so the stored image is never
-  /// larger than the panel could show. Both edges are covered, so nothing on
-  /// screen is sampled below the resolution it is drawn at.
-  ///
-  /// ponytail: a zoomed-in snapshot is therefore the panel's worth of detail
-  /// and no more — held against a 800 % live picture it is the softer of the
-  /// two. Photographing the visible region instead of the whole picture is the
-  /// upgrade, and it wants the boundary moved rather than a number changed.
-  double _snapshotFit(RenderRepaintBoundary boundary) {
-    final shot = boundary.size;
-    final panel = context.size;
-    if (panel == null || panel.isEmpty || shot.width <= 0 || shot.height <= 0) {
-      return 1;
-    }
-    return math
-        .max(panel.width / shot.width, panel.height / shot.height)
-        .clamp(0.001, 1.0);
   }
 
   /// Show the stored picture while the button is down, and stop the moment it
@@ -608,6 +632,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
               overlays: ui.viewerOverlays,
               pictureKey: _pictureKey,
               snapshot: _showingSnapshot ? _snapshot : null,
+              snapshotArea: _snapshotArea,
               wireframes: _wireframes,
               channel: _channel,
               compSize: size,
@@ -878,6 +903,11 @@ class _Stage extends StatelessWidget {
   /// time, which is nearly always.
   final dartui.Image? snapshot;
 
+  /// Which slice of the picture that snapshot is, in fractions of the picture's
+  /// rectangle (K-610): the whole of it unless it was taken while zoomed in,
+  /// where it is the part that was on screen. Null when nothing is stored.
+  final Rect? snapshotArea;
+
   /// Whether the layer controls are drawn (the bar's wireframe switch).
   final bool wireframes;
   final ViewerChannel channel;
@@ -904,6 +934,7 @@ class _Stage extends StatelessWidget {
     required this.overlays,
     required this.pictureKey,
     required this.snapshot,
+    required this.snapshotArea,
     required this.wireframes,
     required this.channel,
     required this.compSize,
@@ -1066,6 +1097,22 @@ class _Stage extends StatelessWidget {
         cursor: viewerCursorFor(uiState.tools.tool),
         child: _stage(context, t),
       ),
+    );
+  }
+
+  /// Where a held snapshot goes: the slice of the picture it was taken from,
+  /// measured against the picture as it stands now (K-610). A snapshot taken
+  /// while the whole picture was on screen covers the whole of it, as it always
+  /// did; one taken zoomed in covers the part it photographed, wherever that
+  /// part has since moved to.
+  Rect _snapshotRect() {
+    final area = snapshotArea;
+    if (area == null) return fitted;
+    return Rect.fromLTRB(
+      fitted.left + area.left * fitted.width,
+      fitted.top + area.top * fitted.height,
+      fitted.left + area.right * fitted.width,
+      fitted.top + area.bottom * fitted.height,
     );
   }
 
@@ -1360,7 +1407,7 @@ class _Stage extends StatelessWidget {
             // the snapshot compares like with like.
             if (snapshot case final shot?)
               Positioned.fromRect(
-                rect: fitted,
+                rect: _snapshotRect(),
                 child: IgnorePointer(
                   child: RawImage(
                     key: const ValueKey('viewer-snapshot-overlay'),

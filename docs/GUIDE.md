@@ -10002,6 +10002,16 @@ on screen told you a photograph existed or how to look at it.) Nothing about eit
 near the engine or an export: it is a picture of the screen, kept in the frontend, thrown
 away when you take the next one.
 
+"Whatever the Viewer is showing" is meant literally, and that is the interesting part.
+Zoomed to 400 % on an HD comp the picture is nearly eight thousand pixels across, and most
+of it is off the edges of the panel; photographing all of it would ask for a few hundred
+million pixels the moment you press a button with no warning on it. So the camera
+photographs the part you can see, at the sharpness you can see it — rather than the whole
+picture shrunk down to fit, which is what it used to do and which made the comparison at
+high magnification a sharp picture against a soft one. Hold the eye and the photograph goes
+back over the piece of the picture it came from, so if you have zoomed or panned since, it
+still lands on the same part of the composition.
+
 In the middle, the transport: to the start, back a frame, play, on a frame, to the end, and
 the clock. Click the clock and type a time to go there.
 

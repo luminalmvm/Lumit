@@ -890,7 +890,11 @@ void main() {
     /// own ratio asks for a few hundred million pixels — on a button with no
     /// warning on it. Uncapped this assertion misses by an order of magnitude
     /// (and the run before it allocates a gigabyte), so the cap is the
-    /// regression, not the advice.
+    /// regression, not the advice. Since K-610 the bound is the *region*
+    /// photographed rather than the resolution it is photographed at, and the
+    /// photograph goes back over the part of the picture it came from — which
+    /// is the second pair of assertions here. What it keeps of the detail is
+    /// pinned in viewer_snapshot_crop_test.dart, where the pixels are readable.
     testWidgets('a snapshot taken at 400 % stays the size of the panel',
         (tester) async {
       final p = withLayer();
@@ -924,6 +928,14 @@ void main() {
       expect(
           image.height, lessThanOrEqualTo((panel.height * ratio).ceil() + 2));
       expect(image.width, greaterThan(1), reason: 'and it is still a picture');
+
+      // And it is put back over the slice it was taken from, not stretched
+      // across the whole 400 % picture: at this magnification that slice is at
+      // most the panel.
+      final over = tester
+          .getRect(find.byKey(const ValueKey('viewer-snapshot-overlay')));
+      expect(over.width, lessThanOrEqualTo(panel.width + 1));
+      expect(over.height, lessThanOrEqualTo(panel.height + 1));
 
       await hold.up();
       await tester.pump();
