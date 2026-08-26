@@ -125,7 +125,12 @@ r.addEventListener("input",set);set()})})`,
                     },
                     {
                       label: "Effects",
-                      items: ["use/effects", "use/fx-console", "use/presets"],
+                      items: [
+                        "use/effects",
+                        "use/nodes",
+                        "use/fx-console",
+                        "use/presets",
+                      ],
                     },
                     {
                       label: "The application",
