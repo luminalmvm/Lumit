@@ -6,7 +6,7 @@ sidebar:
 ---
 
 A folder of numbered stills — an EXR render, a scan, a frame dump — imports as **one footage
-item**, not as a hundred assets. It behaves like any other clip from then on: it trims, it
+item**, not as a hundred assets. It behaves like any other footage from then on: it trims, it
 retimes, it caches, it goes in a Sequence layer.
 
 ## Import a run
@@ -20,7 +20,7 @@ Picking a different frame of the same run imports the same item, not a second on
 What is recognised as a run:
 
 - **Still-image formats only.** A folder of `clip0001.mp4`…`clip0100.mp4` is a hundred
-  clips, and gluing them together would be a destructive guess.
+  footage items, and gluing them together would be a destructive guess.
 - **The frame number is the longest run of digits in the name.** `shot_v2_0043.exr` is frame
   43 of version 2, not frame 2.
 - **Padding has to match.** `%04d` does not name `frame7.png`, so a differently-padded

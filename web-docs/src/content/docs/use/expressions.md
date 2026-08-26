@@ -26,7 +26,7 @@ numbers — a point, a colour — does not yet, and the menu simply does not off
 
 A [driver on the node graph](/use/nodes/) is the other way to make a value come from
 somewhere else. Reach for an expression when the rule is arithmetic you can write down, and
-for a driver when it is something the composition already has — the loudness of a track, a
+for a driver when it is something the composition already has — the loudness of the music, a
 wobble, another layer's points.
 
 ## What the script can read

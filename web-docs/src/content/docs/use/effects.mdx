@@ -7,7 +7,7 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-An **effect** is one stage in a layer's **effect stack**. The stack composites top-to-bottom
+An **effect** is one stage in a layer's **effect stack**. The stack composites top to bottom,
 applying in that order.
 
 <Shot file="effect-menu.png" caption="The Effect menu." eager/>
@@ -18,7 +18,7 @@ applying in that order.
 2. Choose **Effect**, then a category, then the effect.
 
 You can also choose effects via the [Effects console](/use/fx-console/), or dragged onto 
-a layer from the Effects & Presets panel. With nothing selected, the whole menu is disabled.
+a layer from the Effects & presets panel. With nothing selected, the whole menu is disabled.
 
 ## Edit the parameters
 
@@ -27,20 +27,20 @@ animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
 
 ## Order matters
 
-Effects run in stack order. A exposure ahead of a glow does not look like a glow ahead of a
+Effects run in stack order. An exposure ahead of a glow does not look like a glow ahead of an
 exposure. Drag an effect up or down the stack to reorder it.
 
 ## Apply one effect to many layers
 
 Select several layers and apply an effect, and each of them gets its own copy — from the
-Effect menu, the Effects console or the Effects & Presets panel alike.
+Effect menu, the Effects console or the Effects & presets panel alike.
 
 Effects on **adjustment layers** apply to the composite of everything
 below them. See [Layers](/use/layers/).
 
 ## Every effect has a Matte
 
-Every effect's controls has the following: a layer picker labelled **Matte**, with 
+Every effect's controls have the following: a layer picker labelled **Matte**, with 
 a **Channel** dropdown and an **Invert** checkbox beside it. Channel picks what is 
 read from the matte layer: its brightness by default, or its alpha or one of the 
 colour channels. Select a layer and that layer's brightness 
@@ -54,14 +54,14 @@ just strength, and their own effect pages explain this in the parameter table:
 
 - **Gaussian blur** narrows its radius.
 - **Turbulent displace** scales its turbulence.
-- **Glow** gates pixels used to find area's of glow.
+- **Glow** gates pixels used to find areas of glow.
 - **Depth of field** reads it as a depth pass.
 - **Lens flare** reads it as where to find its light sources.
 - **Set matte** reads it as the alpha itself, which is the whole effect.
 
 Lumit renders the matte layer on its own at the composition's size. Beside the picker, 
 the **Layer source** dropdown has the option to read that layer raw, with its masks, 
-or with its effects applied. If the same layer the effect is *on*, it reads that layer's 
+or with its effects applied. If it is the same layer the effect is *on*, it reads that layer's 
 own picture at that point in the stack.
 
 ## The built-in roster

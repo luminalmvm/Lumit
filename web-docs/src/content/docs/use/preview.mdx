@@ -20,22 +20,22 @@ Press play, or `space` by default. The playhead will begin moving and the Viewer
 The cache has three tiers: VRAM, RAM and disk. You can alter the memory allocated to each of 
 these individually under **Edit ▸ Settings ▸ Performance**.
 
-Lumit stores rendered frames to help speedup plaback. Frames that are cached are shown by 
-the **cache bar** under the time ruler, VRAM and Ram display as a green line, frames stored
-on the disk are blue.
+Lumit stores rendered frames to help speed up playback. Frames that are cached are shown by 
+the **cache bar** under the time ruler: VRAM and RAM display as a green line, and frames
+stored on the disk are blue.
 
 ## Preview resolution
 
 Lower the preview resolution to render previews faster: full, half, third, quarter, or auto. 
 Changing the preview resolution has no impact when exporting.
 
-Lumit also has two preview resolution options in the viewer bar. **Every frame** will render
+Lumit also has two preview resolution options in the Viewer bar. **Every frame** will render
 each frame in the composition, pausing audio if playback isn't realtime. **Adaptive res** will
 instead dynamically alter the resolution to try and maintain realtime playback. Sometimes in very 
-intensive compositions even at quater resolution this won't be enough, at which point adaptive res
+intensive compositions even at quarter resolution this won't be enough, at which point adaptive res
 will only display frames it manages to render in time.
 
-Personally I'd normally recommend **Every Frame** as the default option to use.
+Personally I'd normally recommend **Every frame** as the default option to use.
 
 ## The progress bar
 
@@ -58,4 +58,4 @@ effect values as you change them to try and give you an idea of what the value y
 ## Related
 
 - [Exporting](/use/export/)
-- [How Lumit stays fast](/engine/performance/)
+- [Caching](/engine/cache/)

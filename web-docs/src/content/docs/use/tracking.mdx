@@ -22,9 +22,9 @@ carry on editing.
 3. Wait. The status row under the buttons counts the frames as they go, and **Cancel**
    stops it.
 
-The analysis is of the **whole source clip**, not of the layer you applied it to, and it is
-kept beside the project. Every clip using that footage shares the one solve, so trimming a
-clip, moving it, reordering it or [retiming](/use/retime/) it never tracks anything again.
+The analysis is of the **whole source footage**, not of the layer you applied it to, and it
+is kept beside the project. Every layer using that footage shares the one solve, so trimming
+a layer, moving it, reordering it or [retiming](/use/retime/) it never tracks anything again.
 Re-analysing is only needed when you change one of the settings.
 
 | Control | What it does |
@@ -39,7 +39,7 @@ A shot can stop being followable. The lens racks, the frame whites out, there is
 the middle of the file — and past that point there is nothing that can be tied to anything
 before it. Lumit stops there and solves the part that worked rather than inventing the rest.
 
-A thin bar above the status line shows the analysed span against the length of the clip, and
+A thin bar above the status line shows the analysed span against the length of the footage, and
 the line reads *Analysed 180 of 400 frames — the shot could not be followed further*. It
 appears once the work is over and does not move: it measures how far the answer reaches, not
 how far the work has got.
@@ -93,7 +93,7 @@ and however the surface turns. Four corners describe it completely, which is why
 to a planar track is a Corner pin.
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Planar track**.
-2. Put the effect's four points round the flat thing, on the clip's **first frame**. That
+2. Put the effect's four points round the flat thing, on the source's **first frame**. That
    frame is the reference, and every later frame is measured against it.
 3. Mask out anything that crosses the surface — a hand over the phone. The layer's own masks
    still apply inside the quad.

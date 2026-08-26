@@ -1,13 +1,13 @@
 ---
 title: Colour management
-description: Give the project an OpenColorIO configuration, and say what each clip arrived in.
+description: Give the project an OpenColorIO configuration, and say what each item arrived in.
 sidebar:
   order: 2.7
 ---
 
 Lumit composites in **scene-linear Rec. 709**, in floating point, and it does so whatever
 your footage arrived in. Colour management is the two edges either side of that: reading a
-clip into the working space, and writing the result back out for a screen or a file.
+a footage item into the working space, and writing the result back out for a screen or a file.
 
 Without a configuration Lumit uses its own built-in handling — it reads what the file says
 about itself, and shows you the working space encoded to sRGB. That is enough for a great
@@ -37,15 +37,15 @@ any other edit. A missing or unusable configuration never stops a project openin
 preview falls back to the built-in handling, the picker says so, and every colour-space name
 you assigned is kept exactly where it was.
 
-## Say what a clip arrived in
+## Say what a footage item arrived in
 
 Right-click a footage row in the [Project panel](/panels/project/) and open the **Colour
 space** submenu.
 
-- **As the file says** is where every clip starts. Lumit interprets it the built-in way,
+- **As the file says** is where every item starts. Lumit interprets it the built-in way,
   from what the file itself states.
 - Under **From the configuration** are the configuration's own colour-space names, in its
-  own words. Pick the one the clip was shot or graded in.
+  own words. Pick the one the footage was shot or graded in.
 
 This changes pixels, so it is saved in the project and travels with it.
 

@@ -39,19 +39,19 @@ round dab.
 
 ## Strokes are paths
 
-What Lumit stores is the drag infomation (the path, colour, size, hardness, opacity), 
+What Lumit stores is the drag information (the path, colour, size, hardness, opacity), 
 which is composited into the layer each time the frame renders. This means painting at
 quarter-resolution preview will still export at full quality.
 
 Strokes are composited **before masks and effects**: a mask gates the painted picture, and
-effects will operate upon strokes as if they were part of the original layers source.
+effects will operate upon strokes as if they were part of the original layer's source.
 
 ## Editing strokes
 
 - A layer's strokes are listed under a **Paint** heading in the Timeline when the
   layer is twirled open.
 - Each stroke is a single undo.
-- An brush/clone/erase's strength can be reduced later by lowering it's opacity.
+- A brush, clone or erase stroke's strength can be reduced later by lowering its opacity.
 - **Start** and **End** under each stroke trim it by a percentage of its own length, and both
   are keyframable: hold Start at 0 and animate End from 0 to 100 and the stroke draws itself on.
 - Each stroke picks a **blend mode** from the same list a layer does, deciding what colour the
