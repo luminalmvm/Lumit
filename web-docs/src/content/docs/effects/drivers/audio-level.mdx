@@ -1,0 +1,57 @@
+---
+title: Audio level
+description: "How loud a layer's sound is, as a number."
+---
+
+Audio level is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Points at a layer that carries sound and gives you its loudness at the frame being drawn.
+It has two sockets: **Amplitude**, the level of the whole sound, and **Low**, the level of
+the bottom end alone — the one that follows a kick drum rather than a hi-hat. Wire either
+into a scale, a glow or a brightness, usually through a
+[Remap](/effects/drivers/remap/), and the picture moves with the track.
+
+A single instant of sound is a meaningless number, because a wave crosses zero constantly,
+so the level is measured across a short stretch of time centred on the frame rather than
+read off one sample. That makes it one of the two drivers that look at times other than
+their own, and Lumit folds the stretch into what it caches so a held frame cannot outlive
+the sound it was measured from.
+
+With no layer chosen, a layer that has no sound, or a layer somebody deleted, the level
+reads nought. That is the quiet answer, not a fault.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Audio** | Layer | Any layer in the composition | None | - |
+| **Window** | Slider | 0.01 to 1; down to 0.001 and up to 10 | 0.05 | Seconds |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Audio**: the layer whose sound is measured. Wires never cross between layers, so this
+  is a layer picker rather than a socket — the canvas draws the layer you name and runs the
+  wire from there.
+- **Window**: how long a stretch the level is measured over, centred on the frame. Short
+  follows every transient and twitches; long rides the tune and reacts late. A twentieth of
+  a second is a good place to start.
+
+## Related
+
+- [Smooth](/effects/drivers/smooth/) - calm a level that is too twitchy to drive anything.
+- [Remap](/effects/drivers/remap/) - turn a level into the range a parameter wants.
+- [Audio](/use/audio/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

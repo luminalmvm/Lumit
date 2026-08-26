@@ -1,0 +1,58 @@
+---
+title: Layer points
+description: "Brings another layer's points into this layer's graph."
+---
+
+Layer points is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A wire never crosses between layers. What crosses is a name: this node names a layer, the
+way [Audio level](/effects/drivers/audio-level/) names the layer whose sound it measures,
+and hands out whatever points that layer is making. Its **Points** socket is the same
+socket a producer has, so anything that takes a points wire takes this one without knowing
+the difference — [Clone to points](/effects/generate/clone-to-points/) stamps another
+layer's particles, [Connect points](/effects/generate/connect-points/) webs them up,
+[Points sample](/effects/drivers/points-sample/) counts them.
+
+The points it hands over are the points that layer draws, with that layer's own wires
+applied, so the two pictures agree.
+
+Which producer? The first one on the named layer that makes points at all. A layer carrying
+two is a layer whose first one is tapped; there is no picker for the second yet.
+
+A tap reaches one layer and no further. If the layer you name is itself tapping a third
+layer, that second hop reads as empty — which is also what happens with no layer named, a
+layer somebody deleted, a layer with no producer, a producer that is switched off, or a
+[Scatter](/effects/generate/scatter/) or
+[Emit from image](/effects/generate/emit-from-image/), whose points depend on a picture that
+does not exist at the moment this is read. None of those is a fault; they are all simply
+nothing.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Points layer** | Layer | Any layer in the composition | None | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Points layer**: the layer whose points are tapped. Nothing until you set it.
+
+## Related
+
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Connect points](/effects/generate/connect-points/)
+- [Points sample](/effects/drivers/points-sample/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

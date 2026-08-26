@@ -1,0 +1,54 @@
+---
+title: Colour cycle
+description: "A colour that turns through the hue wheel."
+---
+
+Colour cycle is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Puts out a colour that keeps changing — red, orange, yellow, and round again — at whatever
+rate you set. Wire its **Colour** socket into a [Fill](/effects/generate/fill/), a
+[Glow](/effects/stylise/glow/), a [Gradient](/effects/generate/gradient/) stop or a
+particle colour and the picture cycles without a single keyframe.
+
+It is the one driver that carries a colour rather than a number, so it only fits sockets
+that take one.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Phase** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Rate** | Slider | -2 to 2; any value by typing | 0.2 | - |
+| **Saturation** | Slider | 0 to 100 | 100 | Per cent |
+| **Brightness** | Slider | 0 to 100; higher | 100 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Phase**: where on the wheel it starts, in whole turns. 0 is red, a third is green, two
+  thirds is blue, and 1 is red again. Turns rather than degrees, so a
+  [Wiggle](/effects/drivers/wiggle/) of amount 1 wired in here sweeps exactly one
+  revolution.
+- **Rate**: turns per second, and negative runs the wheel backwards. Nought holds the
+  colour still at Phase, which is what you want when something else is driving Phase.
+- **Saturation**: how coloured it is. Nought is grey at the brightness asked for.
+- **Brightness**: how bright, as a per cent of white. It runs past 100 so a driven colour
+  can reach the same headroom a colour parameter has.
+
+## Related
+
+- [Wiggle](/effects/drivers/wiggle/) - drive Phase for a colour that wanders rather than turns.
+- [Fill](/effects/generate/fill/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

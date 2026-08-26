@@ -212,6 +212,7 @@ Useful tools for specific tasks.
 | [Set matte](/effects/utility/set-matte/) | Takes a channel of another layer as transparency. |
 | [Broadcast safe](/effects/utility/broadcast-safe/) | Measures and displays illegal pixels. |
 | [Camera track](/effects/utility/camera-track/) | Works out how the camera moved in a shot. |
+| [Planar track](/effects/utility/planar-track/) | What Planar track does, and what each of its controls means. |
 
 {/* END GENERATED */}
 
@@ -228,5 +229,29 @@ Values for expressions to read.
 | [Checkbox control](/effects/controls/checkbox-control/) | An on/off switch for expressions to read. |
 | [Colour control](/effects/controls/colour-control/) | A colour for expressions to read. |
 | [Point control](/effects/controls/point-control/) | A position for expressions to read. |
+
+{/* END GENERATED */}
+
+### Drivers
+
+Values that other effects follow, wired up rather than keyframed.
+
+A driver makes a number, a colour or a stream of points instead of a picture, so it has no
+page picture and does nothing on its own. Drop one on a layer and run a wire from its
+socket into another effect's parameter, and that parameter follows the wire instead of its
+own keyframes. Bypass the driver and the parameter goes back to the keyframes it had.
+
+{/* GENERATED:list:drivers - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Wiggle](/effects/drivers/wiggle/) | A number that wobbles, for anything that should not sit still. |
+| [Audio level](/effects/drivers/audio-level/) | How loud a layer's sound is, as a number. |
+| [Colour cycle](/effects/drivers/colour-cycle/) | A colour that turns through the hue wheel. |
+| [Math](/effects/drivers/math/) | Two numbers and one arithmetic sign. |
+| [Remap](/effects/drivers/remap/) | One range of numbers into another. |
+| [Smooth](/effects/drivers/smooth/) | Takes the jitter off whatever feeds it. |
+| [Points sample](/effects/drivers/points-sample/) | Turns a stream of points into numbers you can drive things with. |
+| [Layer points](/effects/drivers/layer-points/) | Brings another layer's points into this layer's graph. |
 
 {/* END GENERATED */}

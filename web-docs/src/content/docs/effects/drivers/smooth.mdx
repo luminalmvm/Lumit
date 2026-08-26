@@ -1,0 +1,56 @@
+---
+title: Smooth
+description: "Takes the jitter off whatever feeds it."
+---
+
+Smooth is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+An audio level jumps about frame to frame, and a scale driven straight from one stutters.
+Smooth averages its input over a short stretch of time centred on the frame, so the number
+still follows the music but stops twitching. Put it between the driver and whatever it is
+driving.
+
+The stretch is centred rather than trailing, so a value that ramps comes out as the same
+ramp instead of the ramp running late. That is what makes Smooth safe to drop into a chain
+that was already timed — the motion calms down, but it does not slide.
+
+Like [Audio level](/effects/drivers/audio-level/), it reads times other than its own, and
+Lumit folds that stretch into what it caches.
+
+The input is read nine times across the window, however long the window is. Past about an
+eighth of a second those nine readings sit further apart than a frame, so a long Time on a
+fast-moving input can start stepping rather than smoothing. If turning Time up makes the
+result look less smooth, that is why: turn it back down and calm the driver instead.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Value** | Slider | 0 to 100; any value by typing | 0 | - |
+| **Time** | Slider | 0 to 2; up to 10 | 0.2 | Seconds |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Value**: the number coming in. A value typed here has nothing to smooth and comes
+  straight out again — this control only does anything with a wire on it.
+- **Time**: how long a stretch to average over. Longer is calmer and lazier to react.
+  Nought is no smoothing at all, and passes the input through untouched.
+
+## Related
+
+- [Audio level](/effects/drivers/audio-level/) - the driver this is most often put in front of.
+- [Wiggle](/effects/drivers/wiggle/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

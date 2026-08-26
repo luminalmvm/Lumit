@@ -1,0 +1,53 @@
+---
+title: Wiggle
+description: "A number that wobbles, for anything that should not sit still."
+---
+
+Wiggle is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Puts out a number that drifts about instead of holding still. Wire its **Value** socket
+into a position, a rotation, a blur radius or anything else that takes a number, and that
+parameter stops looking like a computer's idea of a shot.
+
+The wobble is the same every time. It is worked out from the node's own identity and the
+layer's time, never from the clock or from which frame rendered first, so a preview and an
+export agree and a scrub backwards gives the same picture as a scrub forwards. Two Wiggles
+on one layer wobble differently, which is what you want when one is driving position and
+the other rotation.
+
+The value is centred on nought and runs either side of it. To wobble around some other
+number, take Wiggle into a [Math](/effects/drivers/math/) set to Add, or into a
+[Remap](/effects/drivers/remap/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100; any value by typing | 10 | - |
+| **Frequency** | Slider | 0 to 20; higher | 2 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount**: how far the value strays either side of nought. It has no unit of its own —
+  whatever you wire it into decides what the numbers mean, exactly as a
+  [Slider control](/effects/controls/slider-control/) does. Nought is silence.
+- **Frequency**: wobbles per second. Low is a slow drift; high is a jitter.
+
+## Related
+
+- [Smooth](/effects/drivers/smooth/) - take the jitter back off something.
+- [Remap](/effects/drivers/remap/) - put the wobble into the range a parameter wants.
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)
