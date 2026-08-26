@@ -17,7 +17,7 @@ Depth of field is a [Blur & sharpen](/effects/#blur--sharpen) effect.
 
 A blur whose strength changes per pixel, driven by a **depth pass**: a second
 layer whose brightness is used to determine distance from the camera. Pixels at 
-the focus distance remain sharp. Everything either side of that value blur.
+the focus distance remain sharp. Everything either side of that value blurs.
 
 ## Parameters
 
@@ -72,7 +72,7 @@ In the Effect Controls panel:
 - **Matte** is the depth pass.
 - **Focus distance** picks which colour value is in focus.
 - **Use focus point** with **Focus point x** and **Focus point y** read the depth
-  value at a specific spot focuses there, if the value at the point changes, the 
+  value at a specific spot and focus there; if the value at the point changes, the 
   focus changes.
 - **Focus range** is the area around the focus point which stays sharp before 
   the blur begins.
@@ -86,7 +86,7 @@ The **Iris** group shapes the blur:
 - **Roundness**: changes how round the iris appears.
 - **Rotation** rotates the iris.
 - **Aspect ratio** squeezes the iris.
-- **Rim brightness** Adjusts if the lightness is evenly distributed, or towards
+- **Rim brightness**: adjusts whether the lightness is evenly distributed, or towards
   the centre or edge. 
 
 The **Highlights** group alters highlights:
@@ -95,13 +95,13 @@ The **Highlights** group alters highlights:
   highlight rather than as ordinary picture.
 - **Highlight exposure** sets how hard those blurred highlights bloom.
 
-The **Depth map** group alters infomation about how the depth pass is read:
+The **Depth map** group alters information about how the depth pass is read:
 
 - **Depth channel** selects the channel to use as the matte.
 - **Invert** inverts the depth pass before applying blur.
 - **Gamma** is the same as applying the gamma effect to the depth layer. Used
   to adjust the "scaling" between black and white values.
-- **Remove edge leak** and **Detect edge threshold** suppress halo's where a
+- **Remove edge leak** and **Detect edge threshold** suppress haloes where a
   near object is next to a far one and the depth and normal layers don't perfectly
   align.
 
