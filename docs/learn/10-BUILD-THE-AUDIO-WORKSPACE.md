@@ -23,11 +23,11 @@ being taught is where those ideas live in the code, and how to move them.
 
 Three things, in order:
 
-1. **The Audio arrangement, made real.** Lumit ships five workspaces — Edit,
-   Effects, Colour, Audio, Retiming. Audio is currently a stand-in: it makes the
-   Timeline taller and leaves everything else where Edit had it. You will give it
-   the shape the work actually wants — a tall Timeline for the waveform lanes,
-   Effect controls in a column of its own, Scopes to the right.
+1. **The Audio arrangement, made real.** Lumit ships six workspaces — Edit,
+   Effects, Nodes, Colour, Audio, Retiming. Audio is currently a stand-in: it
+   makes the Timeline taller and leaves everything else where Edit had it. You
+   will give it the shape the work actually wants — a tall Timeline for the
+   waveform lanes, Effect controls in a column of its own, Scopes to the right.
 2. **A number from the engine.** A new function in Rust that answers "how many
    pieces of footage in this project carry sound", surfaced as a quiet line at the
    top of the Project panel. Small on purpose: the value of it is the round trip,
@@ -85,12 +85,18 @@ enum Panel {
   scopes,
   debug,
   hierarchy,
-  easing;
+  easing,
+  graph,
+  node;
 ```
 
-**An `enum` is a closed list of possibilities.** `Panel` says: there are nine
-dockable panels, these are their names, and there is no tenth. Anywhere the code
-handles a `Panel`, the compiler can check that every case is covered — which is why
+(The last two carry doc comments in the file, which are left out here for
+brevity. `graph` and `node` are the Nodes workspace's pair — the effect stack
+drawn as boxes and wires, and the parameters of whichever box is picked.)
+
+**An `enum` is a closed list of possibilities.** `Panel` says: there are eleven
+dockable panels, these are their names, and there is no twelfth. Anywhere the
+code handles a `Panel`, the compiler can check that every case is covered — which is why
 adding a panel to this list makes the build fail everywhere the new one has not been
 thought about. That failure is the feature.
 
@@ -191,10 +197,11 @@ upper band: horizontal, three children — a left tab group with four panels sta
 behind Project, the Viewer, and a right tab group of Scopes and Debug.
 
 Read what it does to the work. The Timeline is tall, which is right: the waveform
-lanes are there. But **Effect controls is the third tab of the left group**, behind
-Project, Effects & presets and Hierarchy. Volume lives in Effect controls. Every
-audio effect's parameters live in Effect controls. So the arrangement named after
-sound puts the panel you edit sound in behind two tabs of other things.
+lanes are there. But **Effect controls is the second tab of the left group**, behind
+Project, with Effects & presets and Hierarchy behind it again. Volume lives in
+Effect controls. Every audio effect's parameters live in Effect controls. So the
+arrangement named after sound puts the panel you edit sound in behind a tab, and
+you fetch it back every time you click a row in the Project panel.
 
 That is the change.
 
@@ -353,6 +360,16 @@ cheap enough to happen implicitly, and how to compare two of them.
 what to do with an item. `#[frb(sync)]` means "Dart may call this and get the answer
 immediately"; without it, the Dart side gets a `Future` — a promise of an answer
 later. `#[frb(ignore)]` means "this is internal; do not offer it to Dart at all".
+
+**Not everything in the file hangs off a type.** Further down are plain
+functions with no `self` at all — `audio_pause`, `audio_seek`, `audio_stop`,
+`audio_clock`, and the pair that picks which output the machine plays through,
+`list_audio_devices` and `set_audio_device` (K-586). They are free functions
+because what they act on is the *machine*, not a document: there is one sound
+device and one thing coming out of it, whatever project is open. The generator
+puts a free function on the Dart side as a top-level function too, so the shape
+of the seam matches the shape of the thing. Your own function *is* about a
+document, so it goes on a type.
 
 Now the other shape in the file:
 
@@ -595,16 +612,34 @@ new key, or the upload gets forgotten and the string ships English everywhere.
 
 `flutter_ui/lib/panels/project_panel_frb.dart`. Four small edits.
 
-**One — the import.** With the other `src/rust/api` imports at the top:
+**The panel is five files, not one.** `project_panel_frb.dart` is the panel
+proper — its state, its caches, the walk that turns the document into rows. The
+rest lives beside it: `project_chrome_frb.dart` (the preview card, the search
+well, the column headings, the bottom bar), `project_columns_frb.dart` (the
+measurements — row height, column widths, which columns a given panel width
+fits), `project_row_frb.dart` (one row) and `project_menu_frb.dart` (the
+right-click menu). The split is by *who
+holds state*: the chrome holds none, so each piece is a plain function handed
+what it draws and a callback for what a click means. Your header holds no state
+either, so the chrome file is where it would go if anything else ever needed it.
+It stays in the panel file because nothing does — a one-line header that only
+this panel draws is not a shared piece of furniture yet, and moving it later is
+a smaller change than guessing now.
+
+**One — the import.** `ProjectReference` is already imported at the top, with
+the other `src/rust/api` imports:
 
 ```dart
 import 'package:lumit_flutter/src/rust/api/project.dart';
 ```
 
-That is where the generator put `ProjectReference`.
+That is where the generator put it, and the panel already calls other things on
+it, so there is nothing to add. Check rather than assume: an import you add
+twice is an analyzer error, and an import you assume is there and is not is a
+name the compiler cannot find.
 
-**Two — somewhere to keep the answer.** Beside the `_missing` map, about two thirds
-of the way down the state class:
+**Two — somewhere to keep the answer.** Beside the `_missing` map, about halfway
+down the state class:
 
 ```dart
   /// How many pieces of footage in the project carry sound, or null until the
@@ -636,6 +671,7 @@ Dart's privacy model: no `private` keyword, just the underscore.
       _epoch++;
       _missing.clear();
       _mediaInfo.clear();
+      // ... the other caches this method already clears ...
       _soundItems = null;
       _soundAsked = false;
       _dropThumbs();
@@ -685,12 +721,18 @@ does exactly the same thing, with the comment "claim the slot first".
     if (project != null) _refreshSoundItems(project);
 ```
 
-and in the `Column` that the method returns, between the info header and the missing
-header:
+and in the `Column` that `build` returns at the end, between the search row and the
+column headings:
 
 ```dart
+        _searchRow(t),
         if ((_soundItems ?? 0) > 0) _SoundHeaderFrb(count: _soundItems!),
+        projectColumnHeader(t, cols, onResize: _resizeColumn),
 ```
+
+There are two such `Column`s. The one you want is the second, at the end of
+`build`; the first is the early return for an empty project, which has no items
+and therefore nothing that carries sound.
 
 **`??` is "use the left, unless it is null, then the right".** `_soundItems ?? 0`
 reads "the count, or zero while we do not know yet". **`!`** after a nullable value
@@ -701,8 +743,10 @@ condition on the same line has just established it.
 in the list when the condition holds, and simply not there when it does not. That is
 how a widget is conditionally on screen — not by building it hidden.
 
-Finally the widget itself, just above the `/// The header shown while the project has
-missing footage` comment near the bottom of the file:
+Finally the widget itself, at the very bottom of `project_panel_frb.dart`, after
+the closing brace of the state class. The file has no private widget classes
+today — the chrome that used to be here moved into `project_chrome_frb.dart` as
+functions — so yours is the first, and that is fine.
 
 ```dart
 /// How much of the project carries sound, above the item list.
@@ -807,8 +851,7 @@ flutter test test\frb\project_panel_frb_test.dart
 **Never run `flutter test` with no file argument on this machine.** It starts a
 process per file, in parallel, each of the `frb` ones loading the engine and a
 graphics device. It has frozen the machine hard enough to need the power button. CI
-runs the full suite on its own hardware, one at a time; locally, name what you
-touched.
+runs the full suite on its own hardware; locally, name what you touched.
 
 **Success looks like** `All tests passed!`, and for cargo, `test result: ok`.
 
@@ -1019,12 +1062,14 @@ And the two you will come back to rather than read once:
 Three next steps in the same area, in rising order of difficulty:
 
 1. **Make the count clickable** — filter the project list to items with sound, the
-   way the missing-file header filters to missing ones. Everything you need is the
-   `_MissingHeaderFrb` widget beside yours.
+   way the bottom bar's missing button filters to missing ones. Everything you need
+   is `projectFooter` in `project_chrome_frb.dart` and the `_missingOnly` flag it
+   toggles.
 2. **Open the waveform lanes with the workspace.** Applying Audio could open the
-   Audio ▸ Waveform twirl on every layer that has one — the same thing `LL` does on a
-   selection, in `timeline_panel_frb.dart`. The work is deciding where that belongs,
-   which is a better exercise than the code.
+   Audio ▸ Waveform twirl on every layer that has one — the twirl paths are
+   `audioPath` and `waveformPath` in `layer_fold_frb.dart`, and the set of open
+   ones is what a twirl toggles. The work is deciding where that belongs, which is
+   a better exercise than the code.
 3. **Give the Audio workspace its own panel.** `Panel.audio` does not exist yet; the
    comment in `dock.dart` has been promising it for a while. That one is a feature,
    not an exercise — but you now know every file it would touch.
