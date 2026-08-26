@@ -1,6 +1,13 @@
 // Manual screenshots, sweep 5: the effects panels.
 //
-// effect-controls · effect-menu · effects-presets · presets · scopes
+// effect-controls · effect-menu · effects-presets · presets · scopes ·
+// effects-presets-ofx
+//
+// The last of those is **conditional**. `lib/main.dart` scans for OFX plugins
+// at start-up; a sweep boots without that, so this one asks for the scan
+// itself and photographs the panel again with the plugins in it. On a machine
+// with none installed the scan comes back empty, and the sweep says so and
+// takes no picture rather than shipping a shot of a heading that is not there.
 //
 // Staged in the Effects workspace, which is the arrangement these pages are
 // about: Effect controls in its own column beside the Project panel, Effects &
@@ -148,6 +155,15 @@ Future<void> main() async {
   /// it sits in, which under Round is the rounded edge the design is made of.
   Rect panel(Type type) => boxOfType(type)!.inflate(paneCardInset);
 
+  /// The same, with the dock's tab strip above it — for the shots whose caption
+  /// is about *this panel*, which is a thing the reader finds by the name on
+  /// its tab. A crop that starts at the content is a column of rows that could
+  /// belong to anything.
+  Rect tabbed(Type type) {
+    final b = panel(type);
+    return Rect.fromLTRB(b.left, b.top - dockTabInset, b.right, b.bottom);
+  }
+
   // ---- Shot: Effect controls, with two effects on one layer ---------------
   // Nothing is clicked here on purpose: a card arrives twirled **open**, so a
   // sweep that pressed the twirls would be a sweep that shut them and
@@ -168,7 +184,7 @@ Future<void> main() async {
   await captureUi(
     'effects-presets.png',
     scale: 2,
-    crop: panel(EffectsPresetsPanelFrb),
+    crop: tabbed(EffectsPresetsPanelFrb),
   );
 
   // ---- Shot: saved presets at the top of the panel ------------------------
@@ -208,7 +224,58 @@ Future<void> main() async {
   // and it has been sitting on frame 48 since the window opened.
   ui.playheadFrame.value = 60;
   await pause(6);
-  await captureUi('scopes.png', scale: 2, crop: panel(ScopesPanelFrb));
+  await captureUi('scopes.png', scale: 2, crop: tabbed(ScopesPanelFrb));
+
+  // ---- Shot: the panel with an OFX plugin's own heading in it --------------
+  // The scan is the same call the application makes as it starts, so what
+  // appears is what a reader with those plugins installed would see. A plugin
+  // declares its own grouping rather than borrowing one of Lumit's ten, so its
+  // heading is far enough down a full list to be off the bottom of the panel —
+  // the built-in categories are folded away to bring it up.
+  activatePanelTab(ui.workspace.dock, Panel.effectsAndPresets);
+  ui.activePanel.value = Panel.effectsAndPresets;
+  ui.workspace.touch();
+  await pause(1.5);
+
+  final scan = await rescanPlugins();
+  final plugins =
+      listEffects().where((e) => e.namespace == 'ofx').toList(growable: false);
+  // ignore: avoid_print
+  print('PLUGINS registered ${scan.registered.length}, '
+      'skipped ${scan.skipped.length}, listed ${plugins.length}');
+  for (final line in scan.skipped) {
+    // ignore: avoid_print
+    print('PLUGIN SKIPPED $line');
+  }
+  if (plugins.isEmpty) {
+    // ignore: avoid_print
+    print('NO OFX PLUGINS: effects-presets-ofx.png skipped');
+  } else {
+    final pluginGroups = plugins.map((e) => e.category).toSet();
+    // One effect out of each built-in group, to tell an open fold from a shut
+    // one: a shut group's rows are not built, so the absence of its first row
+    // is how the sweep knows not to click the heading again and flap it open.
+    final firstRow = <String, String>{};
+    for (final effect in listEffects()) {
+      if (pluginGroups.contains(effect.category)) continue;
+      firstRow.putIfAbsent(effect.category, () => effect.name);
+    }
+    // Several passes, because the list builds only the rows it is showing: a
+    // heading below the fold is not on screen to be clicked, and each fold that
+    // shuts pulls the next one up into reach.
+    for (var pass = 0; pass < 6; pass++) {
+      for (final MapEntry(key: group, value: row) in firstRow.entries) {
+        if (elementByKey('fx-item-$row') == null) continue;
+        await tapKey('fx-group-$group', settle: 0.12);
+      }
+    }
+    await pause(2);
+    await captureUi(
+      'effects-presets-ofx.png',
+      scale: 2,
+      crop: tabbed(EffectsPresetsPanelFrb),
+    );
+  }
 
   for (final file in written) {
     file.deleteSync();

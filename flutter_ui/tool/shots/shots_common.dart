@@ -226,22 +226,41 @@ Rect? boxOf(String key) {
 /// Where the first widget of [type] sits, for the panels that carry no key of
 /// their own — the Viewer's picture area is worked out from its panel, and a
 /// panel is a class rather than a `ValueKey`.
-Rect? boxOfType(Type type) {
-  Element? found;
-  void visit(Element el) {
-    if (found != null) return;
-    if (el.widget.runtimeType == type) {
-      found = el;
-      return;
+Rect? boxOfType(Type type) => boxOfTypeNamed('$type');
+
+/// The same, given the class's *name* rather than the class — for the widgets a
+/// sweep has to aim at that their library does not export. The window every
+/// dialogue opens on is one: `showLumitModal` builds a private `_MovableWindow`
+/// around whatever it was handed, and nothing outside `modal_window.dart` can
+/// write that type down.
+///
+/// [under] narrows the search to the subtree of the first widget by that name,
+/// which is how a common class becomes a specific thing: the modal window's own
+/// box is the whole app window — it centres its content rather than sizing
+/// itself to it — so the box a dialogue shot wants is the `Stack` inside it.
+Rect? boxOfTypeNamed(String name, {String? under}) {
+  Element? find(Element root, String wanted) {
+    Element? found;
+    void visit(Element el) {
+      if (found != null) return;
+      if (el.widget.runtimeType.toString() == wanted) {
+        found = el;
+        return;
+      }
+      el.visitChildren(visit);
     }
-    el.visitChildren(visit);
+
+    root.visitChildren(visit);
+    return found;
   }
 
-  WidgetsBinding.instance.rootElement?.visitChildren(visit);
+  var root = WidgetsBinding.instance.rootElement;
+  if (root != null && under != null) root = find(root, under);
+  final found = root == null ? null : find(root, name);
   final render = found?.renderObject;
   if (render is! RenderBox || !render.attached) {
     // ignore: avoid_print
-    print('BOX MISS $type');
+    print('BOX MISS ${under == null ? name : '$name under $under'}');
     return null;
   }
   return render.localToGlobal(Offset.zero) & render.size;

@@ -1,14 +1,17 @@
-// Manual screenshots, sweep: the Timeline's three modes, inspected.
+// Manual screenshots, sweep: the Timeline's two modes.
 //
-// layers-shut · layers-open · layers-selected · keys-mode · graph-mode
+// layers-shut · layers-open · layers-selected · graph-mode
 //
 // Staged the way an inspection wants it: two layers, one with a Glow and
 // four opacity keyframes wearing every interpolation the marks can say —
 // linear (diamond), bezier (hourglass), held (square), and a bezier-in /
 // held-out split — plus position keys, so the open fold shows shaped marks
-// on two lanes, the shut bar shows summary diamonds, and Keys and Graph
-// modes show the same truth their own way. The twirl and the mode tabs are
-// clicked, not reached into, like every sweep.
+// on two lanes, the shut bar shows summary diamonds, and Graph mode shows
+// the same truth its own way. The twirl and the mode tabs are clicked, not
+// reached into, like every sweep.
+//
+// There were three modes when this was written. Keys — the dope sheet — is
+// gone, and with it `tl-view-keys`; what is left is Layers and Graph.
 //
 //   cargo build -p lumit_bridge
 //   cd flutter_ui
@@ -103,12 +106,24 @@ Future<void> main() async {
   await sizeWindow(1720, 1000);
   await pause(5);
 
+  // Over half the window to the Timeline. The rows are built as they are
+  // needed, so a property below the fold is not merely out of shot — it is not
+  // in the tree at all, and a sweep reaching for it finds nothing. Opacity is
+  // the fifth transform row, and the default share does not reach it.
+  ui.workspace.dock.shares[0] = 0.45;
+  ui.workspace.dock.shares[1] = 0.55;
+  ui.workspace.touch();
+  await pause(2);
+
   // Inflate for the tab strip, then clamp inside the photographed boundary
   // itself — the client area, not the window we asked for: a crop that pokes
   // even one pixel past the frame is an ffmpeg refusal and a silent
   // full-window shot.
   Rect panel() {
-    final b = boxOfType(TimelinePanelFrb)!.inflate(dockTabInset);
+    // The panel's own box already starts at its tab strip, so only the pane
+    // card is outside it. Inflating by the tab strip as well pulls a band of
+    // the Viewer's bottom bar into every shot.
+    final b = boxOfType(TimelinePanelFrb)!.inflate(paneCardInset + 2);
     final frame = shotRootKey.currentContext!.size!;
     return Rect.fromLTRB(
         b.left.clamp(0, frame.width),
@@ -136,12 +151,14 @@ Future<void> main() async {
   await tapKey('tl-key-$id/transform/opacity#1', settle: 1);
   await captureUi('layers-selected.png', crop: panel());
 
-  // 4 — Keys mode, the same comp as the dope sheet reads it.
-  await tapKey('tl-view-keys');
-  await pause(1);
-  await captureUi('keys-mode.png', crop: panel());
-
-  // 5 — Graph mode: the opacity curve with its mixed segments.
+  // 4 — Graph mode: the opacity curve with its mixed segments. A key being
+  // selected is not enough — Graph mode draws the curves of the *properties*
+  // picked out in the outline, and with none picked it says so instead — so
+  // the opacity row's name is clicked before the mode is switched.
+  // A property row carries no key of its own — only its label's tap — so this
+  // is the one place the sweep asks the panel directly instead of clicking.
+  ui.requestSelectProperty('$id/transform/opacity');
+  await pause(0.8);
   await tapKey('tl-graph');
   await pause(1);
   await captureUi('graph-mode.png', crop: panel());

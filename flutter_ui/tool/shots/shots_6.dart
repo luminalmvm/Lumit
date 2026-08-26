@@ -108,7 +108,15 @@ Future<void> main() async {
   ]);
 
   // Imported but not placed — every project has one of those.
-  final logo = project.importFootage(path: '$fixtures/Logo.png');
+  project.importFootage(path: '$fixtures/Logo.png');
+
+  // One item given a proxy, and set to use it, so the row wears the `proxy`
+  // badge beside `in use` (K-501) and the manual's picture of the panel shows
+  // both of the marks a row can carry. A second fixture stands in for the
+  // smaller file somebody would really have made: what the badge is about is
+  // that a substitute is attached and switched on, not what is inside it.
+  gameplay.setProxy(path: '$fixtures/Title card.mp4');
+  gameplay.setUseProxy(on_: true);
 
   final layers = comp.getLayers();
   for (final (index, name)
@@ -134,13 +142,32 @@ Future<void> main() async {
   // A footage item is clicked first, because the panel's header is the half of
   // it that says what an item *is* — thumbnail, kind, size, rate, length — and
   // with nothing selected that header is deliberately blank.
+  // The left column a third of the width first. Its columns — name, badges,
+  // size, rate — do not fit the 22% the default arrangement gives it, and the
+  // panel clips what will not fit rather than shrinking it, so a shot taken at
+  // the default share is a shot with the rate column sliced off.
+  final band = ui.workspace.dock.children[0] as DockSplit;
+  band.shares[0] = 0.30;
+  band.shares[1] = 0.50;
+  ui.workspace.touch();
+  await pause(2);
+
   await tapKey('project-row-${gameplay.internalid}', settle: 2.5);
   final tree = boxOfType(ProjectPanelFrb)!;
-  // Up over the dock's tab strip, so the shot says which panel it is, and down
-  // only as far as the last item: the tail of a tree is empty by definition,
-  // and half a picture of nothing says nothing.
+  // The whole panel, tab strip to footer. The tail below the last row is empty,
+  // but the bar under it is not — the import and new-folder buttons and the
+  // item count live there, and a page about the Project panel that cuts them
+  // off is a page about half of it.
   await captureUi('project-panel.png',
-      scale: 2, crop: _panelCrop(tree, 'project-row-${logo.internalid}'));
+      scale: 2,
+      crop: Rect.fromLTRB(
+        tree.left - paneCardInset,
+        tree.top - dockTabInset,
+        tree.right + paneCardInset,
+        // The bar is under the tree rather than inside it, so the floor comes
+        // from a button on the bar rather than from the panel's own box.
+        (boxOf('project-import')?.bottom ?? tree.bottom) + 10,
+      ));
 
   // ---- Shot: the Hierarchy panel, a precomp twirled open -------------------
   // Hierarchy is the third tab of the left group in the default arrangement, so

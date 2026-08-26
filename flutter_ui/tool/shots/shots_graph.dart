@@ -1,9 +1,18 @@
-// Manual screenshots, sweep: the Graph panel (phase 3, K-471..473).
+// Manual screenshots, sweep: the Node graph panel, and the workspace built
+// around it (phase 3, K-471..473).
 //
-// graph-panel.png — the panel docked over the editor with a real wired
-// layer: Source → Glow → Layer out on the image chain, and a Wiggle driver
-// wired into one of Glow's parameters, so the shot shows a node card, a
-// typed wire in its port colour, and the driven socket filled.
+// nodes-workspace.png — the Nodes workspace as its own tab in the toolbar sets
+// it up: the graph across most of the window, the Viewer beside it, the
+// Timeline underneath.
+//
+// graph-panel.png — the panel itself with a real wired layer: Source → Glow →
+// Layer out on the image chain, and a Wiggle driver wired into one of Glow's
+// parameters, so the shot shows a node card, a typed wire in its port colour,
+// and the driven socket filled.
+//
+// Both are photographed in the Nodes workspace rather than with the panel
+// pulled into the editing dock: a graph is wide, and the narrow left-hand
+// column it lands in otherwise cuts the second node off the picture.
 //
 //   cargo build -p lumit_bridge
 //   cd flutter_ui
@@ -77,15 +86,16 @@ Future<void> main() async {
   );
   ui.setSelection([layer]);
 
-  // The Graph panel joins the dock beside the Timeline.
-  setPanelVisible(ui.workspace.dock, Panel.graph, true);
-  activatePanelTab(ui.workspace.dock, Panel.graph);
+  // The Nodes workspace, applied the way its tab in the toolbar applies it.
+  ui.workspace.applyWorkspacePreset(WorkspacePreset.nodes);
 
   runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
 
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(5);
+
+  await captureUi('nodes-workspace.png');
   await captureUi('graph-panel.png',
       crop: boxOfType(GraphPanelFrb)?.inflate(dockTabInset));
   exit(0);

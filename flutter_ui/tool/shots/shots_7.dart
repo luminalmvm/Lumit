@@ -1,22 +1,22 @@
 // Manual screenshots, sweep 7: the windows that open over the editor.
 //
-// new-composition · settings · keymap · export · recovery-dialog
+// new-composition · settings · keymap · export · export-queue ·
+// recovery-dialog
 //
 // Each is opened through the function the application's own menu calls, from a
 // context taken out of the live tree — so what is photographed is the dialogue
 // the program shows, over the editor the program was showing a moment before.
 //
-// **Two shots the manual asks for are not here, and cannot be.**
+// **One shot the manual asks for is not here, and cannot be.**
 //
-// * `export-queue.png` wants "one item writing, one waiting". There is no
-//   queue: `export.rs` starts one job and polls it, `export_cancel` stops that
-//   one, and the menu's *Add to export queue* is a `MenuEntry.todo`. Two rows
-//   would have to be drawn by hand, which is the one thing a manual screenshot
-//   may never be.
 // * `interpretation.png` wants a footage item's interpretation settings. The
-//   glossary and docs/07 §3.2 describe them; docs/03 §2 says plainly that
-//   "interpretation and proxy state are future", and nothing in the bridge or
-//   the panels offers them.
+//   glossary and docs/07 §3.2 describe them; nothing in the bridge or the
+//   panels offers a place to override a file's rate, alpha or colour space.
+//
+// `export-queue.png` used to be on that list beside it, because export was a
+// single dialogue that wrote one composition. There is a queue now, so the
+// shot is taken above — through *Add to queue*, which is the button a reader
+// would press.
 //
 //   cargo build -p lumit_bridge
 //   cd flutter_ui
@@ -34,6 +34,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/export_dialog_frb.dart';
+import 'package:lumit_flutter/shell/export_queue_frb.dart';
 import 'package:lumit_flutter/shell/recovery_dialog_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -41,8 +42,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/widgets/controls.dart';
-
 import 'shots_common.dart';
 
 /// A context out of the live tree, for the dialogues that take one. The Project
@@ -129,7 +128,7 @@ Future<void> main() async {
   // The same window, one page along: the editor is a page of Settings rather
   // than a window of its own, and the sidebar showing where you are is part of
   // what the shortcuts page has to explain.
-  await tapKey('settings-page-keymap', settle: 2);
+  await tapKey('settings-page-shortcuts', settle: 2);
   await captureUi('keymap.png', scale: 2, crop: _window());
   await tapKey('settings-close', settle: 1.5);
 
@@ -144,8 +143,24 @@ Future<void> main() async {
   ));
   await pause(2);
   await tapKey('export-choose', settle: 1.5);
-  await captureUi('export.png', scale: 2, crop: _window());
-  await tapKey('export-close', settle: 1.5);
+  await captureUi('export.png', scale: 2, crop: _window(tall: true));
+
+  // ---- Shot: the export queue ---------------------------------------------
+  // Queued through the dialogue's own *Add to queue* button, which leaves the
+  // item waiting rather than starting it, and the window opened the way the
+  // dialogue opens it once something is in there. Nothing is faked: the item
+  // in the picture is a real export the engine is holding.
+  //
+  // This was on the manual's "waiting on the feature" list for as long as
+  // export was a single dialogue that wrote one composition. It is not any
+  // more.
+  await tapKey('export-add-to-queue', settle: 2.5);
+  unawaited(showExportQueueFrb(context: _context));
+  await pause(2.5);
+  await captureUi('export-queue.png', scale: 2, crop: _window());
+  // Only the queue window is closed here: *Add to queue* shuts the export
+  // dialogue behind it on its way out, so there is nothing left to dismiss.
+  await tapKey('export-queue-close', settle: 1.5);
 
   // ---- Shot: the crash-recovery dialogue -----------------------------------
   // Real autosaves, written by the engine's own rotating autosave beside a real
@@ -179,11 +194,21 @@ Future<void> main() async {
 /// editor around it — the crop every dialogue shot in this sweep wants.
 ///
 /// Worked out from the window itself rather than guessed, because these five
-/// are five different sizes.
-Rect _window() {
+/// are five different sizes. Named rather than typed because the surface a
+/// dialogue opens on is `showLumitModal`'s own private window (K-575's movable,
+/// resizable one), and a sweep cannot write that class down.
+/// [tall] keeps the full height of the app window and narrows only the sides.
+/// The export settings are the one dialogue that draws past the box it lays
+/// itself out in — its footer sits below the window's own bottom edge — and a
+/// crop taken at the box cuts the EXPORT button off the picture.
+Rect _window({bool tall = false}) {
   final root = shotRootKey.currentContext!.findRenderObject()! as RenderBox;
   final screen = Offset.zero & root.size;
-  final box = boxOfType(FloatSurface);
+  final box = boxOfTypeNamed('Stack', under: '_MovableWindow');
   if (box == null) return screen;
-  return box.inflate(56).intersect(screen);
+  final margin = box.inflate(56);
+  return (tall
+          ? Rect.fromLTRB(margin.left, 0, margin.right, screen.bottom)
+          : margin)
+      .intersect(screen);
 }
