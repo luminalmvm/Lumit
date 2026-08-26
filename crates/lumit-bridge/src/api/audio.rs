@@ -123,3 +123,78 @@ pub fn audio_clock() -> BridgeAudioClock {
         loaded: false,
     }
 }
+
+/// One output the machine can play through.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeAudioDevice {
+    /// What `set_audio_device` is called with. Stable across restarts, so the
+    /// frontend can store it and hand it back; opaque otherwise.
+    pub id: String,
+    /// What the sound system calls it, for the list.
+    pub name: String,
+    /// Whether this is the one the system plays through when nothing is chosen.
+    pub is_default: bool,
+}
+
+/// What the machine offers, and what Lumit is actually playing through.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeAudioDevices {
+    pub devices: Vec<BridgeAudioDevice>,
+    /// The id sound comes out of, or empty when the machine has no output at
+    /// all. Not necessarily the id that was chosen — see `fell_back`.
+    pub active: String,
+    /// True when a device was chosen and it is not there any more, so the
+    /// system default is being played through instead. The choice is kept, not
+    /// rewritten: plug the device back in and it is used again.
+    pub fell_back: bool,
+}
+
+/// Every output the machine offers, and which one is in use.
+///
+/// Asking the sound system is not free, so this is a call to make when a list
+/// is about to be shown — never in a rebuild path.
+#[frb(sync)]
+pub fn list_audio_devices() -> BridgeAudioDevices {
+    #[cfg(feature = "media")]
+    let (list, active, fell_back) = crate::audio::devices();
+    // Without a decoder nothing plays, but the machine's outputs are still
+    // worth naming: the setting is stored either way, and a list that went
+    // empty on a build with no FFmpeg would look like a broken sound card.
+    #[cfg(not(feature = "media"))]
+    let (list, active, fell_back) = {
+        let list = lumit_audio::output_devices();
+        let active = list.resolve(None);
+        (list, active, false)
+    };
+    BridgeAudioDevices {
+        devices: list
+            .devices
+            .iter()
+            .map(|d| BridgeAudioDevice {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                is_default: list.default_id.as_deref() == Some(d.id.as_str()),
+            })
+            .collect(),
+        active: active.unwrap_or_default(),
+        fell_back,
+    }
+}
+
+/// Play through the output with this id; an empty string means the system
+/// default, which is what Lumit ships following.
+///
+/// Sound stops until the next play: a stream cannot be moved from one device to
+/// another, so the open one is closed and the next mix opens the new one. The
+/// choice is the machine's, not the project's — the frontend stores it in the
+/// settings file and hands it over on every boot, which is a no-op when it has
+/// not changed.
+#[frb(sync)]
+pub fn set_audio_device(id: String) {
+    #[cfg(feature = "media")]
+    crate::audio::set_device(Some(id).filter(|s| !s.is_empty()));
+    #[cfg(not(feature = "media"))]
+    let _ = id;
+}

@@ -487,6 +487,24 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// The output the user chose to hear Lumit through, by the engine's own id,
+  /// or null to follow whatever the machine plays through (K-586, docs/09 §3.1).
+  ///
+  /// A sound card is a property of the machine, not of the work, so it lives in
+  /// the settings file rather than in a project — and it is stored by id rather
+  /// than by position in the list, because a device unplugged and plugged back
+  /// in does not come back in the same place. The frontend never interprets it:
+  /// it hands the id to the engine on boot and on every change, and the engine
+  /// decides what to do when the device is not there any more.
+  String? audioDevice;
+
+  /// Choose the output and write the file. A deliberate act, like the keymap,
+  /// so it is saved straight away rather than batched.
+  void setAudioDevice(String? id) {
+    audioDevice = id;
+    save();
+  }
+
   /// Remember where the disk cache should live: the engine's own location name,
   /// and the folder for the custom one (null for the other two).
   void setDiskCacheLocation(String location, String? folder) {
@@ -1109,6 +1127,7 @@ class Workspace extends ChangeNotifier {
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
+        'audio_device': audioDevice,
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
@@ -1164,6 +1183,11 @@ class Workspace extends ChangeNotifier {
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
+    // Absent, or empty from a hand-edited file, means follow the machine —
+    // which is what every settings file written before this field existed was
+    // already doing.
+    final device = j['audio_device'];
+    audioDevice = device is String && device.isNotEmpty ? device : null;
     customThemes = [];
     final rawThemes = j['custom_themes'];
     if (rawThemes is List) {

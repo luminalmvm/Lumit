@@ -2603,6 +2603,25 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   played *is* the playback clock: video asks "what time is it?" every frame and shows
   whatever frame matches. One clock, owned by the audio hardware — that's why picture and
   sound can't drift apart, and it's the same design the full engine keeps forever.
+- **Choosing which output Lumit plays through** (Settings → Audio) — a machine usually has
+  several ways to make a noise: the built-in speakers, a headset, whatever the monitor's
+  HDMI cable carries. Windows has a "default" one, and Lumit follows it unless you say
+  otherwise. The Audio page lists them and lets you pin one.
+
+  Three things about this are worth knowing, because they're the sort of thing that looks
+  like a bug otherwise. **First, a device is remembered by its name**, because that's the
+  only handle the sound system offers that still means the same thing after a restart —
+  there is no serial number to hold on to. **Second, unplugging your pinned device doesn't
+  break anything**: Lumit plays through the system default instead and says so in a line
+  under the setting, and it *keeps* your choice rather than quietly rewriting it, so
+  plugging the headset back in goes back to the headset. **Third, changing the device stops
+  the sound until you press play again.** A stream, once opened, is bound to one device —
+  it can't be carried across — so switching means closing the old one and opening a new one,
+  and the new one starts empty. That's why the change is instant but the *sound* isn't.
+
+  The setting itself lives in the settings file on your machine, not in the project. A
+  project you send to somebody else says nothing about your speakers, which is right: which
+  box the noise comes out of is a fact about the room, not about the work.
 - **Composition audio and playback** (`lumit-audio::mix`) — pressing Space on a comp now
   plays it. A comp can have many layers that make sound, each starting at its own moment;
   to play it, Lumit decodes each one and lays them on a single strip at the right offset

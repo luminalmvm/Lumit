@@ -804,7 +804,12 @@ class BareDropdown<T> extends StatelessWidget {
   Future<void> _open(BuildContext context, LumitTheme t) async {
     final box = context.findRenderObject()! as RenderBox;
     final origin = box.localToGlobal(Offset.zero);
-    final picked = await showLumitPopup<T>(
+    // A one-item list rather than the value itself. The popup answers null when
+    // it is dismissed, so for an option list that *contains* null — "System
+    // default" on the Audio page, "Follow the machine" on General — choosing
+    // that option and closing the menu were the same answer, and the option
+    // could never be picked at all. Boxing keeps the two apart.
+    final picked = await showLumitPopup<List<T>>(
       context: context,
       position: origin + Offset(0, box.size.height + 2),
       // IntrinsicWidth bounds the stretch: a float in the overlay has
@@ -840,7 +845,7 @@ class BareDropdown<T> extends StatelessWidget {
                 else
                   MenuRow(
                     selected: options[i] == value,
-                    onPressed: () => close(options[i]),
+                    onPressed: () => close([options[i]]),
                     child: Text(label(options[i])),
                   ),
               ],
@@ -849,7 +854,7 @@ class BareDropdown<T> extends StatelessWidget {
         ),
       ),
     );
-    if (picked != null) onChanged!(picked);
+    if (picked != null) onChanged!(picked.single);
   }
 }
 

@@ -438,6 +438,32 @@ void main() {
     expect((back.theme.accent.r * 255).round(), 0x80);
   });
 
+  /// **The output device is settings, not project data** (docs/09 §3.1): a
+  /// sound card is a property of the machine, so the settings file carries it
+  /// and hands it to the engine on the next launch. Absent means follow the
+  /// machine, which is what every file written before the Audio page existed
+  /// was already doing.
+  test('the chosen audio output round-trips and defaults to the machine', () {
+    expect(Workspace().audioDevice, isNull);
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'ui_scale': 1.0}))
+            .audioDevice,
+        isNull,
+        reason: 'a file written before this field existed follows the machine');
+
+    final ws = Workspace()..audioDevice = 'Headset Earphone (Arctis 7)';
+    final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+    expect(back.audioDevice, 'Headset Earphone (Arctis 7)');
+
+    // An empty id is the engine's word for the system default, not a device
+    // name — a hand-edited file carrying one must read as "follow the machine"
+    // rather than as a device called nothing.
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'audio_device': ''}))
+            .audioDevice,
+        isNull);
+  });
+
   /// **Effect graphs use theme colour** (owner, desk test). Off by shipped
   /// default — a Levels histogram's red hump and a Curves Red tab draw in red,
   /// and only Master takes the theme's own colour — and it round-trips, so the

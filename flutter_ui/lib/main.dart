@@ -33,6 +33,7 @@ import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -1682,6 +1683,13 @@ class LumitUiState extends ChangeNotifier {
     if (vramBudget != null) setVramCacheBudget(bytes: BigInt.from(vramBudget));
     final diskBudget = perf.diskBudgetBytes;
     if (diskBudget != null) setDiskCacheBudget(bytes: BigInt.from(diskBudget));
+    // Which output Lumit is heard through. Same arrangement as the budgets: the
+    // engine holds the live choice with no store behind it, so the settings
+    // file carries it and hands it back here. Null means the system default,
+    // which is what the engine is already following — the call is skipped
+    // rather than made with an empty id, so nothing happens on a fresh install.
+    final device = this.workspace.audioDevice;
+    if (device != null) setAudioDevice(id: device);
     // Where the parked frames go. Restored the same way, and by name rather
     // than by index so a reordered enum cannot silently move a user's cache.
     final where = perf.diskCacheLocation;

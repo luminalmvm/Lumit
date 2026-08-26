@@ -10,11 +10,12 @@
 // drawing has room for neither, and what a setting does is said by its name.
 //
 // **The pages are the drawing's.** General, Appearance, Timeline, Viewer,
-// Preview and cache, Shortcuts. The drawing lists three more — Audio, Autosave,
-// Export — and they are not here, because there is nothing to put on them: the
-// engine has no autosave interval, no audio device and no export defaults to
-// offer yet, and an empty page is a promise the window cannot keep. They arrive
-// with the settings they would hold.
+// Audio, Preview and cache, Shortcuts. The drawing lists two more — Autosave
+// and Export — and they are not here, because there is nothing to put on them:
+// the engine has no autosave interval and no export defaults to offer yet, and
+// an empty page is a promise the window cannot keep. They arrive with the
+// settings they would hold, which is how Audio arrived (K-586): it waited until
+// the engine could name the machine's outputs and be told which to play through.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
 // and the engine has no opinion about it. Timeline and Viewer are working
@@ -38,6 +39,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -135,6 +137,7 @@ enum SettingsPage {
   appearance,
   timeline,
   viewer,
+  audio,
   previewAndCache,
   shortcuts;
 
@@ -146,6 +149,7 @@ enum SettingsPage {
         SettingsPage.appearance => l10n.settingsPageAppearance,
         SettingsPage.timeline => l10n.panelTimeline,
         SettingsPage.viewer => l10n.panelViewer,
+        SettingsPage.audio => l10n.settingsPageAudio,
         SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
         SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
@@ -196,6 +200,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   })? _perf;
   Timer? _perfTimer;
 
+  /// What the machine can play through, captured when the Audio page comes
+  /// forward and again after a change. Asking the sound system is a real call,
+  /// so it is never made from `build()` — same rule as the cache readouts
+  /// above. Null until the page has been opened once.
+  BridgeAudioDevices? _audio;
+
   void _pollPerf() => _perf = (
         ram: cacheStats(),
         vram: vramCacheStats(),
@@ -213,6 +223,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     setState(() {
       _page = page;
       if (page == SettingsPage.previewAndCache) _pollPerf();
+      // Re-read rather than cache for the session: a device can be plugged in
+      // while Settings is open, and stepping off the page and back is the
+      // obvious way to ask again.
+      if (page == SettingsPage.audio) _audio = listAudioDevices();
       // The keymap filters engine-side, so the shared search has to be handed
       // over when the page it belongs to comes forward.
       if (page == SettingsPage.shortcuts) _keymapState()?.query = _query;
@@ -503,6 +517,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       SettingsPage.appearance => _appearance(t, ui),
       SettingsPage.timeline => _timeline(t, ui),
       SettingsPage.viewer => _viewer(t, ui),
+      SettingsPage.audio => _audioPage(t, ui),
       SettingsPage.previewAndCache => _performance(t, ui),
       SettingsPage.shortcuts => _keymap(t, ui),
     };
@@ -621,6 +636,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.showToneMap = shipped.showToneMap;
         workspace.settingsChanged();
         ui.pushViewerLook();
+      case SettingsPage.audio:
+        _chooseAudioDevice(workspace, null);
       case SettingsPage.previewAndCache:
         _perfEdit(() {
           workspace.performance.playback = PlaybackMode.adaptive;
@@ -1326,6 +1343,73 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       ),
     ]);
+  }
+
+  // ---- Audio ---------------------------------------------------------------
+
+  /// Which output Lumit is heard through (K-586, building K-465's Audio page —
+  /// drawn in the Settings drawing and unbuilt until the engine could name the
+  /// machine's devices).
+  ///
+  /// **System default is its own entry**, above the devices themselves and
+  /// distinct from picking the same box by name: it means *follow the machine*,
+  /// so plugging in a headset and switching to it in Windows switches Lumit
+  /// too. Choosing a device by name is a promise to use that one and nothing
+  /// else — and when that one is unplugged the engine plays through the default
+  /// rather than falling silent, which is the line the row reports underneath
+  /// itself. The choice is kept either way: plug it back in and it is used
+  /// again.
+  List<Widget> _audioPage(LumitTheme t, LumitUiState ui) {
+    final devices = _audio;
+    final chosen = ui.workspace.audioDevice;
+    return _sections(t, [
+      (
+        l10n.settingsGroupOutput,
+        [
+          _row(
+            t,
+            l10n.settingsAudioDevice,
+            _dropdown<String?>(
+              key: 'settings-audio-device',
+              // Null first: following the machine is the default and the one
+              // choice in the list that is not a particular box.
+              value: chosen,
+              options: [null, ...?devices?.devices.map((d) => d.id)],
+              width: _ddWide,
+              label: (id) => id == null
+                  ? l10n.settingsAudioSystemDefault
+                  : devices?.devices
+                          .firstWhere((d) => d.id == id,
+                              orElse: () => BridgeAudioDevice(
+                                  id: id, name: id, isDefault: false))
+                          .name ??
+                      id,
+              onChanged: (id) => _chooseAudioDevice(ui.workspace, id),
+            ),
+            // A line the row has to report, which is the one thing K-465 still
+            // allows under a setting: the chosen device is not on this machine
+            // at the moment, or there is nothing to play through at all.
+            description: devices == null
+                ? ''
+                : devices.fellBack
+                    ? l10n.settingsAudioDeviceMissing
+                    : devices.active.isEmpty
+                        ? l10n.settingsAudioNoDevice
+                        : '',
+          ),
+        ],
+      ),
+    ]);
+  }
+
+  /// Take the choice: tell the engine, write it to the settings file, and read
+  /// the list back so the row says what is actually being played through.
+  void _chooseAudioDevice(Workspace workspace, String? id) {
+    // The empty string is the engine's word for "the system default"; null is
+    // Dart's, because a settings file should not carry an empty value.
+    setAudioDevice(id: id ?? '');
+    workspace.setAudioDevice(id);
+    setState(() => _audio = listAudioDevices());
   }
 
   // ---- Shortcuts (K-199) ---------------------------------------------------

@@ -91,6 +91,16 @@ enum Device {
 /// the FFI boundary.
 struct AudioState {
     device: Device,
+    /// The output the user chose, by id, or `None` for the system default.
+    /// The frontend hands it over on boot and whenever it changes (it lives in
+    /// the settings file, not in a project — a machine's sound card is not a
+    /// property of the work). Applied when the stream is next opened, and
+    /// [`set_device`] closes the open one so that is immediately.
+    wanted_device: Option<String>,
+    /// Bumped every time the output changes. A prepare worker carries the
+    /// number its stream was opened under, so a mix that finishes building
+    /// after the device moved can tell its engine was closed underneath it.
+    device_gen: u64,
     /// Which comp's mix the engine holds, and the jobs signature it was built
     /// from — the swap-vs-load and no-op decisions.
     loaded_comp: Option<Uuid>,
@@ -120,6 +130,8 @@ impl AudioState {
     fn new() -> Self {
         Self {
             device: Device::Untried,
+            wanted_device: None,
+            device_gen: 0,
             loaded_comp: None,
             loaded_sig: None,
             playing: false,
@@ -231,21 +243,27 @@ pub(crate) fn build_plan(
 /// Resolve the audio device, building the engine on its own thread on first
 /// use. Called only from the prepare worker (so at most one build races
 /// nothing). `None` on the calm terminal no-device state.
-fn ensure_device() -> Option<(Sender<Cmd>, u32)> {
-    // Fast path under the lock.
-    {
+/// The third answer is the generation the stream was opened under — see
+/// [`AudioState::device_gen`].
+fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
+    // Fast path under the lock, which also reads the chosen output — the id is
+    // taken here rather than on the audio thread so the lock is never held
+    // across the device probe below.
+    let (wanted, generation) = {
         let st = lock();
         match &st.device {
             Device::Unavailable => return None,
-            Device::Ready { tx, rate, .. } => return Some((tx.clone(), *rate)),
-            Device::Untried => {}
+            Device::Ready { tx, rate, .. } => {
+                return Some((tx.clone(), *rate, st.device_gen));
+            }
+            Device::Untried => (st.wanted_device.clone(), st.device_gen),
         }
-    }
+    };
     // Build without the lock: spawn the audio thread and wait for its verdict.
     let (tx, rx) = std::sync::mpsc::channel::<Cmd>();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let engine = match lumit_audio::AudioEngine::new() {
+        let engine = match lumit_audio::AudioEngine::new_on(wanted.as_deref()) {
             Ok(engine) => {
                 let _ = ready_tx.send(Some((engine.clock(), engine.device_rate())));
                 engine
@@ -280,16 +298,23 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32)> {
     match ready_rx.recv() {
         Ok(Some((clock, rate))) => {
             let mut st = lock();
+            // The choice moved again while this stream was opening: let the
+            // fresh one win rather than installing a stale engine over it.
+            if st.device_gen != generation {
+                return None;
+            }
             st.device = Device::Ready {
                 tx: tx.clone(),
                 clock,
                 rate,
             };
-            Some((tx, rate))
+            Some((tx, rate, generation))
         }
         _ => {
             let mut st = lock();
-            st.device = Device::Unavailable;
+            if st.device_gen == generation {
+                st.device = Device::Unavailable;
+            }
             None
         }
     }
@@ -392,7 +417,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
 
     // Resolve the device (first use builds the engine; may block this worker
     // briefly — never a caller).
-    let Some((tx, rate)) = ensure_device() else {
+    let Some((tx, rate, generation)) = ensure_device() else {
         return;
     };
 
@@ -430,6 +455,13 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
     // Install: swap keeps the clock and play state (the instant-edit
     // contract); a fresh load applies the pending start and transport intent.
     let mut st = lock();
+    // Unless the output device changed while this mix was being built. `tx`
+    // then speaks to an engine that is being closed, and recording the comp as
+    // loaded would leave the transport thinking it can hear something it
+    // cannot. Drop the work; the next prepare opens the new device.
+    if st.device_gen != generation {
+        return;
+    }
     if st.loaded_comp == Some(comp) {
         let _ = tx.send(Cmd::Swap(plan));
     } else {
@@ -532,6 +564,45 @@ pub(crate) fn stop() {
     st.playing = false;
     send(&st, Cmd::Pause);
     send(&st, Cmd::Seek(0.0));
+}
+
+/// What the machine offers, the id actually in use, and whether that is a
+/// fallback — see [`crate::api::audio::list_audio_devices`], which is the only
+/// caller and the place the meaning is written down.
+pub(crate) fn devices() -> (lumit_audio::OutputDevices, Option<String>, bool) {
+    // The enumeration is a sound-system call, so the lock is taken only to
+    // read the chosen id, and released before anything slow happens.
+    let wanted = lock().wanted_device.clone();
+    let list = lumit_audio::output_devices();
+    let active = list.resolve(wanted.as_deref());
+    // Only a fallback when something else is actually being played through: a
+    // machine with no output at all has no default to fall back *to*, and says
+    // so by having no active id rather than by claiming a substitution.
+    let fell_back = wanted.is_some() && active.is_some() && active != wanted;
+    (list, active, fell_back)
+}
+
+/// Play through `id` from now on (`None` for the system default).
+///
+/// The cpal stream cannot be moved between devices, so the open one is closed:
+/// dropping the last sender ends the audio thread, the stream goes with it, and
+/// the next prepare opens the new device. Sound stops until then, which is what
+/// changing where the sound comes out means. A no-op when the choice has not
+/// actually changed, so the frontend can hand this over on every boot.
+pub(crate) fn set_device(id: Option<String>) {
+    let mut st = lock();
+    if st.wanted_device == id {
+        return;
+    }
+    st.wanted_device = id;
+    st.device_gen = st.device_gen.wrapping_add(1);
+    st.playing = false;
+    st.loaded_comp = None;
+    st.loaded_sig = None;
+    st.pending_start = None;
+    // Untried rather than Unavailable even when the last attempt found nothing:
+    // choosing a device is exactly the moment to look again.
+    st.device = Device::Untried;
 }
 
 /// The playback clock: `(seconds, is_playing, loaded)`.
@@ -664,5 +735,40 @@ mod tests {
             "playing without a loaded mix is impossible"
         );
         let _ = loaded;
+    }
+
+    /// Choosing an output closes the open stream and forgets what was loaded,
+    /// so the next prepare opens the new device — and choosing the one already
+    /// in force does nothing at all, which is what lets the frontend hand the
+    /// stored choice over on every boot.
+    #[test]
+    fn choosing_an_output_closes_the_stream_and_repeating_it_does_not() {
+        let before = lock().device_gen;
+        set_device(Some("Some device that is not here".to_owned()));
+        {
+            let st = lock();
+            assert_eq!(st.device_gen, before.wrapping_add(1));
+            assert!(matches!(st.device, Device::Untried));
+            assert_eq!(st.loaded_comp, None);
+            assert_eq!(st.loaded_sig, None);
+            assert!(!st.playing);
+        }
+
+        set_device(Some("Some device that is not here".to_owned()));
+        assert_eq!(
+            lock().device_gen,
+            before.wrapping_add(1),
+            "the same choice again is a no-op"
+        );
+
+        // A chosen device that is not on this machine reads as a fallback —
+        // unless the machine has no output at all, which says so by having no
+        // active id rather than by claiming a substitution.
+        let (_list, active, fell_back) = devices();
+        assert_eq!(fell_back, active.is_some());
+
+        // Put the shared state back for whatever else runs in this process.
+        set_device(None);
+        assert!(!devices().2, "the system default is never a fallback");
     }
 }

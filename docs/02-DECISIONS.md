@@ -17026,3 +17026,49 @@ look still folded into the frame's name afterwards).
 **What is still owed**, unchanged from docs/13 §4: the shader-cache recompile, the DRED
 diagnostics, the repeated-loss CPU fallback, and export items resuming mid-item. And B9's
 five seconds stay unmeasured — a number that needs a real device to lose.
+
+## K-586 — Settings → Audio is built: one output, chosen by name, falling back calmly
+
+**DECIDED 2026-08-26.** K-465 named the Audio page from the approved Settings drawing and
+left it unbuilt, under its own rule that a page arrives with the settings it would hold —
+"there is no audio device setting" was the reason. There is one now, so the page is in the
+sidebar, between Viewer and Preview and cache, where the drawing puts it. Nothing else here
+reverses an earlier entry; K-465's page list is amended to seven built pages, with Autosave
+and Export still owed their own stock.
+
+- **One row, in the page grammar the other six use**: an *Output* section over a single
+  *Output device* row — 30 tall, its label in the 190px column, a wide dropdown beside it.
+  No second setting is invented to fill the page out: the drawing shows the destination,
+  and one real answer keeps its promise where a page of plausible-looking switches would
+  not.
+- **System default is the first entry and is not a device.** It means *follow the machine* —
+  change the output in Windows and Lumit follows — and is deliberately distinct from picking
+  that same box by its name, which is a promise to use that one and nothing else. It is what
+  Lumit ships doing, so a settings file that has never been asked carries nothing at all.
+- **A device is remembered by name, because cpal offers no other handle** that survives a
+  restart: there is no endpoint id to hold. Two outputs sharing a name are indistinguishable
+  and the first enumerated wins — noted in the code rather than solved, because the fix is a
+  cpal that exposes the host's own handle.
+- **A vanished device falls back, and the choice is kept.** Resolution is one plain function
+  over the enumerated list (`lumit_audio::OutputDevices::resolve`): the chosen device while
+  it is there, else the system default, else the first output, else nothing. It is a
+  function over a list rather than a method on a stream so it is testable without a sound
+  card, which is what CI has. The stored id is never rewritten — plug the headset back in
+  and it is used again — and the row reports the substitution on the line underneath it,
+  which is the one thing K-465 still allows under a setting. A machine with no output at all
+  says *that* instead, and is the calm terminal no-device state, never an error.
+- **The choice is application settings, not project data** (`audio_device` in the settings
+  file). A sound card is a property of the room, not of the work, so a project sent to
+  somebody else says nothing about it. Threaded like the cache budgets: the engine holds the
+  live choice with no store behind it, and the frontend hands it over on boot and on every
+  change (`set_audio_device`, a no-op when unchanged; `list_audio_devices` for the list).
+- **Changing the output stops the sound until the next play.** A cpal stream is bound to the
+  device it was opened on and cannot be carried across, so the open one is closed and the
+  next prepare opens the new one. A mix that was still being built when the device moved is
+  dropped rather than installed into the closed engine — otherwise the transport believes it
+  can hear something it cannot.
+- **A null option in a dropdown can now be chosen** (`BareDropdown`). The popup answers null
+  when it is *dismissed*, so an option list containing null — System default here, Follow
+  the machine on General — made picking that entry and clicking away the same answer, and
+  the entry could never be taken at all. The answer is boxed in a one-item list. This fixed
+  the language row too, which had been unselectable since it was written.

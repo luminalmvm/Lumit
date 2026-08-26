@@ -35,6 +35,19 @@ that says what exists.
 
 ### 3.1 Audio clock is the playback master
 
+**Which device.** The system default, unless the user names one in Settings → Audio. The
+choice is stored **by device id** (the name the sound system reports — cpal exposes no
+other handle that survives a restart) and it is **application settings, never project
+data**: a sound card is a property of the machine, so it lives in the settings file and the
+frontend hands it to the engine on boot and on every change (`set_audio_device`;
+`list_audio_devices` names what the machine offers and which one is in use). A named device
+that is not present when the stream opens falls back to the system default, then to the
+first output there is — the choice is *kept*, not rewritten, so plugging the device back in
+uses it again, and the frontend is told a fallback happened so it can say so. A machine
+with no output at all is the calm terminal no-device state of §3.1: no sound, no error,
+the picture on its own clock. Changing the device closes the open stream (a cpal stream
+cannot be moved), so sound stops until the next play.
+
 Output runs through **cpal** into the OS device (WASAPI on Windows). During preview the
 **audio clock is the master**: the video system schedules frames against the audio
 device's sample position, not a wall-clock timer. The audio callback MUST be real-time

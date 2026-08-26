@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `document_snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `eq`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
@@ -24,6 +24,24 @@ void audioStop() => BridgeLib.instance.api.crateApiAudioAudioStop();
 /// short lock.
 BridgeAudioClock audioClock() =>
     BridgeLib.instance.api.crateApiAudioAudioClock();
+
+/// Every output the machine offers, and which one is in use.
+///
+/// Asking the sound system is not free, so this is a call to make when a list
+/// is about to be shown — never in a rebuild path.
+BridgeAudioDevices listAudioDevices() =>
+    BridgeLib.instance.api.crateApiAudioListAudioDevices();
+
+/// Play through the output with this id; an empty string means the system
+/// default, which is what Lumit ships following.
+///
+/// Sound stops until the next play: a stream cannot be moved from one device to
+/// another, so the open one is closed and the next mix opens the new one. The
+/// choice is the machine's, not the project's — the frontend stores it in the
+/// settings file and hands it over on every boot, which is a no-op when it has
+/// not changed.
+void setAudioDevice({required String id}) =>
+    BridgeLib.instance.api.crateApiAudioSetAudioDevice(id: id);
 
 /// Where playback is, as the transport needs to know it.
 class BridgeAudioClock {
@@ -53,4 +71,67 @@ class BridgeAudioClock {
           seconds == other.seconds &&
           playing == other.playing &&
           loaded == other.loaded;
+}
+
+/// One output the machine can play through.
+class BridgeAudioDevice {
+  /// What `set_audio_device` is called with. Stable across restarts, so the
+  /// frontend can store it and hand it back; opaque otherwise.
+  final String id;
+
+  /// What the sound system calls it, for the list.
+  final String name;
+
+  /// Whether this is the one the system plays through when nothing is chosen.
+  final bool isDefault;
+
+  const BridgeAudioDevice({
+    required this.id,
+    required this.name,
+    required this.isDefault,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ isDefault.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAudioDevice &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          isDefault == other.isDefault;
+}
+
+/// What the machine offers, and what Lumit is actually playing through.
+class BridgeAudioDevices {
+  final List<BridgeAudioDevice> devices;
+
+  /// The id sound comes out of, or empty when the machine has no output at
+  /// all. Not necessarily the id that was chosen — see `fell_back`.
+  final String active;
+
+  /// True when a device was chosen and it is not there any more, so the
+  /// system default is being played through instead. The choice is kept, not
+  /// rewritten: plug the device back in and it is used again.
+  final bool fellBack;
+
+  const BridgeAudioDevices({
+    required this.devices,
+    required this.active,
+    required this.fellBack,
+  });
+
+  @override
+  int get hashCode => devices.hashCode ^ active.hashCode ^ fellBack.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAudioDevices &&
+          runtimeType == other.runtimeType &&
+          devices == other.devices &&
+          active == other.active &&
+          fellBack == other.fellBack;
 }

@@ -8132,6 +8132,26 @@
   "@settingsGroupWaveforms": {
     "description": "Settings window, Appearance: the heading over the settings that decide how an audio waveform is drawn."
   },
+  "settingsGroupOutput": "Output",
+  "@settingsGroupOutput": {
+    "description": "Settings window, Audio: the heading over the settings that decide where sound comes out."
+  },
+  "settingsAudioDevice": "Output device",
+  "@settingsAudioDevice": {
+    "description": "Settings window, Audio: the name of the row whose dropdown chooses which speakers or headphones Lumit plays through."
+  },
+  "settingsAudioSystemDefault": "System default",
+  "@settingsAudioSystemDefault": {
+    "description": "Settings window, Audio: the first entry in the output device list — follow whatever the operating system is set to, rather than pinning one device."
+  },
+  "settingsAudioDeviceMissing": "That device is not connected — playing through the system default until it is back.",
+  "@settingsAudioDeviceMissing": {
+    "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
+  },
+  "settingsAudioNoDevice": "This machine has no audio output.",
+  "@settingsAudioNoDevice": {
+    "description": "Settings window, Audio: the line under the output device row when the machine offers no sound output at all, so nothing can be played."
+  },
   "settingsKeymapFile": "Keymap file",
   "@settingsKeymapFile": {
     "description": "Settings window, Shortcuts: the name of the row whose buttons read a keymap from a file and write one out."
@@ -8139,6 +8159,10 @@
   "settingsNoMatches": "No setting matches that.",
   "@settingsNoMatches": {
     "description": "Settings window: shown in place of a page when the search box has hidden every row on it."
+  },
+  "settingsPageAudio": "Audio",
+  "@settingsPageAudio": {
+    "description": "Settings window: name of a page in the sidebar — where sound comes out."
   },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {

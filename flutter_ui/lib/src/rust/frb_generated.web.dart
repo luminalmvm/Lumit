@@ -275,6 +275,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAudioClock dco_decode_bridge_audio_clock(dynamic raw);
 
   @protected
+  BridgeAudioDevice dco_decode_bridge_audio_device(dynamic raw);
+
+  @protected
+  BridgeAudioDevices dco_decode_bridge_audio_devices(dynamic raw);
+
+  @protected
   BridgeAudioPeaks dco_decode_bridge_audio_peaks(dynamic raw);
 
   @protected
@@ -683,6 +689,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<BridgeAnimatedMaskPath> dco_decode_list_bridge_animated_mask_path(
       dynamic raw);
+
+  @protected
+  List<BridgeAudioDevice> dco_decode_list_bridge_audio_device(dynamic raw);
 
   @protected
   List<BridgeAutosave> dco_decode_list_bridge_autosave(dynamic raw);
@@ -1205,6 +1214,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAudioClock sse_decode_bridge_audio_clock(SseDeserializer deserializer);
 
   @protected
+  BridgeAudioDevice sse_decode_bridge_audio_device(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeAudioDevices sse_decode_bridge_audio_devices(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeAudioPeaks sse_decode_bridge_audio_peaks(SseDeserializer deserializer);
 
   @protected
@@ -1661,6 +1678,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeAnimatedMaskPath> sse_decode_list_bridge_animated_mask_path(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeAudioDevice> sse_decode_list_bridge_audio_device(
       SseDeserializer deserializer);
 
   @protected
@@ -2243,6 +2264,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAudioClock self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_audio_device(
+      BridgeAudioDevice self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_audio_devices(
+      BridgeAudioDevices self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_audio_peaks(
       BridgeAudioPeaks self, SseSerializer serializer);
 
@@ -2757,6 +2786,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_animated_mask_path(
       List<BridgeAnimatedMaskPath> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_audio_device(
+      List<BridgeAudioDevice> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_autosave(

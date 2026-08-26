@@ -54,6 +54,84 @@ fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
     })
 }
 
+/// One output the machine offers (K-586, docs/09 §3.1).
+///
+/// The **id is the name the sound system reports**, because cpal offers no
+/// other handle that survives a restart — and a name is what the user picked
+/// off the list in the first place.
+//
+// ponytail: two outputs with identical names are indistinguishable here and
+// the first enumerated wins. A truly unique id needs a cpal that exposes the
+// host's own endpoint handle; until then a duplicate name picks one of the
+// two rather than failing, which is the harmless half of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputDevice {
+    pub id: String,
+    pub name: String,
+}
+
+/// What the machine offers, and which of them it plays through by default.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OutputDevices {
+    pub devices: Vec<OutputDevice>,
+    /// The system default's id, when the sound system names one.
+    pub default_id: Option<String>,
+}
+
+impl OutputDevices {
+    /// Which output a stored choice actually resolves to: the chosen one while
+    /// it is still here, else the system default, else the first output there
+    /// is. `None` only when the machine has no output at all.
+    ///
+    /// This is the whole of the falling-back rule, and it is a plain function
+    /// over a list so it can be tested without a sound card: a device that has
+    /// been unplugged since the choice was made lands on the default calmly,
+    /// and the caller can see it happened by comparing the answer with what it
+    /// asked for.
+    #[must_use]
+    pub fn resolve(&self, wanted: Option<&str>) -> Option<String> {
+        let known = |id: &str| self.devices.iter().any(|d| d.id == id);
+        wanted
+            .filter(|w| known(w))
+            .map(str::to_owned)
+            .or_else(|| self.default_id.clone().filter(|d| known(d)))
+            .or_else(|| self.devices.first().map(|d| d.id.clone()))
+    }
+}
+
+/// What the machine offers right now.
+///
+/// Asks the sound system, so it is not something to do in a loop — the
+/// Settings page reads it when it opens, and the engine reads it once when it
+/// opens a stream. Never fails: a host that will not enumerate reports
+/// nothing, which is the same calm no-device state as a machine with no card.
+#[must_use]
+pub fn output_devices() -> OutputDevices {
+    let host = cpal::default_host();
+    let devices = host
+        .output_devices()
+        .map(|it| {
+            it.filter_map(|d| d.name().ok())
+                .map(|name| OutputDevice {
+                    id: name.clone(),
+                    name,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // Linux/ALSA reports no usable default while still enumerating outputs, so
+    // it is not asked there: `resolve` then falls back to the first enumerated
+    // device, which is what this platform has always played through.
+    #[cfg(target_os = "linux")]
+    let default_id = None;
+    #[cfg(not(target_os = "linux"))]
+    let default_id = host.default_output_device().and_then(|d| d.name().ok());
+    OutputDevices {
+        devices,
+        default_id,
+    }
+}
+
 pub struct AudioEngine {
     _stream: cpal::Stream,
     shared: Arc<Shared>,
@@ -62,37 +140,27 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    #[cfg(target_os = "linux")]
-    pub fn get_device() -> Result<Device, AudioError> {
-        let host = cpal::default_host();
-
-        let mut devices = host.output_devices().map_err(|_| AudioError::NoDevice)?;
-        let device = devices.nth(0).ok_or(AudioError::NoDevice)?;
-        Ok(device)
+    /// The cpal handle for `wanted`, resolved through [`OutputDevices::resolve`]
+    /// so a vanished choice quietly becomes the system default.
+    pub fn get_device(wanted: Option<&str>) -> Result<Device, AudioError> {
+        let id = output_devices()
+            .resolve(wanted)
+            .ok_or(AudioError::NoDevice)?;
+        cpal::default_host()
+            .output_devices()
+            .map_err(|_| AudioError::NoDevice)?
+            .find(|d| d.name().is_ok_and(|n| n == id))
+            .ok_or(AudioError::NoDevice)
     }
 
-    #[cfg(not(target_os = "linux"))]
-    pub fn get_device() -> Result<Device, AudioError> {
-        let host = cpal::default_host();
-
-        // The system default is what the user expects to hear from. Some hosts
-        // report no default while still enumerating usable outputs (seen on
-        // Linux/ALSA), so fall back to the first enumerated device rather than
-        // failing outright — playback with sound beats a hard NoDevice error.
-        let device = match host.default_output_device() {
-            Some(device) => device,
-            None => host
-                .output_devices()
-                .map_err(|_| AudioError::NoDevice)?
-                .next()
-                .ok_or(AudioError::NoDevice)?,
-        };
-
-        Ok(device)
-    }
-
+    /// Open the system default output.
     pub fn new() -> Result<Self, AudioError> {
-        let device = Self::get_device()?;
+        Self::new_on(None)
+    }
+
+    /// Open `wanted`, or the system default when it is not there any more.
+    pub fn new_on(wanted: Option<&str>) -> Result<Self, AudioError> {
+        let device = Self::get_device(wanted)?;
         let config = device
             .default_output_config()
             .map_err(|e| AudioError::Device(e.to_string()))?;
@@ -261,6 +329,62 @@ fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    fn list(names: &[&str], default: Option<&str>) -> OutputDevices {
+        OutputDevices {
+            devices: names
+                .iter()
+                .map(|n| OutputDevice {
+                    id: (*n).to_owned(),
+                    name: (*n).to_owned(),
+                })
+                .collect(),
+            default_id: default.map(str::to_owned),
+        }
+    }
+
+    /// The whole falling-back rule, without a sound card: a choice that is
+    /// still plugged in wins, one that has vanished lands on the system
+    /// default, a machine whose host names no default takes the first output,
+    /// and a machine with nothing at all says so instead of pretending.
+    #[test]
+    fn a_chosen_device_resolves_and_a_vanished_one_falls_back() {
+        let plugged_in = list(&["Speakers", "Headphones"], Some("Speakers"));
+        assert_eq!(
+            plugged_in.resolve(Some("Headphones")).as_deref(),
+            Some("Headphones")
+        );
+        assert_eq!(plugged_in.resolve(None).as_deref(), Some("Speakers"));
+
+        // The headphones were unplugged since the choice was made.
+        let unplugged = list(&["Speakers"], Some("Speakers"));
+        assert_eq!(
+            unplugged.resolve(Some("Headphones")).as_deref(),
+            Some("Speakers"),
+            "a device that has gone falls back to the default, calmly"
+        );
+
+        // A host that names no default (Linux/ALSA), and one that names a
+        // default which is itself no longer enumerated.
+        assert_eq!(
+            list(&["Speakers", "HDMI"], None)
+                .resolve(Some("HDMI"))
+                .as_deref(),
+            Some("HDMI")
+        );
+        assert_eq!(
+            list(&["Speakers", "HDMI"], None).resolve(None).as_deref(),
+            Some("Speakers")
+        );
+        assert_eq!(
+            list(&["HDMI"], Some("Speakers")).resolve(None).as_deref(),
+            Some("HDMI")
+        );
+
+        // Nothing to play through at all.
+        assert_eq!(list(&[], None).resolve(Some("Speakers")), None);
+        assert_eq!(OutputDevices::default().resolve(None), None);
+    }
 
     fn tone(frames: usize) -> Arc<AudioBuffer> {
         let mut samples = Vec::with_capacity(frames * 2);

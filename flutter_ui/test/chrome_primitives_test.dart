@@ -359,4 +359,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(chosen, 'a');
   });
+
+  /// **A null option can be chosen.** Several dropdowns offer "no particular
+  /// one" as their first entry — Follow the machine on General, System default
+  /// on Audio — and the menu answers `null` when it is *dismissed*, so picking
+  /// that entry and clicking away used to be the same answer: the option was in
+  /// the list, drew a tick, and could not be taken.
+  testWidgets('a dropdown whose options include null can pick it',
+      (tester) async {
+    String? chosen = 'a';
+    var picks = 0;
+    await tester.pumpWidget(host(BareDropdown<String?>(
+      value: 'a',
+      options: const [null, 'a'],
+      label: (v) => v ?? 'none',
+      onChanged: (v) {
+        chosen = v;
+        picks++;
+      },
+    )));
+    await tester.pump();
+
+    await tester.tap(find.byType(BareDropdown<String?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('none'));
+    await tester.pumpAndSettle();
+    expect(picks, 1, reason: 'the null row answered');
+    expect(chosen, isNull);
+
+    // And dismissing still writes nothing, which is the reason the two were
+    // ever confused.
+    await tester.tap(find.byType(BareDropdown<String?>));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(picks, 1);
+  });
 }
