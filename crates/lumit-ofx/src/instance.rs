@@ -577,6 +577,31 @@ pub(crate) fn set_images(
     Ok(std::mem::replace(&mut instance.images, images))
 }
 
+/// Add the frames at other times a prefetch just fetched, leaving the frame in
+/// hand alone.
+///
+/// A second call rather than an argument to [`set_images`] because the two
+/// happen at different moments: the clips are bound before the plugin is asked
+/// anything, and the frames it wants beyond this one are not known until it has
+/// answered `getFramesNeeded` (docs/impl/ofx-host.md §4).
+pub(crate) fn add_images_at(
+    handle: Handle,
+    images_at: BTreeMap<(String, i64), Image>,
+) -> Result<(), Status> {
+    if images_at.is_empty() {
+        return Ok(());
+    }
+    let mut state = state();
+    let instance = state
+        .effects
+        .get_mut(handle)?
+        .instance
+        .as_mut()
+        .ok_or(Status::ErrBadHandle)?;
+    instance.images_at.extend(images_at);
+    Ok(())
+}
+
 /// Take the pictures back off the instance at the end of a render. The caller
 /// owns them from here, which is how the output frame gets read out.
 pub(crate) fn take_images(handle: Handle) -> Result<BTreeMap<String, Image>, Status> {

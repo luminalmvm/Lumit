@@ -17779,6 +17779,34 @@ five-step manual pass — including the unhappy half, where the licence is pulle
 layer must wear a calm badge — and says the result is recorded in the pull request that ran
 it, not in a document that would rot.
 
+**The bench was run, and it changed the host twice.** openfx-misc built and drove: 205
+plugin/context pairs, and **no bad handle or bad value in the whole pass** — K-589's handle
+discipline holds against eighty plugins nobody here wrote. Two things did not hold. The
+clips were bound just before `kOfxImageEffectActionRender`, and real plugins ask their input
+how big it is inside `getRegionOfDefinition` and fetch it in `isIdentity`; they were being
+told "there is no image" and failing the action. The pictures now go on before the first
+question and come off on every path out, which is nineteen of those pairs. And the
+parameter suite's unbuilt half answered the wrong no to a forged handle, above.
+
+**What the bench found that this package does not fix, it names.** Half the remaining
+failures are one gap: openfx-misc writes parameter values during
+`kOfxActionCreateInstance`, and this host cannot accept a write, so the support library
+throws and the instance never exists. Accepting it needs to *read* the value, and reading
+it needs a C-variadic entry point — the ceiling K-591 already recorded for `paramGetValue`.
+The read side got away with four fixed pointers because pointers all pass alike; the write
+side cannot, because an `int` and a `double` arrive in different registers. That is a C
+shim and a package of its own, alongside making a plugin's writes reach the document
+(docs/12 §2.2). It is written down in the note rather than papered over, and the harness
+prints the count on every run.
+
+**So the pass asserts about the host and measures the plugins.** No suite call refused, no
+broken frame, every plugin Lumit wrote driving cleanly — those are assertions.
+What somebody else's plugin does in a host still missing features it needs is a printed
+number and a table; `LUMIT_OFX_BENCH_STRICT` turns it into an assertion the day the host
+can carry it. A suite that went red for a feature nobody has built yet would block
+everything else (K-007) while proving nothing, and a suite that never counted would let the
+number rot.
+
 **Built-in means "in the compile-time slice".** The browser listing decided provenance by
 asking the *scan* whether it had heard of an effect, which is the same answer for every
 plugin in a running Lumit and the wrong one for a definition registered by any other route

@@ -113,12 +113,21 @@ fn openfx_misc(work: &Path, into: &Path) -> Result<(), String> {
         .arg("-B")
         .arg(&build)
         .arg("-DCMAKE_BUILD_TYPE=Release"))?;
-    run(Command::new("cmake")
+    // **A partial build is still a bench.** openfx-misc is several targets, and
+    // one of them (CImg) wants a header its shallow clone does not bring; the
+    // other seventy-odd plugins compile perfectly well beside it. So the build's
+    // own exit code is a note rather than the end, and what was actually
+    // produced is the answer — `collect` says no only when nothing at all was.
+    let trouble = run(Command::new("cmake")
         .arg("--build")
         .arg(&build)
         .arg("--config")
-        .arg("Release"))?;
-    collect(&build, into)
+        .arg("Release"))
+    .err();
+    collect(&build, into).map_err(|why| match trouble {
+        Some(build) => format!("{why} ({build})"),
+        None => why,
+    })
 }
 
 /// ntsc-rs: one plugin, built by Cargo, laid out as a bundle by hand because
@@ -137,15 +146,21 @@ fn ntsc_rs(work: &Path, into: &Path) -> Result<(), String> {
         "ntsc-rs-openfx-plugin",
     ]))?;
 
-    let built = [
-        "libntscrs_openfx.so",
-        "ntscrs_openfx.dll",
-        "libntscrs_openfx.dylib",
-    ]
-    .into_iter()
-    .map(|name| checkout.join("target").join("release").join(name))
-    .find(|path| path.is_file())
-    .ok_or_else(|| "ntsc-rs built no plugin library".to_owned())?;
+    // Found by extension rather than by name: what Cargo calls the library is
+    // the crate's own business and it has been renamed before now.
+    let built = std::fs::read_dir(checkout.join("target").join("release"))
+        .map_err(|e| format!("reading ntsc-rs's build output: {e}"))?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.is_file()
+                && path.extension().and_then(|e| e.to_str()) == Some(library_extension())
+                && path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|stem| stem.contains("openfx"))
+        })
+        .ok_or_else(|| "ntsc-rs built no plugin library".to_owned())?;
 
     let contents = into
         .join("NtscRs.ofx.bundle")
@@ -155,6 +170,17 @@ fn ntsc_rs(work: &Path, into: &Path) -> Result<(), String> {
     std::fs::copy(&built, contents.join("NtscRs.ofx"))
         .map_err(|e| format!("copying the ntsc-rs plugin: {e}"))?;
     Ok(())
+}
+
+/// What a shared library is called at the end on this platform.
+const fn library_extension() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "dll"
+    } else if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    }
 }
 
 /// The bundle sub-directory this platform's binaries live in. Spelled here
@@ -189,8 +215,16 @@ fn clone(work: &Path, name: &str, url: &str) -> Result<PathBuf, String> {
     Ok(into)
 }
 
-/// Copy every `*.ofx.bundle` under `from` into `into`, which is what turns a
-/// build tree into a folder the host can scan.
+/// Gather everything under `from` that a host could load into `into`, as
+/// bundles.
+///
+/// Two shapes, because the projects emit two: a finished `*.ofx.bundle`
+/// directory (what a Makefile install step leaves), and a **loose `.ofx`
+/// binary** (what the CMake build drops in `build/Release`, which is what
+/// openfx-misc really produces on Windows). The loose one is wrapped in the
+/// bundle layout here — that layout is the host's only way in
+/// (docs/impl/ofx-host.md §1), and expecting somebody else's build to have
+/// arranged it would be expecting them to know about us.
 fn collect(from: &Path, into: &Path) -> Result<(), String> {
     let mut found = 0usize;
     let mut stack = vec![from.to_path_buf()];
@@ -200,20 +234,29 @@ fn collect(from: &Path, into: &Path) -> Result<(), String> {
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.ends_with(".ofx.bundle") {
-                copy_tree(&path, &into.join(&name))?;
+            if path.is_dir() {
+                if name.ends_with(".ofx.bundle") {
+                    copy_tree(&path, &into.join(&name))?;
+                    found += 1;
+                } else {
+                    stack.push(path);
+                }
+            } else if path.extension().and_then(|e| e.to_str()) == Some("ofx") {
+                let contents = into
+                    .join(format!("{name}.bundle"))
+                    .join("Contents")
+                    .join(arch_dir());
+                std::fs::create_dir_all(&contents)
+                    .map_err(|e| format!("creating {}: {e}", contents.display()))?;
+                std::fs::copy(&path, contents.join(&name))
+                    .map_err(|e| format!("copying {}: {e}", path.display()))?;
                 found += 1;
-            } else {
-                stack.push(path);
             }
         }
     }
     if found == 0 {
-        return Err(format!("no bundle was built under {}", from.display()));
+        return Err(format!("no plugin was built under {}", from.display()));
     }
     Ok(())
 }

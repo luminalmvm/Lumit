@@ -1534,6 +1534,53 @@ fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
     assert!((now[1] - was[1] * 2.0).abs() <= 0.01, "{now:?} vs {was:?}");
 }
 
+/// **The clips are bound before the first question, not before the render.**
+///
+/// A plugin asks its input how big it is inside
+/// `getRegionOfDefinition` — most of openfx-misc does — and a host that binds
+/// its clips in time for `kOfxImageEffectActionRender` and no earlier answers
+/// "there is no image" to all of that. The plugin then fails the action, and the
+/// whole render fails for a reason that has nothing to do with pixels. The
+/// conformance bench is what found it (K-595); this is the small version.
+#[test]
+fn a_clip_can_be_measured_before_the_render_action() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("a_clip_can_be_measured") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("a_clip_can_be_measured_before_the_render_action");
+        return;
+    };
+    probe_call(&probe, b"LumitTestPlugResetProbes ");
+    assert_eq!(
+        probe_call(&probe, b"LumitTestPlugRodSawSource "),
+        0,
+        "nothing has asked yet"
+    );
+
+    let rendered = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug",
+        &RenderRequest::filter(0.0, a_test_frame(6, 4)),
+        &ParamSnapshot::new(),
+    );
+    assert!(
+        rendered.is_ok(),
+        "the render itself worked ({:?})",
+        rendered.err()
+    );
+    assert_eq!(
+        probe_call(&probe, b"LumitTestPlugRodSawSource "),
+        1,
+        "the plugin asked its Source clip how big it was during          getRegionOfDefinition, and the host could say"
+    );
+    // And the pictures did not stay behind afterwards, which is the other half
+    // of binding them earlier.
+    assert_eq!(crate::suites::memory::image_bytes_live(), 0);
+}
+
 /// The pixel path itself: a plugin that changes nothing must give back exactly
 /// what it was given. The comparison is bit-for-bit at fp16 because the
 /// fp16 → fp32 → fp16 round trip is lossless — every half float is exactly a

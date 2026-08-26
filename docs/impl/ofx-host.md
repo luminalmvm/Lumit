@@ -72,6 +72,14 @@ bytes (**can be negative** — bottom-up; honour it), pixel depth, premultiplica
 We hand out fp32 RGBA premultiplied ([12-PLUGINS.md](../12-PLUGINS.md)); convert at the
 boundary from fp16. Pin the buffer until `clipReleaseImage`.
 
+**The clips are bound for the whole of that sequence, not for the render action** (K-595).
+A plugin asks its input how big it is inside `getRegionOfDefinition`, and often fetches the
+image itself in `isIdentity`; a host that binds its clips just before
+`kOfxImageEffectActionRender` answers "there is no image" to all of it, and a well-written
+plugin then fails the action. Most of openfx-misc does exactly this, and it is what the
+first conformance run found. The pictures go on before the first question and come off on
+every path out, including the ones that fail.
+
 `OfxMultiThreadSuiteV1`: implement `multiThread` over our worker pool but **cap
 `multiThreadNumCPUs` honestly** and make `multiThreadIndex` correct — plugins allocate
 per-thread scratch by it. Mutex functions: plain `parking_lot` wrappers.
@@ -188,7 +196,42 @@ registered into the same catalogue the built-ins live in — the seam
      the scan's "first drivable one" is a menu decision, not a conformance one.
    - **A rejection is a row, not a failure**: a context this host does not drive, a
      describe that failed, a parameter set Lumit cannot declare. The table counts them
-     separately and the assertion is only about the third column.
+     separately.
+   - **The assertions are about the host, not about the plugins.** No suite call refused,
+     no broken frame, and every plugin *Lumit* wrote drives cleanly. What a third party's
+     plugin does in a host still missing features it needs is measured and printed —
+     `LUMIT_OFX_BENCH_STRICT` turns that column into an assertion, and it is set the day
+     the host can carry it. A suite that went red for a feature nobody has built yet would
+     block everything else (K-007) while proving nothing.
+   - **The build emits loose `.ofx` binaries, not bundles.** openfx-misc's CMake project
+     drops `Misc.ofx` in `build/Release`; the bundle layout §1 loads from is the host's
+     own convention, so the runner wraps what it finds. A partial build is still a bench —
+     one target of openfx-misc (CImg) wants a header its shallow clone does not bring, and
+     the other seventy-odd plugins compile beside it.
+
+   **What the first real run said** (openfx-misc at master, ntsc-rs 1.7, Windows, 205
+   plugin/context pairs): 30 passed, 71 rejected at describe, 104 failed, and **no bad
+   handle or bad value in the whole pass** — the handle discipline of K-589 holds against
+   eighty plugins nobody here wrote. Two findings came straight back into the host: the
+   clip binding above, worth nineteen of those pairs, and the parameter suite's
+   `kOfxStatErrUnsupported` to forged handles (item 2). The remainder is a list of things
+   the host has not built yet rather than things it got wrong:
+
+   - **Half the failures are one gap: a plugin writes a parameter value.** openfx-misc
+     calls `paramSetValueAtTime` during `kOfxActionCreateInstance`; this host answers
+     `kOfxStatErrUnsupported`, the support library throws, and the instance never exists.
+     Accepting the write needs the value, and reading it needs a **C-variadic** entry
+     point, which is the ceiling K-591 already recorded for `paramGetValue` — the fixed
+     four-pointer trick works for reads because pointers all pass alike and does not work
+     for writes, where an `int` and a `double` arrive in different registers. So the fix is
+     a small C shim or nothing, and it belongs with the package that makes a plugin's
+     writes reach the document (docs/12 §2.2).
+   - The rest of the failures are plugins whose render or region-of-definition needs
+     something else again, and a handful of `createInstance` refusals with no single
+     cause; each is a row in the table with the action and the status it answered.
+   - **ntsc-rs does not load at all** — `kOfxActionLoad` answers `kOfxStatErrUnknown`
+     before anything can be described. Worth its own look; nothing about it is diagnosed
+     here.
 
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI). **Landed** as

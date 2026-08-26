@@ -54,7 +54,7 @@ use crate::ffi::{
 use crate::handles::Handle;
 use crate::host::state;
 use crate::image::{Frame16, Image, RectI, RowOrder};
-use crate::instance::{set_images, take_images, Instance};
+use crate::instance::{add_images_at, set_images, take_images, Instance};
 use crate::props::{PropValue, PropertySet};
 use crate::status::Status;
 
@@ -253,6 +253,84 @@ pub fn render_with_prefetch(
     let handle = instance.handle();
     token.check()?;
 
+    // **The pictures go on before the first question, not before the render.**
+    // A plugin's `getRegionOfDefinition` and `isIdentity` ask their input clip
+    // how big it is and, often, for the image itself; a host that only binds
+    // the clips in time for `kOfxImageEffectActionRender` answers "there is no
+    // image" to all of that, and a well-written plugin answers `kOfxStatFailed`
+    // to the action. Most of openfx-misc does exactly that, which is how this
+    // was found (K-595). They come off again on every path out, below.
+    let mut images = BTreeMap::new();
+    for (name, frame) in &request.inputs {
+        images.insert(name.clone(), Image::from_frame(frame, request.order)?);
+    }
+    images.insert(
+        OUTPUT_CLIP.to_owned(),
+        Image::black(request.bounds, request.order)?,
+    );
+
+    // Taken with no host lock held, and now held for the whole conversation
+    // rather than for the render alone: every action in it calls into the
+    // plugin, and a plugin that says two of its renders may not overlap is not
+    // saying its `getRegionOfDefinition` may (docs/14 §7, K-066).
+    let guard = instance.render_lock();
+    let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
+
+    let previous = set_images(handle, images, BTreeMap::new())?;
+    drop(previous);
+
+    let outcome = ask(plugin, instance, request, token, prefetch);
+
+    // The pictures come back off the instance whatever happened, so a failed
+    // render leaves nothing behind for the next one to find.
+    let mut images = take_images(handle)?;
+    let output = images.remove(OUTPUT_CLIP);
+    drop(images);
+    let answers = outcome?;
+
+    let frame = match &answers.identity_of {
+        // The honest short-circuit: the plugin says this frame is its input, so
+        // the input is the frame. No begin, no render, no end, and the buffer
+        // that was allocated for an output goes back unused.
+        Some(clip) => request
+            .inputs
+            .get(clip)
+            .cloned()
+            .ok_or(RenderError::Host(Status::ErrUnknown))?,
+        None => output
+            .ok_or(RenderError::Host(Status::ErrFatal))?
+            .to_frame()?,
+    };
+    Ok(Rendered {
+        frame,
+        region_of_definition: answers.region_of_definition,
+        frames_needed: answers.frames_needed,
+        identity_of: answers.identity_of,
+    })
+}
+
+/// What the plugin said on the way to a frame, and nothing it drew.
+struct Answers {
+    region_of_definition: RectI,
+    frames_needed: BTreeMap<String, (f64, f64)>,
+    /// The clip the plugin said this frame is a copy of, if it said so — in
+    /// which case no render happened at all.
+    identity_of: Option<String>,
+}
+
+/// The whole ordered conversation, from the first question to the last action
+/// (docs/impl/ofx-host.md §3). Split out so that the pictures it works on are
+/// put on the instance before it starts and taken off after it ends, on every
+/// path — including the ones that fail.
+fn ask(
+    plugin: &PluginRef,
+    instance: &Instance,
+    request: &RenderRequest,
+    token: &EpochToken,
+    prefetch: Prefetch<'_>,
+) -> Result<Answers, RenderError> {
+    let handle = instance.handle();
+
     let region_of_definition = get_region_of_definition(plugin, handle, request)?;
     token.check()?;
 
@@ -287,18 +365,15 @@ pub fn render_with_prefetch(
     // One call, however many frames — a retimer's per-frame fetches are the
     // thing this exists to keep off the wire.
     let temporal = prefetch(&frames_needed)?;
+    let mut images_at = BTreeMap::new();
+    for (key, frame) in &temporal {
+        images_at.insert(key.clone(), Image::from_frame(frame, request.order)?);
+    }
+    add_images_at(handle, images_at)?;
     token.check()?;
 
     if let Some(clip) = is_identity(plugin, handle, request)? {
-        // The honest short-circuit: the plugin says this frame is its input, so
-        // the input is the frame. No begin, no render, no end, no buffer.
-        let frame = request
-            .inputs
-            .get(&clip)
-            .cloned()
-            .ok_or(RenderError::Host(Status::ErrUnknown))?;
-        return Ok(Rendered {
-            frame,
+        return Ok(Answers {
             region_of_definition,
             frames_needed,
             identity_of: Some(clip),
@@ -306,89 +381,46 @@ pub fn render_with_prefetch(
     }
     token.check()?;
 
-    let frame = render_sequence(plugin, instance, request, &temporal, token)?;
-    Ok(Rendered {
-        frame,
+    render_sequence(plugin, handle, request, token)?;
+    Ok(Answers {
         region_of_definition,
         frames_needed,
         identity_of: None,
     })
 }
 
-/// Begin, render, end — the part that must not be interrupted halfway and must
-/// not be entered by two threads at once unless the plugin said it may be.
+/// Begin, render, end — the part that must not be interrupted halfway. The
+/// pictures are already on the instance and the lock, if this plugin needs one,
+/// is already held.
 fn render_sequence(
     plugin: &PluginRef,
-    instance: &Instance,
+    handle: Handle,
     request: &RenderRequest,
-    temporal: &BTreeMap<(String, i64), Frame16>,
     token: &EpochToken,
-) -> Result<Frame16, RenderError> {
-    let handle = instance.handle();
-
-    // The pictures are built before the lock: allocating is the host's own
-    // business and nothing else is waiting on it.
-    let mut images = BTreeMap::new();
-    for (name, frame) in &request.inputs {
-        images.insert(name.clone(), Image::from_frame(frame, request.order)?);
-    }
-    images.insert(
-        OUTPUT_CLIP.to_owned(),
-        Image::black(request.bounds, request.order)?,
+) -> Result<(), RenderError> {
+    dispatch(
+        plugin,
+        handle,
+        actions::BEGIN_SEQUENCE_RENDER,
+        Some(sequence_args(request)),
+    )?;
+    token.check()?;
+    let scope = CancelScope::new(token);
+    let render = dispatch(plugin, handle, actions::RENDER, Some(render_args(request)));
+    drop(scope);
+    // The end action runs whatever the render answered: a plugin that
+    // allocated in the begin must be given its chance to free, and a host
+    // that skips the end on the failure path is the reason plugins leak.
+    let end = dispatch(
+        plugin,
+        handle,
+        actions::END_SEQUENCE_RENDER,
+        Some(sequence_args(request)),
     );
-    let mut images_at = BTreeMap::new();
-    for (key, frame) in temporal {
-        images_at.insert(key.clone(), Image::from_frame(frame, request.order)?);
-    }
-
-    // Chosen before the lock is taken, and taken with no host lock held: the
-    // render behind it calls into a plugin, which re-enters the suites
-    // (docs/14 §7).
-    let guard = instance.render_lock();
-    let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
-
-    let previous = set_images(handle, images, images_at)?;
-    drop(previous);
-
-    let outcome = (|| -> Result<(), RenderError> {
-        dispatch(
-            plugin,
-            handle,
-            actions::BEGIN_SEQUENCE_RENDER,
-            Some(sequence_args(request)),
-        )?;
-        token.check()?;
-        let scope = CancelScope::new(token);
-        let render = dispatch(plugin, handle, actions::RENDER, Some(render_args(request)));
-        drop(scope);
-        // The end action runs whatever the render answered: a plugin that
-        // allocated in the begin must be given its chance to free, and a host
-        // that skips the end on the failure path is the reason plugins leak.
-        let end = dispatch(
-            plugin,
-            handle,
-            actions::END_SEQUENCE_RENDER,
-            Some(sequence_args(request)),
-        );
-        render?;
-        end?;
-        token.check()?;
-        Ok(())
-    })();
-
-    // The pictures come back off the instance either way, so a failed render
-    // leaves nothing behind for the next one to find.
-    let mut images = take_images(handle)?;
-    let output = images.remove(OUTPUT_CLIP);
-    drop(images);
-    // Only now is the failure allowed to escape, and the half-written output
-    // goes with it rather than to the caller.
-    outcome?;
-
-    let frame = output
-        .ok_or(RenderError::Host(Status::ErrFatal))?
-        .to_frame()?;
-    Ok(frame)
+    render?;
+    end?;
+    token.check()?;
+    Ok(())
 }
 
 /// Dispatch one action with an optional `inArgs`, and turn a failure into a

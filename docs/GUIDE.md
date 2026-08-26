@@ -11630,6 +11630,28 @@ That is what a host bug looks like from the outside. So the host now keeps a cou
 answer it gives, and the pass fails if "that is not a handle" or "that is not a value" was
 ever one of them.
 
+**What the first real run said.** Eighty plugins nobody here wrote, in two hundred-odd
+combinations of plugin and shape: thirty worked, seventy were turned away at the door for
+reasons that are true, and a hundred failed — and not one of them ever handed the host a
+number it could not make sense of, which is the thing the whole handle design was for.
+
+Two of those failures were ours and are fixed. The interesting one: Lumit was handing a
+plugin its pictures just before asking it to paint, and real plugins ask about their input
+much earlier than that — "how big is it?" is the first question most of them ask. They were
+being told there was no picture at all, and sensibly gave up. The pictures go on at the
+start of the conversation now.
+
+The largest remaining failure is not a bug but a gap with a name: these plugins **write** a
+value back into their own controls while they are starting up, and Lumit cannot yet accept
+a write from a plugin. There is a specific, boring reason it cannot, and it is worth
+knowing because it decides when it will be fixed: the C function a plugin calls to write a
+value takes "however many numbers this control has" — a shape C can express and Rust
+cannot, on its own. Reading is fine, because reading passes addresses and all addresses
+look alike; writing passes the numbers themselves, and a whole number and a decimal one
+travel in different places inside the machine. So that fix is a small piece of C, and it
+arrives with the work that makes a plugin's writes reach your project properly. Until then
+the number is printed on every run rather than quietly forgotten.
+
 ### Handing every door a key that does not fit
 
 The other half of the same idea, done properly. A handle is a number the host invented; a

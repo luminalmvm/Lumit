@@ -39,7 +39,7 @@ use std::time::{Duration, Instant};
 use lumit_ofx::ffi::{
     actions, OfxHost, OfxImageClipHandle, OfxImageEffectSuiteV1, OfxMessageSuiteV1,
     OfxMultiThreadSuiteV1, OfxParamHandle, OfxParamSetHandle, OfxParameterSuiteV1, OfxPlugin,
-    OfxPropertySetHandle, OfxPropertySuiteV1, K_OFX_IMAGE_EFFECT_PLUGIN_API_VERSION,
+    OfxPropertySetHandle, OfxPropertySuiteV1, OfxRectD, K_OFX_IMAGE_EFFECT_PLUGIN_API_VERSION,
 };
 use lumit_ofx::status::{OfxStatus, Status};
 
@@ -89,6 +89,15 @@ static RENDER_RENDEZVOUS: AtomicUsize = AtomicUsize::new(0);
 
 /// Non-zero makes every render answer `kOfxStatFailed`.
 static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
+
+/// What the plugin found when it asked the host how big its Source clip was,
+/// during `getRegionOfDefinition`: nought if it never asked, one if the host
+/// answered, two if the host could not say.
+///
+/// A real plugin asks that question there — most of openfx-misc does — and a
+/// host that has not bound its clips until the render action answers "there is
+/// no image", which is why this is worth a probe of its own (K-595).
+static ROD_SAW_SOURCE: AtomicU32 = AtomicU32::new(0);
 
 /// How long a render waits at the rendezvous before giving up. A host that
 /// serialises the render will never reach the count, and the wait must end
@@ -320,6 +329,7 @@ unsafe fn dispatch(
         actions::DESCRIBE_IN_CONTEXT => describe_in_context(variant, handle.cast_mut()),
         actions::CREATE_INSTANCE | actions::DESTROY_INSTANCE => Status::Ok.code(),
         actions::BEGIN_SEQUENCE_RENDER | actions::END_SEQUENCE_RENDER => Status::Ok.code(),
+        actions::GET_REGION_OF_DEFINITION => region_of_definition(handle.cast_mut()),
         actions::IS_IDENTITY => is_identity(variant, out_args),
         actions::GET_FRAMES_NEEDED => frames_needed(in_args, out_args),
         actions::RENDER => render(variant, handle.cast_mut(), in_args),
@@ -787,6 +797,48 @@ fn describe_full(
 
 // ----------------------------------------------------------------- render --
 
+/// `kOfxImageEffectActionGetRegionOfDefinition`: ask the host how big the input
+/// is, note what it said, and leave the answer to the host.
+///
+/// The plugin wants nothing from this action — its output is its input's size,
+/// which is what the host assumes anyway — but asking is the point. It is the
+/// first moment a plugin touches its clips, long before the render action, and
+/// the host has to have bound them by then.
+fn region_of_definition(handle: *mut c_void) -> OfxStatus {
+    let Some(effect_suite) = image_effect_suite() else {
+        return Status::ErrMissingHostFeature.code();
+    };
+    let mut clip: OfxImageClipHandle = std::ptr::null_mut();
+    let mut props: OfxPropertySetHandle = std::ptr::null_mut();
+    // SAFETY: the host's own functions, given the handle it passed us and
+    // valid out-parameters.
+    let seen = unsafe {
+        let got = (effect_suite.clip_get_handle)(
+            handle,
+            c"Source".as_ptr(),
+            &raw mut clip,
+            &raw mut props,
+        );
+        if got != Status::Ok.code() || clip.is_null() {
+            2
+        } else {
+            let mut bounds = OfxRectD::default();
+            if (effect_suite.clip_get_region_of_definition)(clip, 0.0, &raw mut bounds)
+                == Status::Ok.code()
+                && bounds.x2 > bounds.x1
+            {
+                1
+            } else {
+                2
+            }
+        }
+    };
+    ROD_SAW_SOURCE.store(seen, Ordering::SeqCst);
+    // The host's own answer is the right one; this action exists here only to
+    // ask a question on the way past.
+    Status::ReplyDefault.code()
+}
+
 /// `kOfxImageEffectActionIsIdentity`. Only one variant ever says yes, and it
 /// says it by naming the clip its output would have been.
 fn is_identity(variant: Variant, out_args: *mut c_void) -> OfxStatus {
@@ -1222,6 +1274,14 @@ pub extern "C" fn LumitTestPlugResetProbes() {
     MAX_RENDERS_IN_FLIGHT.store(0, Ordering::SeqCst);
     RENDER_RENDEZVOUS.store(0, Ordering::SeqCst);
     RENDER_FAILS.store(0, Ordering::SeqCst);
+    ROD_SAW_SOURCE.store(0, Ordering::SeqCst);
+}
+
+/// What the host said when the plugin asked its Source clip's size during
+/// `getRegionOfDefinition`: nought never asked, one answered, two could not.
+#[no_mangle]
+pub extern "C" fn LumitTestPlugRodSawSource() -> c_int {
+    ROD_SAW_SOURCE.load(Ordering::SeqCst) as c_int
 }
 
 /// Make every render answer `kOfxStatFailed`, or stop doing so.
