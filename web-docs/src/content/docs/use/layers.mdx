@@ -25,10 +25,10 @@ the top layer composites over everything below it.
 | **[Text layer](/use/text/)** | Editable text. |
 | **[Shape layer](/use/shapes/)** | Vector shapes with fills and strokes. |
 | **[Sequence layer](/use/sequence-layers/)** | Similar to Footage, but allows cutting within one layer. |
-| **Adjustment layer** | Invisible. Its effects apply to everything below it. |
+| **Adjustment layer** | A comp-sized layer with nothing of its own to show, born with the adjustment switch on. |
 | **Null layer** | Invisible and transform-only. Used to drive other layers. |
 | **[Camera layer](/use/camera/)** | A 3D viewpoint. Affects layers with the 3D switch on. |
-| **Light layer** | A source of light. Shades layers with the Accepts lights switch on. |
+| **Light layer** | A source of light: **Point**, **Spot** or **Area**. Shades layers with Accepts lights on. |
 | **[Audio layer](/use/audio/)** | Sound with no picture. Made by placing an audio file, or by **Add audio only** on a clip that has a picture too. |
 
 ## Order and selection
@@ -45,32 +45,74 @@ selects it everywhere.
 other compositions as well. A copied layer retains all information: transform, keyframes, 
 masks, paint, effects, switches, markers, and retime values.
 
-By default a pasted layer starts at the playhead, but this can be changed to be the 
-layer's original time in the composition, turn on *Paste layers at their original time* in
-[Settings ▸ Interface](/use/settings/). A parent or matte reference is retained 
-only if the target composition still contains that layer. To paste at the
-copied time instead.
+By default a pasted layer starts at the playhead. To paste at the time it was copied from
+instead, turn on *Paste layers at their original time* in [Settings ▸
+Timeline](/use/settings/). A parent or matte reference is retained only if the target
+composition still contains that layer.
 
 ## Switches
 
 <Shot file="layer-switches.png" caption="The switches on a layer's row." />
 
-Each layer has switches in the timeline, in order above: visibility, mute, solo, lock, 
-and shy, then: flow, disable effects, motion blur, and 3D.
+Each layer has two runs of switches in the Timeline outline.
+
+The **switches** column holds what the Timeline keeps about a layer: visibility, mute, solo,
+lock, shy, and guide. The **modes** column holds how the layer is rendered: collapse, flow,
+disable effects, motion blur, 3D, and adjustment.
 
 A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no 
 visibility switch, and a layer that can never be heard — a solid, text, a shape, or a clip 
-with no sound — has no mute switch.
+with no sound — has no mute switch. Guide, on the other hand, is drawn on every row, because
+any layer at all can be reference-only.
 
 The **motion blur switch** smears a layer from it's own transformations, you'll only
 notice this if you have keyframes properties on the layer. The Motion blur
 effect is different, see [Effects](/use/effects/).
 
-## Adjustment layers
+## Adjustment
 
-An adjustment layer draws nothing of its own. Its effect stack applies to the composite
-of everything below it. If you change the position or scaling of the adjustment layer, 
-effects on it will only apply to the area of the viewer it covers.
+**Adjustment is a switch**, on any layer that draws something. Turn it on and the layer's own
+picture is set aside; its effect stack runs on the composite of everything below it instead.
+Turn it off and the layer is itself again, having forgotten nothing.
+
+Where the layer sits and how big it is still matter: effects on it apply only to the area it
+covers, so scaling it down is how you confine a grade to part of the frame.
+
+**Layer ▸ New ▸ Adjustment** makes a comp-sized layer with the switch already on, which is
+the usual way in. Turn the switch off on one of those and it becomes an ordinary white solid
+that you can turn back on whenever you like.
+
+The four kinds with no picture to set aside — Camera, Light, Null and an Audio layer — cannot
+be adjustment layers, and the cell is left out on their rows.
+
+## Guide layers
+
+**Guide** marks a layer *for reference only*: a match photograph, a grid, a title-safe
+rectangle, an animatic. The Viewer draws it like any other layer and **no exported file
+contains it**, picture or sound.
+
+Guide-ness beats solo. Soloing a guide layer changes what you are looking at and changes
+nothing about what you deliver — a switch that means *look at this* must never quietly change
+what a client receives. A locked layer refuses the guide switch, unlike shy, because guide
+decides what leaves the building.
+
+The export dialogue can be told to write them anyway, for a review copy.
+
+## Light layers
+
+**Layer ▸ New** offers three: a **Point light**, a bare bulb with no extent; a **Spot light**,
+a cone aimed by the layer's own rotation; and an **Area light**, a rectangle of a real size —
+a softbox, a window, a strip light — which starts at a tenth of the composition.
+
+A light is placed by its ordinary transform, so it animates and parents like anything else.
+Which layers it shades is per layer: **Accepts lights**, a ticked entry on the layer's
+right-click menu in the Timeline, on by default and doing nothing at all in a composition
+with no lights.
+
+:::note[Partly built]
+A light's own properties — its colour, intensity, cone angle, size and falloff — have no rows
+yet. What you can set is where the light is and which kind it is when you make it.
+:::
 
 ## Parenting
 
@@ -82,3 +124,4 @@ on top of them.
 - [Transforming layers](/use/transform/)
 - [Keyframes](/use/keyframes/)
 - [Masks](/use/masks/) and [Mattes](/use/mattes/)
+- [The Timeline](/panels/timeline/) - where the switches live.

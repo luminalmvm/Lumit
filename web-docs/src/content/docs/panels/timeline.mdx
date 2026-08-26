@@ -1,75 +1,117 @@
 ---
 title: Timeline
-description: The ruler, outline columns, switches, and lanes.
+description: The two modes, the ruler, the outline columns, and editing keyframes in bulk.
 sidebar:
   order: 4
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-The Timeline has two halves: the **outline** on the left and **lane** or **graph** view on the right.
-
+The Timeline has two halves: the **outline** on the left, naming layers and their properties,
+and on the right either the **lanes** or the **graph**.
 
 <Shot file="timeline.png" caption="The Timeline: outline on the left, lanes on the right." eager/>
+
+## Layers and Graph
+
+Two mode tabs sit at the far right of the panel's header, with the playhead's time and frame
+number at its far left. The outline is **the same in both modes** — the same twirls, the same
+columns, the same rows — so a property is found the same way whichever you are in. Switching
+mode changes what is drawn against time, and nothing else.
+
+<Shot file="layers-shut.png" caption="Layers mode with everything shut: a summary diamond on the bar for each keyframed moment." />
+
+**Layers** draws each layer as a bar, with a lane per property once the layer is twirled open.
+Shut, a layer's keys are summarised as small diamonds on its own bar.
+
+<Shot file="layers-open.png" caption="Layers mode, a layer twirled open: keyframes on their own lanes, shaped by their interpolation." />
+
+<Shot file="graph-mode.png" caption="Graph mode: the curve of the selected property, running edge to edge." />
+
+**Graph** draws the curves. A property's curves are on the pane while its row is **selected**
+in the outline — there is no tick and no separate list. The curves share one value scale, so
+a rotation in degrees and an opacity in per cent are one flat line under another.
+
+## The Animated filter
+
+**ANIMATED**, on the bottom bar, lists only properties that have keyframes, across every
+layer. `U` is the shortcut. It is how you find the animation in a composition without
+twirling anything open, and it works in both modes.
+
+Beside it, the **shy filter** hides every layer with its shy switch on, and a master
+**motion blur** toggle governs the whole composition.
 
 ## The ruler
 
 | Item | What it is |
 | --- | --- |
-| **Work area** | Area that plays/exports. Ends are adjustable, defaults to length of composition. |
+| **Work area** | The stretch that plays and exports. Drag either end; it defaults to the whole composition. |
 | **Markers ribbon** | Composition markers. |
-| **Layer markers** | Markers that sit directly on a layer. |
+| **Layer markers** | Markers sitting on a layer. |
 | **Beat markers** | Markers placed by **Composition ▸ Detect beats**. |
-| **Cache bar** | Which frames are cached, changes depending on tier. |
+| **Cache bar** | Which frames are cached, coloured by which tier they are in. |
 
 ## The outline columns
 
-<Shot file="timeline-outline.png" caption="The outline columns." eager/>
+<Shot file="timeline-outline.png" caption="The outline columns." />
 
-Left to right:
+Left to right: **Switches**, **Layer**, **Modes**, **Compose**, **Parent**, and the render
+times.
 
-1. **Visibility · audio · solo · lock · shy**
-2. **Twirl · label colour · layer number · layer name**
-3. **Collapse · Flow · effects bypass · motion blur · 3D**
-4. **Matte · blend mode · Parent**
-5. **Render times**
-
-## The switches
-
-| Switch | Does |
+| Column | Holds |
 | --- | --- |
-| **Visible** | Whether the layer draws. |
-| **Audible** | Whether its audio plays. |
-| **Solo** | Draws only solo-ed layers. |
-| **Lock** | Prevents edits to a layer. |
-| **Shy** | Hide the row when the shy filter is on. Doesn't alter if the layer draws. |
-| **Collapse** | On a Precomp layer, render through rather than flatten first. |
-| **Flow** | Enables Flow, our optical flow synthesis. |
-| **Effects bypass** | When toggled, draws layer without any effects applied to it. |
-| **Motion blur** | Applies motion blur to the layer based on it's keyframed values. |
-| **3D** | Makes the layer 3D and can interact with a [camera](/use/camera/). |
+| **Switches** | Visibility, mute, solo, lock, shy, guide. |
+| **Layer** | Twirl, label colour, layer number, name. The one column that stretches. |
+| **Modes** | Collapse, flow, disable effects, motion blur, 3D, adjustment. |
+| **Compose** | Matte and blend mode. |
+| **Parent** | The parent picker. |
+
+Drag a column heading to reorder the groups, and drag a seam to resize one. Toggles on the
+bottom bar show and hide **Switches**, **Modes** and **Parent** — each hides the columns its
+own word names, and Compose answers to no toggle.
+
+The two runs of switches divide along a line worth knowing: **Switches** is what the Timeline
+keeps about a layer, and **Modes** is how the layer is rendered. See
+[Layers](/use/layers/#switches).
 
 ## The lanes
 
 <Shot file="timeline-lanes.png" caption="A layer twirled open, showing its properties and keyframes." />
 
-Each layer has a bar in the lane area showing when it renders. Drag the bar to move it, and drag either end to trim.
+Each layer has a bar showing when it draws. Drag the bar to move it, and either end to trim
+it. A trimmed layer keeps a faint outline of its full source extent, so you can see what you
+cut off.
 
-Twirl a layer open in the outline. Transform, masks and effects will appear here, along with flow options or paint 
-strokes if applied.
+Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
+contents appear beneath it, each on a lane of its own.
 
-A [Sequence layer](/use/sequence-layers/) displays its clips on one row, and is unique in how it behaves in the timeline.
+A [Sequence layer](/use/sequence-layers/) draws its clips on one row and behaves differently
+from everything else here.
 
-## Snapping
+## Editing keyframes in bulk
 
-Dragged layers and keyframes snap to whole frames.
+<Shot file="layers-selected.png" caption="A block of keyframes selected: the box, its stretch handles, and the count of what is inside." />
+
+Sweep a box over the lanes and every keyframe inside it is selected, across as many
+properties and layers as the box crosses. The selection is drawn as a **block** with a badge
+reading how many keys it holds and how many frames it spans.
+
+- Drag the block's **body** to move every key together.
+- Drag an **end handle** to stretch the whole block — the keys inside keep their proportions,
+  so a move gets faster or slower without being re-timed one key at a time.
+- The **magnet** on the bottom bar decides whether a dragged key lands on a whole frame or
+  may sit between two.
+
+The strip along the bottom bar acts on whatever keys are selected, in whichever mode you are
+in: **Interpolation** — Linear, Hold, Ease, Bezier — then **Reverse**, **Copy** and **Paste
+at playhead**.
 
 ## Render times
 
-The stopwatch switch on the Timeline's bottom strip enables measuring render times. Each layer's row shows the entire 
-render time for that layer in milliseconds for the last measured frame, each effect's heading shows the render time for that
-effect, and the column header carries the entire frame's render time.
-A Precomp layer's number includes everything inside it.
+The stopwatch on the bottom strip turns on render-time measuring. Each layer's row shows how
+long that layer took on the last measured frame in milliseconds, each effect's heading shows
+its own, and the column heading carries the whole frame's. A Precomp layer's number includes
+everything inside it.
 
 ## Related
 
