@@ -4098,15 +4098,27 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   exactly like text does. Emoji are banned: a glyph is either from the icon set or
   deliberately drawn, never a character we hope the user's fonts carry — that's how the
   invisible stopwatch/arrow bugs happened.
-  Most of those names now draw **Lumit's own glyph** from `lumit_icons.dart` (below). The
-  handful the new set has no drawing for yet — the puppet, roto, vertex and camera-navigation
-  tools, the star, the solid, the fx switch, the label tag, the snap magnet, tone map, the
-  node panel's mark — still come from Iconoir, the free icon family Lumit started with, so
-  nothing on screen is a glyph borrowed to mean something it doesn't. A few marks are drawn
-  by hand rather than looked up at all, because they are Lumit's own artwork: the Null
-  layer's crossed square, the rounded-rectangle tool, the Viewer's layer-controls box, and
-  the zoom slider's two hills. As the new set gains those missing drawings, the names move
-  across one line at a time and no panel changes.
+  Every one of those names now draws **Lumit's own glyph** from `lumit_icons.dart` (below).
+  For a long while a couple of dozen of them — the puppet, roto, vertex and camera-navigation
+  tools, the star, the solid, the label tag, the snap magnet, tone map, the node panel's mark
+  — were borrowed from Iconoir, the free icon family Lumit started with, because a borrowed
+  glyph that means roughly the right thing beats one of our own pressed into a meaning it
+  doesn't have. Those drawings exist now, so Iconoir has been taken out of the project
+  altogether: one fewer thing to download, and one fewer set of drawing conventions on
+  screen. Four marks are still drawn by hand rather than looked up, because they are Lumit's
+  own artwork and each needs something the shared drawing rules don't allow — the Null
+  layer's crossed square wants sharp mitred corners, the rounded-rectangle tool wants a
+  corner radius that shrinks with the icon, the Viewer's layer-controls box wants solid
+  corner handles, and the zoom slider's two hills have to stay clean well below 16px.
+
+  **Drawing an icon is not finished when the maths is right.** Every glyph in this set was
+  looked at, at the size it ships and again large, before it was kept, and several were
+  thrown away and redrawn on sight: a path with a crossbar through it turned out to read as
+  the letter A, a circle with a line through it as the international "forbidden" sign, and a
+  box with a triangle beside it as a loudspeaker. None of that is visible in the
+  coordinates; it only shows up when you look at the picture. The rule that comes out of it
+  is simple — a glyph has to be readable as the thing it names, and if it reads as something
+  else it is wrong no matter how neat the drawing is.
 - `flutter_ui/lib/main.dart` + `lib/shell/` — **the window**: panels, menus, shortcuts,
   and the state glue (current project, selection, the render worker's reply stream).
 - **Layers can hang over the edges of the composition** (K-153, GEN-3). Think of a

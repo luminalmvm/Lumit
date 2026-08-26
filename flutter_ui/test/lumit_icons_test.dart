@@ -7,6 +7,9 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+// Prefixed: `icons.dart`'s enum is also called `LumitIcon`, and the widget that
+// draws one glyph owns that name here.
+import 'package:lumit_flutter/icons/icons.dart' as icons;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 
@@ -14,8 +17,10 @@ Map<String, String> _glyphBodies() {
   final data = jsonDecode(File('tool/icons/glyphs.json').readAsStringSync())
       as Map<String, dynamic>;
   return {
-    for (final section in (data['sections'] as List).cast<Map<String, dynamic>>())
-      for (final glyph in (section['glyphs'] as List).cast<Map<String, dynamic>>())
+    for (final section
+        in (data['sections'] as List).cast<Map<String, dynamic>>())
+      for (final glyph
+          in (section['glyphs'] as List).cast<Map<String, dynamic>>())
         glyph['name'] as String: glyph['body'] as String,
   };
 }
@@ -28,7 +33,8 @@ String _document(String body) => '<svg viewBox="0 0 16 16" fill="none" '
     'stroke-linejoin="round">$body</svg>';
 
 void main() {
-  test('every glyph in the source file reached the generated map, drawing and all',
+  test(
+      'every glyph in the source file reached the generated map, drawing and all',
       () {
     final bodies = _glyphBodies();
     expect(bodies, isNotEmpty);
@@ -69,6 +75,33 @@ void main() {
       // by the Viewer at runtime, not in the glyph.
       expect(RegExp('#[0-9a-fA-F]{3,8}').hasMatch(svg), isFalse, reason: name);
     });
+  });
+
+  /// The gate that keeps K-440's list closed.
+  ///
+  /// Every name the app asks for by [icons.LumitIcon] draws a glyph of the set,
+  /// bar four that are Lumit's own artwork and are painter-drawn on purpose —
+  /// each of those says in `icons.dart` why a glyph would be the worse drawing.
+  /// A member added without a drawing fails here rather than shipping a mark
+  /// that means something else.
+  testWidgets('every icon the app asks for is a drawing of the set',
+      (tester) async {
+    const painterDrawn = <icons.LumitIcon>{
+      icons.LumitIcon.nullLayer,
+      icons.LumitIcon.roundedRectangle,
+      icons.LumitIcon.wireframe,
+      icons.LumitIcon.zoomExtent,
+    };
+    for (final icon in icons.LumitIcon.values) {
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: icons.lumitIcon(icon,
+            size: icons.iconSize, color: const Color(0xffffffff)),
+      ));
+      expect(find.byType(LumitIcon),
+          painterDrawn.contains(icon) ? findsNothing : findsOneWidget,
+          reason: icon.name);
+    }
   });
 
   testWidgets('a handful of glyphs draw at the asked-for size', (tester) async {

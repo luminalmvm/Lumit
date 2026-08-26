@@ -18808,3 +18808,54 @@ every one-pixel stripe of the region on screen where the panel-resolution captur
 them away, a picture that fits crops to the whole of itself, and a picture panned off the
 panel crops to nothing; and in `viewer_panel_frb_test.dart`, the 400 % snapshot is still no
 larger than the panel and is shown over the slice it was taken from.
+
+## K-611 — The set owes nothing, and a ticked menu row is a drawing
+
+**Status: DECIDED.** Supersedes the standing part of K-085 (Iconoir as the icon family) and
+closes K-440's list of owed glyphs.
+
+Twenty-five names in `flutter_ui/lib/icons/icons.dart` were still showing a borrowed Iconoir
+glyph: the puppet tools, the roto pair, the pen group's vertex tools and mask feather, the
+camera navigation tools, clone stamp, eraser, vertical type, rotate, star, solid, collapse
+transformations, the label tag, the snap magnet, tone map, the node panel's mark and the
+filled key. **All of them are drawn in `tool/icons/glyphs.json` on the set's own grammar**
+(16px grid, 1.5px stroke, round caps, one weight, `currentColor`), and each name's line in
+`icons.dart` moved across. No panel changed.
+
+**Iconoir is removed from the frontend entirely** — the dependency is out of `pubspec.yaml`,
+and with it the half-pixel nudge that existed only because Iconoir draws on a 24-unit grid.
+Lumit's own glyphs carry that offset in their coordinates, so nothing is shifted on its way
+to the screen any more, at any display scaling.
+
+**Four marks stay painter-drawn, and each now says why** rather than saying "not yet": the
+Null layer's square wants mitred corners and a heavier stroke, so it does not read as the
+rectangle tool with a cross in it; the rounded rectangle's radius has to be a fraction of
+the size it is *asked for*, or the pair with the rectangle collapses into one mark at 13; the
+Viewer's layer-controls box wants filled corner handles sized against the box rather than
+the stroke; and the zoom slider's hills must stay clean well under 16px, where a stroke has
+no whole pixel to land on (K-209).
+
+**A ticked menu row draws the set's `Tick`.** It had been the character `✓` in five places,
+drawn by whichever font carried it at whatever weight that font gave it. One `menuTick`
+helper beside `MenuRow` now draws it everywhere — the Viewer's view, quality and colour
+menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, and the
+menu bar's own rows — and carries a screen-reader name, which the bare character had by
+accident and a glyph does not get for free. **The macOS platform menu bar is the one
+exception and says so in place**: Flutter's `PlatformMenuItem` takes a label and nothing
+else, so there is no channel to put a glyph down; that branch keeps the character and the
+comment names the API as the ceiling.
+
+**A glyph has to be readable as the thing it names.** Every drawing here was rendered and
+looked at, at 16 and large, before it was kept, and six were thrown away on sight for
+reading as something else: a path with a crossbar through it is the letter A (the three
+vertex tools), a circle with a bar or a cross through it is the international mark for
+forbidden (puppet starch, twice), and a box with a triangle beside it is a loudspeaker
+(camera dolly). None of that is visible in the coordinates. Each glyph that dodged a
+collision names it in its `comment` in `glyphs.json`, so the next person does not redraw the
+mark that was already rejected.
+
+Tests: in Flutter, `lumit_icons_test.dart` — every `LumitIcon` the app can ask for resolves
+to a glyph of the set bar the four painter-drawn, which is the gate that keeps this list
+closed; `icon_crispness_test.dart` — no icon is shifted on its way to the screen, at any of
+four display ratios; and `timeline_panel_frb_test.dart` — a ticked row carries the `Tick`
+glyph and an unticked one carries nothing.

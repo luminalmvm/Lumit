@@ -8,39 +8,15 @@
 // rebuilt one at a time — it is a name for a glyph, no longer a lookup into a
 // second icon family.
 //
-// The members the new set has no word for yet — the deep tools (puppet, roto,
-// vertex, camera navigation), the star and solid marks, the fx switch, the
-// label tag, the snap magnet, tone map, the node panel's mark — keep the
-// Iconoir glyph or the painter-drawn mark they had (K-085), so nothing on
-// screen is a glyph that means something else. They are the list of drawings
-// the set still owes.
+// **The set owes nothing now** (K-440's list, closed): the deep tools (puppet,
+// roto, vertex, camera navigation), the star and solid marks, the label tag,
+// the snap magnet, tone map, the node panel's mark and the filled key were the
+// last stand-ins, and each is drawn. Iconoir is gone from the app with them.
+// Four marks stay painter-drawn on purpose — the Null layer, the rounded
+// rectangle, the Viewer's layer-controls box and the zoom slider's hills — and
+// each says below why a glyph would be the worse drawing.
 
 import 'package:flutter/widgets.dart';
-import 'package:iconoir_flutter/regular/arc_3d.dart' as ic;
-import 'package:iconoir_flutter/regular/copy.dart' as ic;
-import 'package:iconoir_flutter/regular/drag.dart' as ic;
-import 'package:iconoir_flutter/regular/erase.dart' as ic;
-import 'package:iconoir_flutter/regular/expand.dart' as ic;
-import 'package:iconoir_flutter/regular/fill_color.dart' as ic;
-import 'package:iconoir_flutter/regular/flare.dart' as ic;
-import 'package:iconoir_flutter/regular/globe.dart' as ic;
-import 'package:iconoir_flutter/regular/hdr.dart' as ic;
-import 'package:iconoir_flutter/regular/intersect.dart' as ic;
-import 'package:iconoir_flutter/regular/label.dart' as ic;
-import 'package:iconoir_flutter/regular/magic_wand.dart' as ic;
-import 'package:iconoir_flutter/regular/magnet.dart' as ic;
-import 'package:iconoir_flutter/regular/mask_square.dart' as ic;
-import 'package:iconoir_flutter/regular/minus_circle.dart' as ic;
-import 'package:iconoir_flutter/regular/network.dart' as ic;
-import 'package:iconoir_flutter/regular/path_arrow.dart' as ic;
-import 'package:iconoir_flutter/regular/pin.dart' as ic;
-import 'package:iconoir_flutter/regular/plus_circle.dart' as ic;
-import 'package:iconoir_flutter/regular/rotate_camera_right.dart' as ic;
-import 'package:iconoir_flutter/regular/snow_flake.dart' as ic;
-import 'package:iconoir_flutter/regular/square_dashed.dart' as ic;
-import 'package:iconoir_flutter/regular/star.dart' as ic;
-import 'package:iconoir_flutter/regular/type.dart' as ic;
-import 'package:iconoir_flutter/solid/keyframe.dart' as ics;
 
 // Prefixed: the widget that draws one glyph of the new set is also called
 // `LumitIcon`, and the enum below owns that name here.
@@ -58,9 +34,9 @@ enum LumitIcon {
   rectangle,
   ellipse,
 
-  /// The star shape tool. **No glyph in the new set yet** — Iconoir's star
-  /// stands in, because the set's only many-sided shape is [polygon] and the
-  /// two tools sit beside each other.
+  /// The star shape tool: five points against [polygon]'s five flat sides.
+  /// The two tools sit beside each other, so the count is what tells them
+  /// apart.
   star,
   pen,
   play,
@@ -74,8 +50,9 @@ enum LumitIcon {
   graphCurve,
   timelineBars,
 
-  /// The node panel's mark. **No glyph in the new set yet**: the set's graph
-  /// glyphs are its actions (auto-wire, heal, frame all), not the panel.
+  /// The node panel's mark: two boxes and the wire between them. The set's
+  /// other graph glyphs are its *actions* (auto-wire, heal, frame all); this
+  /// one is the panel.
   nodes,
   footage,
   comp,
@@ -89,10 +66,9 @@ enum LumitIcon {
   import,
   newComposition,
 
-  /// A Solid. **No glyph in the new set yet** — its project marks are folder,
-  /// composition, footage, still, sequence and audio, and none of those is a
-  /// solid colour: `Still` is a photograph in a frame, which would say
-  /// "an image file" over a layer that is one flat colour.
+  /// A Solid: a swatch — a frame with one flat block in it. Deliberately not
+  /// `Still`, which is a photograph in a frame and would say "an image file"
+  /// over a layer that is one flat colour.
   ///
   /// An Adjustment layer used to share this mark; it has its own now
   /// ([adjustment]).
@@ -113,34 +89,34 @@ enum LumitIcon {
   keyframeAdd,
   keyframe,
 
-  /// A filled keyframe diamond. **No glyph in the new set yet, and by design**:
-  /// §5 bans a filled variant of an outlined idea, so a selected key wants a
-  /// state rather than a second mark. Iconoir's solid diamond stands in.
+  /// A filled keyframe diamond: [keyframe]'s shape, filled. §5 bans a filled
+  /// twin of an outlined idea as a *second meaning*; this is one meaning in a
+  /// second state, and the Timeline draws the pair side by side.
   keyframeFilled,
   stopwatch,
   twirlClosed,
   twirlOpen,
 
-  /// Collapse transformations / continuously rasterise. **No glyph in the new
-  /// set yet** — the set's `Collapse` is the twirl triangle [twirlOpen] draws,
-  /// which is a different switch entirely.
+  /// Collapse transformations / continuously rasterise: two arrows closing on
+  /// one line. The set's `Collapse` is the twirl triangle [twirlOpen] draws,
+  /// which is a different switch entirely, so this has a glyph of its own.
   collapse,
   flow,
   cube3d,
 
-  /// The Timeline's snap magnet. **No glyph in the new set yet.**
+  /// The Timeline's snap magnet: a horseshoe.
   magnet,
   eyedropper,
   reset,
   motionBlur,
 
-  /// The effects switch, and the add-effect button. **No glyph in the new set
-  /// yet**: `Add effect` is a bare plus, which is right on the button and wrong
-  /// on a layer's switch, and one member draws both.
+  /// The effects mark: the layer switch, the Effect controls' empty states and
+  /// its header. All of them mean "effects", so all of them draw the set's
+  /// `Effects switch`. The set's `Add effect` is a bare plus and belongs on a
+  /// button that adds one, which is a different call and not this member.
   fx,
 
-  /// The label-colour column's tag (docs/07 §4.2). **No glyph in the new set
-  /// yet.**
+  /// The label-colour column's tag (docs/07 §4.2).
   label,
 
   /// Shy: hide-from-the-layer-list, and the master filter that honours it.
@@ -154,9 +130,13 @@ enum LumitIcon {
   circleFilled,
 
   /// A Null layer: an empty square crossed corner to corner, the mark After
-  /// Effects puts on a null. **No glyph in the new set yet**, so it stays
-  /// painter-drawn, and deliberately unlike [rectangle] and [solid], which are
-  /// plain squares.
+  /// Effects puts on a null.
+  ///
+  /// **Painter-drawn on purpose**: it is drawn with a 2-unit mitred stroke and
+  /// butt caps, which is not the set's weight and not its joins — the corners
+  /// have to come to a point for the square to read as a transform box rather
+  /// than as [rectangle] with a cross in it. A glyph of the set could not do
+  /// that without breaking the one grammar §5 keeps.
   nullLayer,
 
   /// A landscape — two hills under a sky — drawn small at one end of the
@@ -174,7 +154,8 @@ enum LumitIcon {
   // --- The toolbar's tools (K-216, docs/07 §1.7). ---
   zoomIn,
 
-  /// The rotate tool. **No glyph in the new set yet.**
+  /// The rotate tool: a box with a turn over it. Deliberately not a bare
+  /// circular arrow, which is what [reset] draws.
   rotate,
 
   /// The anchor-point tool: a crosshair in a ring, the same mark the Viewer
@@ -182,56 +163,69 @@ enum LumitIcon {
   anchorPoint,
   razor,
 
-  /// A square with its corners taken off. **No glyph in the new set yet**:
-  /// its only square is [rectangle], and the two shape tools have to be told
-  /// apart at 16px, which two lookups of the same glyph could not do — so this
-  /// one stays painter-drawn.
+  /// A square with its corners taken off.
+  ///
+  /// **Painter-drawn on purpose**: the corner radius is a quarter of the side
+  /// *at the size it is asked for*, so the pair with [rectangle] stays legible
+  /// as two shape tools at the 13 the Project panel uses and the 16 the toolbar
+  /// does. A fixed radius baked into a 16-unit path rounds away to nothing at
+  /// the small end and the two tools become one mark.
   roundedRectangle,
   polygon,
 
-  /// The pen group's vertex tools. **No glyphs in the new set yet.**
+  /// The pen group's vertex tools: one curve with a vertex on it, and then a
+  /// plus, a minus, or the pair of tangent handles the convert puts there.
   vertexAdd,
   vertexDelete,
   vertexConvert,
 
-  /// Mask feather. **No glyph in the new set yet** — the set's `Mask` is the
-  /// mask *tool*, not the feather that follows it.
+  /// Mask feather: a hard edge inside a soft one. The set's `Mask` is the mask
+  /// *tool* — a frame with a shape in it — and feather is about the edge alone,
+  /// so it drops the frame.
   maskFeather,
 
-  /// Vertical type. **No glyph in the new set yet.**
+  /// Vertical type: [text]'s T on its side, crossbar to the left.
   textVertical,
   brush,
 
-  /// The paint group's other tools, and the roto pair. **No glyphs in the new
-  /// set yet** — the set's `Paint` covers the brush alone.
+  /// The paint group's other tools, and the roto pair. The set's `Paint` is
+  /// the brush alone; these four are a stamp, an eraser, the brush over a
+  /// dashed selection, and an edge with hair coming off it.
   cloneStamp,
   eraser,
   rotoBrush,
   refineEdge,
 
-  /// The puppet tools. **No glyphs in the new set yet.**
+  /// The puppet tools: a pin, a braced region, one shape passing in front of
+  /// another, and a line bent off the dashed one it would have followed.
   puppetPin,
   puppetStarch,
   puppetOverlap,
   puppetBend,
 
-  /// The camera navigation tools. **No glyphs in the new set yet** — the set's
-  /// `Camera` is the camera layer, not orbit, pan and dolly.
+  /// The camera navigation tools: a body with a ring round it, the four ways
+  /// in the plane, and a view cone with an arrow down its axis. The set's
+  /// `Camera` is the camera *layer*, which is none of those.
   cameraOrbit,
   cameraPan,
   cameraDolly,
 
   /// The Viewer bar's layer-controls switch (K-217): a box with a handle on
-  /// each corner — the mark it governs, drawn small. **No glyph in the new set
-  /// yet**, so it stays painter-drawn: what it depicts is Lumit's own gizmo.
+  /// each corner — the mark it governs, drawn small.
+  ///
+  /// **Painter-drawn on purpose**: the handles are filled squares whose size is
+  /// fixed against the box, not against the stroke, so the switch keeps looking
+  /// like the gizmo it turns on at every size the bar renders it. In a stroked
+  /// glyph the handles and the box would share one weight and the mark would
+  /// read as a grid.
   wireframe,
 
   /// The Viewer bar's exposure box (K-314).
   aperture,
 
-  /// The Viewer bar's tone-map switch (K-314). **No glyph in the new set yet**;
-  /// Iconoir's HDR mark stands in — what the toggle is about is the values
-  /// above 1 that an ordinary display cannot show.
+  /// The Viewer bar's tone-map switch (K-314): the transfer curve against the
+  /// dashed line of doing nothing. The gap between them is the whole of what
+  /// the switch is for — the values above 1 an ordinary display cannot show.
   toneMap,
 
   /// The Viewer bar's transparency-grid switch (K-411): the checkerboard
@@ -273,9 +267,9 @@ enum LumitIcon {
 /// The size an icon draws at (15-DESIGN §5: 16px for panels, 20px for the
 /// transport).
 ///
-/// **These are not free numbers.** Every glyph is drawn on a grid with a
-/// 1.5-unit stroke, so on the 24-unit Iconoir grid the stroke's width on screen
-/// is `size / 24 * 1.5` — at 16 that is exactly one pixel at 100% display
+/// **These are not free numbers.** A glyph is drawn on a grid with a 1.5-unit
+/// stroke, so on a 24-unit grid the stroke's width on screen is
+/// `size / 24 * 1.5` — at 16 that is exactly one pixel at 100% display
 /// scaling, and at 20 it is 1.25. The panel icons had been drawn at 10–13,
 /// where the stroke comes to 0.63–0.81 of a pixel: there is no such pixel, so
 /// the renderer spreads each line across two of them at partial strength and
@@ -292,35 +286,38 @@ enum LumitIcon {
 const double iconSize = 16;
 const double iconSizeTransport = 20;
 
-/// The Iconoir grid its glyphs are drawn on, and how wide their stroke is in
-/// those units. Paired: the stroke's width on screen is
+/// The grid the painter-drawn marks below are laid out on, and how wide a
+/// stroke is in those units. Paired: the stroke's width on screen is
 /// `size / _iconGridUnits * _iconStrokeUnits`, which is the whole of why the
-/// sizes above are what they are.
+/// sizes above are what they are. Twenty-four rather than the set's sixteen
+/// because these four coordinate systems predate the set and there is nothing
+/// to gain from restating them.
 const double _iconGridUnits = 24;
 const double _iconStrokeUnits = 1.5;
 
 /// Build `icon` at `size` in `color`.
 ///
-/// Three ways down, in order: Lumit's own glyph where the set has one, the
-/// painter-drawn mark where the icon is Lumit's own artwork, and the Iconoir
-/// glyph where the set still owes a drawing.
+/// Two ways down: Lumit's own glyph, which is every member but four, and the
+/// painter-drawn mark for the four that are Lumit's own artwork and say above
+/// why a glyph would be the worse drawing.
 Widget lumitIcon(LumitIcon icon, {required double size, required Color color}) {
   final own = _ownGlyph(icon);
   if (own != null) {
     return glyph.LumitIcon(own, size: size, colour: color);
   }
-  final painter = switch (icon) {
-    LumitIcon.nullLayer => _GridIconPainter(color, _drawNullLayer),
-    LumitIcon.roundedRectangle =>
-      _GridIconPainter(color, _drawRoundedRectangle),
-    LumitIcon.wireframe => _GridIconPainter(color, _drawWireframe),
-    LumitIcon.zoomExtent => ZoomExtentPainter(color),
-    _ => null,
-  };
-  if (painter != null) {
-    return CustomPaint(size: Size.square(size), painter: painter);
-  }
-  return _CrispGlyph(size: size, child: _iconoirGlyph(icon, color));
+  return CustomPaint(
+    size: Size.square(size),
+    painter: switch (icon) {
+      LumitIcon.roundedRectangle =>
+        _GridIconPainter(color, _drawRoundedRectangle),
+      LumitIcon.wireframe => _GridIconPainter(color, _drawWireframe),
+      LumitIcon.zoomExtent => ZoomExtentPainter(color),
+      // The Null layer, and the one place an unmapped member can land: a
+      // member added without a glyph draws the mark that says "nothing here",
+      // which is wrong but visible, rather than an empty box that is not.
+      _ => _GridIconPainter(color, _drawNullLayer),
+    },
+  );
 }
 
 /// The glyph from Lumit's own set that this icon means, or null where the set
@@ -392,85 +389,34 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.footage || LumitIcon.film => LumitIcons.footage,
       LumitIcon.sequence => LumitIcons.sequence,
       LumitIcon.adjustment => LumitIcons.adjustment,
+      LumitIcon.solid => LumitIcons.solid,
+      LumitIcon.nodes => LumitIcons.nodes,
+      // The toolbar's remaining tools.
+      LumitIcon.star => LumitIcons.star,
+      LumitIcon.rotate => LumitIcons.rotate,
+      LumitIcon.textVertical => LumitIcons.verticalType,
+      LumitIcon.vertexAdd => LumitIcons.vertexAdd,
+      LumitIcon.vertexDelete => LumitIcons.vertexDelete,
+      LumitIcon.vertexConvert => LumitIcons.vertexConvert,
+      LumitIcon.maskFeather => LumitIcons.maskFeather,
+      LumitIcon.cloneStamp => LumitIcons.cloneStamp,
+      LumitIcon.eraser => LumitIcons.eraser,
+      LumitIcon.rotoBrush => LumitIcons.rotoBrush,
+      LumitIcon.refineEdge => LumitIcons.refineEdge,
+      LumitIcon.puppetPin => LumitIcons.puppetPin,
+      LumitIcon.puppetStarch => LumitIcons.puppetStarch,
+      LumitIcon.puppetOverlap => LumitIcons.puppetOverlap,
+      LumitIcon.puppetBend => LumitIcons.puppetBend,
+      LumitIcon.cameraOrbit => LumitIcons.cameraOrbit,
+      LumitIcon.cameraPan => LumitIcons.cameraPan,
+      LumitIcon.cameraDolly => LumitIcons.cameraDolly,
+      // Switches and columns.
+      LumitIcon.collapse => LumitIcons.collapseTransformations,
+      LumitIcon.label => LumitIcons.label,
+      LumitIcon.magnet => LumitIcons.snap,
+      LumitIcon.keyframeFilled => LumitIcons.selectedKey,
+      LumitIcon.toneMap => LumitIcons.toneMap,
       _ => null,
-    };
-
-/// A glyph, nudged onto the pixel grid.
-///
-/// A stroke straddles the line it is drawn along — half its width each side.
-/// Iconoir's paths run along whole units of the 24-grid, so a one-pixel stroke
-/// lands centred on a pixel *boundary* and comes out as two half-lit pixels
-/// instead of one lit one: a grey, doubled line rather than a crisp one. Half
-/// a pixel across puts those strokes back on pixel centres, which is the whole
-/// difference for every horizontal and vertical line in the set — most of it,
-/// since these are interface icons.
-///
-/// Only when the stroke is an odd number of device pixels: at 2px (a 200%
-/// display, or the 20px transport at 150%) the line already covers whole
-/// pixels and moving it would be the thing that blurred it. Curves and
-/// diagonals are unaffected either way.
-///
-/// **Iconoir's glyphs only.** Lumit's own set carries the offset in the
-/// drawings themselves (its coordinates sit on half units of a 16-unit grid,
-/// §5), so nudging those again would take them back off the pixel centres they
-/// are already on.
-///
-/// Best effort at a UI scale other than 1: the scale multiplies in above this
-/// widget, so the nudge lands near, rather than exactly on, half a pixel.
-class _CrispGlyph extends StatelessWidget {
-  final double size;
-  final Widget child;
-
-  const _CrispGlyph({required this.size, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final strokeDevicePixels =
-        (size / _iconGridUnits * _iconStrokeUnits * ratio).round();
-    final nudge = strokeDevicePixels.isOdd ? 0.5 / ratio : 0.0;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Transform.translate(
-        offset: Offset(nudge, nudge),
-        child: child,
-      ),
-    );
-  }
-}
-
-/// The stand-ins: the icons Lumit's own set has no glyph for yet, still drawn
-/// from Iconoir (K-085). Every one of these is a drawing the set owes; none of
-/// them is a glyph of the set pressed into a meaning it does not have.
-Widget _iconoirGlyph(LumitIcon icon, Color color) => switch (icon) {
-      LumitIcon.star => ic.Star(color: color),
-      LumitIcon.nodes => ic.Network(color: color),
-      LumitIcon.solid => ic.FillColor(color: color),
-      LumitIcon.keyframeFilled => ics.KeyframeSolid(color: color),
-      LumitIcon.collapse => ic.Flare(color: color),
-      LumitIcon.magnet => ic.Magnet(color: color),
-      LumitIcon.label => ic.Label(color: color),
-      LumitIcon.rotate => ic.RotateCameraRight(color: color),
-      LumitIcon.vertexAdd => ic.PlusCircle(color: color),
-      LumitIcon.vertexDelete => ic.MinusCircle(color: color),
-      LumitIcon.vertexConvert => ic.PathArrow(color: color),
-      LumitIcon.maskFeather => ic.SquareDashed(color: color),
-      LumitIcon.textVertical => ic.Type(color: color),
-      LumitIcon.cloneStamp => ic.Copy(color: color),
-      LumitIcon.eraser => ic.Erase(color: color),
-      LumitIcon.rotoBrush => ic.MaskSquare(color: color),
-      LumitIcon.refineEdge => ic.MagicWand(color: color),
-      LumitIcon.puppetPin => ic.Pin(color: color),
-      LumitIcon.puppetStarch => ic.SnowFlake(color: color),
-      LumitIcon.puppetOverlap => ic.Intersect(color: color),
-      LumitIcon.puppetBend => ic.Arc3d(color: color),
-      LumitIcon.cameraOrbit => ic.Globe(color: color),
-      LumitIcon.cameraPan => ic.Drag(color: color),
-      LumitIcon.cameraDolly => ic.Expand(color: color),
-      LumitIcon.toneMap => ic.Hdr(color: color),
-      // Everything else is drawn above, from Lumit's own set or by a painter.
-      _ => const SizedBox.shrink(),
     };
 
 /// The one shell behind every painter-drawn mark. Each mark used to be its

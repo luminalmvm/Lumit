@@ -21,7 +21,7 @@ import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 // The K-440 set's drawing widget, under a prefix: `LumitIcon` is also the name
-// of the older Iconoir enum this file uses for layer kinds.
+// of the by-name enum in icons.dart that this file uses for layer kinds.
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';

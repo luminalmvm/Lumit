@@ -2844,9 +2844,7 @@ Future<void> showProjectMenuFrb({
                 onPressed: () => close(_ProjectMenuAction.useProxy),
                 child: Row(
                   children: [
-                    SizedBox(
-                        width: 16,
-                        child: proxy.enabled ? const Text('✓') : null),
+                    menuTick(proxy.enabled),
                     Expanded(child: Text(l10n.useProxy)),
                   ],
                 ),
@@ -2889,10 +2887,7 @@ Future<void> showProjectMenuFrb({
                         onLocalEdit();
                       },
                       child: Row(children: [
-                        SizedBox(
-                            width: 16,
-                            child:
-                                colourSpace == null ? const Text('✓') : null),
+                        menuTick(colourSpace == null),
                         Expanded(child: Text(l10n.colourSpaceFromFile)),
                       ]),
                     ),
@@ -2920,11 +2915,7 @@ Future<void> showProjectMenuFrb({
                           onLocalEdit();
                         },
                         child: Row(children: [
-                          SizedBox(
-                              width: 16,
-                              child: space == colourSpace
-                                  ? const Text('✓')
-                                  : null),
+                          menuTick(space == colourSpace),
                           Expanded(child: Text(space)),
                         ]),
                       ),

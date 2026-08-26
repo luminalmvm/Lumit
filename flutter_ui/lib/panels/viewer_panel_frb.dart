@@ -2301,13 +2301,6 @@ List<Widget> viewerPickers({
       ),
     ];
 
-/// A tick in a menu row, the mark the guides menu already uses.
-///
-/// ponytail: the tick is a character, as it is in the menu bar; a drawn
-/// checkmark wants a glyph of our own.
-Widget menuTick(LumitTheme t, bool on) =>
-    SizedBox(width: 16, child: on ? Text('✓', style: t.bodyPrimary) : null);
-
 /// **How good the preview is** — the header's middle picker (K-466).
 ///
 /// It carries two answers that used to sit apart: the preview resolution
@@ -2360,7 +2353,7 @@ class _QualityDropdown extends StatelessWidget {
               ui.setPreviewResolution(resolution);
             },
             child: Row(children: [
-              menuTick(t, resolution == ui.previewResolution),
+              menuTick(resolution == ui.previewResolution),
               Text(resolution.title),
             ]),
           ),
@@ -2374,12 +2367,8 @@ class _QualityDropdown extends StatelessWidget {
               ui.workspace.touch();
             },
             child: Row(children: [
-              menuTick(
-                  t,
-                  mode ==
-                      (adaptive
-                          ? PlaybackMode.adaptive
-                          : PlaybackMode.everyFrame)),
+              menuTick(mode ==
+                  (adaptive ? PlaybackMode.adaptive : PlaybackMode.everyFrame)),
               Text(mode == PlaybackMode.adaptive
                   ? l10n.playbackAdaptiveShort
                   : l10n.playbackEveryFrame),
@@ -2501,7 +2490,7 @@ class _ColourDropdown extends StatelessWidget {
             ui.setColourView(null);
           },
           child: Row(children: [
-            menuTick(t, view == null),
+            menuTick(view == null),
             Text(l10n.viewerDisplayTransform),
           ]),
         ),
@@ -2528,11 +2517,9 @@ class _ColourDropdown extends StatelessWidget {
                 ui.setColourView([display.name, name]);
               },
               child: Row(children: [
-                menuTick(
-                    t,
-                    view != null &&
-                        view.first == display.name &&
-                        view.last == name),
+                menuTick(view != null &&
+                    view.first == display.name &&
+                    view.last == name),
                 Text(name),
               ]),
             ),
@@ -2545,7 +2532,7 @@ class _ColourDropdown extends StatelessWidget {
               onToneMap();
             },
             child: Row(children: [
-              menuTick(t, look.toneMap),
+              menuTick(look.toneMap),
               Text(l10n.viewerColourToneMap),
             ]),
           ),
@@ -3163,7 +3150,7 @@ class _ChannelPicker extends StatelessWidget {
                       onChannel(c);
                     },
                     child: Row(children: [
-                      menuTick(t, c == channel),
+                      menuTick(c == channel),
                       Text(_label(c)),
                     ]),
                   ),

@@ -1487,7 +1487,13 @@ MenuEntry updateMenuEntry(
 /// a leading mark in the label, since Flutter's platform-menu API has no
 /// checked state of its own.
 ///
-/// ponytail: labels carry the tick; a real checkmark needs a channel of our own.
+/// **The tick is a character here and only here.** Flutter's platform-menu API
+/// hands macOS a label and nothing else — [PlatformMenuItem] has no checked
+/// state and no leading widget — so there is no channel to put a glyph down.
+/// The in-app renderer below draws the set's tick like every other menu; this
+/// one prefixes `✓ ` to the label and pads the untick to match. The ceiling is
+/// exactly that API: when `PlatformMenuItem` gains a checked state, or when
+/// Lumit draws its own bar on macOS, this branch loses its reason to exist.
 List<PlatformMenuItem> platformMenusFor(
     BuildContext context, List<MenuSection> menus) {
   final keymap = context.read<LumitUiState>().keymap;
@@ -1823,11 +1829,7 @@ class _MenuListState extends State<_MenuList> {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
     return Row(
       children: [
-        if (ticks)
-          SizedBox(
-            width: 16,
-            child: item.checked == true ? Text('✓', style: style) : null,
-          ),
+        if (ticks) menuTick(item.checked == true, colour: style?.color),
         Expanded(child: Text(item.text, style: style)),
         if (shortcut != null)
           Padding(

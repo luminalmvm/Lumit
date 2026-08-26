@@ -47,6 +47,59 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3"/></svg>';
   static const String eyedropper =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l.8-2.8 5-5 2 2-5 5z"/><path d="M10 3.2a1.7 1.7 0 0 1 2.8 2.8l-1.6 1.6-2.8-2.8z"/></svg>';
+  /// A box with a turn sweeping over it and away to the right, not the near-full circle Reset draws: the two sit a toolbar apart and a bare circular arrow would read as "undo the rotation". The arc has to clear the box and carry on past it, or the pair reads as a chest with a lid.
+  static const String rotate =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="7" height="6.5"/><path d="M6 5.5A5 5 0 0 1 13.5 6"/><path d="M11.5 4.2 13.9 6.1 12 8.2"/></svg>';
+  /// Five points, where Polygon has five flat sides. The pair are neighbours on the toolbar and the count is what tells them apart at 16px, so the star keeps the same five.
+  static const String star =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2L9.53 6.1 13.71 6.35 10.47 9 11.53 13.05 8 10.8 4.47 13.05 5.53 9 2.29 6.35 6.47 6.1Z"/></svg>';
+  /// The T of Text turned on its side, crossbar to the left. Orientation is the whole difference, which is why both keep the same three strokes.
+  static const String verticalType =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v10M3 8h10M13 6v4"/></svg>';
+  /// A corner point on a path, and then the sign: the three vertex tools are one drawing with a plus, a minus, and the rounded corner a convert would leave. Deliberately a right angle rather than a peak - a peak with a crossbar through it is the letter A, which is what the first drawing of these turned out to be.
+  static const String vertexAdd =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M10 5.5v5M7.5 8h5"/></svg>';
+  static const String vertexDelete =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M7.5 8h5"/></svg>';
+  /// The dashed arc cutting the corner is what the tool does to it.
+  static const String vertexConvert =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5v9h9"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M3 6.5A6 6 0 0 0 9 12.5" stroke-dasharray="2 1.5" opacity=".65"/></svg>';
+  /// The hard edge inside, the soft one outside. Mask is a frame with a dashed shape in it; this one drops the frame, because feather is about the edge and nothing else.
+  static const String maskFeather =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="5.5" stroke-dasharray="2 1.5" opacity=".55"/></svg>';
+  /// A rubber stamp: head, neck, pad.
+  static const String cloneStamp =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h4v3l1.5 2.5h-7L6 5.5z"/><path d="M8 8v2"/><rect x="3.5" y="10" width="9" height="3.5"/></svg>';
+  /// The divider is what makes the rhombus an eraser rather than a tilted rectangle; the line under it is the surface being cleared.
+  static const String eraser =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 5-6 6-5-5z"/><path d="M6 5l5 5"/><path d="M8 13h6"/></svg>';
+  /// The set's brush nib over a dashed selection: a brush that selects, which is exactly what the tool is.
+  static const String rotoBrush =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="8.5" r="5" stroke-dasharray="2 1.5"/><path d="M12.5 2.5l1.5 1.5-6 6-2 .5.5-2z"/></svg>';
+  /// A region, the hard edge it has, and the soft one the tool gives it. Mask feather says the same thing with closed rings, where this is an open edge - the two never share a surface, and a roto edge is a boundary rather than a shape.
+  static const String refineEdge =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2.5h4c2 3 2 9 0 11h-4z" fill="currentColor" opacity=".28" stroke="none"/><path d="M6.5 2.5c2 3 2 9 0 11"/><path d="M10 2.5c2 3 2 9 0 11" stroke-dasharray="2 1.5" opacity=".7"/></svg>';
+  /// A pin, head and needle. Deliberately not Anchor's ringed crosshair: a puppet pin is driven in, an anchor point is a coordinate.
+  static const String puppetPin =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="4.5" r="2.5"/><path d="M8 7v7"/></svg>';
+  /// A region marked out, hatched the way a drawing hatches a part that is held: the area told not to deform. Deliberately square and hatched, not a circle with a bar or a cross through it - both of those are the mark for forbidden, on every surface anyone has ever used.
+  static const String puppetStarch =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="2 1.5"/><path d="M4.5 11.5L11.5 4.5M4.5 8L8 4.5M8 11.5L11.5 8"/></svg>';
+  /// The back shape is drawn as a broken outline and the front one whole, which is the entire question the tool answers.
+  static const String puppetOverlap =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4a4 4 0 1 0 0 8"/><circle cx="9.5" cy="8" r="4"/></svg>';
+  /// The dashed line is where the thing would have gone; the solid one is where the bend takes it. Without the dash this is Redo.
+  static const String puppetBend =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12.5h4Q11.5 12.5 11.5 6.5V4"/><path d="M9.7 5.7L11.5 3.9 13.3 5.7"/><path d="M6.5 12.5h7" stroke-dasharray="2 1.5" opacity=".45"/></svg>';
+  /// A body with a path round it. The ring is drawn flat rather than tilted because a tilted one at 16px is two curves that miss the circle by a pixel and read as a smudge.
+  static const String cameraOrbit =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.5"/><ellipse cx="8" cy="8" rx="6.2" ry="2.2"/></svg>';
+  /// Four ways in the plane. Add effect is the bare plus and Anchor the ringed crosshair; the arrowheads are what keep this one from being either.
+  static const String cameraPan =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v11M2.5 8h11"/><path d="M6 4.5L8 2.5l2 2M6 11.5L8 13.5l2-2M4.5 6L2.5 8l2 2M11.5 6L13.5 8l-2 2"/></svg>';
+  /// Two rails running away to a vanishing point and an arrow up them: the camera moving into the scene, not the picture scaling. Deliberately not a cone with an arrow beside it, which is a loudspeaker.
+  static const String cameraDolly =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5L6.5 3M14 13.5L9.5 3" opacity=".55"/><path d="M8 12.5V6M6.2 7.8 8 6l1.8 1.8"/></svg>';
 
   // --- Layer switches ---
   static const String visible =
@@ -93,6 +146,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 2.5l11 11" /><path d="M2.5 13.5L13.5 2.5v11z" fill="currentColor" opacity=".4"/></svg>';
   static const String label =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5h-5l-6 6 5 5 6-6z"/><circle cx="11" cy="5" r="1"/></svg>';
+  /// Two arrows closing on one line. Not the corner brackets of Fit inverted - Fit is already in the set, and at 16px the inverse of a bracket is a bracket.
+  static const String collapseTransformations =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12" opacity=".4"/><path d="M8 2v3.5M6 3.7l2 1.8 2-1.8M8 14v-3.5M6 12.3l2-1.8 2 1.8"/></svg>';
 
   // --- Transport ---
   static const String toStart =
@@ -149,6 +205,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg>';
   static const String zoomOut =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/></svg>';
+  /// A horseshoe magnet: the Timeline's snapping, in the mark every editor uses for it.
+  static const String snap =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13V8a4.5 4.5 0 0 1 9 0v5h-3V8a1.5 1.5 0 0 0-3 0v5z"/></svg>';
 
   // --- Keyframes and values ---
   static const String stopwatch =
@@ -169,6 +228,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 2.5h11v11z" fill="currentColor"/></svg>';
   static const String separateAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/><path d="M5 5l-1 1 1 1M11 5l1 1-1 1" opacity=".6"/></svg>';
+  /// Animated's diamond, filled. §5 bans a filled twin of an outlined idea as a *second meaning*; this is the same meaning in a second state, which is what a selected key is, and the Timeline draws the two side by side.
+  static const String selectedKey =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l6 6-6 6-6-6z" fill="currentColor"/></svg>';
 
   // --- Effects ---
   static const String addEffect =
@@ -209,6 +271,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3V8H2zM6.5 12h3V5h-3zM11 12h3V2h-3z"/></svg>';
   static const String scopes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h12"/><path d="M3 12c1-8 3-8 4 0s3-8 4 0 2-6 2-2"/></svg>';
+  /// The transfer curve on its axes: values going up the side and coming out flat at the top is the whole of what the switch does to the ones above 1. Value draws a zigzag on the same axes and the two never share a surface.
+  static const String toneMap =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h12M2 13V4" opacity=".4"/><path d="M3 13C8 13 8 4.5 13.5 4.5"/></svg>';
 
   // --- Project ---
   static const String folder =
@@ -239,6 +304,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>';
   static const String proxy =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5H2.5v8.5"/><rect x="5.5" y="5.5" width="8" height="8"/></svg>';
+  /// A swatch: a frame with one flat block in it. The block is what keeps it apart from Rectangle, which is an empty frame of a different proportion.
+  static const String solid =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><rect x="4.5" y="4.5" width="7" height="7" fill="currentColor" stroke="none"/></svg>';
 
   // --- Graph panel ---
   static const String autoWire =
@@ -251,6 +319,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h7l3 3v8H3z"/><path d="M10 2.5v3h3"/></svg>';
   static const String group =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="2 1.5"/><rect x="5" y="5" width="6" height="6"/></svg>';
+  /// The panel itself, not one of its actions: two boxes and the wire between them.
+  static const String nodes =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="5.5" height="4"/><rect x="8.5" y="9" width="5.5" height="4"/><path d="M7.5 5h2.5a1.5 1.5 0 0 1 1.5 1.5V9"/></svg>';
 
   // --- Application ---
   static const String export =
@@ -273,6 +344,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5a2 2 0 0 1 2 2v8a2 2 0 0 0-2-1H3zM13 3H8"/><path d="M13 3v9H8"/></svg>';
   static const String workspace =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="11"/><path d="M2 6h12M7 6v7.5"/></svg>';
+  /// The mark every ticked menu row carries. In use draws the same check over a Project item; the two are one shape with two jobs, and naming them apart is what keeps a call site honest about which it means.
+  static const String tick =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>';
 
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
@@ -293,6 +367,24 @@ abstract final class LumitIcons {
     'Paint': paint,
     'Point picker': pointPicker,
     'Eyedropper': eyedropper,
+    'Rotate': rotate,
+    'Star': star,
+    'Vertical type': verticalType,
+    'Vertex add': vertexAdd,
+    'Vertex delete': vertexDelete,
+    'Vertex convert': vertexConvert,
+    'Mask feather': maskFeather,
+    'Clone stamp': cloneStamp,
+    'Eraser': eraser,
+    'Roto brush': rotoBrush,
+    'Refine edge': refineEdge,
+    'Puppet pin': puppetPin,
+    'Puppet starch': puppetStarch,
+    'Puppet overlap': puppetOverlap,
+    'Puppet bend': puppetBend,
+    'Camera orbit': cameraOrbit,
+    'Camera pan': cameraPan,
+    'Camera dolly': cameraDolly,
     'Visible': visible,
     'Hidden': hidden,
     'Audio': audio,
@@ -315,6 +407,7 @@ abstract final class LumitIcons {
     'Parent': parent,
     'Matte': matte,
     'Label': label,
+    'Collapse transformations': collapseTransformations,
     'To start': toStart,
     'Previous frame': previousFrame,
     'Play': play,
@@ -341,6 +434,7 @@ abstract final class LumitIcons {
     'Normalise': normalise,
     'Zoom in': zoomIn,
     'Zoom out': zoomOut,
+    'Snap': snap,
     'Stopwatch': stopwatch,
     'Previous key': previousKey,
     'Add key': addKey,
@@ -350,6 +444,7 @@ abstract final class LumitIcons {
     'Unlink': unlink,
     'Invert': invert,
     'Separate axes': separateAxes,
+    'Selected key': selectedKey,
     'Add effect': addEffect,
     'Bypass': bypass,
     'Expose': expose,
@@ -367,6 +462,7 @@ abstract final class LumitIcons {
     'Colour space': colourSpace,
     'Quality': quality,
     'Scopes': scopes,
+    'Tone map': toneMap,
     'Folder': folder,
     'New folder': newFolder,
     'Composition': composition,
@@ -381,11 +477,13 @@ abstract final class LumitIcons {
     'Missing': missing,
     'In use': inUse,
     'Proxy': proxy,
+    'Solid': solid,
     'Auto-wire': autoWire,
     'Heal': heal,
     'Frame all': frameAll,
     'Note': note,
     'Group': group,
+    'Nodes': nodes,
     'Export': export,
     'Add to queue': addToQueue,
     'Settings': settings,
@@ -396,5 +494,6 @@ abstract final class LumitIcons {
     'Help': help,
     'Manual': manual,
     'Workspace': workspace,
+    'Tick': tick,
   };
 }

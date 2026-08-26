@@ -7,6 +7,8 @@ import 'dart:async';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/services.dart';
 
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
@@ -309,6 +311,24 @@ Widget _capitalised(Widget child, bool on) =>
     on && child is Text && child.data != null
         ? Text(child.data!.toUpperCase(), style: child.style)
         : child;
+
+/// The tick column of a menu row: the set's checkmark where the row is on, and
+/// an empty slot of the same width where it is not, so a menu's names line up
+/// whether anything in it is ticked or nothing is.
+///
+/// The mark is a glyph, not the character `✓` (K-440's tick): a character is
+/// drawn by whichever font has it, at whatever weight that font gives it, and
+/// sat beside the set's own marks at three different weights across three
+/// menus. The glyph takes the row's text colour like any other — [MenuRow]
+/// puts `bodyPrimary` on its children — and `colour` is for the one caller
+/// that draws a row disabled and needs the tick to go with it.
+Widget menuTick(bool on, {Color? colour}) => SizedBox(
+      width: 16,
+      child: on
+          ? LumitIcon(LumitIcons.tick,
+              colour: colour, semanticLabel: l10n.menuRowTicked)
+          : null,
+    );
 
 /// One row in a dropdown/menu popup.
 class MenuRow extends StatefulWidget {

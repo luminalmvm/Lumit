@@ -10077,5 +10077,9 @@
   "badgeUnknownEffect": "This build does not know this effect",
   "@badgeUnknownEffect": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."
+  },
+  "menuRowTicked": "Ticked",
+  "@menuRowTicked": {
+    "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
   }
 }

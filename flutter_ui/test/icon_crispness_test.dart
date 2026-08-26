@@ -1,14 +1,15 @@
-// The two rules that decide whether an icon lands on the pixel grid or smears
-// across it. Both are arithmetic about stroke widths, so both are testable
-// without looking at a screen — which matters, because the symptom (icons that
-// read as "crunchy") is the kind of thing only ever reported by eye.
+// The rule that decides whether an icon lands on the pixel grid or smears
+// across it. It is arithmetic about stroke widths, so it is testable without
+// looking at a screen — which matters, because the symptom (icons that read as
+// "crunchy") is the kind of thing only ever reported by eye.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/icons.dart';
 
-/// The stroke an Iconoir glyph draws at [size], in logical pixels: 1.5 units
-/// of its own 24-unit grid.
+/// The stroke a glyph drawn on a 24-unit grid draws at [size], in logical
+/// pixels: 1.5 of those units. The sizes in `icons.dart` were chosen against
+/// this arithmetic and the reasoning is kept there.
 double strokeAt(double size) => size / 24.0 * 1.5;
 
 void main() {
@@ -21,47 +22,31 @@ void main() {
     expect(strokeAt(12), lessThan(1.0), reason: 'the size that looked crunchy');
   });
 
-  /// The nudge: a one-pixel stroke drawn along a whole-pixel coordinate covers
-  /// half of the pixel each side, so it comes out doubled and grey. Half a
-  /// pixel across puts it on a pixel centre.
+  /// The nudge is gone with the glyphs it existed for.
   ///
-  /// Drawn here with the magnet, which is one of the icons Lumit's own set has
-  /// no glyph for yet and so still comes from Iconoir: the nudge is Iconoir's
-  /// 24-unit grid meeting the pixel grid. The own set carries its offset in the
-  /// drawings, and is deliberately not nudged again.
-  testWidgets(
-      'a one-pixel stroke is nudged onto the grid, a two-pixel one is'
-      ' left alone', (tester) async {
-    Future<Offset> translationAt(double ratio, double size) async {
-      await tester.pumpWidget(MediaQuery(
-        data: MediaQueryData(devicePixelRatio: ratio),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: Center(
-            child: lumitIcon(LumitIcon.magnet,
-                size: size, color: const Color(0xffffffff)),
+  /// A one-pixel stroke drawn along a whole-pixel coordinate covers half of the
+  /// pixel each side and comes out doubled and grey, so every borrowed glyph
+  /// used to be shifted half a pixel across on its way to the screen. Lumit's
+  /// own set carries that offset in the drawings — its coordinates sit on half
+  /// units of a 16-unit grid — so a shift on top of it would take the strokes
+  /// *off* the centres they are already on. Now that the set draws everything,
+  /// nothing may be nudged, at any display scaling.
+  testWidgets('no icon is shifted on its way to the screen', (tester) async {
+    for (final ratio in const [1.0, 1.5, 2.0, 3.0]) {
+      for (final icon in LumitIcon.values) {
+        await tester.pumpWidget(MediaQuery(
+          data: MediaQueryData(devicePixelRatio: ratio),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Center(
+              child: lumitIcon(icon,
+                  size: iconSize, color: const Color(0xffffffff)),
+            ),
           ),
-        ),
-      ));
-      final transform = tester.widget<Transform>(find.descendant(
-        of: find.byType(SizedBox).first,
-        matching: find.byType(Transform),
-      ));
-      return Offset(transform.transform.getTranslation().x,
-          transform.transform.getTranslation().y);
+        ));
+        expect(find.byType(Transform), findsNothing,
+            reason: '${icon.name} at a ratio of $ratio');
+      }
     }
-
-    // 100% scaling: a 1px stroke, so half a pixel across.
-    expect(await translationAt(1.0, iconSize), const Offset(0.5, 0.5));
-    // 200%: the stroke is a whole 2 device pixels and already covers them —
-    // moving it is what would blur it.
-    expect(await translationAt(2.0, iconSize), Offset.zero);
-    // 150% (the common Windows setting): 1.5 and 1.875 device pixels, both of
-    // which land nearest 2 — even, so left alone. Neither is a whole number of
-    // pixels; there is nothing a nudge can do about that.
-    expect(await translationAt(1.5, iconSize), Offset.zero);
-    expect(await translationAt(1.5, iconSizeTransport), Offset.zero);
-    // 300% on a panel icon: 3 device pixels, odd again, so half of one.
-    expect(await translationAt(3.0, iconSize), Offset(0.5 / 3.0, 0.5 / 3.0));
   });
 }

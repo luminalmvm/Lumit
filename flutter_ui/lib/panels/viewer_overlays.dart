@@ -157,12 +157,7 @@ class ViewerGuidesMenu extends StatelessWidget {
             },
             child: Row(
               children: [
-                // ponytail: the tick is a character, as it is in the menu bar;
-                // a drawn checkmark wants a glyph of our own.
-                SizedBox(
-                  width: 16,
-                  child: row.on ? Text('✓', style: t.bodyPrimary) : null,
-                ),
+                menuTick(row.on),
                 Text(row.text),
               ],
             ),

@@ -342,10 +342,14 @@ is no shared palette to promote them to any more.
 
 **Lumit draws its own icon set** (K-440, superseding K-085's Iconoir pick). The set is drawn
 and adopted application-wide: `flutter_ui/lib/icons/icons.dart` resolves each name the panels
-ask for to its glyph. Iconoir stays only where the set still owes a drawing — the deep tools
-(puppet, roto, vertex, camera navigation), the star and solid marks, the fx switch, the label
-tag, the snap magnet, tone map and the node panel's mark — listed in `docs/TODO.md`; a name
-crosses over the day its glyph exists, and no panel changes. The set's grammar is fixed:
+ask for to its glyph. **The set owes nothing**: the last stand-ins — the deep tools (puppet,
+roto, vertex, camera navigation), the star and solid marks, the label tag, the snap magnet,
+tone map, the node panel's mark and the filled key — are drawn, and **Iconoir is no longer a
+dependency of the frontend at all**. Four marks are painter-drawn on purpose and each says in
+`icons.dart` why a glyph of the set would be the worse drawing: the Null layer's mitred
+crossed square, the rounded-rectangle tool (its radius is a fraction of the size it is asked
+for), the Viewer's layer-controls box, and the zoom slider's two hills. The set's grammar is
+fixed:
 
 - **16px grid, 1.5px stroke, round caps, one weight.** Every glyph is drawn on the same
   16-unit grid with the same stroke; there are no filled and outlined variants of one idea,
@@ -376,6 +380,17 @@ crosses over the day its glyph exists, and no panel changes. The set's grammar i
   glyph is either from the icon set or deliberately painter-drawn (keyframe diamonds on
   lanes); never a Unicode character we hope the user's fonts happen to carry. Every icon
   name used must resolve in the embedded set (CI-tested).
+- **A ticked menu row draws the set's `Tick`**, through the one `menuTick` helper beside
+  `MenuRow`. It had been the character `✓`, drawn by whichever font carried it at whatever
+  weight that font gave it, and it sat beside the set's own marks at three different weights
+  across three menus. **The one exception is the macOS platform menu bar**, where Flutter's
+  `PlatformMenuItem` takes a label and nothing else: there is no channel to put a glyph
+  down, so that branch alone prefixes the character and pads the untick to match.
+- **A glyph has to be readable as the thing it names**, and a mark that reads as something
+  else is a defect however elegant it is. Three of K-440's owed drawings were redrawn on
+  sight for exactly that: a peak with a crossbar through it is the letter A, a circle with a
+  bar or a cross through it is the mark for forbidden, and a box with a triangle off it is a
+  loudspeaker. Each glyph that dodged a collision says which one, in `glyphs.json`.
 
 ### 5.1 Chrome labels: Words / Icons / Icons everywhere (K-440)
 

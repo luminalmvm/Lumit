@@ -14,7 +14,6 @@ dependencies:
   intl: any
   crypto: ^3.0.7
   ffi: ^2.1.0
-  iconoir_flutter: ^7.11.1
   # Draws Lumit's own glyphs, which are inline SVG (docs/15-DESIGN.md §5).
   flutter_svg: ^2.3.0
   file_selector: ^1.1.0

@@ -42,6 +42,11 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
 
+/// A ticked menu row's mark: the set's checkmark, not the character it used to
+/// be (K-440's tick).
+final Finder _tick = find.byWidgetPredicate(
+    (w) => w is glyph.LumitIcon && w.glyph == LumitIcons.tick);
+
 void main() {
   setUpAll(initEngineForTests);
 
@@ -1232,8 +1237,8 @@ void main() {
 
       // A per-point row is a value row like any other: its field writes
       // through to that point alone.
-      await dragLeft(
-          tester, find.byKey(ValueKey<String>('tl-mask-vertexFeather-$id-0')), 20);
+      await dragLeft(tester,
+          find.byKey(ValueKey<String>('tl-mask-vertexFeather-$id-0')), 20);
       final dragged = layer.getMasks().single;
       expect(stillValue(dragged.vertexFeather[0]), lessThan(12),
           reason: 'the drag reached point 1');
@@ -1350,8 +1355,7 @@ void main() {
       final written = layer.getPaint().single.end;
       expect(written, isA<BridgeScalar_Static>());
       expect((written as BridgeScalar_Static).field0, 40);
-      expect(layer.getPaint().single.start,
-          isA<BridgeScalar_Static>(),
+      expect(layer.getPaint().single.start, isA<BridgeScalar_Static>(),
           reason: 'and Start is left where it was');
     });
 
@@ -1837,8 +1841,8 @@ void main() {
           reason: 'the stopwatch planted a key on the shape');
       // The keys reach the lane, so the diamonds have somewhere to be drawn.
       expect(
-          laneKeysOf(FoldShapeValueRow(layer.getShapeContents().single,
-              ShapeValue.path,
+          laneKeysOf(FoldShapeValueRow(
+              layer.getShapeContents().single, ShapeValue.path,
               depth: 3)),
           hasLength(1));
 
@@ -4963,8 +4967,7 @@ void main() {
       await openMenu();
       final entry = find.byKey(const ValueKey('tl-row-accepts-lights'));
       expect(entry, findsOneWidget);
-      expect(
-          find.descendant(of: entry, matching: find.text('✓')), findsOneWidget,
+      expect(find.descendant(of: entry, matching: _tick), findsOneWidget,
           reason: 'the entry says which way the setting is set');
       await tester.tap(entry);
       await tester.pumpAndSettle();
@@ -4974,8 +4977,7 @@ void main() {
       // Off now, so the tick is gone and picking it again puts it back.
       await openMenu();
       final again = find.byKey(const ValueKey('tl-row-accepts-lights'));
-      expect(
-          find.descendant(of: again, matching: find.text('✓')), findsNothing);
+      expect(find.descendant(of: again, matching: _tick), findsNothing);
       await tester.tap(again);
       await tester.pumpAndSettle();
       expect(layer.getSwitches().acceptsLights, isTrue);
@@ -5054,8 +5056,7 @@ void main() {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       final before = layer.getInfo();
-      p.uiState.playheadFrame.value =
-          (before.inFrame + before.outFrame) ~/ 2;
+      p.uiState.playheadFrame.value = (before.inFrame + before.outFrame) ~/ 2;
       await mount(tester, p);
       final id = layer.internallayerId;
 

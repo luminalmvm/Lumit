@@ -8638,10 +8638,11 @@ class _OutlineRowState extends State<_OutlineRow> {
     bool on,
     BridgeLayerSwitch? which, {
     LumitIcon? offIcon,
-    // Lumit's own set (K-440), where it has the mark: [mark]/[offMark] take
-    // the place of [icon]/[offIcon] and are drawn from lumit_icons.dart. The
-    // Iconoir pair stays for the switches the set has no glyph for yet, so
-    // this cell can be ported one column at a time.
+    // Lumit's own set (K-440), where the caller passes a glyph directly:
+    // [mark]/[offMark] take the place of [icon]/[offIcon] and are drawn from
+    // lumit_icons.dart. The [LumitIcon] pair stays for the cells not yet
+    // ported — it resolves to the same set (K-611), so this is which name the
+    // caller uses, not which family draws.
     String? mark,
     String? offMark,
     String? tip,
@@ -8758,7 +8759,7 @@ class _OutlineRowState extends State<_OutlineRow> {
           onPressed: () => close('accepts-lights'),
           child: Row(
             children: [
-              SizedBox(width: 16, child: lit ? const Text('✓') : null),
+              menuTick(lit),
               Expanded(child: Text(l10n.switchAcceptsLights)),
             ],
           ),
@@ -11275,8 +11276,8 @@ class _LaneBottomBar extends StatelessWidget {
   /// them, which three buttons never did.
   ///
   /// Painter-drawn and small, both deliberately: the pair only says
-  /// "less / more" if the sizes plainly differ, and an Iconoir glyph under
-  /// 16px crunches (K-209), so these are filled shapes with no stroke to lose.
+  /// "less / more" if the sizes plainly differ, and a stroked glyph under 16px
+  /// crunches (K-209), so these are filled shapes with no stroke to lose.
   /// One end of the slider: the landscape, and **a click on it nudges the
   /// zoom one step** (§6.5). The pair had been decoration — a picture of what
   /// the two ends mean — while every other icon in this bar does something,
