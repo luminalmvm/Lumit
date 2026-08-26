@@ -11541,6 +11541,64 @@ what this one leaves behind is a single call that adds a described plugin to the
 and gives it its round-trip pass, so the place that does the looking has one thing to do
 with what it finds.
 
+### Where Lumit looks for plugins
+
+Everything above could host a plugin somebody handed it by name. This is the part that goes
+looking, and it is the part you actually see.
+
+OFX has a convention about where plugins live, and every host follows it: one folder per
+platform (`C:\Program Files\Common Files\OFX\Plugins` on Windows, `/Library/OFX/Plugins`
+on a Mac), plus anything listed in an environment variable called `OFX_PLUGIN_PATH` — the
+escape hatch for people who keep their plugins somewhere else. Inside those folders a
+plugin is a *bundle*: a folder named `Something.ofx.bundle` with the actual library buried
+a couple of levels down under `Contents`. Lumit reads all of those folders once when it
+starts, and again whenever you ask it to rescan — after installing something, say.
+
+For each bundle it finds, Lumit starts the separate little program described above, asks
+every plugin inside to describe itself, and turns each answer into an effect. From that
+moment the plugin is in the Effects & presets browser and behaves like anything else in it:
+double-click to apply, drag it onto a layer, star it as a favourite, search for it. There
+is exactly one visible difference, and the specification asks for it: right-click a row and
+the menu says whether the effect ships with Lumit or came from a plugin.
+
+**Nothing about this is allowed to interrupt you.** Somebody else's installer leaves broken
+files on machines; a plugin may only work in a shape Lumit cannot drive; two of its
+controls may collide. Each of those is one calm line in a report the scan hands back, the
+scan carries on to the next bundle, and no dialogue appears. Nor does the scan hold the
+application up: it runs on a worker thread while the interface comes up around it, because
+a machine with a large plugin suite installed would otherwise sit on a blank window for
+several seconds.
+
+**Switching one off.** The same right-click menu can switch a plugin off. That is a
+*preference* — a fact about your machine, not about any project — so it goes in a small
+file beside Lumit's other settings, keyed by the plugin's own permanent identifier rather
+than by where its file happens to sit. It takes effect two ways at once, which matters more
+than it sounds: the next scan never even loads the plugin, and the copies already on your
+layers stop rendering immediately rather than waiting for a restart. Those layers do not
+break — they show the picture unchanged, and the effect's card wears a quiet line saying
+why.
+
+That line is the last piece. An effect card can say one of four things when it is not doing
+its own work: this plugin failed, this plugin is switched off, this plugin is not installed
+on this machine, or this build of Lumit has never heard of this effect. The last two are
+what a project made on somebody else's computer looks like when you open it here — and the
+important thing is what *doesn't* happen: nothing is deleted, nothing is silently dropped,
+and saving the project writes the effect back exactly as it arrived. Take the project back
+to the machine that has the plugin and it works again.
+
+The words on the badge are Lumit's, and translated; the engine sends a short code rather
+than an English sentence so that they can be. Where a plugin has words of its own about
+what went wrong, those appear underneath, exactly as the plugin wrote them — translating a
+vendor's error message would be inventing one.
+
+**When a plugin wants to say something.** OFX lets a plugin raise an error, a warning or a
+yes/no question at any moment, including in the middle of playing back a comp. Lumit's
+answer for now is deliberately dull: it becomes an ordinary quiet notice on the status
+strip at the bottom of the window, the same one that tells you a project was saved. Never a
+box in the middle of the screen, never something that stops playback. A plugin that asks a
+question is told "you decide" — which is the answer OFX itself defines for a host that
+cannot ask anybody.
+
 ### What exists so far
 
 The ground floor: finding and opening a bundle, handing the plugin the host in the right
@@ -11568,13 +11626,16 @@ And on top of *that*, the section above: a described plugin becomes an entry in 
 catalogue, renders in the middle of a stack of built-ins, names its cached frames like any
 other effect, and says which neighbouring frames it needs.
 
-What is not there yet is the wiring at the other end: nothing in the engine goes looking for
-plugins when Lumit starts, and there is no list in Preferences to switch one off — so in
-practice the catalogue still holds only built-ins, and no engine crate depends on the plugin
-host. That is the next package, and the seam it needs is one call. Beside it, three smaller
-gaps that are written down rather than papered over: writing a value back and keyframing
-from a plugin, overlays (which gracefully turn into no overlay), and the copy in and out of
-the shared block, which the block exists to make unnecessary one day.
+And on top of *that*, the scan described above: Lumit reads the machine's plugin folders
+when it starts, and what it finds is in the browser under the plugin's own heading, applies
+to a layer like anything else, can be switched off, and wears a quiet line when it dies.
+
+What is not there yet: there is no page in Settings listing every installed plugin — the
+switch lives in the row's own right-click menu, which is where you already are when you
+wonder what a plugin is doing in your list. Beside that, three smaller gaps that are
+written down rather than papered over: writing a value back and keyframing from a plugin,
+overlays (which gracefully turn into no overlay), and the copy in and out of the shared
+block, which the block exists to make unnecessary one day.
 
 There is also a small set of plugins of Lumit's own, `lumit-ofx-testplug`, which exist only
 so the host has something honest to be tested against — a commercial plugin cannot live in

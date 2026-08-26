@@ -438,7 +438,12 @@ impl PluginHost for LocalHost {
 /// for it too, which is the recorded ceiling — K-066's parallelism is across
 /// *brokers* until one broker can carry two conversations at once.
 pub struct BrokerHost {
-    broker: Mutex<Broker>,
+    /// **Shared**, because a bundle holds many plugins and docs/12 §2.3 puts
+    /// one broker process behind the bundle rather than behind each of them:
+    /// openfx-misc alone would otherwise be eighty processes. The lock is the
+    /// bundle serialisation described above, now also serialising the bundle's
+    /// plugins against each other.
+    broker: Arc<Mutex<Broker>>,
     /// Which plugin of the bundle, by the index the broker's describe used.
     plugin: u32,
     context: Context,
@@ -449,9 +454,9 @@ pub struct BrokerHost {
 impl BrokerHost {
     /// Host one plugin of an already-spawned, already-described broker.
     #[must_use]
-    pub fn new(broker: Broker, plugin: u32, context: Context) -> Self {
+    pub fn new(broker: Arc<Mutex<Broker>>, plugin: u32, context: Context) -> Self {
         Self {
-            broker: Mutex::new(broker),
+            broker,
             plugin,
             context,
             instances: Mutex::new(BTreeMap::new()),
@@ -500,7 +505,24 @@ impl PluginHost for BrokerHost {
         // this call is the work of the package that gives the dispatch seam its
         // side tables. Until then a frame at another time answers with the frame
         // in hand, which is what the spec says an unfetchable clip gives.
-        match broker.render(id, &request, &|_, _| None) {
+        let answer = broker.render(id, &request, &|_, _| None);
+        // Whatever the plugin asked us to *say* during that render, taken while
+        // the broker is in hand and filed after the guard is dropped: the
+        // message log is another process-wide lock, and taking two of those
+        // nested is the deadlock shape (docs/14 §7) even when neither call
+        // reaches a plugin. Never modal — the frontend draws these as a calm
+        // toast (docs/12 §2.2's open question, answered this way until the
+        // owner says otherwise).
+        let notes = broker.take_notes();
+        drop(broker);
+        for (kind, text) in notes {
+            crate::host::state().push_message(crate::host::HostMessage {
+                message_type: kind,
+                message_id: String::new(),
+                text,
+            });
+        }
+        match answer {
             Ok(answer) => Rendering {
                 frame: answer.frame,
                 error: answer.error,

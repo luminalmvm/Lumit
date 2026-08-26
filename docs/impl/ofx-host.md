@@ -139,6 +139,31 @@ registered into the same catalogue the built-ins live in — the seam
   instance. Thread safety needs nothing new — `instance::render_lock` already turns the
   plugin's declaration into no lock, the instance's, or the bundle's (K-066).
 
+## 4b. Going looking (K-594)
+
+`lumit-ofx::discover` is [12-PLUGINS.md](../12-PLUGINS.md) §2.6's scan: §1's search paths
+(already `bundle::search_paths`), a bundle apiece, §3's describe, §4a's `EffectDef`, and a
+`register` callback for the composition root. What it pins:
+
+- **`scan` takes a callback, not a catalogue.** A definition lands in two tables joined only
+  by a `match_name` string ([effect-registry.md](effect-registry.md) §5), and the pairing is
+  the composition root's (`lumit_render::gpufx::ofx::register`). `lumit-bridge` is that
+  root; no engine crate gains a dependency on another.
+- **`Hosting::Broker` is the shipping arrangement, `Hosting::InProcess` is the tests'.**
+  Proving that a folder of bundles becomes the right set of catalogue entries needs no
+  second process, and `CARGO_BIN_EXE_…` names the broker only inside its own crate anyway.
+- **The switched-off list is read before describe, and again per render.** The stored one
+  (`lumit_project::PluginPrefs`) keeps a plugin's code from running at all; the running one
+  (`discover::set_enabled`) is what a plugin switched off mid-session is gated by, because
+  registration is additive and never removes (K-593).
+- **A rescan is guarded by name before any work.** That is what keeps it idempotent and what
+  stops the second scan re-leaking a schema — §4a's recorded ceiling, discharged.
+- **The ring is built for 1080p at scan time.** The scan runs before any composition is
+  open, and §4 sizes a ring once per broker. A 4K comp then renders through the three-slot
+  floor; the upgrade is a broker respawned at the comp's size.
+- **A bundle's plugins share one broker.** `BrokerHost` holds an `Arc<Mutex<Broker>>`;
+  eighty plugins in one bundle are one process, not eighty.
+
 ## 5. Test plan
 
 1. Conformance bench first: **openfx-misc** (Natron's plugin set, ~80 plugins, source

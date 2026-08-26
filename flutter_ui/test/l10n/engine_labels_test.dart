@@ -131,6 +131,34 @@ Set<String> _colourRefusalKeys() {
   return keys;
 }
 
+/// Every reason an effect's calm badge can carry, by the key the engine sends
+/// (`BADGE_REASONS` in `crates/lumit-bridge/src/api/effect.rs`).
+///
+/// Read out of the Rust source the way the import reasons and the colour
+/// refusals are, and for the same reason: nothing in either type system ties a
+/// reason there to a sentence in `engine_labels.dart`, and the failure is
+/// silent — a badge nobody has words for simply draws nothing, which is worse
+/// than English.
+Set<String> _badgeReasonKeys() {
+  final source = File('../crates/lumit-bridge/src/api/effect.rs');
+  expect(source.existsSync(), isTrue,
+      reason: 'run this from flutter_ui/, beside the crates/ tree');
+  final body =
+      RegExp(r'BADGE_REASONS: &\[&str\] = &\[(.*?)\];', dotAll: true)
+          .firstMatch(source.readAsStringSync())
+          ?.group(1);
+  expect(body, isNotNull,
+      reason: 'BADGE_REASONS has moved or been renamed');
+
+  final keys = <String>{
+    for (final m in RegExp(r'"([a-z0-9_]+)"').allMatches(body!)) m.group(1)!,
+  };
+  expect(keys.length, greaterThan(3),
+      reason: 'the list declares more reasons than this — the scrape has '
+          'stopped matching the source');
+  return keys;
+}
+
 void main() {
   test('every import report reason has a sentence to be translated', () {
     final missing = _importReasonKeys().where((k) => !hasImportReason(k)).toList()
@@ -169,6 +197,25 @@ void main() {
     expect(engineLabel(''), '');
   });
 
+
+  test('every effect badge reason has a sentence to be translated', () {
+    final missing = _badgeReasonKeys().where((k) => !hasEffectBadge(k)).toList()
+      ..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason: 'these are values of BADGE_REASONS with no case in effectBadge() '
+          "in lib/l10n/engine_labels.dart. Add each one's sentence there and "
+          'the matching key to lib/l10n/app_en.arb, or an effect whose plugin '
+          'has died wears no badge at all.',
+    );
+  });
+
+  test('a badge reason with no sentence draws nothing, rather than a raw key',
+      () {
+    expect(effectBadge('not_a_real_reason'), isNull);
+    expect(hasEffectBadge('plugin_disabled'), isTrue);
+  });
 
   test('every colour config refusal has a sentence to be translated', () {
     final missing =

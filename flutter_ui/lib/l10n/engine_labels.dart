@@ -1077,3 +1077,32 @@ String? _colourRefusal(String key, String Function(String) a) {
 
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
+
+// ---------------------------------------------------------------------------
+// The calm badge an effect wears when the frame it drew was not its own work.
+//
+// The engine sends a *key*, not a sentence (`BADGE_REASONS` in
+// `crates/lumit-bridge/src/api/effect.rs`): four things it can say, all of them
+// about somebody else's code or about an effect this build has never heard of.
+// `test/l10n/engine_labels_test.dart` reads that declaration and fails if a
+// reason has no case below.
+
+/// The badge sentence for [key], or null when this build has none — the caller
+/// then draws nothing rather than a raw key.
+String? effectBadge(String key) {
+  switch (key) {
+    case 'plugin_failed':
+      return l10n.badgePluginFailed;
+    case 'plugin_disabled':
+      return l10n.badgePluginDisabled;
+    case 'plugin_missing':
+      return l10n.badgePluginMissing;
+    case 'unknown_effect':
+      return l10n.badgeUnknownEffect;
+    default:
+      return null;
+  }
+}
+
+/// Whether this build has a sentence for [key] — what the sync test asserts.
+bool hasEffectBadge(String key) => effectBadge(key) != null;

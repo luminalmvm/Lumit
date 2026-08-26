@@ -17623,3 +17623,89 @@ declaration, which `render_lock` obeys.
 
 No `app_en.arb` key: the failure sentences are engine English that nothing in the frontend
 can reach yet, and they gain their keys with the package that shows the badge (K-303).
+
+## K-594 — Lumit goes looking for plugins, and an installed one is an effect in the browser like any other
+
+**DECIDED 2026-08-26.** The sixth package of the OFX host (K-589, K-590, K-591, K-592,
+K-593, K-061), and the one that makes the previous five visible: docs/12 §2.6's discovery,
+its per-plugin enable/disable list, and the browser row that is a built-in's row apart from
+a small provenance tag.
+
+**The scan is a function, and the composition root is the bridge.**
+`lumit-ofx::discover::scan` takes the directories, the switched-off list and a `register`
+callback, and answers with what it registered and one calm line per thing it turned away.
+It is a callback rather than a direct call because a definition has to land in **two**
+tables at once — `lumit-core`'s catalogue and `lumit-render`'s pass table, joined only by a
+`match_name` string — and K-593 deliberately left that pairing to the composition root
+(`lumit_render::gpufx::ofx::register`, one call, both tables). `lumit-bridge` is that root,
+because it is the one crate that can see the user's preferences, the catalogue and the
+render at once; engine crates gain no new dependency on each other.
+
+**`rescan_plugins()` is not `frb(sync)`, and that is the whole of "off the UI thread."**
+Opening other people's bundles and spawning a broker apiece is tens of milliseconds at best
+and seconds on a machine with a large suite installed. flutter_rust_bridge runs a
+non-`sync` function on a worker and hands Dart a future, so the start-up scan and the
+rescan command are the same call and neither blocks the shell. The shell fires it once at
+start-up and does not await it.
+
+**A refusal is a line, never a dialogue** (docs/12 §2.6, §2.1). A bundle that will not
+load, a plugin whose only context this host cannot drive, a plugin whose parameters collide
+on one id, a plugin the user switched off: each is a sentence in the scan report, the scan
+carries on, and the other seventy-nine plugins in the folder are unaffected.
+
+**Disabling is answered twice.** The stored list (`lumit_project::PluginPrefs`, one small
+JSON file beside the export defaults, keyed by the plugin's own reverse-domain identifier)
+is consulted *before* a plugin is described, so a switched-off plugin's code never runs at
+all. A plugin switched off **mid-session** is already registered and K-593's registration is
+additive and never removes — so a small gate host in front of every plugin reads the
+running list per render and answers identity with a reason. Both roads end at the same
+badge, and neither needs a restart to be true.
+
+**One broker per bundle, not one per plugin.** `BrokerHost` now holds an
+`Arc<Mutex<Broker>>`, so a bundle's plugins share the process K-592 spawns for it —
+openfx-misc's eighty plugins in one bundle would otherwise have been eighty processes. The
+recorded ceiling stands: a bundle is serialised behind one lock, and K-066's parallelism is
+across brokers.
+
+**A plugin places itself.** Its declared grouping is its heading in Effects & presets,
+under a category key prefixed `ofx/` so a plugin whose grouping happens to read like one of
+Lumit's ten categories still gets a heading of its own. `BridgeEffectInfo` gains
+`namespace` (`builtin` / `ofx`) so the provenance rides on the listing the browser already
+reads, rather than being a second call per row; the browser groups, folds, searches, stars
+and drags a plugin through exactly the code that does it for a built-in. The four other
+schema lookups in the bridge (`list_parameters`, `list_pairs`, `list_parameter_groups`,
+`list_enabled_when`) now go through the whole catalogue rather than the `BUILTINS` slice,
+which is what puts a plugin's parameters in Effect controls.
+
+**The badge is a key, not a sentence.** `BridgeEffectInstanceInfo` gains `badge_reason` —
+one of a closed `BADGE_REASONS` list — and `badge_detail`, the engine's or the plugin's own
+words where there are any. Four reasons: the plugin failed, the plugin is switched off, the
+plugin is not installed on this machine, this build has never heard of the effect. The last
+two are docs/12 §1's inert placeholder given a face at last: the instance is kept exactly as
+saved, values and all, and nothing is lost. The frontend translates the key (K-303) and
+shows the detail verbatim, because a vendor's sentence about a vendor's code is not ours to
+translate. `engine_labels_test.dart` reads `BADGE_REASONS` out of the Rust source and fails
+on a reason with no sentence, exactly as it does for the import reasons and the colour
+refusals.
+
+**The Message suite is a calm toast, and never modal** — docs/12's open question, answered
+as a shipped default rather than closed. A plugin may raise an error, a warning or a
+question at any moment, including in the middle of playback; a modal vendor dialogue there
+would be the worst possible answer, and a *question* has already been told "you decide" at
+the suite, which is the reply OFX defines for a host that cannot ask. The broker's notes
+are drained after each render into the host's message log, and the status strip's existing
+half-second tick posts them as ordinary notices. The question stays open for the owner to
+answer properly; this is what happens until then.
+
+**Ceilings, named.** The shared-memory ring is sized once per broker and the scan happens
+before any composition is open, so it is built for 1080p — a 4K comp then renders through
+the three-slot floor docs/impl/ofx-host.md §4 already names, and the upgrade is a broker
+respawned at the comp's size, not a different design. Switching a plugin back on does not
+re-register it within a session if it was never scanned in; a rescan does that. There is no
+Settings page listing installed plugins yet: switching one off is a command in its row's
+context menu, which is where somebody already is when they wonder what a plugin is doing in
+their list.
+
+New `app_en.arb` keys: `effectsPlugins`, `effectFromPlugin`, `effectBuiltIn`,
+`switchPluginOff`, `badgePluginFailed`, `badgePluginDisabled`, `badgePluginMissing`,
+`badgeUnknownEffect`.

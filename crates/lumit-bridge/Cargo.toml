@@ -64,6 +64,10 @@ lumit-project = { path = "../lumit-project" }
 # (engine crates never depend on the UI) is unbroken.
 lumit-eval = { path = "../lumit-eval" }
 lumit-media = { path = "../lumit-media", optional = true }
+# The OFX host (docs/12). The bridge is the composition root for plugins: it is
+# the one place that knows the user's preferences, the effect catalogue and the
+# render's pass table at once, which is what a scan has to reach (K-594).
+lumit-ofx = { path = "../lumit-ofx" }
 # Beat detection maths (docs/09 §5); the audio mixdown rides the same
 # headless input path lumit-render provides.
 lumit-audio = { path = "../lumit-audio" }
@@ -109,6 +113,9 @@ features = [
 
 [dev-dependencies]
 tempfile = "3"
+# The minimal OFX plugin, so a bridge test can put a real bundle in a folder and
+# watch it come out of `list_effects` (K-594). Dev-only, as it is for lumit-ofx.
+lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
 # The ffmpeg-made fixtures, so tests that need real media can have some —
 # a still and a running clip are the two sides of the K-246 wrap rule, and
 # nothing but real media can tell them apart. Skips itself with no ffmpeg.

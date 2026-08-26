@@ -1126,6 +1126,15 @@ class _EffectSection extends StatelessWidget {
       // An effect with its own display (Levels' histogram, K-413) draws it
       // above its rows; the rows themselves are unchanged.
       rows: [
+        // Above everything, because it is the reason the rows beneath it are
+        // not doing anything (docs/12 §1, §2.3). An effect that is behaving
+        // draws none of this.
+        if (effectBadgeRow(context,
+                id: '$id',
+                reason: info.badgeReason,
+                detail: info.badgeDetail)
+            case final badge?)
+          badge,
         if (customEffectDisplay(
           info.name,
           effectId: id,
@@ -1779,3 +1788,52 @@ Widget? customEffectDisplay(
         ),
       _ => null,
     };
+
+/// The calm badge an effect wears when the last frame it drew was not its own
+/// work, or when this build has never heard of it at all (docs/12 §1, §2.3).
+///
+/// Four things it can say, and the engine sends a **key** for each rather than a
+/// sentence, so the words are the user's own (K-303): the plugin failed, the
+/// plugin is switched off, the plugin is not installed on this machine, or the
+/// effect came from a newer Lumit. Where the engine or the plugin has words of
+/// its own about a failure they go underneath, verbatim — it is somebody else's
+/// sentence about somebody else's code and translating it would be inventing.
+///
+/// Never an alarm and never red: the comp is still compositing, the effect is
+/// rendering as identity, and the values below are still readable and still
+/// saved. `null` — no badge, no row — is the ordinary case and costs nothing.
+///
+/// A free function rather than a widget class so a test can pump exactly this
+/// and nothing else.
+Widget? effectBadgeRow(
+  BuildContext context, {
+  required String id,
+  String? reason,
+  String? detail,
+}) {
+  if (reason == null) return null;
+  final sentence = effectBadge(reason);
+  if (sentence == null) return null;
+  final t = ThemeScope.of(context).theme;
+  return Padding(
+    key: ValueKey<String>('fx-badge-$id'),
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          sentence,
+          key: ValueKey<String>('fx-badge-reason-$id'),
+          style: t.small.copyWith(color: t.accent),
+        ),
+        if (detail != null && detail.isNotEmpty)
+          Text(
+            detail,
+            key: ValueKey<String>('fx-badge-detail-$id'),
+            style: t.small.copyWith(color: t.textMuted),
+          ),
+      ],
+    ),
+  );
+}

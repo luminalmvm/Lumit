@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `bridge_unit`, `catalogue`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `document_for`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -39,6 +39,57 @@ List<BridgeEffectInfo> listEffects() =>
 /// search groups them exactly as the Add-effect menu groups effects.
 List<BridgeEffectInfo> listDrivers() =>
     BridgeLib.instance.api.crateApiEffectListDrivers();
+
+/// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) and offer what is
+/// found as effects.
+///
+/// **Deliberately not `frb(sync)`**: this opens other people's bundles and
+/// spawns a broker process per bundle, which is tens of milliseconds at best
+/// and seconds on a machine with a large suite installed. flutter_rust_bridge
+/// runs it on a worker and hands Dart a future, so the interface never waits on
+/// it — the start-up scan and the rescan command are the same call.
+///
+/// Registration is additive and idempotent: calling this twice registers each
+/// plugin once (K-593), so a rescan after installing something new is safe at
+/// any moment.
+Future<BridgePluginScan> rescanPlugins() =>
+    BridgeLib.instance.api.crateApiEffectRescanPlugins();
+
+/// Switch a discovered plugin on or off, by the `match_name` the listing hands
+/// out (docs/12 §2.6).
+///
+/// Takes the match name rather than the plugin's own identifier because that is
+/// what the browser holds; deriving one from the other is the engine's business
+/// and would otherwise be a rule the frontend had to know. A name that is not a
+/// plugin's is simply ignored.
+///
+/// Two things happen: the answer is written to the preferences, so it survives
+/// a restart, and it takes effect **now** — a plugin switched off mid-session
+/// renders its input unchanged and its layers wear a badge, rather than the
+/// change waiting for a relaunch. Switching one back on does not re-register it
+/// within the session if it was never scanned in; a rescan does that.
+///
+/// # Errors
+///
+/// [`BridgeError::WriteFailed`] when the preference could not be written — the
+/// answer still holds for this session.
+void setPluginEnabled({required String effect, required bool enabled}) =>
+    BridgeLib.instance.api
+        .crateApiEffectSetPluginEnabled(effect: effect, enabled: enabled);
+
+/// What plugins have asked Lumit to say since this was last called, oldest
+/// first, taken as they are read.
+///
+/// **Never modal** (docs/12 §2.2, open question): a plugin that wants to tell
+/// the user something gets a calm toast on the status strip and nothing more,
+/// until the owner says what the Message suite should look like. A plugin that
+/// asks a *question* has already been told "you decide" at the suite, which is
+/// the reply OFX defines for a host that cannot ask.
+///
+/// Empty on every session with no plugins, which is what makes polling it from
+/// the shell's existing tick free.
+List<String> pluginMessages() =>
+    BridgeLib.instance.api.crateApiEffectPluginMessages();
 
 /// Every `.lumfx` in the preset library folder, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
@@ -272,6 +323,15 @@ class BridgeEffectInfo {
   final String category;
   final String categoryLabel;
 
+  /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+  ///
+  /// A discovered plugin is drawn exactly as a built-in is — same row, same
+  /// star, same drag — and this is the one difference: docs/12 §2.6 asks for
+  /// "a small provenance tag in the effect's context menu", and nothing else.
+  /// It rides on the listing rather than being a second call, because the
+  /// browser needs it for every row it draws.
+  final String namespace;
+
   /// The sockets an instance of this entry would draw, from its declaration
   /// alone (K-471 §1.3) — the parameters that can take a wire.
   ///
@@ -291,6 +351,7 @@ class BridgeEffectInfo {
     required this.label,
     required this.category,
     required this.categoryLabel,
+    required this.namespace,
     required this.inputs,
     required this.outputs,
   });
@@ -301,6 +362,7 @@ class BridgeEffectInfo {
       label.hashCode ^
       category.hashCode ^
       categoryLabel.hashCode ^
+      namespace.hashCode ^
       inputs.hashCode ^
       outputs.hashCode;
 
@@ -313,6 +375,7 @@ class BridgeEffectInfo {
           label == other.label &&
           category == other.category &&
           categoryLabel == other.categoryLabel &&
+          namespace == other.namespace &&
           inputs == other.inputs &&
           outputs == other.outputs;
 }
@@ -341,6 +404,22 @@ class BridgeEffectInstanceInfo {
   /// call apiece is exactly the hover-hot traffic the budget test forbids.
   final List<String> linkedPairs;
 
+  /// Why this instance is not doing its own work, if it is not (docs/12 §1,
+  /// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
+  ///
+  /// A **key**, not a sentence: the panel draws the calm badge in the user's
+  /// own language (K-303). Four things it can say — the plugin failed, the
+  /// plugin is switched off, the plugin is not installed on this machine, or
+  /// this build has never heard of the effect at all. The last two are the
+  /// placeholder docs/12 §1 requires: the instance is kept, values and all,
+  /// so saving cannot lose it.
+  final String? badgeReason;
+
+  /// The engine's or the plugin's own words about the failure, where there
+  /// are any — shown beneath the badge, verbatim and untranslated, because it
+  /// is somebody else's sentence about somebody else's code.
+  final String? badgeDetail;
+
   const BridgeEffectInstanceInfo({
     required this.id,
     required this.name,
@@ -348,6 +427,8 @@ class BridgeEffectInstanceInfo {
     required this.enabled,
     required this.values,
     required this.linkedPairs,
+    this.badgeReason,
+    this.badgeDetail,
   });
 
   @override
@@ -357,7 +438,9 @@ class BridgeEffectInstanceInfo {
       customName.hashCode ^
       enabled.hashCode ^
       values.hashCode ^
-      linkedPairs.hashCode;
+      linkedPairs.hashCode ^
+      badgeReason.hashCode ^
+      badgeDetail.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -369,7 +452,9 @@ class BridgeEffectInstanceInfo {
           customName == other.customName &&
           enabled == other.enabled &&
           values == other.values &&
-          linkedPairs == other.linkedPairs;
+          linkedPairs == other.linkedPairs &&
+          badgeReason == other.badgeReason &&
+          badgeDetail == other.badgeDetail;
 }
 
 @freezed
@@ -774,6 +859,37 @@ class BridgeParamValue {
           runtimeType == other.runtimeType &&
           id == other.id &&
           value == other.value;
+}
+
+/// What one scan of the machine's plugin folders did (docs/12 §2.6).
+class BridgePluginScan {
+  /// The labels of the effects this scan added, in the order they were found.
+  /// Empty for a rescan that found nothing new, which is the usual answer.
+  final List<String> registered;
+
+  /// One calm line per bundle or plugin turned away — a broken install, a
+  /// context this host cannot drive, a plugin the user switched off. Shown as
+  /// a report, never as a dialogue.
+  final List<String> skipped;
+
+  const BridgePluginScan({
+    required this.registered,
+    required this.skipped,
+  });
+
+  static Future<BridgePluginScan> default_() =>
+      BridgeLib.instance.api.crateApiEffectBridgePluginScanDefault();
+
+  @override
+  int get hashCode => registered.hashCode ^ skipped.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePluginScan &&
+          runtimeType == other.runtimeType &&
+          registered == other.registered &&
+          skipped == other.skipped;
 }
 
 /// A point parameter: two independently animatable axes.

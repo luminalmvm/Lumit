@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show pluginMessages;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:provider/provider.dart';
@@ -49,7 +50,12 @@ class StatusLineFrb extends StatefulWidget {
   /// The same seam for the proxy job.
   final BridgeProxyState Function()? proxyPollFn;
 
-  const StatusLineFrb({super.key, this.poll, this.proxyPollFn});
+  /// The same seam for what plugins have asked Lumit to say, so a test can
+  /// raise a plugin message without a plugin.
+  final List<String> Function()? pluginMessagesFn;
+
+  const StatusLineFrb(
+      {super.key, this.poll, this.proxyPollFn, this.pluginMessagesFn});
 
   @override
   State<StatusLineFrb> createState() => _StatusLineFrbState();
@@ -66,10 +72,15 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
 
   late final LumitUiState _ui;
 
+  /// The shell state the notices go on. Read here rather than through
+  /// [LumitUiState] because a notice is the application's, not the interface's.
+  late final LumitState _app;
+
   @override
   void initState() {
     super.initState();
     _ui = context.read<LumitUiState>();
+    _app = context.read<LumitState>();
     // One poll up front: a strip mounted over a running export (a hot reload
     // mid-export, say) has to pick it up without waiting for a start signal.
     _export = (widget.poll ?? exportPoll)();
@@ -93,6 +104,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _export = (widget.poll ?? exportPoll)();
     final was = _proxy is BridgeProxyState_Running;
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
+    _sayWhatThePluginsSaid();
     _syncTimer();
     if (mounted) setState(() {});
     // The job stopped running on this tick, so the item it belonged to has
@@ -100,6 +112,28 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     // repaint, and only on the edge, so a panel listening does one re-read per
     // job rather than one per tick.
     if (was && _proxy is! BridgeProxyState_Running) proxyJobChanged.value++;
+  }
+
+  /// Whatever plugins asked Lumit to say since the last tick, as calm notices
+  /// (docs/12 §2.2).
+  ///
+  /// **Never modal, and never a dialogue.** An OFX plugin may raise an error, a
+  /// warning or a question at any moment, including in the middle of a render;
+  /// a modal box in the middle of playback would be the worst possible answer,
+  /// and a question has already been told "you decide" at the suite. Until the
+  /// owner says what the Message suite should look like, this is the whole of
+  /// it: the last message wins the notice line, exactly as every other quiet
+  /// message does.
+  ///
+  /// Drained here because this is the tick that runs while a comp is playing,
+  /// which is when a plugin is speaking. A session with no plugins takes one
+  /// sync read that answers with an empty list.
+  void _sayWhatThePluginsSaid() {
+    final said = (widget.pluginMessagesFn ?? pluginMessages)();
+    if (said.isEmpty) return;
+    for (final message in said) {
+      _app.postNotice(message);
+    }
   }
 
   /// The tick runs only while something on the strip is actually moving: an

@@ -10,6 +10,13 @@
 // the panel never holds a copy of what effects exist. Adding a built-in to the
 // engine puts it here with no Dart change at all.
 //
+// **Plugins are in that same list** (docs/12 §2.6, K-594). An OFX plugin the
+// engine found on this machine arrives as one more entry, under a heading that
+// is its own declared grouping rather than one of Lumit's ten categories, and
+// it groups, folds, searches, stars and drags exactly as a built-in does. The
+// one difference the spec asks for is a small provenance tag in the row's
+// context menu, which is also where the plugin can be switched off.
+//
 // **Favourites** (owner, desk test). A star on every row, and the ones starred
 // gather under a Favourites heading above everything else — the effects you
 // reach for are four or five of the forty, and hunting them down their
@@ -51,8 +58,20 @@ class EffectsPresetsPanelFrb extends StatefulWidget {
   /// The library listing seam, injected by tests so no real library is read.
   final List<BridgePresetInfo> Function()? presetsLister;
 
-  const EffectsPresetsPanelFrb(
-      {super.key, this.savePicker, this.loadPicker, this.presetsLister});
+  /// The catalogue seam, on the same footing as [presetsLister]. It exists so a
+  /// test can put a *discovered plugin* in the list without a real bundle
+  /// installed on the machine running it — the engine's own scan is tested
+  /// where it lives (`crates/lumit-ofx/tests/discover.rs`), and what this panel
+  /// owes is the grouping, the fold and the provenance tag.
+  final List<BridgeEffectInfo> Function()? effectsLister;
+
+  const EffectsPresetsPanelFrb({
+    super.key,
+    this.savePicker,
+    this.loadPicker,
+    this.presetsLister,
+    this.effectsLister,
+  });
 
   @override
   State<EffectsPresetsPanelFrb> createState() => _EffectsPresetsPanelFrbState();
@@ -140,14 +159,22 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     // declares rather than alphabetically by accident.
     final grouped = <String, List<BridgeEffectInfo>>{};
     final headings = <String, String>{};
-    for (final effect in listEffects()) {
+    for (final effect in (widget.effectsLister ?? listEffects)()) {
+      // A discovered plugin arrives with its own declared grouping as its
+      // category (docs/12 §2.6), so it groups and folds through exactly this
+      // map — no second list, no plugin branch. A plugin that declared no
+      // grouping at all has nothing to head it with, and this is the only place
+      // that knows the word for that.
+      final heading = effect.categoryLabel.isEmpty
+          ? l10n.effectsPlugins
+          : engineLabel(effect.categoryLabel);
       if (needle.isNotEmpty &&
           !effect.label.toLowerCase().contains(needle) &&
-          !engineLabel(effect.categoryLabel).toLowerCase().contains(needle)) {
+          !heading.toLowerCase().contains(needle)) {
         continue;
       }
       grouped.putIfAbsent(effect.category, () => []).add(effect);
-      headings[effect.category] = engineLabel(effect.categoryLabel);
+      headings[effect.category] = heading;
     }
 
     return Column(
@@ -205,6 +232,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                         onApply: () => _apply(ui, effect.name),
                         favourite: ui.workspace.isFavouriteEffect(effect.name),
                         onToggleFavourite: () => _star(ui, effect.name),
+                        onCatalogueChanged: () => setState(() {}),
                       ),
                 ],
               ],
@@ -314,6 +342,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             onApply: () => _apply(ui, effect.name),
             favourite: true,
             onToggleFavourite: () => _star(ui, effect.name),
+            onCatalogueChanged: () => setState(() {}),
           ),
         for (final preset in presets)
           _PresetRow(
@@ -481,29 +510,94 @@ class _PresetRow extends StatelessWidget {
       );
 }
 
+/// The `namespace` an entry carries when it came out of an OFX plugin — the
+/// engine's own spelling (`NAMESPACE_OFX`).
+const String _ofxNamespace = 'ofx';
+
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
   final bool favourite;
   final VoidCallback onToggleFavourite;
+
+  /// Something in the catalogue changed — a plugin was switched off, so the
+  /// listing has to be read again.
+  final VoidCallback onCatalogueChanged;
   const _EffectRow({
     super.key,
     required this.effect,
     required this.onApply,
     required this.favourite,
     required this.onToggleFavourite,
+    required this.onCatalogueChanged,
   });
+
+  /// Where an effect says where it came from (docs/12 §2.6): a small provenance
+  /// tag, in the context menu and nowhere else, so a plugin's row in the list is
+  /// otherwise identical to a built-in's.
+  ///
+  /// A plugin's menu carries one command with it, because the tag would
+  /// otherwise be a fact with nothing to do: switching the plugin off is the
+  /// preference docs/12 §2.6 asks for, and this is where a person is already
+  /// looking when they wonder what a plugin is doing in their list.
+  void _menu(BuildContext context, Offset at) {
+    final plugin = effect.namespace == _ofxNamespace;
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+                child: Text(
+                  plugin ? l10n.effectFromPlugin : l10n.effectBuiltIn,
+                  key: ValueKey<String>('fx-provenance-${effect.name}'),
+                  style: ThemeScope.of(context)
+                      .theme
+                      .small
+                      .copyWith(color: ThemeScope.of(context).theme.textMuted),
+                ),
+              ),
+              if (plugin)
+                MenuRow(
+                  key: ValueKey<String>('fx-disable-${effect.name}'),
+                  onPressed: () {
+                    close(null);
+                    try {
+                      setPluginEnabled(effect: effect.name, enabled: false);
+                    } catch (_) {
+                      // The preference file would not take it. The plugin is
+                      // still off for this session, which is what was asked.
+                    }
+                    onCatalogueChanged();
+                  },
+                  child: Text(l10n.switchPluginOff),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final row = _libraryRow(
-      context,
-      label: effect.label,
-      favourite: favourite,
-      onToggleFavourite: onToggleFavourite,
-      onApply: onApply,
-      starKey: 'fx-star-${effect.name}',
+    final row = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
+      child: _libraryRow(
+        context,
+        label: effect.label,
+        favourite: favourite,
+        onToggleFavourite: onToggleFavourite,
+        onApply: onApply,
+        starKey: 'fx-star-${effect.name}',
+      ),
     );
 
     return Draggable<EffectDragData>(

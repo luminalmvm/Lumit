@@ -37,6 +37,8 @@ import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgePluginScan, rescanPlugins;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
@@ -236,6 +238,16 @@ Future<void> main(List<String> args) async {
   // degraded-but-alive behaviour as a failed File → Open.
   final fromArgs = projectPathFromArgs(args);
   if (fromArgs != null) state.openProject(fromArgs);
+  // The one start-up plugin scan (docs/12 §2.6, K-594). Not awaited: opening
+  // other people's bundles and spawning a broker apiece takes as long as it
+  // takes, and the shell must come up whether the machine has eighty plugins on
+  // it or none. The effects added arrive in the browser's next read, and a
+  // bundle that would not load is a line in the report rather than anything the
+  // user is stopped by.
+  unawaited(rescanPlugins().catchError((_) => BridgePluginScan(
+        registered: const [],
+        skipped: const [],
+      )));
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them (K-464).
   runApp(LumitAppNew(state, LumitUiState(state), welcome: fromArgs == null));

@@ -9812,5 +9812,37 @@
   "settingsExportNoFolder": "No folder chosen yet",
   "@settingsExportNoFolder": {
     "description": "Line under the Destination row on Settings > Export, shown when the fixed-folder option is chosen but no folder has been picked. The folder's path replaces it once one is picked."
+  },
+  "effectsPlugins": "Plugins",
+  "@effectsPlugins": {
+    "description": "Heading in the Effects & presets panel over installed OFX plugins that declare no menu grouping of their own. Plugins that do declare one are headed by that instead."
+  },
+  "effectFromPlugin": "From an OpenFX plugin",
+  "@effectFromPlugin": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from a plugin installed on this machine rather than shipping with Lumit."
+  },
+  "effectBuiltIn": "Built in",
+  "@effectBuiltIn": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect ships with Lumit."
+  },
+  "switchPluginOff": "Switch this plugin off",
+  "@switchPluginOff": {
+    "description": "Command in the right-click menu on a plugin's row in the Effects & presets panel. It stops the plugin being offered and stops it rendering, and is remembered between sessions."
+  },
+  "badgePluginFailed": "This plugin did not render this frame",
+  "@badgePluginFailed": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, when an OFX plugin crashed, hung or refused. The layer still composites, showing the picture unchanged. The plugin's own words about what went wrong appear beneath it."
+  },
+  "badgePluginDisabled": "This plugin is switched off",
+  "@badgePluginDisabled": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the user has switched the OFX plugin off in the Effects & presets panel. The effect renders as if it were not there."
+  },
+  "badgePluginMissing": "This plugin is not installed on this machine",
+  "@badgePluginMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an OFX plugin effect in the project that this machine has no plugin for. The effect is kept exactly as it was saved and is not lost."
+  },
+  "badgeUnknownEffect": "This build does not know this effect",
+  "@badgeUnknownEffect": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."
   }
 }

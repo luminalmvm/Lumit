@@ -590,6 +590,13 @@ impl Broker {
         &self.notes
     }
 
+    /// The same list, taken — what the host does once it has shown them, so a
+    /// message is drawn once rather than on every drain.
+    #[must_use]
+    pub fn take_notes(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.notes)
+    }
+
     // ------------------------------------------------------------ the wire --
 
     /// One action, with its deadline and its consequences: a failure is a

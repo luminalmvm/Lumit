@@ -98,6 +98,13 @@ impl HostState {
         }
         self.messages.push(message);
     }
+
+    /// Take the log, leaving it empty — what the frontend does when it has
+    /// drawn them, so a plugin's message becomes one calm toast rather than one
+    /// per poll (docs/12 §2.2).
+    pub fn take_messages(&mut self) -> Vec<HostMessage> {
+        std::mem::take(&mut self.messages)
+    }
 }
 
 static STATE: OnceLock<Mutex<HostState>> = OnceLock::new();

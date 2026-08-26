@@ -1766,6 +1766,8 @@ dependencies = [
  "lumit-import",
  "lumit-keymap",
  "lumit-media",
+ "lumit-ofx",
+ "lumit-ofx-testplug",
  "lumit-project",
  "lumit-render",
  "lumit-track",

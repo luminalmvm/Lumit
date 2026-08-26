@@ -532,6 +532,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgePlaybackTier dco_decode_bridge_playback_tier(dynamic raw);
 
   @protected
+  BridgePluginScan dco_decode_bridge_plugin_scan(dynamic raw);
+
+  @protected
   BridgePoint dco_decode_bridge_point(dynamic raw);
 
   @protected
@@ -1512,6 +1515,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgePlaybackTier sse_decode_bridge_playback_tier(
       SseDeserializer deserializer);
+
+  @protected
+  BridgePluginScan sse_decode_bridge_plugin_scan(SseDeserializer deserializer);
 
   @protected
   BridgePoint sse_decode_bridge_point(SseDeserializer deserializer);
@@ -2611,6 +2617,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_playback_tier(
       BridgePlaybackTier self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_plugin_scan(
+      BridgePluginScan self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_point(BridgePoint self, SseSerializer serializer);

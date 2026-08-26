@@ -2,6 +2,9 @@
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
 pub mod fixtures;
+pub mod plugins;
+
+pub use plugins::{plugin_prefs_path, PluginPrefs};
 
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
 use lumit_core::ops::Op;

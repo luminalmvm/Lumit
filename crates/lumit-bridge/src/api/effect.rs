@@ -43,6 +43,14 @@ pub struct BridgeEffectInfo {
     pub label: String,
     pub category: String,
     pub category_label: String,
+    /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+    ///
+    /// A discovered plugin is drawn exactly as a built-in is — same row, same
+    /// star, same drag — and this is the one difference: docs/12 §2.6 asks for
+    /// "a small provenance tag in the effect's context menu", and nothing else.
+    /// It rides on the listing rather than being a second call, because the
+    /// browser needs it for every row it draws.
+    pub namespace: String,
     /// The sockets an instance of this entry would draw, from its declaration
     /// alone (K-471 §1.3) — the parameters that can take a wire.
     ///
@@ -85,26 +93,171 @@ pub fn list_drivers() -> Vec<BridgeEffectInfo> {
     catalogue(|category| category == lumit_core::fx::FxCategory::Drivers)
 }
 
+/// An entry Lumit itself declares.
+pub const NAMESPACE_BUILTIN: &str = "builtin";
+/// An entry that came out of an OFX plugin on this machine (docs/12 §2.6).
+pub const NAMESPACE_OFX: &str = "ofx";
+
+/// The category key a plugin's own menu path becomes.
+///
+/// Prefixed, so a plugin whose grouping happens to read `Blur & sharpen` still
+/// gets a heading of its own rather than being folded into Lumit's — the two
+/// are not the same list and a coincidence of wording must not merge them. A
+/// plugin that declares no grouping at all falls to the bare prefix, and the
+/// browser draws that heading in its own words.
+#[frb(ignore)]
+fn plugin_category_key(grouping: &str) -> String {
+    if grouping.is_empty() {
+        NAMESPACE_OFX.to_owned()
+    } else {
+        format!("{NAMESPACE_OFX}/{grouping}")
+    }
+}
+
 /// The catalogue walk both listings share, so the two cannot drift apart on
 /// what an entry looks like.
+///
+/// **The whole catalogue, not the built-in slice** (K-593/K-594): the run-time
+/// half is where a discovered plugin lives, and walking `BUILTINS` would have
+/// left every plugin out of the one listing the browser reads. The built-ins
+/// still come first and in schema order, because that is the order the
+/// catalogue itself keeps.
 #[frb(ignore)]
 fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEffectInfo> {
-    lumit_core::fx::BUILTINS
+    lumit_core::fx::BUILTIN_DEFS
         .iter()
+        .map(lumit_core::fx::EffectDef::schema)
         .filter(|schema| keep(schema.category))
         .map(|schema| {
             let (inputs, outputs) = crate::api::graph::catalogue_ports(schema.match_name);
+            // A plugin places itself: its declared grouping is its heading, and
+            // none of Lumit's ten categories is a claim about somebody else's
+            // effect (docs/12 §2.6). Read here so `list_effects` is still one
+            // call — a browser that had to ask a second question per row would
+            // be one call per effect per rebuild.
+            let plugin = lumit_ofx::discover::plugin_of(schema.match_name);
             BridgeEffectInfo {
                 name: schema.match_name.to_owned(),
                 label: schema.label.to_owned(),
                 // Shared with v0 rather than restated, so the two frontends cannot
                 // disagree about which key a category has.
-                category: crate::edits::fx_category_key(schema.category).to_owned(),
-                category_label: schema.category.label().to_owned(),
+                category: plugin.as_ref().map_or_else(
+                    || crate::edits::fx_category_key(schema.category).to_owned(),
+                    |found| plugin_category_key(&found.grouping),
+                ),
+                category_label: plugin.as_ref().map_or_else(
+                    || schema.category.label().to_owned(),
+                    |found| found.grouping.clone(),
+                ),
+                namespace: if plugin.is_some() {
+                    NAMESPACE_OFX
+                } else {
+                    NAMESPACE_BUILTIN
+                }
+                .to_owned(),
                 inputs,
                 outputs,
             }
         })
+        .collect()
+}
+
+/// What one scan of the machine's plugin folders did (docs/12 §2.6).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgePluginScan {
+    /// The labels of the effects this scan added, in the order they were found.
+    /// Empty for a rescan that found nothing new, which is the usual answer.
+    pub registered: Vec<String>,
+    /// One calm line per bundle or plugin turned away — a broken install, a
+    /// context this host cannot drive, a plugin the user switched off. Shown as
+    /// a report, never as a dialogue.
+    pub skipped: Vec<String>,
+}
+
+/// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) and offer what is
+/// found as effects.
+///
+/// **Deliberately not `frb(sync)`**: this opens other people's bundles and
+/// spawns a broker process per bundle, which is tens of milliseconds at best
+/// and seconds on a machine with a large suite installed. flutter_rust_bridge
+/// runs it on a worker and hands Dart a future, so the interface never waits on
+/// it — the start-up scan and the rescan command are the same call.
+///
+/// Registration is additive and idempotent: calling this twice registers each
+/// plugin once (K-593), so a rescan after installing something new is safe at
+/// any moment.
+pub fn rescan_plugins() -> BridgePluginScan {
+    let prefs = lumit_project::PluginPrefs::load_default();
+    // The stored preference becomes the running one first, so a plugin
+    // registered by an earlier scan and switched off since is switched off for
+    // this scan's renders too, not only absent from it.
+    lumit_ofx::discover::set_disabled(&prefs.disabled);
+    let options = lumit_ofx::discover::ScanOptions {
+        disabled: prefs.disabled.clone(),
+        ..lumit_ofx::discover::ScanOptions::standard()
+    };
+    let outcome =
+        lumit_ofx::discover::scan(&options, &mut |def| lumit_render::gpufx::ofx::register(def));
+    BridgePluginScan {
+        registered: outcome
+            .registered
+            .iter()
+            .map(|found| found.label.clone())
+            .collect(),
+        skipped: outcome.skipped,
+    }
+}
+
+/// Switch a discovered plugin on or off, by the `match_name` the listing hands
+/// out (docs/12 §2.6).
+///
+/// Takes the match name rather than the plugin's own identifier because that is
+/// what the browser holds; deriving one from the other is the engine's business
+/// and would otherwise be a rule the frontend had to know. A name that is not a
+/// plugin's is simply ignored.
+///
+/// Two things happen: the answer is written to the preferences, so it survives
+/// a restart, and it takes effect **now** — a plugin switched off mid-session
+/// renders its input unchanged and its layers wear a badge, rather than the
+/// change waiting for a relaunch. Switching one back on does not re-register it
+/// within the session if it was never scanned in; a rescan does that.
+///
+/// # Errors
+///
+/// [`BridgeError::WriteFailed`] when the preference could not be written — the
+/// answer still holds for this session.
+#[frb(sync)]
+pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeError> {
+    let Some(identifier) = effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX) else {
+        return Ok(());
+    };
+    lumit_ofx::discover::set_enabled(identifier, enabled);
+    let mut prefs = lumit_project::PluginPrefs::load_default();
+    if !prefs.set_enabled(identifier, enabled) {
+        return Ok(());
+    }
+    prefs.save_default().map_err(|_| BridgeError::WriteFailed)
+}
+
+/// What plugins have asked Lumit to say since this was last called, oldest
+/// first, taken as they are read.
+///
+/// **Never modal** (docs/12 §2.2, open question): a plugin that wants to tell
+/// the user something gets a calm toast on the status strip and nothing more,
+/// until the owner says what the Message suite should look like. A plugin that
+/// asks a *question* has already been told "you decide" at the suite, which is
+/// the reply OFX defines for a host that cannot ask.
+///
+/// Empty on every session with no plugins, which is what makes polling it from
+/// the shell's existing tick free.
+#[frb(sync)]
+pub fn plugin_messages() -> Vec<String> {
+    lumit_ofx::host::state()
+        .take_messages()
+        .into_iter()
+        .map(|message| message.text)
+        .filter(|text| !text.is_empty())
         .collect()
 }
 
@@ -451,9 +604,12 @@ pub enum BridgeParamKind {
 pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
     use lumit_core::fx::ParamKind;
 
-    let Some(schema) = lumit_core::fx::BUILTINS
-        .iter()
-        .find(|s| s.match_name == effect)
+    // The **whole** catalogue: a plugin's parameters have to reach Effect
+    // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
+    // half alone (K-593/K-594).
+    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
+        .get(&effect)
+        .map(lumit_core::fx::EffectDef::schema)
     else {
         return Vec::new();
     };
@@ -615,9 +771,12 @@ pub struct BridgeParamPair {
 /// still opens.
 #[frb(sync)]
 pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
-    let Some(schema) = lumit_core::fx::BUILTINS
-        .iter()
-        .find(|s| s.match_name == effect)
+    // The **whole** catalogue: a plugin's parameters have to reach Effect
+    // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
+    // half alone (K-593/K-594).
+    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
+        .get(&effect)
+        .map(lumit_core::fx::EffectDef::schema)
     else {
         return Vec::new();
     };
@@ -674,9 +833,12 @@ pub(crate) const LENS_PICK_PARAM: &str = "lens_model";
 /// the flat run.
 #[frb(sync)]
 pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
-    let Some(schema) = lumit_core::fx::BUILTINS
-        .iter()
-        .find(|s| s.match_name == effect)
+    // The **whole** catalogue: a plugin's parameters have to reach Effect
+    // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
+    // half alone (K-593/K-594).
+    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
+        .get(&effect)
+        .map(lumit_core::fx::EffectDef::schema)
     else {
         return Vec::new();
     };
@@ -754,9 +916,12 @@ pub enum BridgeEnabledCond {
 pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
     use lumit_core::fx::EnabledCond;
 
-    let Some(schema) = lumit_core::fx::BUILTINS
-        .iter()
-        .find(|s| s.match_name == effect)
+    // The **whole** catalogue: a plugin's parameters have to reach Effect
+    // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
+    // half alone (K-593/K-594).
+    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
+        .get(&effect)
+        .map(lumit_core::fx::EffectDef::schema)
     else {
         return Vec::new();
     };
@@ -1218,6 +1383,66 @@ pub struct BridgeEffectInstanceInfo {
     /// field here is: a chain glyph is drawn per point row per rebuild, and a
     /// call apiece is exactly the hover-hot traffic the budget test forbids.
     pub linked_pairs: Vec<String>,
+    /// Why this instance is not doing its own work, if it is not (docs/12 §1,
+    /// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
+    ///
+    /// A **key**, not a sentence: the panel draws the calm badge in the user's
+    /// own language (K-303). Four things it can say — the plugin failed, the
+    /// plugin is switched off, the plugin is not installed on this machine, or
+    /// this build has never heard of the effect at all. The last two are the
+    /// placeholder docs/12 §1 requires: the instance is kept, values and all,
+    /// so saving cannot lose it.
+    pub badge_reason: Option<String>,
+    /// The engine's or the plugin's own words about the failure, where there
+    /// are any — shown beneath the badge, verbatim and untranslated, because it
+    /// is somebody else's sentence about somebody else's code.
+    pub badge_detail: Option<String>,
+}
+
+/// Every value [`BridgeEffectInstanceInfo::badge_reason`] can take.
+///
+/// A closed list, spelled once, so the frontend's table of sentences can be
+/// held against it — `test/l10n/engine_labels_test.dart` reads this very
+/// declaration and fails if a reason has no translation, exactly as it does for
+/// the import report's reasons and the colour config's refusals.
+pub const BADGE_REASONS: &[&str] = &[
+    "plugin_failed",
+    "plugin_disabled",
+    "plugin_missing",
+    "unknown_effect",
+];
+
+/// Why this instance is not doing its own work, if it is not.
+///
+/// The order is the order of certainty. A failure recorded against *this
+/// instance* by the last render is the most specific thing anyone knows, so it
+/// is read first; only then does the question become the more general "is there
+/// anything in the catalogue by that name at all".
+#[frb(ignore)]
+fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
+    let name = effect.effect.match_name.as_str();
+    if let Some(why) = lumit_render::gpufx::ofx::error_of(effect.id) {
+        // A switched-off plugin files the reason key itself, so the badge says
+        // "switched off" rather than reporting it as a failure.
+        return if why == lumit_ofx::discover::DISABLED_REASON {
+            (Some("plugin_disabled".to_owned()), None)
+        } else {
+            (Some("plugin_failed".to_owned()), Some(why))
+        };
+    }
+    if lumit_core::fx::BUILTIN_DEFS.get(name).is_some() {
+        return (None, None);
+    }
+    // Nothing answers to that name. An `ofx:` one is a plugin this machine
+    // has not got — uninstalled, switched off before the scan, or a project
+    // made on somebody else's machine; anything else is an effect from a
+    // newer Lumit. Both are inert placeholders and neither is an error
+    // (docs/12 §1, docs/08 §5).
+    if effect.effect.namespace == lumit_core::model::EffectNamespace::Ofx {
+        (Some("plugin_missing".to_owned()), None)
+    } else {
+        (Some("unknown_effect".to_owned()), None)
+    }
 }
 
 /// Build one instance's [`BridgeEffectInstanceInfo`] — the shared body of
@@ -1238,6 +1463,7 @@ pub(crate) fn read_instance_info(
     let mut filled = effect.clone();
     lumit_core::fx::backfill_builtin_params(std::slice::from_mut(&mut filled));
     let effect = &filled;
+    let (badge_reason, badge_detail) = badge_of(effect);
     BridgeEffectInstanceInfo {
         id: effect.id,
         name: effect.effect.match_name.clone(),
@@ -1252,6 +1478,8 @@ pub(crate) fn read_instance_info(
             })
             .collect(),
         linked_pairs: effect.linked_pairs.clone(),
+        badge_reason,
+        badge_detail,
     }
 }
 

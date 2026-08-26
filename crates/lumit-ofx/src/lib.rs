@@ -48,6 +48,7 @@
 pub mod bundle;
 pub mod def;
 pub mod describe;
+pub mod discover;
 pub mod ffi;
 pub mod handles;
 pub mod host;
@@ -68,6 +69,9 @@ mod tests;
 pub use bundle::{Bundle, BundleError};
 pub use def::{BrokerHost, LocalHost, OfxEffectDef, PluginHost, Rendering};
 pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejection, ScanReport};
+pub use discover::{
+    scan, DiscoveredPlugin, Hosting, ScanOptions, ScanOutcome, DISABLED_REASON, SCAN_FRAME,
+};
 pub use handles::{Handle, HandleKind, HandleRegistry};
 pub use image::{Frame16, Image, RectI, RowOrder};
 pub use instance::{Instance, ParamSnapshot, ThreadSafety};

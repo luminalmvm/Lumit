@@ -63,6 +63,16 @@ pub fn errored_ops() -> Vec<(Uuid, String)> {
         .unwrap_or_default()
 }
 
+/// Why this one op's last frame was a placeholder, if it was.
+///
+/// The single-instance question, beside the whole-table one: the panel asks it
+/// once per effect card it draws, and cloning the table for each of those would
+/// be a copy per card per rebuild.
+#[must_use]
+pub fn error_of(instance: Uuid) -> Option<String> {
+    ERRORED.lock().ok()?.get(&instance).cloned()
+}
+
 /// Forget an op's failure — what a re-render that worked, or a deleted effect,
 /// leaves behind.
 pub fn clear_errored(instance: Uuid) {

@@ -1071,7 +1071,7 @@ fn effect_with_every_kind() -> lumit_core::model::EffectInstance {
 
     let curve = Animation::Keyframed(vec![
         Keyframe {
-            time: Rational::new(0, 1).expect("0 s"),
+            time: lumit_core::time::Rational::new(0, 1).expect("0 s"),
             value: 5.0,
             interp_in: SideInterp::Linear,
             interp_out: SideInterp::Linear,
@@ -1447,6 +1447,7 @@ fn list_effects_names_the_builtins_with_their_labels_and_categories() {
     );
     assert!(effects
         .iter()
+        .filter(|e| e.namespace == crate::api::effect::NAMESPACE_BUILTIN)
         .all(|e| !e.category.is_empty() && !e.category_label.is_empty()));
 }
 
@@ -1759,6 +1760,11 @@ fn list_parameters_of_an_unknown_effect_is_empty() {
 #[test]
 fn every_builtin_lists_its_parameters() {
     for info in crate::api::effect::list_effects() {
+        // A discovered plugin is in this listing too (K-594) and its rows are
+        // its own; this sweep is a statement about *Lumit's* declarations.
+        if info.namespace != crate::api::effect::NAMESPACE_BUILTIN {
+            continue;
+        }
         let params = crate::api::effect::list_parameters(info.name.clone());
         let declared = lumit_core::fx::BUILTINS
             .iter()
@@ -1780,6 +1786,9 @@ fn every_builtin_lists_its_parameters() {
 #[test]
 fn every_builtin_lists_its_layout() {
     for info in crate::api::effect::list_effects() {
+        if info.namespace != crate::api::effect::NAMESPACE_BUILTIN {
+            continue;
+        }
         let groups = crate::api::effect::list_parameter_groups(info.name.clone());
         let enabled_when = crate::api::effect::list_enabled_when(info.name.clone());
         let ids: Vec<String> = crate::api::effect::list_parameters(info.name.clone())
@@ -9602,4 +9611,202 @@ fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
     );
 
     project.close().expect("closed");
+}
+
+// ----------------------------------------------------------------- plugins --
+
+/// The test plugin's file name on this platform.
+fn ofx_test_plugin_file_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "lumit_ofx_testplug.dll"
+    } else if cfg!(target_os = "macos") {
+        "liblumit_ofx_testplug.dylib"
+    } else {
+        "liblumit_ofx_testplug.so"
+    }
+}
+
+/// Lay the test plugin out as a bundle in `root`, or `None` if Cargo has not
+/// built it — in which case the caller says so and does nothing.
+fn an_ofx_bundle_in(root: &std::path::Path) -> Option<std::path::PathBuf> {
+    let name = ofx_test_plugin_file_name();
+    let exe = std::env::current_exe().ok()?;
+    let mut dir = exe.parent()?;
+    let source = loop {
+        if dir.join(name).is_file() {
+            break dir.join(name);
+        }
+        if dir.join("deps").join(name).is_file() {
+            break dir.join("deps").join(name);
+        }
+        dir = dir.parent()?;
+    };
+    let into = root
+        .join("Bridge.ofx.bundle")
+        .join("Contents")
+        .join(lumit_ofx::bundle::BUNDLE_ARCH_DIR);
+    std::fs::create_dir_all(&into).ok()?;
+    let binary = into.join("bridge.ofx");
+    std::fs::copy(&source, &binary).ok()?;
+    Some(binary)
+}
+
+/// A discovered plugin reaches the browser as an ordinary listing entry — under
+/// its **own** grouping, saying where it came from, and with its parameters
+/// available to Effect controls without a second kind of lookup (docs/12 §2.6).
+///
+/// The scan is in-process: whether a plugin becomes a catalogue entry the bridge
+/// can list is the question here, and a broker process would only add a way for
+/// the test to be flaky.
+#[test]
+fn a_discovered_plugin_lists_under_its_own_grouping_with_its_provenance() {
+    use crate::api::effect::{list_effects, list_parameters, NAMESPACE_OFX};
+
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some(_binary) = an_ofx_bundle_in(root.path()) else {
+        eprintln!(
+            "a_discovered_plugin_lists_under_its_own_grouping_with_its_provenance: skipped — {} \
+             was not built. cargo build -p lumit-ofx-testplug",
+            ofx_test_plugin_file_name()
+        );
+        return;
+    };
+
+    let options = lumit_ofx::discover::ScanOptions {
+        paths: vec![root.path().to_path_buf()],
+        disabled: std::collections::BTreeSet::new(),
+        hosting: lumit_ofx::discover::Hosting::InProcess,
+    };
+    // The real registration, into both tables at once — this is exactly what
+    // `rescan_plugins` does, minus reading the user's preferences off disk.
+    lumit_ofx::discover::scan(&options, &mut lumit_render::gpufx::ofx::register);
+
+    let listed = list_effects();
+    let plugin = listed
+        .iter()
+        .find(|e| e.name == "ofx:com.lumitlab.testplug")
+        .expect("the scanned plugin is in the one listing the browser reads");
+    assert_eq!(plugin.label, "Test plug");
+    assert_eq!(
+        plugin.namespace, NAMESPACE_OFX,
+        "the provenance rides on the listing, so the context menu needs no second call"
+    );
+    assert_eq!(
+        (plugin.category.as_str(), plugin.category_label.as_str()),
+        ("ofx/Lumit/Test", "Lumit/Test"),
+        "a plugin is placed under its own declared grouping, not under one of ours"
+    );
+    assert!(
+        listed
+            .iter()
+            .any(|e| e.name == "blur" && e.namespace == crate::api::effect::NAMESPACE_BUILTIN),
+        "and the built-ins are still all there, still saying they are ours"
+    );
+
+    // Its parameters reach Effect controls through the same call a built-in's
+    // do — the four schema lookups now walk the whole catalogue (K-594).
+    let params = list_parameters(plugin.name.clone());
+    assert!(
+        params.iter().any(|p| p.id == "gain"),
+        "a plugin's own rows are listed: {:?}",
+        params.iter().map(|p| &p.id).collect::<Vec<_>>()
+    );
+    assert!(
+        crate::api::effect::list_parameter_groups(plugin.name.clone())
+            .iter()
+            .any(|g| g.label == "Advanced"),
+        "and so is the layout it declared"
+    );
+
+    // A rescan is not a second catalogue.
+    let again = lumit_ofx::discover::scan(&options, &mut lumit_render::gpufx::ofx::register);
+    assert!(again.registered.is_empty());
+    assert_eq!(
+        list_effects()
+            .iter()
+            .filter(|e| e.name == "ofx:com.lumitlab.testplug")
+            .count(),
+        1
+    );
+}
+
+/// An effect this build has never heard of stays an inert placeholder with a
+/// calm badge, and the badge says **which** kind of nothing it is: a plugin the
+/// machine has not got, or an effect from a newer Lumit (docs/12 §1).
+#[test]
+fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
+    use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace};
+
+    let instance = |namespace, match_name: &str| EffectInstance {
+        id: Uuid::now_v7(),
+        effect: EffectKey {
+            namespace,
+            match_name: match_name.to_owned(),
+            version: 1,
+            extra: serde_json::Map::new(),
+        },
+        enabled: true,
+        params: Vec::new(),
+        sample_temporally: true,
+        custom_name: None,
+        linked_pairs: Vec::new(),
+        extra: serde_json::Map::new(),
+    };
+
+    let missing = crate::api::effect::read_instance_info(
+        &instance(EffectNamespace::Ofx, "ofx:com.nobody.notinstalled"),
+        lumit_core::time::Rational::ZERO,
+    );
+    assert_eq!(missing.badge_reason.as_deref(), Some("plugin_missing"));
+    assert_eq!(missing.badge_detail, None);
+    assert_eq!(
+        missing.name, "ofx:com.nobody.notinstalled",
+        "the instance is kept exactly as it was, so saving cannot lose it"
+    );
+
+    let stranger = crate::api::effect::read_instance_info(
+        &instance(EffectNamespace::Placeholder, "from_a_newer_lumit"),
+        lumit_core::time::Rational::ZERO,
+    );
+    assert_eq!(stranger.badge_reason.as_deref(), Some("unknown_effect"));
+
+    // And a built-in wears no badge at all.
+    let blur = lumit_core::fx::instantiate("blur").expect("Gaussian blur is built in");
+    let ordinary = crate::api::effect::read_instance_info(&blur, lumit_core::time::Rational::ZERO);
+    assert_eq!(ordinary.badge_reason, None);
+
+    // Every reason the engine can file has a name in the closed list the
+    // frontend's translations are held against.
+    for reason in [
+        missing.badge_reason.as_deref(),
+        stranger.badge_reason.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        assert!(
+            crate::api::effect::BADGE_REASONS.contains(&reason),
+            "{reason} is not in BADGE_REASONS, so nothing will translate it"
+        );
+    }
+}
+
+/// Switching a plugin off is answered at once and remembered, and a name that
+/// is not a plugin's is quietly nothing.
+#[test]
+fn a_plugin_can_be_switched_off_and_the_answer_holds_immediately() {
+    let identifier = "com.lumitlab.switchme";
+    let match_name = format!("ofx:{identifier}");
+
+    assert!(!lumit_ofx::discover::is_disabled(identifier));
+    // The preference write may fail on a machine with no home directory; the
+    // session's own answer must hold either way, which is what this asserts.
+    let _ = crate::api::effect::set_plugin_enabled(match_name.clone(), false);
+    assert!(lumit_ofx::discover::is_disabled(identifier));
+    let _ = crate::api::effect::set_plugin_enabled(match_name, true);
+    assert!(!lumit_ofx::discover::is_disabled(identifier));
+
+    // A built-in's name is not a plugin's, and asking is not an error.
+    assert!(crate::api::effect::set_plugin_enabled("blur".to_owned(), false).is_ok());
+    assert!(!lumit_ofx::discover::is_disabled("blur"));
 }

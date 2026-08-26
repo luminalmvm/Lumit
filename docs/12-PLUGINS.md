@@ -476,7 +476,12 @@ Boundaries:
   activation flows break under them — needs empirical testing with real licensed plugins.
 - **OFX Message suite UX**: plugin-raised dialogs and progress from an out-of-process
   server need a policy (marshal to the UI thread; do modal vendor dialogs get shown, calm
-  toast instead?). Decide with [07-UI-SPEC.md](07-UI-SPEC.md).
+  toast instead?). Decide with [07-UI-SPEC.md](07-UI-SPEC.md). **What ships until then**
+  (K-594): a plugin's message is a calm notice on the status strip and **never** modal — a
+  vendor dialogue in the middle of playback is the worst available answer, and a plugin's
+  *question* is already answered "you decide" at the suite, which is what OFX defines for a
+  host that cannot ask. The question is what the finished shape should be, not what happens
+  meanwhile.
 - **LFX curve/path parameter kind**: shape-warping effects want a bezier path parameter;
   does v1 of the parameter set include paths, or does that wait for the `kfx.overlay`
   extension where on-Viewer editing makes them usable?
