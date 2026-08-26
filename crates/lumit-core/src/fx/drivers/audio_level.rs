@@ -85,11 +85,13 @@ impl EffectDef for AudioLevelDef {
                     id: AMPLITUDE_PORT,
                     label: "Amplitude",
                     ty: PortType::Number,
+                    three_d: false,
                 },
                 Port {
                     id: LOW_PORT,
                     label: "Low",
                     ty: PortType::Number,
+                    three_d: false,
                 },
             ],
         }

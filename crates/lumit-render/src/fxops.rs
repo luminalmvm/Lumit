@@ -828,6 +828,16 @@ fn op_keys(
                     for n in sched.schedule.counts() {
                         h.update(&n.to_le_bytes());
                     }
+                    // And the camera it draws its third axis through (K-561),
+                    // for exactly the same reason: move the comp's camera and
+                    // this op's picture moves, while nothing `feed_hash`
+                    // walked has changed at all.
+                    h.update(&[u8::from(sched.projection.is_some())]);
+                    for row in sched.projection.unwrap_or_default().m {
+                        for v in row {
+                            h.update(&v.to_le_bytes());
+                        }
+                    }
                 }
                 sched_i += 1;
             }

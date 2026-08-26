@@ -74,6 +74,7 @@ impl EffectDef for ColourCycleDef {
                 id: COLOUR_PORT,
                 label: "Colour",
                 ty: PortType::Colour,
+                three_d: false,
             }],
         }
     }

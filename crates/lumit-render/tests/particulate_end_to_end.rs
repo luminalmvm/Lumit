@@ -409,3 +409,109 @@ fn a_huge_emit_rate_renders_instead_of_faulting_the_device() {
         "the bare solid changed after a huge-rate frame — the device was left in a bad state"
     );
 }
+
+// ------------------------------------------------ the third axis (K-561)
+
+/// The same project, with the layer's 3D switch set and a camera in the comp.
+///
+/// The camera is placed a little off centre and turned, because a camera that
+/// sits exactly where the default one is looks at the layer's plane head-on and
+/// foreshortens a *centred* emitter almost symmetrically — which is a picture
+/// that could be mistaken for the flat one.
+fn project_3d(
+    effects: Vec<lumit_core::model::EffectInstance>,
+    three_d: bool,
+    with_camera: bool,
+) -> (Arc<Document>, Uuid) {
+    use lumit_core::anim::Property;
+    let (doc, comp_id) = project(effects);
+    let mut doc = (*doc).clone();
+    let comp = doc.comp_mut(comp_id).expect("the comp is there");
+    comp.layers[0].switches.three_d = three_d;
+    if with_camera {
+        let mut camera = solid_layer(Uuid::now_v7());
+        camera.name = "Camera 1".into();
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(f64::from(H) * 1.5),
+            solve_link: None,
+            correction_base: None,
+        };
+        camera.transform.position_x = Property::fixed(f64::from(W) * 0.35);
+        camera.transform.position_y = Property::fixed(f64::from(H) * 0.65);
+        camera.transform.rotation_y = Property::fixed(-12.0);
+        comp.layers.insert(0, camera);
+    }
+    (Arc::new(doc), comp_id)
+}
+
+/// A Particulate with real depth in it: an emitter reaching a long way through
+/// the layer's plane, and particles launched out of it.
+fn deep_particulate() -> lumit_core::model::EffectInstance {
+    let mut inst = default_particulate();
+    set(&mut inst, "depth", f(1200.0));
+    set(&mut inst, "direction_z", f(20.0));
+    set(&mut inst, "spread_z", f(120.0));
+    set(&mut inst, "size", f(20.0));
+    inst
+}
+
+/// **The whole claim, through the application** (K-561): on a 3D layer the
+/// particles are seen through the composition's camera, and on a 2D layer they
+/// are not — the camera might as well not be there.
+///
+/// The second half is the K-258 gate at its widest: a project that never asked
+/// for depth renders byte for byte whatever the comp is looking with.
+#[test]
+fn a_three_d_particulate_is_seen_through_the_comps_camera() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+
+    // ONE instance, cloned: `instantiate` rolls a fresh seed for every new
+    // effect (docs/08 §2.4), so two "identical" fixtures would be two different
+    // fields of particles and every comparison below would be meaningless.
+    let deep = deep_particulate();
+    macro_rules! render {
+        ($three_d:expr, $camera:expr, $fx:expr) => {{
+            let (doc, comp) = project_3d($fx, $three_d, $camera);
+            let (px, ..) = r
+                .render_rgba(&doc, comp, 60, 1.0)
+                .expect("the comp renders");
+            px
+        }};
+    }
+    // A 2D layer: the camera changes nothing at all, byte for byte.
+    let flat = render!(false, false, vec![deep.clone()]);
+    let flat_with_camera = render!(false, true, vec![deep.clone()]);
+    assert_eq!(
+        flat, flat_with_camera,
+        "a camera moved a 2D layer's particles — the K-258 guarantee is broken"
+    );
+
+    // A 3D layer without a camera: still nothing to see depth with.
+    assert_eq!(
+        render!(true, false, vec![deep.clone()]),
+        flat,
+        "the 3D switch alone moved the particles — there is no camera to see them with"
+    );
+
+    // And with both: a different picture, and still a picture.
+    let seen = render!(true, true, vec![deep.clone()]);
+    let (n, worst) = diff(&flat, &seen);
+    assert!(
+        n > 0 && worst > 4,
+        "the camera drew the same field as the flat layer ({n} bytes differ, worst {worst})"
+    );
+    assert!(
+        n < seen.len() / 2,
+        "the camera destroyed the frame rather than projecting it ({n} bytes)"
+    );
+
+    // Twice is once (docs/08 §2.4): the projection is arithmetic, not state.
+    assert_eq!(
+        seen,
+        render!(true, true, vec![deep.clone()]),
+        "one frame, two pictures"
+    );
+}

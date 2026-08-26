@@ -8778,6 +8778,15 @@
           "slider_max": 2160.0
         },
         {
+          "id": "position_z",
+          "label": "Position z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
           "id": "width",
           "label": "Width",
           "kind": "float",
@@ -8793,6 +8802,16 @@
           "kind": "float",
           "unit": "px",
           "default": 400.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "depth",
+          "label": "Depth",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
           "slider_min": 0.0,
           "slider_max": 2000.0,
           "hard_min": 0.0
@@ -8831,6 +8850,14 @@
           "dial_step": 15.0
         },
         {
+          "id": "direction_z",
+          "label": "Direction z",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "spread",
           "label": "Spread",
           "kind": "float",
@@ -8838,6 +8865,17 @@
           "default": 360.0,
           "slider_min": 0.0,
           "slider_max": 360.0,
+          "hard_min": 0.0,
+          "hard_max": 360.0
+        },
+        {
+          "id": "spread_z",
+          "label": "Spread z",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
           "hard_min": 0.0,
           "hard_max": 360.0
         },
@@ -9027,6 +9065,15 @@
           "slider_max": 2000.0
         },
         {
+          "id": "wind_z",
+          "label": "Wind z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
           "id": "drag",
           "label": "Drag",
           "kind": "float",
@@ -9208,13 +9255,17 @@
             "shape",
             "position_x",
             "position_y",
+            "position_z",
             "width",
             "height",
+            "depth",
             "emitter_angle",
             "mask_path",
             "emit_rate",
             "direction",
+            "direction_z",
             "spread",
+            "spread_z",
             "initial_speed",
             "speed_jitter"
           ],
@@ -9244,6 +9295,7 @@
             "gravity",
             "wind_x",
             "wind_y",
+            "wind_z",
             "drag",
             "turbulence_amount",
             "turbulence_scale",

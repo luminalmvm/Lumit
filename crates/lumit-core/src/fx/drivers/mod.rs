@@ -37,7 +37,7 @@ use uuid::Uuid;
 
 use super::markers::MarkerContext;
 use super::params::{ParamId, Value};
-use super::points::PointsStream;
+use super::points::{self, PointsStream};
 use super::registry::{AudioTap, DriverCx, EffectMetadata};
 use super::resolved::resolve_into_arena;
 use super::ResolvedStack;
@@ -127,6 +127,30 @@ pub fn resolve_drivers(
     context: Arc<ExpressionContext>,
     audio: Option<&dyn AudioTap>,
 ) -> ResolvedDrivers {
+    resolve_drivers_projected(graph, lt, context, audio, points::Projection::FLAT)
+}
+
+/// [`resolve_drivers`], told where the composition's camera puts a particle
+/// that is off the layer's plane (K-561).
+///
+/// **Why the walk needs to be told at all.** A driver reads a points stream as
+/// *data*, and Nearest distance is a distance on the frame — so the numbers a
+/// wire carries have to be measured where the picture draws the particles,
+/// which on a 3D layer is through the composition's camera. The projection is
+/// worked out by the one place that holds both the layer's placement and the
+/// comp's camera (the draw builder, from `lumit_gpu`'s own matrices), and
+/// handed down as plain numbers; nothing in this crate derives a camera.
+///
+/// `Projection::FLAT` — what plain [`resolve_drivers`] passes — is a 2D layer,
+/// a comp with no camera, and every caller that is not placing layers.
+#[must_use]
+pub fn resolve_drivers_projected(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
     }
@@ -134,6 +158,7 @@ pub fn resolve_drivers(
         graph,
         context,
         audio,
+        projection,
         budget: Cell::new(EVAL_BUDGET),
         streams: RefCell::new(Vec::new()),
     };
@@ -210,6 +235,10 @@ struct Eval<'a> {
     graph: &'a LayerGraph,
     context: Arc<ExpressionContext>,
     audio: Option<&'a dyn AudioTap>,
+    /// Where the composition's camera puts a particle off the layer's plane
+    /// (K-561), in **px@comp** — the units a driver reads a stream in. Flat on
+    /// a 2D layer, and flat for every caller that does not place layers.
+    projection: points::Projection,
     budget: Cell<u32>,
     /// **One evaluation per producer per frame** (points-stream.md §3.3): two
     /// wires out of one Particulate cost one stream, and a diamond of drivers
@@ -468,7 +497,12 @@ impl Eval<'_> {
             p.window_frames(dt),
             &rate_at,
         );
-        let stream = Rc::new(super::points::evaluate(&p.points(), &sched, t, &path));
+        let stream = Rc::new(super::points::evaluate(
+            &p.points().projected(self.projection),
+            &sched,
+            t,
+            &path,
+        ));
         self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
         Some(stream)
     }
@@ -1357,9 +1391,14 @@ mod tests {
         use crate::fx::points::PointsStream;
 
         let mut s = PointsStream::default();
-        for (i, p) in [[0.0f32, 0.0], [30.0, 40.0], [-100.0, 0.0], [3.0, 4.0]]
-            .into_iter()
-            .enumerate()
+        for (i, p) in [
+            [0.0f32, 0.0, 0.0],
+            [30.0, 40.0, 0.0],
+            [-100.0, 0.0, 0.0],
+            [3.0, 4.0, 0.0],
+        ]
+        .into_iter()
+        .enumerate()
         {
             s.position.push(p);
             s.id.push(i as u64);
@@ -1369,6 +1408,58 @@ mod tests {
         assert_eq!(points_sample::sample(Some(&s), [6.0, 8.0]), (4.0, 5.0));
         // A query point on top of a particle reads nought, not the empty value.
         assert_eq!(points_sample::sample(Some(&s), [30.0, 40.0]).1, 0.0);
+    }
+
+    /// **Nearest distance is measured where the picture draws** (K-561): the
+    /// projected position, not the three axes.
+    ///
+    /// Position is a point on the frame, so the honest answer to "how far is
+    /// the nearest particle" is how far it is in the frame — and a particle
+    /// pushed away from the camera is *seen* nearer the centre, so the number
+    /// has to follow it there. The port declares itself 2D
+    /// ([`Port::three_d`] false); this is what that declaration buys.
+    #[test]
+    fn nearest_distance_measures_in_the_projected_frame() {
+        use crate::fx::points::{PointsStream, Projection};
+
+        // A head-on camera 400 back from the plane, about the origin: a
+        // particle 400 deep is seen at half its distance from the centre.
+        let proj = Projection {
+            m: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0 / 400.0, 1.0],
+            ],
+        };
+        let mut s = PointsStream {
+            projection: proj,
+            ..PointsStream::default()
+        };
+        s.position.push([100.0, 0.0, 400.0]);
+        s.id.push(0);
+        // Unprojected it is 100 out; seen, it is 50.
+        assert!((points_sample::sample(Some(&s), [0.0, 0.0]).1 - 50.0).abs() < 1e-3);
+        // And the same stream on a 2D layer reads the plane distance, which is
+        // the number this driver has always answered.
+        s.projection = Projection::FLAT;
+        assert_eq!(points_sample::sample(Some(&s), [0.0, 0.0]).1, 100.0);
+    }
+
+    /// The wire stays one type (K-561): the v1 consumer does **not** declare 3D
+    /// awareness, so what it reads is the projected pair. A test rather than a
+    /// comment because the flag is what the family package builds on, and a
+    /// port that quietly flipped would change what every 2D consumer measures.
+    #[test]
+    fn the_points_sample_port_is_not_three_d_aware() {
+        let def = super::super::BUILTIN_DEFS
+            .get("points_sample")
+            .expect("Points sample is declared");
+        let crate::fx::Signature::Data { inputs, .. } = def.signature() else {
+            panic!("Points sample is a driver");
+        };
+        let port = inputs.first().expect("it declares its Points input");
+        assert_eq!(port.ty, crate::fx::PortType::Points);
+        assert!(!port.three_d, "the v1 driver reads projected positions");
     }
 
     /// §3.3's memo: **one evaluation per producer per frame**, however many
@@ -1406,6 +1497,7 @@ mod tests {
             graph: &graph,
             context,
             audio: None,
+            projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
         };
@@ -1469,6 +1561,7 @@ mod tests {
             graph: &looped,
             context: context.clone(),
             audio: None,
+            projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
         };

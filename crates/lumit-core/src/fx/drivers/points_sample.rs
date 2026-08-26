@@ -112,6 +112,17 @@ impl EffectDef for PointsSampleDef {
 /// own Max particles (K-475) and deterministic because the stream is ordered by
 /// birth index rather than by anything a scheduler decided.
 ///
+/// **Nearest distance is measured where the particle is drawn** (K-561): the
+/// projected position, not the three axes. The reason is the row's own units —
+/// Position is a px@comp *point on the frame*, the place a user picked with the
+/// dropper by looking at the picture — so the honest answer to "how far is the
+/// nearest particle from here" is how far it is in that picture. A distance
+/// through the depth axis would be measured in a space the query point does not
+/// live in, and the wire's whole purpose (a glow that brightens as a spark
+/// passes the lamp) is about what the viewer sees passing the lamp. A consumer
+/// that wants the true 3D distance declares [`Port::three_d`] and reads the
+/// three axes itself; that is what the flag is for.
+///
 /// (ponytail: O(n) scan. A grid or a kd-tree only if a profile ever shows a
 /// real graph spending it — at the default cap of 20 000 this is a few hundred
 /// microseconds of straight-line arithmetic.)
@@ -122,7 +133,8 @@ pub fn sample(stream: Option<&PointsStream>, at: [f32; 2]) -> (f32, f32) {
     };
     // Squared while scanning, rooted once: the same minimum, one square root.
     let mut nearest_sq = f32::INFINITY;
-    for p in &s.position {
+    for i in 0..s.len() {
+        let p = s.projected(i);
         let (dx, dy) = (p[0] - at[0], p[1] - at[1]);
         let d = dx.mul_add(dx, dy * dy);
         if d < nearest_sq {

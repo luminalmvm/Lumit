@@ -5406,16 +5406,18 @@ consume them ([impl/points-stream.md](impl/points-stream.md)). The design is
 [impl/particulate.md](impl/particulate.md); this entry is the catalogue's account of it.
 
 **Parameters**, in four groups. *Emitter*: Shape (Point · Line · Ellipse · Rectangle · Mask
-path), Position (px@comp), Width / Height (px@comp, 0–2000, default 400), Emitter angle,
-Mask path (K-408), Emit rate (per second, 0–1000, default 150), Direction (degrees, default
-−90), Spread (degrees, 0–360, default 360), Initial speed (px@comp/s, default 90), Speed
-jitter (per cent, default 50). *Particle*: Life (seconds, default 2), Life jitter (per cent,
+path), Position (px@comp), **Position z** (px@comp, default 0 — K-561), Width / Height
+(px@comp, 0–2000, default 400), **Depth** (px@comp, 0–2000, default 0 — K-561), Emitter
+angle, Mask path (K-408), Emit rate (per second, 0–1000, default 150), Direction (degrees,
+default −90), **Direction z** (degrees, default 0 — K-561), Spread (degrees, 0–360, default
+360), **Spread z** (degrees, 0–180, default 0 — K-561), Initial speed (px@comp/s, default
+90), Speed jitter (per cent, default 50). *Particle*: Life (seconds, default 2), Life jitter (per cent,
 default 30), Size (px@comp, default 4), Size jitter (per cent, default 40), Size over life
 and Opacity over life (curves, K-412 — flat, and 1 → 0), Colour and End colour
 (scene-linear, values above 1 legal), Rotation, **Rotation jitter** (degrees, 0–360, default
-360 — K-507), Spin (degrees/s), Align to motion. *Forces*: Gravity (px@comp/s²), Wind x /
-Wind y (px@comp/s — they act **through** Drag, and with Drag 0 they do nothing at all),
-Drag (per second, default 0.5), Turbulence amount / scale / speed. *Render*: Mode
+360 — K-507), Spin (degrees/s), Align to motion. *Forces*: Gravity (px@comp/s², and **down stays down** — K-561),
+Wind x / Wind y / **Wind z** (px@comp/s — they act **through** Drag, and with Drag 0 they
+do nothing at all), Drag (per second, default 0.5), Turbulence amount / scale / speed. *Render*: Mode
 (Disc · Sprite · Streak), Feather (per cent), Sprite layer (K-123, K-142), Streak length
 (seconds), **Max particles** (1–200 000, hard 1 000 000, default 20 000 — not animatable),
 Seed. Plus the host Mix with its Blend (K-425).
@@ -5429,11 +5431,12 @@ t_b   = frame start + (j + ½)·Δt/n_f                        # birth time, spr
 die(a)= hash(seed, birth index, a)                          # every per-particle draw
 age   = t − t_b ;  alive if 0 ≤ age < life(die)
 p(age)= p0 + w·age + (v0 − w)·age·r(k·age) + g·age²·s(k·age) # closed form, no g/k
-Δp    = amount · noise2(p0/scale + phase, age·turb_speed)    # turbulence displaces
+Δp    = amount · noise3(p0/scale + phase, age·turb_speed)    # turbulence displaces
 keep the newest `cap` alive by birth index                   # the cap rule
+seen  = M·(x, y, z, 1) ; draw at seen.xy/seen.w, size ÷ seen.w  # the comp's camera
 ```
 
-Six notes:
+Seven notes:
 
 - **The forces are the set with closed-form integrals** (K-474), and that is the selection
   criterion rather than a styling choice. `r` and `s` are `(1 − e^(−x))/x` and its
@@ -5459,9 +5462,25 @@ Six notes:
   budget, the **newest** cap by birth index survives — visible, deterministic, and identical
   from any scrub direction. Under governor pressure the same rule at half the cap is the
   degradation rung: interaction only, never on export (docs/06 §6.2).
-- **Two things ride beside the op**, because neither is a number anybody typed: the layer's
-  clock, and the birth schedule — the whole history of the Emit rate track rather than its
-  value now. The draw builder scans both, exactly as it flattens a mask polyline (§1.2).
+- **Three things ride beside the op**, because none of them is a number anybody typed: the
+  layer's clock, the birth schedule — the whole history of the Emit rate track rather than
+  its value now — and, since K-561, the composition's camera. The draw builder works out all
+  three, exactly as it flattens a mask polyline (§1.2).
+- **The particles live in three axes, and the composition's camera sees them** (K-561,
+  K-596). A
+  particle carries a depth, the closed forms integrate it under the same drag and wind
+  algebra (gravity excepted — down stays down), the emitter reaches through the layer's
+  plane, and turbulence gained a third lattice channel on the rule that a jitter with an x
+  and a y gains a z. **On a 3D layer** the stream projects through the comp's active camera
+  exactly as the layer's own transform does — the same `camera_matrix` and `place_matrix`
+  the compositor places layers with, restricted back onto the layer's plane, so there is no
+  second camera in the engine (the precedent is K-406's ruling on Card wipe: Lumit keeps
+  cameras on the composition). **On a 2D layer nothing changes**: the projection is flat and
+  every project saved before the axis existed draws the picture it always drew, bit for bit,
+  which is the K-258 gate and is tested as one. Depth-map occlusion and collision remain out
+  of scope. The wire stays one type: a consumer reads the projected pair unless it declares
+  3D awareness on its port, which is how Points sample keeps measuring its Nearest distance
+  where the viewer sees the particles.
 
 `moderate` cost, `FullFrame` ROI (a particle may travel anywhere), premultiplied, temporal
 window `{0}` — the payoff of the closed forms, and what makes scrubbing one evaluation.

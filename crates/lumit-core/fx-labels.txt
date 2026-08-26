@@ -128,6 +128,7 @@ Deep emerald
 Deep red
 Deep yellow
 Density
+Depth
 Depth channel
 Depth map
 Depth of field
@@ -142,6 +143,7 @@ Difference
 Direction
 Direction x
 Direction y
+Direction z
 Directional blur
 Disc
 Dispersion
@@ -442,6 +444,7 @@ Polar coordinates
 Polar to rectangular
 Position x
 Position y
+Position z
 Posterize
 Posterize time
 Power
@@ -561,6 +564,7 @@ Spherize
 Spiky
 Spin
 Spread
+Spread z
 Sprite
 Sprite flare
 Sprite layer
@@ -681,6 +685,7 @@ Wiggles per second
 Wiggly
 Wind x
 Wind y
+Wind z
 Window
 Wipe
 Wipe angle

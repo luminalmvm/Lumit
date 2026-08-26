@@ -90,7 +90,25 @@ struct Params {
     target_h: f32,
     sprite_w: f32,
     sprite_h: f32,
-    _pad: f32,
+    wind_z: f32,
+
+    // The third axis (K-561). Every one of these is nought on a 2D layer.
+    em_z: f32,
+    em_depth: f32,
+    dir_z: f32,
+    spread_z: f32,
+
+    // The composition camera, restricted back onto the layer's own plane:
+    // `(m0·v, m1·v, m2·v)` for `v = (x, y, z, 1)` puts the particle at
+    // `xy / w` and scales it by `1 / w`. Only read when `project` is set.
+    proj0: vec4<f32>,
+    proj1: vec4<f32>,
+    proj2: vec4<f32>,
+
+    project: u32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 // The mode codes, matching `lumit_core::fx::points::RenderMode::from_code`. An
@@ -109,10 +127,13 @@ const A_LIFE: u32 = 4u;
 const A_SIZE: u32 = 5u;
 const A_TURB_PHASE: u32 = 6u;
 const A_ROTATION: u32 = 7u;
+const A_EMIT_W: u32 = 8u;
+const A_DIRECTION_Z: u32 = 9u;
 
-// The turbulence lattices, matching `points::TURB_CHANNEL_X/Y`.
+// The turbulence lattices, matching `points::TURB_CHANNEL_X/Y/Z`.
 const TURB_X: u32 = 64u;
 const TURB_Y: u32 = 65u;
+const TURB_Z: u32 = 66u;
 
 const CURVE_TABLE: u32 = 257u;
 const SCAN_BLOCK: u32 = 256u;
@@ -138,16 +159,38 @@ const SCAN_BLOCK: u32 = 256u;
 // `draw_indirect`'s four words, so the draw never waits on a read-back.
 @group(0) @binding(7) var<storage, read_write> args: array<u32>;
 
-// The stream's regions, in words, for a capacity of `c` particles.
+// The stream's regions, in words, for a capacity of `c` particles. Position,
+// speed and the draw's tail are three components each since K-561.
 fn r_pos(c: u32) -> u32 { return 0u; }
-fn r_speed(c: u32) -> u32 { return 2u * c; }
-fn r_age(c: u32) -> u32 { return 4u * c; }
-fn r_life(c: u32) -> u32 { return 5u * c; }
-fn r_size(c: u32) -> u32 { return 6u * c; }
-fn r_rot(c: u32) -> u32 { return 7u * c; }
-fn r_colour(c: u32) -> u32 { return 8u * c; }
-fn r_id(c: u32) -> u32 { return 10u * c; }
-fn r_tail(c: u32) -> u32 { return 12u * c; }
+fn r_speed(c: u32) -> u32 { return 3u * c; }
+fn r_age(c: u32) -> u32 { return 6u * c; }
+fn r_life(c: u32) -> u32 { return 7u * c; }
+fn r_size(c: u32) -> u32 { return 8u * c; }
+fn r_rot(c: u32) -> u32 { return 9u * c; }
+fn r_colour(c: u32) -> u32 { return 10u * c; }
+fn r_id(c: u32) -> u32 { return 12u * c; }
+fn r_tail(c: u32) -> u32 { return 14u * c; }
+
+// == lumit_core::fx::points::Projection::apply, given the three rows.
+//
+// `.xy` is where the camera puts the particle on the layer's plane and `.z` is
+// the foreshortening. With `on` clear — a 2D layer — it hands back the same
+// bits it was given and a scale of exactly one, which is the K-258 guarantee:
+// the flat path is not an approximation of itself.
+fn pt_project(m0: vec4<f32>, m1: vec4<f32>, m2: vec4<f32>, on: u32, q: vec3<f32>) -> vec3<f32> {
+    if (on == 0u) {
+        return vec3<f32>(q.x, q.y, 1.0);
+    }
+    let v = vec4<f32>(q, 1.0);
+    let w = dot(m2, v);
+    // At or behind the camera's own plane: scale nought, which draws nothing
+    // at all rather than flinging the particle across the frame.
+    if (w <= 1e-4) {
+        return vec3<f32>(q.x, q.y, 0.0);
+    }
+    let inv = 1.0 / w;
+    return vec3<f32>(dot(m0, v) * inv, dot(m1, v) * inv, inv);
+}
 
 // == lumit_core::fx::points::draw.
 fn pt_die(birth_lo: u32, birth_hi: u32, attr_id: u32) -> f32 {
@@ -186,34 +229,39 @@ fn pt_drag_terms(x: f32) -> vec2<f32> {
 }
 
 struct Motion {
-    pos: vec2<f32>,
-    vel: vec2<f32>,
+    pos: vec3<f32>,
+    vel: vec3<f32>,
 };
 
-// == lumit_core::fx::points::integrate.
-fn pt_integrate(p0: vec2<f32>, v0: vec2<f32>, age: f32) -> Motion {
+// == lumit_core::fx::points::integrate. Three axes, one algebra: the depth
+// component takes the same drag and wind terms. Gravity stays down (K-561).
+fn pt_integrate(p0: vec3<f32>, v0: vec3<f32>, age: f32) -> Motion {
     let k = max(p.drag, 0.0);
     let x = k * age;
     let rs = pt_drag_terms(x);
     let decay = exp(-x);
-    let g = vec2<f32>(0.0, p.gravity);
+    let g = vec3<f32>(0.0, p.gravity, 0.0);
+    let wind = vec3<f32>(p.wind.x, p.wind.y, p.wind_z);
     var m: Motion;
-    m.pos = p0 + p.wind * age + (v0 - p.wind) * age * rs.x + g * age * age * rs.y;
-    m.vel = p.wind + (v0 - p.wind) * decay + g * age * rs.x;
+    m.pos = p0 + wind * age + (v0 - wind) * age * rs.x + g * age * age * rs.y;
+    m.vel = wind + (v0 - wind) * decay + g * age * rs.x;
     return m;
 }
 
-// == lumit_core::fx::points::turbulence.
-fn pt_turbulence(p0: vec2<f32>, phase: f32, age: f32) -> vec2<f32> {
+// == lumit_core::fx::points::turbulence. The lattice is sampled at the birth
+// point's own x and y as it always was; the third axis is a third channel of
+// the same lattice, not a third input coordinate.
+fn pt_turbulence(p0: vec3<f32>, phase: f32, age: f32) -> vec3<f32> {
     if (p.turb == 0.0) {
-        return vec2<f32>(0.0, 0.0);
+        return vec3<f32>(0.0, 0.0, 0.0);
     }
     let scale = max(p.turb_scale, 1e-3);
-    let q = p0 / scale + vec2<f32>(phase, phase);
+    let q = p0.xy / scale + vec2<f32>(phase, phase);
     let z = age * p.turb_speed;
-    return vec2<f32>(
+    return vec3<f32>(
         p.turb * nc_value3(p.seed, TURB_X, q.x, q.y, z, 0),
         p.turb * nc_value3(p.seed, TURB_Y, q.x, q.y, z, 0),
+        p.turb * nc_value3(p.seed, TURB_Z, q.x, q.y, z, 0),
     );
 }
 
@@ -245,24 +293,30 @@ fn pt_path_at(s_in: f32) -> vec2<f32> {
     return a.xy + (b.xy - a.xy) * t;
 }
 
-// == lumit_core::fx::points::birth_point. `.z` of the result is 0 when the
+// == lumit_core::fx::points::birth_point. `.w` of the result is 0 when the
 // emitter has nothing to emit from — a Mask path row that came to no mask,
-// which is the documented no-op.
-fn pt_birth_point(u: f32, v: f32) -> vec3<f32> {
+// which is the documented no-op; `.xyz` is the birth point's three axes.
+//
+// `w_die` is the draw through the emitter's Depth (K-561), filled uniformly: a
+// Point becomes a segment, an Ellipse a cylinder, a Rectangle a box. Line and
+// Mask path ignore it and stay on the plane.
+fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
     if (p.shape == 4u) {
         if (p.path_len < 2u) {
-            return vec3<f32>(0.0, 0.0, 0.0);
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
         // Already an absolute position: the path is where the user drew it, so
         // the emitter's own place and turn do not move it.
-        return vec3<f32>(pt_path_at(u * p.path_total), 1.0);
+        return vec4<f32>(pt_path_at(u * p.path_total), p.em_z, 1.0);
     }
     let a = radians(p.em_angle);
     let s = sin(a);
     let c = cos(a);
     var local = vec2<f32>(0.0, 0.0);
+    var depth = (w_die - 0.5) * p.em_depth;
     if (p.shape == 1u) {
         local = vec2<f32>((u - 0.5) * p.em_wh.x, 0.0);
+        depth = 0.0;
     } else if (p.shape == 2u) {
         // √u for the radius, or the middle of the disc would be crowded.
         let r = sqrt(max(u, 0.0));
@@ -271,9 +325,10 @@ fn pt_birth_point(u: f32, v: f32) -> vec3<f32> {
     } else if (p.shape == 3u) {
         local = vec2<f32>((u - 0.5) * p.em_wh.x, (v - 0.5) * p.em_wh.y);
     }
-    return vec3<f32>(
+    return vec4<f32>(
         p.em_pos.x + local.x * c - local.y * s,
         p.em_pos.y + local.x * s + local.y * c,
+        p.em_z + depth,
         1.0,
     );
 }
@@ -444,14 +499,22 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let hi = cand.birth_hi;
     let age = cand.age;
     let life = cand.life;
-    let b0 = pt_birth_point(pt_die(lo, hi, A_EMIT_U), pt_die(lo, hi, A_EMIT_V));
-    if (b0.z == 0.0) {
+    let b0 = pt_birth_point(
+        pt_die(lo, hi, A_EMIT_U),
+        pt_die(lo, hi, A_EMIT_V),
+        pt_die(lo, hi, A_EMIT_W),
+    );
+    if (b0.w == 0.0) {
         return;
     }
-    let p0 = b0.xy;
+    let p0 = b0.xyz;
     let dir = radians(p.dir) + (pt_die(lo, hi, A_DIRECTION) - 0.5) * radians(p.spread);
+    let dir_z = radians(p.dir_z) + (pt_die(lo, hi, A_DIRECTION_Z) - 0.5) * radians(p.spread_z);
     let speed = pt_jitter(p.speed, p.speed_jitter, pt_die(lo, hi, A_SPEED));
-    let v0 = vec2<f32>(speed * cos(dir), speed * sin(dir));
+    // The elevation tilts the launch out of the plane; at nought its cosine is
+    // exactly one and the two in-plane components are the bits they always were.
+    let cz = cos(dir_z);
+    let v0 = vec3<f32>(speed * cos(dir) * cz, speed * sin(dir) * cz, speed * sin(dir_z));
     let m = pt_integrate(p0, v0, age);
     let phase = pt_die(lo, hi, A_TURB_PHASE) * 1000.0;
     let d = pt_turbulence(p0, phase, age);
@@ -467,6 +530,8 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     var rot = radians(p.rotation);
     if (p.align != 0u) {
+        // In the layer's plane: a rotation is one angle in the picture the
+        // sprite is stamped into, which has no depth axis to turn about.
         rot = atan2(speed_out.y, speed_out.x) + rot;
     }
     // The per-particle rotation spread (K-507), from the seed hash like every
@@ -485,10 +550,12 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     let cap = p.cap;
-    stream[r_pos(cap) + dst * 2u] = bitcast<u32>(head.x);
-    stream[r_pos(cap) + dst * 2u + 1u] = bitcast<u32>(head.y);
-    stream[r_speed(cap) + dst * 2u] = bitcast<u32>(speed_out.x);
-    stream[r_speed(cap) + dst * 2u + 1u] = bitcast<u32>(speed_out.y);
+    stream[r_pos(cap) + dst * 3u] = bitcast<u32>(head.x);
+    stream[r_pos(cap) + dst * 3u + 1u] = bitcast<u32>(head.y);
+    stream[r_pos(cap) + dst * 3u + 2u] = bitcast<u32>(head.z);
+    stream[r_speed(cap) + dst * 3u] = bitcast<u32>(speed_out.x);
+    stream[r_speed(cap) + dst * 3u + 1u] = bitcast<u32>(speed_out.y);
+    stream[r_speed(cap) + dst * 3u + 2u] = bitcast<u32>(speed_out.z);
     stream[r_age(cap) + dst] = bitcast<u32>(age);
     stream[r_life(cap) + dst] = bitcast<u32>(life);
     stream[r_size(cap) + dst] = bitcast<u32>(size);
@@ -498,8 +565,9 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     stream[r_colour(cap) + dst * 2u + 1u] = pack2x16float(colour.ba);
     stream[r_id(cap) + dst * 2u] = lo;
     stream[r_id(cap) + dst * 2u + 1u] = hi;
-    stream[r_tail(cap) + dst * 2u] = bitcast<u32>(tail.x);
-    stream[r_tail(cap) + dst * 2u + 1u] = bitcast<u32>(tail.y);
+    stream[r_tail(cap) + dst * 3u] = bitcast<u32>(tail.x);
+    stream[r_tail(cap) + dst * 3u + 1u] = bitcast<u32>(tail.y);
+    stream[r_tail(cap) + dst * 3u + 2u] = bitcast<u32>(tail.z);
 }
 
 // ---------------------------------------------------------------- the draw
@@ -523,15 +591,25 @@ struct VsOut {
 @vertex
 fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
     let cap = dp.cap;
-    let head = vec2<f32>(
-        bitcast<f32>(dstream[r_pos(cap) + ii * 2u]),
-        bitcast<f32>(dstream[r_pos(cap) + ii * 2u + 1u]),
+    let head3 = vec3<f32>(
+        bitcast<f32>(dstream[r_pos(cap) + ii * 3u]),
+        bitcast<f32>(dstream[r_pos(cap) + ii * 3u + 1u]),
+        bitcast<f32>(dstream[r_pos(cap) + ii * 3u + 2u]),
     );
-    let tail = vec2<f32>(
-        bitcast<f32>(dstream[r_tail(cap) + ii * 2u]),
-        bitcast<f32>(dstream[r_tail(cap) + ii * 2u + 1u]),
+    let tail3 = vec3<f32>(
+        bitcast<f32>(dstream[r_tail(cap) + ii * 3u]),
+        bitcast<f32>(dstream[r_tail(cap) + ii * 3u + 1u]),
+        bitcast<f32>(dstream[r_tail(cap) + ii * 3u + 2u]),
     );
-    let size = bitcast<f32>(dstream[r_size(cap) + ii]);
+    // Through the composition's camera (K-561): where it is seen, and how much
+    // it foreshortens. The tail takes the same camera, so a streak that runs
+    // towards the lens really does run towards the lens. Flat on a 2D layer, in
+    // which case these are the same bits the stream holds.
+    let ph = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, head3);
+    let pt = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, tail3);
+    let head = ph.xy;
+    let tail = pt.xy;
+    let size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
     let rot = bitcast<f32>(dstream[r_rot(cap) + ii]);
     let rg = unpack2x16float(dstream[r_colour(cap) + ii * 2u]);
     let ba = unpack2x16float(dstream[r_colour(cap) + ii * 2u + 1u]);

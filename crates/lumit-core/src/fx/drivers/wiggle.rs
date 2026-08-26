@@ -64,6 +64,7 @@ impl EffectDef for WiggleDef {
                 id: VALUE_PORT,
                 label: "Value",
                 ty: PortType::Number,
+                three_d: false,
             }],
         }
     }

@@ -62,12 +62,19 @@ pub const MAX_CANDIDATES: u64 = (MAX_WORKGROUPS_PER_DIM as u64) * (EVAL_WORKGROU
 /// reads — every distance in **raster** pixels, as the resolve step left them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParticulateOp<'a> {
-    pub emitter_pos: [f32; 2],
+    /// The emitter's centre, three axes (K-561).
+    pub emitter_pos: [f32; 3],
     /// The Line/Ellipse/Rectangle extents.
     pub emitter_wh: [f32; 2],
+    /// The Point/Ellipse/Rectangle extent through the layer's plane (K-561).
+    pub emitter_depth: f32,
     pub emitter_angle_deg: f32,
     pub direction_deg: f32,
+    /// Launch elevation out of the layer's plane, degrees (K-561).
+    pub direction_z_deg: f32,
     pub spread_deg: f32,
+    /// The elevation's own cone, degrees (K-561).
+    pub spread_z_deg: f32,
     pub speed: f32,
     /// `0..=1`.
     pub speed_jitter: f32,
@@ -91,7 +98,8 @@ pub struct ParticulateOp<'a> {
     /// Scene-linear RGBA at birth and at death.
     pub colour: [f32; 4],
     pub end_colour: [f32; 4],
-    pub wind: [f32; 2],
+    /// The air's own speed on all three axes (K-561).
+    pub wind: [f32; 3],
     pub gravity: f32,
     pub drag: f32,
     pub turbulence: f32,
@@ -127,6 +135,13 @@ pub struct ParticulateOp<'a> {
     /// arrives as Disc** — the host resolves the fallback so the kernel has one
     /// less branch (particulate.md §2).
     pub mode: u32,
+    /// Where the composition's camera puts a particle off the layer's plane
+    /// (K-561): a row-major 3×4 already scaled to **this raster**, or `None` on
+    /// a 2D layer, a comp with no camera, and every project saved before the
+    /// axis existed. `None` is not "the identity matrix" — the kernel takes a
+    /// different branch and touches the position's bits not at all, which is
+    /// what makes the flat picture bit-identical rather than nearly so.
+    pub projection: Option<[[f32; 4]; 3]>,
 }
 
 #[repr(C)]
@@ -184,15 +199,29 @@ struct ParticulateParams {
     target_h: f32,
     sprite_w: f32,
     sprite_h: f32,
-    _pad: f32,
+    wind_z: f32,
+
+    em_z: f32,
+    em_depth: f32,
+    dir_z: f32,
+    spread_z: f32,
+
+    proj0: [f32; 4],
+    proj1: [f32; 4],
+    proj2: [f32; 4],
+
+    project: u32,
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 }
 
 /// The scan's block width — the same 256 the kernel declares.
 const SCAN_BLOCK: u32 = 256;
 
-/// Words of stream per particle: position 2, speed 2, age, life, size,
-/// rotation, colour 2 (half pairs), id 2, and the draw's own tail 2.
-const STREAM_WORDS: u64 = 14;
+/// Words of stream per particle: position 3, speed 3, age, life, size,
+/// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3 (K-561).
+const STREAM_WORDS: u64 = 17;
 
 impl FxEngine {
     /// Draw one Particulate over a working texture, returning a new texture of
@@ -342,8 +371,9 @@ impl FxEngine {
         }
         let blocks = candidates.div_ceil(SCAN_BLOCK);
         let sprite_size = sprite.map_or((1.0, 1.0), |t| (t.width() as f32, t.height() as f32));
+        let proj = op.projection.unwrap_or([[0.0; 4]; 3]);
         let u = ParticulateParams {
-            em_pos: op.emitter_pos,
+            em_pos: [op.emitter_pos[0], op.emitter_pos[1]],
             em_wh: op.emitter_wh,
             em_angle: op.emitter_angle_deg,
             dir: op.direction_deg,
@@ -363,7 +393,7 @@ impl FxEngine {
             align: u32::from(op.align_to_motion),
             colour: op.colour,
             end_colour: op.end_colour,
-            wind: op.wind,
+            wind: [op.wind[0], op.wind[1]],
             gravity: op.gravity,
             drag: op.drag,
             turb: op.turbulence,
@@ -385,7 +415,18 @@ impl FxEngine {
             target_h: h as f32,
             sprite_w: sprite_size.0,
             sprite_h: sprite_size.1,
-            _pad: 0.0,
+            wind_z: op.wind[2],
+            em_z: op.emitter_pos[2],
+            em_depth: op.emitter_depth,
+            dir_z: op.direction_z_deg,
+            spread_z: op.spread_z_deg,
+            proj0: proj[0],
+            proj1: proj[1],
+            proj2: proj[2],
+            project: u32::from(op.projection.is_some()),
+            _pad0: 0.0,
+            _pad1: 0.0,
+            _pad2: 0.0,
         };
         let ubuf = ctx
             .device

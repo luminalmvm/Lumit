@@ -501,7 +501,17 @@ pub mod particulate {
                 rate
             });
         schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
-        let carriage = PointsSchedule { schedule, t };
+        // **Flat, deliberately** (K-561): B12–B14 are the budgets docs/13 §2
+        // states and the baselines checked in beside them, so the fixture has
+        // to keep measuring the same work. The third axis costs one dot product
+        // and one divide per particle in the vertex stage — inside the noise of
+        // a row already reported to three decimal places — so it earns no row
+        // of its own rather than being smuggled into three that exist.
+        let carriage = PointsSchedule {
+            schedule,
+            t,
+            projection: None,
+        };
 
         let tex = lumit_gpu::fx::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let run = || {

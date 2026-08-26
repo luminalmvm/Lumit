@@ -6,7 +6,9 @@ proposed by this note and since **confirmed DECIDED by K-491**: K-474 (closed-fo
 evaluation, no simulation state) and K-475 (the particle cap is the user's budget dial).
 **Related:** K-471 (drivers and the wiring model), K-419 (px@comp), K-425 (the Mix row's
 Blend), K-408 (mask-path parameters), K-123 (layer references), K-132 (per-effect
-temporal sampling), K-031 (preview equals export). **Status: commissioned** (K-491, the
+temporal sampling), K-031 (preview equals export), **K-561 (the particles live in three
+axes and the composition's camera sees them, superseding K-495)**, K-596 (the depth rows,
+and the projection that rides beside the op). **Status: commissioned** (K-491, the
 owner's 2026-08-24 commission) — [points-stream.md](points-stream.md) is the
 infrastructure design (consumption, consumers, seam) and holds the ordered work packages
 (PS1–PS7); this note remains the effect's own *how*. When PS2 lands the effect whole,
@@ -44,9 +46,8 @@ scrub-safe.
 
 **Is not:** a simulation. No collisions, no per-particle interaction, no state carried
 between frames — §8 specs the exception's contract should one ever be needed, and it is
-deliberately not built. Also not in v1: emitting from the image's own bright pixels, 3D
-particles (positions grow to `Vec3` with 2.5D points), and the stack-effect family
-consuming the points output (Connect points, Clone to points, Trail, Scatter) — deferred
+deliberately not built. Also not in v1: emitting from the image's own bright pixels, and
+the stack-effect family consuming the points output (Connect points, Clone to points, Trail, Scatter) — deferred
 as named packages in [points-stream.md](points-stream.md) §2.3. The one v1 consumer
 beyond this effect's own drawing is the **Points sample** driver (K-494).
 
@@ -63,12 +64,16 @@ softly glowing motes over the footage.
 |---|---|---|---|---|
 | Shape | choice | Point · Line · Ellipse · Rectangle · Mask path | Point | Area shapes emit uniformly over their interior; Line along its segment; Mask path along the arc-length polyline (K-408). |
 | Position | 2D point, px@comp | open | comp centre | The `_x`/`_y` pair convention; pick-on-Viewer dropper. |
+| Position z | px@comp | −2000–2000 (open) | 0 | **K-561.** How far in front of or behind the layer's own plane the emitter sits. Nought is the plane, which is what every 2D layer draws. |
 | Width / Height | px@comp | 0–2000 (0+) | 400 / 400 | Extents for Line (Width only), Ellipse, Rectangle. Ignored by Point and Mask path. |
-| Emitter angle | degrees | −360–360 (open) | 0 | Rotates Line/Ellipse/Rectangle about Position. |
+| Depth | px@comp | 0–2000 (0+) | 0 | **K-561.** The extent *through* the plane, filled uniformly: Point becomes a segment, Ellipse a cylinder, Rectangle a box. Ignored by Line (one dimension by name) and by Mask path, which stays planar at the emitter's own depth — the path is where the user drew it. |
+| Emitter angle | degrees | −360–360 (open) | 0 | Rotates Line/Ellipse/Rectangle about Position, in the plane. Depth runs through that plane and is not turned by it. |
 | Mask path | mask-path reference | — | First mask | Used when Shape is Mask path; empty polyline emits nothing (the documented no-op, K-408). Static in v1, like every mask-path reference. |
 | Emit rate | none (per second) | 0–1000 (0+) | 150 | Births per second of layer time; the integral is the birth schedule (§3.1). |
-| Direction | degrees | −360–360 (open) | −90 | Launch direction; −90 is up. |
+| Direction | degrees | −360–360 (open) | −90 | Launch direction in the layer's plane; −90 is up. |
+| Direction z | degrees | −360–360 (open) | 0 | **K-561.** The launch's elevation out of that plane: positive throws particles away from the camera. |
 | Spread | degrees | 0–360 | 360 | Cone about Direction. |
+| Spread z | degrees | 0–180 (0–360) | 0 | **K-561.** The elevation's own cone — a row of its own, so that a full 360 of in-plane Spread stays a disc of directions rather than quietly becoming a sphere. |
 | Initial speed | px@comp per second | 0–2000 (0+) | 90 | |
 | Speed jitter | per cent | 0–100 | 50 | Per-particle, from the seed. |
 
@@ -96,8 +101,8 @@ selection criterion, recorded as K-474, not a styling choice.
 
 | Parameter | Kind / unit | Slider (hard) | Default | Notes |
 |---|---|---|---|---|
-| Gravity | px@comp per second² | −2000–2000 (open) | 0 | Positive is down. |
-| Wind x / Wind y | px@comp per second | −2000–2000 (open) | 0 / 0 | The air's own speed. Wind acts *through* Drag — with Drag 0 it does nothing, and the row's description says so. |
+| Gravity | px@comp per second² | −2000–2000 (open) | 0 | Positive is down. **Down stays down** (K-561): gravity is the one force with a direction of its own, and a depth component would be a control nobody asked for. |
+| Wind x / Wind y / Wind z | px@comp per second | −2000–2000 (open) | 0 / 0 / 0 | The air's own speed, on all three axes since K-561. Wind acts *through* Drag — with Drag 0 it does nothing, and the rows' descriptions say so. |
 | Drag | none (per second) | 0–10 (0+) | 0.5 | Exponential approach of the particle's speed toward the wind's. |
 | Turbulence amount | px@comp | 0–500 (0+) | 40 | Displacement magnitude. |
 | Turbulence scale | px@comp | 10–1000 (10+) | 200 | Spatial wavelength of the noise. |
@@ -168,14 +173,26 @@ k > 0:   v(age) = w + g/k + (v0 − w − g/k) · e^(−k·age)
 k → 0:   p(age) = p0 + v0·age + ½·g·age²          // series guard below k·age < 1e−4
 ```
 
+**Three components, one algebra** (K-561): `p0`, `v0` and `w` are three-vectors and the
+formulas above apply component by component, the depth axis included. `g` is
+`[0, gravity, 0]` — the one force with a direction of its own. The implementation
+rearranges both branches so neither divides by `k`, and moves the series guard to
+`k·age = 0.1`, which is where the two genuinely meet in `f32` (`fx/points.rs::drag_terms`).
+
 **Turbulence** is a displacement, not an integrated force — the standard trick that keeps
 it closed-form:
 
 ```
-Δp = amount · noise2(p0 / scale + phase_b, age · turb_speed)
+Δp = amount · noise3(p0 / scale + phase_b, age · turb_speed)
 ```
 
-where `noise2` is the same deterministic value-noise family Wiggle and Fractal noise use
+where `noise3` is **three channels of** the same deterministic value-noise family Wiggle
+and Fractal noise use — the third added by K-561, on the rule that a jitter with an x and
+a y gains a z. The lattice is sampled at the birth point's own x and y as it always was:
+a third *input* coordinate would move every existing sample and repaint every project. It
+follows that on a 2D layer with Turbulence above nought the stream's `z` is **not** nought
+and cannot be seen, because the flat projection drops it — the K-258 guarantee is about
+the picture, which is what the tests hold. `noise3`
 (one lattice, pinned by the test plan — do not invent a second noise), and `phase_b` is
 the particle's hashed phase. The drawn position is `p(age) + Δp`.
 
@@ -240,8 +257,8 @@ node-graph.md §6.2's shape was the starting point; WP6 finalises it with **one 
 /// One frame's particles, structure-of-arrays, GPU-resident, never in the document.
 struct PointsStream {
     count: u32,                 // live particles this frame (≤ the declared cap)
-    position: Buffer<Vec2>,     // px@comp; grows to Vec3 with 2.5D points
-    speed: Buffer<Vec2>,        // px@comp per second
+    position: Buffer<Vec3>,     // px@comp, the layer's three axes, UNPROJECTED (K-561)
+    speed: Buffer<Vec3>,        // px@comp per second
     age: Buffer<f32>,           // seconds since birth
     life: Buffer<f32>,          // this particle's total lifetime, seconds  ← added
     size: Buffer<f32>,          // px@comp, after Size over life
@@ -253,6 +270,13 @@ struct PointsStream {
 
 `id` **is** the birth index: no separate id space, and stability across frames falls out
 of §3.1 for free.
+
+**Positions and speeds are unprojected** (K-561): the layer's own three axes. Where the
+composition's camera puts a particle is one small 3×4 table carried beside the stream and
+applied at the *read* — `projected(i)` for a consumer that thinks in 2D, `position[i]` for
+one that declared `Port::three_d`. points-stream.md §3.1 is the contract. On the card the
+stream is 17 words a particle: position 3, speed 3, age, life, size, rotation, colour 2
+(half pairs), id 2, and the draw's own tail 3.
 
 ## 5. Determinism and caching
 
@@ -368,7 +392,7 @@ Landed with the implementation, per K-007. lumit-core unless noted.
 4. **Closed forms**: position/speed against the analytic solutions at `k = 0`,
    `k = 0.5`, and across the series guard boundary; wind-with-zero-drag is exactly
    motionless wind (the documented behaviour).
-5. **Turbulence pinning**: fixed seed, fixed lattice — golden values for `noise2` at
+5. **Turbulence pinning**: fixed seed, fixed lattice — golden values for `noise3` at
    pinned sample points, so no one swaps the noise family silently.
 6. **Id stability**: a particle's `id`, sampled at three frames of its life, is constant;
    ids are strictly increasing in birth order after compaction (the prefix-sum
@@ -384,14 +408,34 @@ Landed with the implementation, per K-007. lumit-core unless noted.
 11. **Frame-key sensitivity**: seed change ⇒ key changes; scrubbing time ⇒ key changes
     (seeded rule); an edit to an unrelated layer ⇒ key stable.
 12. **Budgets** (perf harness, docs/13 §7.3): the four numbers of §7 as gates on the
-    reference-desktop runner.
+    reference-desktop runner. Measured **flat**, deliberately: B12–B14 are the numbers
+    docs/13 §2 states against a checked-in baseline, and the third axis costs one dot
+    product and one divide per particle in the vertex stage — inside the noise of a row
+    already reported to three decimal places, so it earns no row of its own.
+13. **The third axis** (K-561). *The flat projection is the identity*, bit for bit, at any
+    `z` — the arithmetic the whole 2D guarantee rests on, and the one bit it does not
+    carry (the sign of a zero) named rather than skipped. *The camera puts depth where
+    perspective puts it*: the plane unmoved, a particle further off drawn smaller and
+    nearer the centre, one at or behind the camera drawn not at all. *A projected particle
+    lands where the camera would have put it* — the restriction and its inverse held
+    against the compositor's own matrices (`lumit-render`, `points_projection_tests`).
+    *The K-258 gate*: an instance with the five depth rows absent altogether — which is
+    what an old file loads as — evaluates to the identical stream and draws the identical
+    picture. *The depth rows do something*, each one separately, turbulence's third
+    lattice included. *Determinism, random access and the cap rule hold in 3D*: items 1, 2
+    and 7 re-run on a stream that is off the plane and seen through a camera. *The GPU
+    twins in 3D*: item 8 again with a projection, and the drawn picture in all three modes
+    — the streak's tail taking the same camera as its head. *End to end*: a 3D layer under
+    a comp camera draws a different field from the same layer flat, and a 2D layer's
+    picture is byte-identical whether the comp has a camera or not.
 
 ## Open questions
 
 Two of this note's original questions are resolved by the family design step
 ([points-stream.md](points-stream.md)): **how the family consumes the stream** — a graph
-wire, the `EffectData` edge (K-492) — and **Vec2 vs Vec3** — positions are `Vec2`, with
-2.5D remaining node-graph.md §6.2's recorded growth path (K-495). What stays open:
+wire, the `EffectData` edge (K-492) — and **Vec2 vs Vec3** — positions are `Vec3`, and on
+a 3D layer the composition's camera sees them (K-561, superseding K-495's answer of
+`Vec2`). What stays open:
 
 - **Whether the simulated exception is ever needed.** §8 is its contract; building it
   waits on an owner ruling driven by real demand (collisions with layer alpha is the

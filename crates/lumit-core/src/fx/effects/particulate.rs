@@ -20,6 +20,13 @@
 //! evaluate/compaction/instanced-draw passes and the schedule's carriage beside
 //! the op. The Points socket is declared but nothing may wire it until PS3
 //! lands the edge.
+//!
+//! **The particles live in three axes** (K-561). Position z, Depth, Direction
+//! z, Spread z and Wind z are the five new rows, every one of them defaulting
+//! to the flat behaviour — so a 2D layer, and every project saved before the
+//! axis existed, draws the picture it always drew. What makes the depth
+//! *visible* is the layer's own 3D switch and the composition's camera, which
+//! the renderer threads in beside the birth schedule.
 
 use crate::fx::points::{self, Emitter, EmitterShape, Forces, ParticleLook, PointsParams};
 use crate::fx::{
@@ -53,13 +60,17 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "shape",
             "position_x",
             "position_y",
+            "position_z",
             "width",
             "height",
+            "depth",
             "emitter_angle",
             "mask_path",
             "emit_rate",
             "direction",
+            "direction_z",
             "spread",
+            "spread_z",
             "initial_speed",
             "speed_jitter",
         ],
@@ -87,6 +98,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "gravity",
             "wind_x",
             "wind_y",
+            "wind_z",
             "drag",
             "turbulence_amount",
             "turbulence_scale",
@@ -170,6 +182,14 @@ pub struct Particulate {
     #[slider(label = "Position y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub position_y: f32,
 
+    /// The emitter's depth, px@comp: how far in front of the layer's own plane
+    /// the particles are born (K-561). **Nought is the plane**, which is what a
+    /// 2D layer draws and what every project made before the axis existed
+    /// reads as; it means something only when the layer is 3D and the
+    /// composition has a camera to see it with.
+    #[slider(label = "Position z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub position_z: f32,
+
     /// The emitter's extent across, px@comp. Line reads only this; Point and
     /// Mask path read neither it nor Height.
     #[slider(min = 0.0, max = 2000.0, default = 400.0, hard_min = 0.0, unit = Px)]
@@ -178,6 +198,12 @@ pub struct Particulate {
     /// The emitter's extent down, px@comp; see [`width`](Self::width).
     #[slider(min = 0.0, max = 2000.0, default = 400.0, hard_min = 0.0, unit = Px)]
     pub height: f32,
+
+    /// The emitter's extent **through** the plane, px@comp (K-561): a Point
+    /// becomes a segment of particles receding from the camera, an Ellipse a
+    /// cylinder, a Rectangle a box. Line and Mask path stay flat.
+    #[slider(min = 0.0, max = 2000.0, default = 0.0, hard_min = 0.0, unit = Px)]
+    pub depth: f32,
 
     /// Rotates Line, Ellipse and Rectangle about Position.
     #[dial(label = "Emitter angle", default = 0.0)]
@@ -194,9 +220,15 @@ pub struct Particulate {
     #[slider(min = 0.0, max = 1000.0, default = 150.0, hard_min = 0.0, unit = Raw)]
     pub emit_rate: f32,
 
-    /// Which way particles leave; −90 is up.
+    /// Which way particles leave, in the layer's own plane; −90 is up.
     #[dial(label = "Direction", default = -90.0)]
     pub direction: f32,
+
+    /// How far particles lean **out of** that plane as they leave, degrees
+    /// (K-561): positive throws them away from the camera, negative towards it.
+    /// Nought is flat, which is what a 2D layer draws.
+    #[dial(label = "Direction z", default = 0.0)]
+    pub direction_z: f32,
 
     /// The cone about Direction. At 360 they leave every way at once.
     #[slider(
@@ -208,6 +240,21 @@ pub struct Particulate {
         unit = Degrees
     )]
     pub spread: f32,
+
+    /// The cone about Direction z, degrees (K-561) — the lean's own spread, a
+    /// row of its own so that a full turn of in-plane Spread stays a disc of
+    /// directions rather than quietly becoming a sphere. At nought every
+    /// particle leaves in the plane, which is the flat behaviour exactly.
+    #[slider(
+        label = "Spread z",
+        min = 0.0,
+        max = 180.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 360.0,
+        unit = Degrees
+    )]
+    pub spread_z: f32,
 
     /// How fast a particle leaves, px@comp per second.
     #[slider(
@@ -326,6 +373,11 @@ pub struct Particulate {
     /// [`wind_x`](Self::wind_x).
     #[slider(label = "Wind y", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub wind_y: f32,
+
+    /// The air's own speed **through** the layer's plane, px@comp per second
+    /// (K-561) — the third axis of the same wind, carried by the same drag.
+    #[slider(label = "Wind z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub wind_z: f32,
 
     /// How quickly a particle's speed approaches the wind's, per second.
     #[slider(min = 0.0, max = 10.0, default = 0.5, hard_min = 0.0, unit = Raw)]
@@ -460,12 +512,15 @@ impl Particulate {
         PointsParams {
             emitter: Emitter {
                 shape: EmitterShape::from_code(self.shape),
-                position: [self.position_x, self.position_y],
+                position: [self.position_x, self.position_y, self.position_z],
                 width: self.width.max(0.0),
                 height: self.height.max(0.0),
+                depth: self.depth.max(0.0),
                 angle_deg: self.emitter_angle,
                 direction_deg: self.direction,
+                direction_z_deg: self.direction_z,
                 spread_deg: self.spread.clamp(0.0, 360.0),
+                spread_z_deg: self.spread_z.clamp(0.0, 360.0),
                 speed: self.initial_speed,
                 speed_jitter: (self.speed_jitter / 100.0).clamp(0.0, 1.0),
             },
@@ -485,7 +540,7 @@ impl Particulate {
             },
             forces: Forces {
                 gravity: self.gravity,
-                wind: [self.wind_x, self.wind_y],
+                wind: [self.wind_x, self.wind_y, self.wind_z],
                 drag: self.drag.max(0.0),
                 turbulence: self.turbulence_amount.max(0.0),
                 turbulence_scale: self.turbulence_scale.max(1.0),
@@ -493,6 +548,11 @@ impl Particulate {
             },
             cap: self.max_particles.clamp(1, points::CAP_HARD as i32) as u32,
             seed: self.seed,
+            // **Flat until somebody says otherwise** (K-561): a bag of
+            // parameters cannot know what the composition is looking with, so
+            // the caller that does — the renderer, or the driver walk — pins it
+            // with `PointsParams::projected`.
+            projection: points::Projection::FLAT,
         }
     }
 

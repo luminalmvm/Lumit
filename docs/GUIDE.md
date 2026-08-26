@@ -10598,12 +10598,65 @@ from where the particle was a moment ago to where it is now, and *where it was a
 ago* is worked out with the same formula run at an earlier age, not remembered. Which is
 why a streak costs nothing extra and is exactly a dot when you set its length to zero.
 
-**Two things are handed to the effect from outside**, because they are not numbers anybody
-typed into a box. One is the layer's own clock. The other is the birth schedule — the
+**Three things are handed to the effect from outside**, because none of them is a number
+anybody typed into a box. One is the layer's own clock. Another is the birth schedule — the
 record of how many particles were born on every frame since the layer started, which
 depends on the whole history of the Emit rate slider rather than on its value right now.
-Both are worked out once by the part of Lumit that plans a frame, and travel alongside the
-effect exactly as a mask's traced outline does.
+The third is the composition's camera, which is the next section. All three are worked out
+once by the part of Lumit that plans a frame, and travel alongside the effect exactly as a
+mask's traced outline does.
+
+### The particles have a depth, and the camera sees it
+
+Every particle carries **three** numbers for where it is, not two: across, down, and *how
+far away*. The third one is new, and everything about it is arranged so that a project
+which never asked for depth cannot tell it was added.
+
+**What depth does to the maths is almost nothing.** The formulas that carry a particle
+along — wind pushing it, drag slowing it — simply run a third time, on the third number,
+with the same arithmetic. Gravity is the one exception: down is down, and it would be a
+strange dial that let you point gravity at the camera, so gravity stays flat. The emitter
+grows a **Depth** setting, which turns a single emitting point into a line of them
+receding from you, an oval into a tube, a rectangle into a box. Particles can be launched
+leaning towards you or away (**Direction z**, with its own spread), the wind gains a third
+direction, and the turbulence that already nudged particles sideways and up now nudges
+them nearer and further too.
+
+**What depth does to the *picture* is where the interesting part is.** An effect paints
+into the layer's own flat rectangle of pixels. That rectangle is then turned in space and
+photographed by the composition's camera — that is what the layer's 3D switch is for. So a
+particle that is meant to be a hundred pixels in *front* of the rectangle cannot simply be
+painted where its across-and-down numbers say: it has to be painted where the camera would
+*see* it, which is somewhere else on that rectangle, and drawn smaller or larger for being
+further off or nearer.
+
+Working out that "somewhere else" is one small table of twelve numbers, and Lumit builds
+it once a frame out of **the very same camera maths the compositor uses to place layers**.
+There is deliberately not a second camera anywhere in the engine — the effect is handed
+the answer as plain numbers, and the part of the program that does the arithmetic for
+particles has never heard of cameras at all. (This follows a rule set down when the Card
+wipe effect was built: cameras belong to the composition, not to effects, and an effect
+that wants one asks the composition.)
+
+**On a 2D layer, none of this happens.** There is no camera looking at a 2D layer, so the
+table is the "do nothing" one and the particles are painted exactly where their first two
+numbers say — the same pixels, to the last bit, that the same project made before depth
+existed. That is not a coincidence to be hoped for; it is a guarantee, and there are tests
+that load a project with the depth settings absent altogether (which is what an old file
+is) and check the picture byte for byte.
+
+**One wire, two ways of reading it.** The points stream still carries one kind of thing,
+whatever is plugged into it. What changes is which of two readings a box asks for: most
+boxes want "where does this appear on the frame" and get the flattened pair, and a box
+that genuinely thinks in three dimensions says so on its socket and gets all three
+numbers. Points sample is one of the first kind, which is why the distance it reports is
+the distance you can *see* on the picture rather than a distance through a depth you
+cannot — its Position control is a spot you picked by looking at the frame, so the honest
+answer is measured in the same place.
+
+Two things depth deliberately does **not** bring: particles do not hide behind things, and
+they do not bounce off anything. Both are the kind of "every particle must ask about every
+other particle" work the whole design exists to avoid.
 
 **The same maths, twice, on purpose.** Every formula in this effect exists in two places:
 plain Rust for the processor, and the card's own language for the card. That sounds like

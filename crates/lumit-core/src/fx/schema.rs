@@ -153,13 +153,42 @@ pub struct Port {
     pub label: &'static str,
     /// What travels through it, which is also what colours it.
     pub ty: PortType,
+    /// **3D awareness** (K-561), for a [`PortType::Points`] port only.
+    ///
+    /// The points wire stays one type: a stream carries three coordinates
+    /// whatever reads it. What this says is which of the two readings the
+    /// consumer wants — `false`, the default and every consumer today, means
+    /// "give me where the camera puts them"
+    /// ([`PointsStream::projected`](crate::fx::points::PointsStream::projected));
+    /// `true` means "give me the three axes, I will do my own geometry". It is
+    /// a **declaration on the port**, not a second type and not a second wire,
+    /// so a 3D-aware effect can be dropped into a graph full of 2D ones and
+    /// nothing about the connection changes.
+    pub three_d: bool,
 }
 
 impl Port {
     /// Declare a port. `const` so a signature's output list is a static.
     #[must_use]
     pub const fn new(id: &'static str, label: &'static str, ty: PortType) -> Port {
-        Port { id, label, ty }
+        Port {
+            id,
+            label,
+            ty,
+            three_d: false,
+        }
+    }
+
+    /// The same port, declared **3D-aware** (K-561): its consumer reads the
+    /// stream's three axes rather than the projected two.
+    #[must_use]
+    pub const fn three_d(self) -> Port {
+        Port {
+            id: self.id,
+            label: self.label,
+            ty: self.ty,
+            three_d: true,
+        }
     }
 }
 

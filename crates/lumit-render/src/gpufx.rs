@@ -3616,6 +3616,7 @@ fn particulate_op<'a>(
     path: &'a [[f32; 4]],
     path_total: f32,
     mode: u32,
+    projection: Option<[[f32; 4]; 3]>,
 ) -> lumit_gpu::fx::ParticulateOp<'a> {
     let e = &packed.emitter;
     let look = &packed.particle;
@@ -3624,9 +3625,12 @@ fn particulate_op<'a>(
     lumit_gpu::fx::ParticulateOp {
         emitter_pos: e.position,
         emitter_wh: [e.width, e.height],
+        emitter_depth: e.depth,
         emitter_angle_deg: e.angle_deg,
         direction_deg: e.direction_deg,
+        direction_z_deg: e.direction_z_deg,
         spread_deg: e.spread_deg,
+        spread_z_deg: e.spread_z_deg,
         speed: e.speed,
         speed_jitter: e.speed_jitter,
         shape: e.shape as u32,
@@ -3662,6 +3666,7 @@ fn particulate_op<'a>(
         feather: style.feather,
         mix: style.mix,
         mode,
+        projection,
     }
 }
 
@@ -3729,6 +3734,12 @@ impl GpuEffect for Particulate {
         let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
         curves.extend_from_slice(&packed.particle.size_curve);
         curves.extend_from_slice(&packed.particle.opacity_curve);
+        // The camera, in the raster this frame is drawn at (K-561): the
+        // projection was built in px@comp, like the mask path beside it, and
+        // takes the same factor for the same reason (K-266, K-385).
+        let projection = sched
+            .projection
+            .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
         let poly = lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p));
         let path: Vec<[f32; 4]> = poly
             .points
@@ -3745,6 +3756,7 @@ impl GpuEffect for Particulate {
             &path,
             poly.length(),
             mode,
+            projection,
         );
         fx.particulate(ctx, tex, w, h, sprite.filter(|_| mode == 1), &op)
     }
@@ -3810,11 +3822,33 @@ mod tests {
         lumit_core::fx::points::Schedule,
         lumit_core::fx::points::PointsSchedule,
     ) {
+        particulate_fixture_3d(mode, cap, None)
+    }
+
+    /// The same fixture, with the third axis alive (K-561): every new row set
+    /// to something that matters, and the camera the stream is seen through.
+    /// `None` is the flat fixture above, which is the one every pre-K-561 test
+    /// reads and the one whose picture must not have moved.
+    fn particulate_fixture_3d(
+        mode: u32,
+        cap: i32,
+        projection: Option<lumit_core::fx::points::Projection>,
+    ) -> (
+        lumit_core::fx::effects::particulate::Particulate,
+        lumit_core::fx::points::Schedule,
+        lumit_core::fx::points::PointsSchedule,
+    ) {
         use lumit_core::fx::effects::particulate::Particulate as P;
+        let deep = projection.is_some();
         let inst = P {
             shape: 2,
             position_x: 64.0,
             position_y: 48.0,
+            position_z: if deep { -30.0 } else { 0.0 },
+            depth: if deep { 90.0 } else { 0.0 },
+            direction_z: if deep { 25.0 } else { 0.0 },
+            spread_z: if deep { 70.0 } else { 0.0 },
+            wind_z: if deep { 35.0 } else { 0.0 },
             width: 60.0,
             height: 40.0,
             emitter_angle: 20.0,
@@ -3863,6 +3897,7 @@ mod tests {
         let carriage = lumit_core::fx::points::PointsSchedule {
             schedule: sched.clone(),
             t,
+            projection,
         };
         (inst, sched, carriage)
     }
@@ -3880,7 +3915,9 @@ mod tests {
         Vec<[u32; 2]>,
         Vec<f32>,
     ) {
-        let packed = inst.points();
+        let packed = inst
+            .points()
+            .projected(carriage.projection.unwrap_or_default());
         let style = inst.draw_style();
         let frames = particulate_frames(carriage);
         let mut curves = Vec::new();
@@ -3902,14 +3939,48 @@ mod tests {
     /// answer. The colour region is compared nowhere here: particulate.md §4
     /// declares it at half precision, which is a storage width rather than an
     /// agreement, and the picture test below is what holds it.
+    /// A head-on camera over the fixture's little raster, as the restriction
+    /// comes out: a particle `z` deep scales by `zoom/(zoom + z)` about the
+    /// frame's centre. The renderer's own construction is held to the
+    /// compositor's matrices in `build.rs`; what this one is for is giving the
+    /// kernel a projection that is definitely not the identity.
+    fn test_camera(centre: [f32; 2], zoom: f32) -> lumit_core::fx::points::Projection {
+        lumit_core::fx::points::Projection {
+            m: [
+                [1.0, 0.0, centre[0] / zoom, 0.0],
+                [0.0, 1.0, centre[1] / zoom, 0.0],
+                [0.0, 0.0, 1.0 / zoom, 1.0],
+            ],
+        }
+    }
+
     #[test]
     fn the_particulate_stream_agrees_with_the_cpu_reference() {
+        stream_agrees_with_the_cpu_reference(None);
+    }
+
+    /// **The same agreement, in three axes** (K-561): the four passes carry the
+    /// third component, and the depth attributes are held to the same one part
+    /// in 10⁵ of their range as the two that were always there.
+    ///
+    /// The compacted stream is *unprojected* on both sides — it is the layer's
+    /// three axes, which is what a 3D-aware consumer reads — so this is the
+    /// closed forms agreeing about depth, and the draw test below is what says
+    /// the camera agrees about where that depth is seen.
+    #[test]
+    fn the_particulate_stream_agrees_with_the_cpu_reference_in_three_dimensions() {
+        stream_agrees_with_the_cpu_reference(Some(test_camera([64.0, 48.0], 300.0)));
+    }
+
+    fn stream_agrees_with_the_cpu_reference(
+        projection: Option<lumit_core::fx::points::Projection>,
+    ) {
         let Ok(ctx) = GpuContext::headless() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
         let fx = FxEngine::new(&ctx);
         let (w, h) = (128u32, 96u32);
-        let (inst, sched, carriage) = particulate_fixture(0, 20_000);
+        let (inst, sched, carriage) = particulate_fixture_3d(0, 20_000, projection);
         let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
         let cpu = lumit_core::fx::points::evaluate(
             &packed,
@@ -3923,7 +3994,17 @@ mod tests {
             cpu.len()
         );
 
-        let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+        let op = particulate_op(
+            &packed,
+            style,
+            &carriage,
+            &frames,
+            &curves,
+            &[],
+            0.0,
+            0,
+            carriage.projection.map(|proj| proj.m),
+        );
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let (count, words) = fx
             .particulate_stream(&ctx, &tex, w, h, &op)
@@ -3936,7 +4017,7 @@ mod tests {
         // exactly or the compaction has put a particle in the wrong slot.
         for i in 0..cpu.len() {
             let id =
-                u64::from(words[10 * cap + i * 2]) | (u64::from(words[10 * cap + i * 2 + 1]) << 32);
+                u64::from(words[12 * cap + i * 2]) | (u64::from(words[12 * cap + i * 2 + 1]) << 32);
             assert_eq!(
                 id, cpu.id[i],
                 "id {i} — the compaction is not in birth order"
@@ -3945,25 +4026,29 @@ mod tests {
         let names = [
             "position x",
             "position y",
+            "position z",
             "speed x",
             "speed y",
+            "speed z",
             "age",
             "life",
             "size",
             "rotation",
         ];
-        let mut worst_gap = [0.0f32; 8];
-        let mut range = [0.0f32; 8];
+        let mut worst_gap = [0.0f32; 10];
+        let mut range = [0.0f32; 10];
         for i in 0..cpu.len() {
             for (k, (a, b)) in [
-                (f(i * 2), cpu.position[i][0]),
-                (f(i * 2 + 1), cpu.position[i][1]),
-                (f(2 * cap + i * 2), cpu.speed[i][0]),
-                (f(2 * cap + i * 2 + 1), cpu.speed[i][1]),
-                (f(4 * cap + i), cpu.age[i]),
-                (f(5 * cap + i), cpu.life[i]),
-                (f(6 * cap + i), cpu.size[i]),
-                (f(7 * cap + i), cpu.rotation[i]),
+                (f(i * 3), cpu.position[i][0]),
+                (f(i * 3 + 1), cpu.position[i][1]),
+                (f(i * 3 + 2), cpu.position[i][2]),
+                (f(3 * cap + i * 3), cpu.speed[i][0]),
+                (f(3 * cap + i * 3 + 1), cpu.speed[i][1]),
+                (f(3 * cap + i * 3 + 2), cpu.speed[i][2]),
+                (f(6 * cap + i), cpu.age[i]),
+                (f(7 * cap + i), cpu.life[i]),
+                (f(8 * cap + i), cpu.size[i]),
+                (f(9 * cap + i), cpu.rotation[i]),
             ]
             .into_iter()
             .enumerate()
@@ -3992,6 +4077,20 @@ mod tests {
     /// `moderate` class's perceptual epsilon.
     #[test]
     fn the_particulate_draw_matches_the_cpu_reference_in_every_mode() {
+        draw_matches_the_cpu_reference(None);
+    }
+
+    /// **The camera draws the same picture on both paths** (K-561): the CPU
+    /// reference projects each particle before it stamps it, the vertex stage
+    /// projects each instance before it places its quad, and the two agree
+    /// inside the `moderate` class's epsilon in every render mode — streaks
+    /// included, whose tails take the same camera as their heads.
+    #[test]
+    fn the_particulate_draw_matches_the_cpu_reference_through_a_camera() {
+        draw_matches_the_cpu_reference(Some(test_camera([64.0, 48.0], 300.0)));
+    }
+
+    fn draw_matches_the_cpu_reference(projection: Option<lumit_core::fx::points::Projection>) {
         let Ok(ctx) = GpuContext::headless() else {
             return;
         };
@@ -4002,7 +4101,7 @@ mod tests {
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
         let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
         for mode in [0u32, 1, 2] {
-            let (inst, sched, carriage) = particulate_fixture(mode, 4_000);
+            let (inst, sched, carriage) = particulate_fixture_3d(mode, 4_000, projection);
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
             let (cpu_stream, tails) = lumit_core::fx::points::evaluate_with_tail(
                 &packed,
@@ -4026,7 +4125,39 @@ mod tests {
                 }),
             );
 
-            let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, mode);
+            // A camera that changed nothing would make every comparison below
+            // pass by comparing two identical flat pictures.
+            if projection.is_some() {
+                let mut flat_stream = cpu_stream.clone();
+                flat_stream.projection = lumit_core::fx::points::Projection::FLAT;
+                let mut flat = vec![0.0f32; (w * h * 4) as usize];
+                lumit_core::fx::points::draw_stream(
+                    &mut flat,
+                    w,
+                    h,
+                    &flat_stream,
+                    &tails,
+                    &style,
+                    (mode == 1).then_some(lumit_core::fx::points::Sprite {
+                        rgba: &sprite_px,
+                        w: 8,
+                        h: 8,
+                    }),
+                );
+                assert_ne!(cpu, flat, "mode {mode}: the camera moved nothing at all");
+            }
+
+            let op = particulate_op(
+                &packed,
+                style,
+                &carriage,
+                &frames,
+                &curves,
+                &[],
+                0.0,
+                mode,
+                carriage.projection.map(|proj| proj.m),
+            );
             let tex =
                 lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
             let out = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
@@ -4103,6 +4234,7 @@ mod tests {
         let carriage = lumit_core::fx::points::PointsSchedule {
             schedule: sched.clone(),
             t,
+            projection: None,
         };
         (inst.points(), inst.draw_style(), sched, carriage)
     }
@@ -4119,15 +4251,18 @@ mod tests {
     /// The eight attributes the golden pins, in order. `id` is exempt (a birth
     /// index, compared exactly) and colour is exempt (particulate.md §4
     /// declares it at half precision — the frames are what hold it).
-    const STREAM_ATTRS: usize = 8;
+    const STREAM_ATTRS: usize = 10;
 
-    /// Particle `i`'s eight attributes, in the golden's order.
+    /// Particle `i`'s ten attributes, in the golden's order — three axes of
+    /// position and speed since K-561.
     fn stream_attrs(s: &lumit_core::fx::points::PointsStream, i: usize) -> [f32; STREAM_ATTRS] {
         [
             s.position[i][0],
             s.position[i][1],
+            s.position[i][2],
             s.speed[i][0],
             s.speed[i][1],
+            s.speed[i][2],
             s.age[i],
             s.life[i],
             s.size[i],
@@ -4345,7 +4480,17 @@ mod tests {
         let mut curves = Vec::new();
         curves.extend_from_slice(&packed.particle.size_curve);
         curves.extend_from_slice(&packed.particle.opacity_curve);
-        let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+        let op = particulate_op(
+            &packed,
+            style,
+            &carriage,
+            &frames,
+            &curves,
+            &[],
+            0.0,
+            0,
+            carriage.projection.map(|proj| proj.m),
+        );
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let (count, words) = fx
             .particulate_stream(&ctx, &tex, w, h, &op)
@@ -4360,21 +4505,23 @@ mod tests {
         let cap = op.cap as usize;
         for (i, want) in ids.iter().enumerate() {
             let id =
-                u64::from(words[10 * cap + i * 2]) | (u64::from(words[10 * cap + i * 2 + 1]) << 32);
+                u64::from(words[12 * cap + i * 2]) | (u64::from(words[12 * cap + i * 2 + 1]) << 32);
             assert_eq!(id as f64, *want, "id {i} moved on the card");
         }
         let f = |i: usize| f32::from_bits(words[i]);
         let flat: Vec<f32> = (0..count as usize)
             .flat_map(|i| {
                 [
-                    f(i * 2),
-                    f(i * 2 + 1),
-                    f(2 * cap + i * 2),
-                    f(2 * cap + i * 2 + 1),
-                    f(4 * cap + i),
-                    f(5 * cap + i),
+                    f(i * 3),
+                    f(i * 3 + 1),
+                    f(i * 3 + 2),
+                    f(3 * cap + i * 3),
+                    f(3 * cap + i * 3 + 1),
+                    f(3 * cap + i * 3 + 2),
                     f(6 * cap + i),
                     f(7 * cap + i),
+                    f(8 * cap + i),
+                    f(9 * cap + i),
                 ]
             })
             .collect();
@@ -4437,9 +4584,23 @@ mod tests {
                 &|_| rate,
             );
             schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
-            let carriage = lumit_core::fx::points::PointsSchedule { schedule, t };
+            let carriage = lumit_core::fx::points::PointsSchedule {
+                schedule,
+                t,
+                projection: None,
+            };
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
-            let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+            let op = particulate_op(
+                &packed,
+                style,
+                &carriage,
+                &frames,
+                &curves,
+                &[],
+                0.0,
+                0,
+                carriage.projection.map(|proj| proj.m),
+            );
             // A few runs to warm the driver and let the card clock up, then
             // twenty timed **without waiting between them**: a flush and a poll
             // per iteration measures the round trip to the queue, which is
@@ -4517,6 +4678,7 @@ mod tests {
                 &|_| 400.0,
             ),
             t,
+            projection: None,
         };
 
         let source = vec![0.0f32; (w * h * 4) as usize];
@@ -4563,6 +4725,7 @@ mod tests {
             &[],
             0.0,
             0,
+            None,
         );
         assert_eq!(
             op.cap,
@@ -4596,7 +4759,17 @@ mod tests {
             let cap = (full.len() as u32) / divisor;
             let mut expected = full.clone();
             expected.keep_newest(cap as usize);
-            let mut op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+            let mut op = particulate_op(
+                &packed,
+                style,
+                &carriage,
+                &frames,
+                &curves,
+                &[],
+                0.0,
+                0,
+                carriage.projection.map(|proj| proj.m),
+            );
             op.cap = cap;
             let (count, words) = fx
                 .particulate_stream(&ctx, &tex, w, h, &op)
@@ -4604,8 +4777,8 @@ mod tests {
             assert_eq!(count, cap, "cap {cap}: drew {count}");
             let ids: Vec<u64> = (0..count as usize)
                 .map(|i| {
-                    u64::from(words[10 * cap as usize + i * 2])
-                        | (u64::from(words[10 * cap as usize + i * 2 + 1]) << 32)
+                    u64::from(words[12 * cap as usize + i * 2])
+                        | (u64::from(words[12 * cap as usize + i * 2 + 1]) << 32)
                 })
                 .collect();
             assert_eq!(ids, expected.id, "cap {cap}: the wrong particles survived");

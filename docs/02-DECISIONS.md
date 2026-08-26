@@ -17845,3 +17845,99 @@ that is red one time in three is worse than a missing one.
 **`quirks.json` is still empty, and that is a result.** No plugin has earned an entry from
 the runs made so far. The table's purpose is unchanged (K-589): the day the bench forces
 one, it is a line of data rather than an `if identifier ==` in the code.
+
+## K-596 — How the third axis was built: a projection that rides beside the op, and a flag on the port
+
+**DECIDED 2026-08-26**, building K-561 (which supersedes K-495). The commission is
+recorded there; what follows are the decisions the building forced, each of which could
+reasonably have gone another way.
+
+**The five new rows, and the one force that did not gain a third component.** *Position z*
+places the emitter off the layer's plane; *Depth* is the emitter's extent **through** the
+plane, filled uniformly — a Point becomes a segment, an Ellipse a cylinder, a Rectangle a
+box — and Line ignores it (one dimension by name) as does Mask path, which stays planar at
+the emitter's own depth because a mask path is where the user drew it. *Direction z* is the
+launch's elevation out of the plane and *Spread z* is its own cone, deliberately **not** the
+existing Spread applied in a second plane: Spread defaults to a whole 360, and letting it
+mean elevation too would silently turn every existing project's disc of launch directions
+into a sphere. *Wind z* is the third axis of the same wind, carried by the same drag.
+**Gravity stays `[0, g, 0]`** — down is down, it is the one force with a direction of its
+own, and a depth component would be a control nobody asked for. Every one of the five
+defaults to the flat behaviour, which is what makes the compatibility guarantee below a
+matter of arithmetic rather than of a conversion.
+
+**Turbulence gained a third lattice channel, and the consequence is stated rather than
+hidden.** "Jitters gain z where x and y have them" leaves turbulence as the only one with
+a genuine pair, so it gains a third channel of the *same* value-noise core — sampled at
+the birth point's own x and y as it always was, because a third *input* coordinate would
+move every existing sample and repaint every project. It follows that on a 2D layer with
+Turbulence above nought (the default look has it at 40) the **stream's** z is not nought.
+It cannot be seen — the flat projection drops it — so the guarantee K-561 asks for is
+about the **picture**, and that is what the tests hold: an instance with the five depth
+rows absent altogether, which is exactly what an old file loads as, evaluates to the
+identical stream and draws the identical pixels.
+
+**The camera rides beside the op, as one 3×4 table of numbers.** `PointsSchedule` already
+carried the two things the resolved parameter bag cannot: the layer's clock, and the birth
+schedule. The composition's camera is the third of that kind, and it travels the same way —
+`PointsSchedule.projection`, `None` on a 2D layer. It is built in **`lumit-render`**
+(`build::points_projection`) out of `lumit_gpu::camera_matrix` and `lumit_gpu::place_matrix`,
+the very two the compositor places layers with, multiplied together and then restricted back
+onto the layer's own plane: the product's `H` — itself with the z column struck out —
+inverted and put in front, so a particle at `z = 0` returns to exactly where it started and
+one off the plane returns to where it is *seen*. The alternative was to give `lumit-core` a
+camera of its own, which would have meant a second implementation of the projection this
+engine already has, and a drift waiting to be found. So `lumit-core` never derives a camera:
+it is handed twelve numbers, which is why `Projection` is a table and not a pose. K-406's
+ruling on Card wipe is the precedent — cameras belong to the composition, and an effect that
+wants one asks the composition rather than growing controls for one.
+
+Three consequences worth naming. The projection is **folded into the per-effect cache key**
+beside the schedule (`fxops::op_keys`), because moving the camera moves this op's picture
+while nothing the parameter hash walks has changed. It is **rescaled to the raster** by the
+same `px_scale` the mask path takes and for the same reason (K-266, K-385), which is one
+rearrangement of the same twelve numbers rather than a second matrix. And `None` is **not**
+"the identity matrix": both render paths branch on it and leave the positions' bits alone,
+so the flat picture is bit-identical rather than nearly so. The one bit the flat projection
+does not carry, if it is applied, is the sign of a zero — a distinction no coverage can
+hold, named in the test rather than skipped.
+
+**The wire stays one type; 3D awareness is a flag on the port.** `Port` gains a `bool`
+beside `id`/`label`/`ty`, false by default, set by `Port::three_d()`. A consumer that has
+not declared it reads `PointsStream::projected(i)` — where the camera puts the particle on
+the layer's plane; one that has reads the three axes and does its own geometry. This is a
+*declaration*, not a second type: no second socket colour, no second refusal, no second
+edge, and a 3D-aware effect can be dropped into a graph full of 2D ones with nothing about
+the connection changing. It is the smallest thing that answers the question, and the points
+family's later packages answer it one at a time.
+
+**Nearest distance is measured in projected space, and the argument is the row's units.**
+Points sample's Position is a **point on the frame** — px@comp, picked with the dropper by
+looking at the picture — so the honest answer to "how far is the nearest particle from
+here" is how far it is *in that picture*. A distance through the depth axis would be
+measured in a space the query point does not live in, and the wire's whole purpose (a glow
+that brightens as a spark passes the lamp) is about what the viewer sees passing the lamp.
+The driver therefore reads the projected pair, which is what its 2D port declaration means,
+and a consumer wanting the true 3D distance declares `Port::three_d` and computes it. The
+driver walk is given the same projection the picture is drawn with
+(`resolve_drivers_projected`, one closure in the draw builder for all four resolve sites),
+so "one stream, two readers" survives the axis: what a wire measures is where the viewer
+sees it. Streak tails take the same camera as their heads, so a streak that runs towards
+the lens really does.
+
+**A particle at or behind the camera's own plane draws nothing.** Its foreshortening is
+answered as nought rather than as a division by a vanishing `W`, which makes its radius
+nought and its coverage empty — the degenerate case degrading rather than flinging a
+particle across the frame (14-ENGINEERING-RULES §4). A layer scaled to nothing, whose
+plane is singular, answers no projection at all and draws flat.
+
+**Budgets: no new row.** B12–B14 keep measuring the flat fixture, deliberately. They are
+the numbers docs/13 §2 states against a checked-in baseline, and the third axis costs one
+dot product and one divide per particle in the vertex stage — inside the noise of a row
+already reported to three decimal places. A new row would be a gate on nothing. The GPU
+stream grew from 14 words a particle to 17, which is the whole of the memory cost and is
+the declared peak scratch it always was (K-475). Re-run on this machine, the three rows
+are unmoved.
+
+**Out of scope, as K-561 says**: depth-map occlusion and collision. Both are the
+"every particle must ask about every other particle" shape K-474 exists to exclude.

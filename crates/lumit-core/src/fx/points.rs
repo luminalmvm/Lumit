@@ -1,5 +1,5 @@
 //! The points stream, and the closed forms that put a particle where it is
-//! (K-474, K-475, K-495; [impl/particulate.md](../../../../docs/impl/particulate.md)
+//! (K-474, K-475, K-561; [impl/particulate.md](../../../../docs/impl/particulate.md)
 //! §3–§4, [impl/points-stream.md](../../../../docs/impl/points-stream.md) §3).
 //!
 //! # In plain terms
@@ -40,6 +40,17 @@
 //! the Points sample driver, which reads the very same stream so that what a
 //! wire measures is what the viewer sees. A second implementation of these
 //! formulas would be a drift waiting to be found.
+//!
+//! # The third axis (K-561)
+//!
+//! A particle carries three coordinates, not two. Everything above is
+//! unchanged by that — the same dice, the same schedule, the same algebra with
+//! one more component — and what is new is one small thing at the end:
+//! [`Projection`], which says where a particle at depth `z` lands on the
+//! layer's own flat picture once the **composition's camera** has looked at it.
+//! On a 2D layer there is no camera to look with, the projection is
+//! [`Projection::FLAT`], and every number this module produces for the picture
+//! is bit-for-bit what it was before the axis existed (the K-258 gate).
 
 use crate::fx::cpu::{curve_at, CURVE_TABLE};
 use crate::fx::noise::{hash01, value3};
@@ -52,6 +63,107 @@ pub const CAP_DEFAULT: i64 = 20_000;
 /// Max particles' hard ceiling (K-475): the most an instance may ever be typed
 /// up to, and the peak scratch the governor grants against (docs/13 §6).
 pub const CAP_HARD: i64 = 1_000_000;
+
+/// Where a particle at depth `z` lands on the layer's own flat picture, once
+/// the composition's active camera has looked at it (K-561).
+///
+/// # In plain terms
+///
+/// An effect draws into the layer's own rectangle of pixels, and *then* the
+/// compositor turns that rectangle in space and photographs it with the
+/// composition's camera. A particle that sits a hundred pixels in front of the
+/// rectangle therefore cannot simply be drawn where its `x` and `y` say: it has
+/// to be drawn where the camera would *see* it, which is somewhere else on the
+/// rectangle, and smaller or larger for being further off or nearer.
+///
+/// This is that "somewhere else", as one 3×4 table of numbers. It is worked out
+/// once a frame by the renderer, from the very matrices the compositor places
+/// layers with — `lumit_gpu::camera_matrix` and `lumit_gpu::place_matrix` — so
+/// there is no second camera in this engine and nothing here to re-derive. What
+/// arrives is the composition of the two, restricted back onto the layer's own
+/// plane: `m · (x, y, z, 1)` gives `(X, Y, W)`, the particle lands at
+/// `(X/W, Y/W)`, and everything about it — its diameter, its streak — is
+/// `1/W` of the size it would have had on the plane.
+///
+/// [`FLAT`](Self::FLAT) is the identity: `(x, y, 1)` for any `z`, which is a
+/// 2D layer, a composition with no camera, and every project saved before the
+/// axis existed. It is applied without a branch and lands on exactly the bits
+/// it was handed, which is what makes the K-258 guarantee arithmetic rather
+/// than a promise.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Projection {
+    /// Row-major 3×4: `[x, y, z, 1] → (X, Y, W)`, in the units the particle
+    /// positions are already in.
+    pub m: [[f32; 4]; 3],
+}
+
+impl Default for Projection {
+    fn default() -> Self {
+        Projection::FLAT
+    }
+}
+
+impl Projection {
+    /// The layer's own plane, unlooked-at: `z` changes nothing.
+    pub const FLAT: Projection = Projection {
+        m: [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+    };
+
+    /// Whether this is the identity — a 2D layer, or a comp with no camera.
+    #[must_use]
+    pub fn is_flat(&self) -> bool {
+        *self == Projection::FLAT
+    }
+
+    /// Where `p` lands, and by how much it foreshortens: `([x, y], scale)`.
+    ///
+    /// A particle at or behind the camera's own plane answers a **scale of
+    /// nought**, which draws nothing at all: a disc of no radius covers no
+    /// pixel, so the degenerate case degrades rather than dividing by a
+    /// vanishing `W` and flinging a particle across the frame
+    /// (14-ENGINEERING-RULES §4).
+    #[must_use]
+    pub fn apply(&self, p: [f32; 3]) -> ([f32; 2], f32) {
+        let v = [p[0], p[1], p[2], 1.0];
+        let dot = |r: &[f32; 4]| r[0] * v[0] + r[1] * v[1] + r[2] * v[2] + r[3];
+        let w = dot(&self.m[2]);
+        if w <= 1e-4 {
+            return ([p[0], p[1]], 0.0);
+        }
+        let inv = 1.0 / w;
+        ([dot(&self.m[0]) * inv, dot(&self.m[1]) * inv], inv)
+    }
+
+    /// The same projection, for particle coordinates measured in a raster
+    /// `px_scale` times the size the matrix was built at (K-266, K-385).
+    ///
+    /// The matrix is built in **px@comp**, because that is what the layer's
+    /// placement is in; the draw works in whatever raster the preview is
+    /// running at. Scaling the input down and the answer back up is one
+    /// rearrangement of the same numbers: only the translation column of the
+    /// two position rows grows with the raster, and only the direction part of
+    /// the depth row shrinks with it. At full scale nothing moves, so a
+    /// full-resolution preview and the export are bit-identical by
+    /// construction (K-031).
+    #[must_use]
+    pub fn rescaled(&self, px_scale: f32) -> Projection {
+        let s = px_scale.max(1e-6);
+        if s == 1.0 {
+            return *self;
+        }
+        let mut m = self.m;
+        m[0][3] *= s;
+        m[1][3] *= s;
+        for c in m[2].iter_mut().take(3) {
+            *c /= s;
+        }
+        Projection { m }
+    }
+}
 
 /// What a particle is drawn as (particulate.md §2, Render group).
 ///
@@ -146,16 +258,33 @@ impl EmitterShape {
 pub struct Emitter {
     pub shape: EmitterShape,
     /// px@comp (or raster px — the caller's own scale; see [`evaluate`]).
-    pub position: [f32; 2],
+    /// Three coordinates since K-561: `z` is towards the camera, positive away
+    /// from it, and zero is the layer's own plane.
+    pub position: [f32; 3],
     /// The extents Line, Ellipse and Rectangle are drawn to.
     pub width: f32,
     pub height: f32,
-    /// Rotation of the emitter's own shape about `position`, degrees.
+    /// The extent **through** the layer's plane (K-561): Point becomes a
+    /// segment along `z`, Ellipse a cylinder and Rectangle a box, each filled
+    /// uniformly. Line and Mask path stay planar — a mask path is where the
+    /// user drew it, and a line is one dimension by name.
+    pub depth: f32,
+    /// Rotation of the emitter's own shape about `position`, degrees. Turns the
+    /// shape in its own plane; `depth` runs through that plane and is not
+    /// turned by it.
     pub angle_deg: f32,
-    /// Launch direction, degrees; −90 is up.
+    /// Launch direction in the layer's plane, degrees; −90 is up.
     pub direction_deg: f32,
+    /// Launch **elevation** out of that plane, degrees (K-561). Zero is the
+    /// plane itself, which is what every project saved before the axis existed
+    /// reads as.
+    pub direction_z_deg: f32,
     /// The cone about `direction_deg`, degrees.
     pub spread_deg: f32,
+    /// The cone about `direction_z_deg`, degrees — the elevation's own spread,
+    /// separate so that a full 360° in-plane spread stays a disc of directions
+    /// rather than quietly becoming a sphere.
+    pub spread_z_deg: f32,
     /// Speed at birth, px per second.
     pub speed: f32,
     /// Per-particle speed spread, `0..=1`.
@@ -200,11 +329,14 @@ pub struct ParticleLook {
 /// The four v1 forces — exactly the set with closed-form integrals (K-474).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Forces {
-    /// px per second², positive down.
+    /// px per second², positive down. **Down stays down** (K-561): gravity is
+    /// the one force with a direction of its own, and giving it a depth
+    /// component would be inventing a control the note does not ask for.
     pub gravity: f32,
-    /// The air's own speed, px per second. Wind acts **through** drag: with
-    /// `drag` at 0 it does nothing at all, which is the documented behaviour.
-    pub wind: [f32; 2],
+    /// The air's own speed, px per second, on all three axes (K-561). Wind acts
+    /// **through** drag: with `drag` at 0 it does nothing at all, which is the
+    /// documented behaviour.
+    pub wind: [f32; 3],
     /// Exponential approach of the particle's speed towards the wind's, per
     /// second.
     pub drag: f32,
@@ -227,10 +359,26 @@ pub struct PointsParams {
     /// budget, the newest by birth index survive.
     pub cap: u32,
     pub seed: u32,
+    /// Where the composition's camera puts a particle that is off the layer's
+    /// plane (K-561). [`Projection::FLAT`] — the default — is a 2D layer, and
+    /// is what [`crate::fx::effects::particulate::Particulate::points`] hands
+    /// back, because a bag of parameters cannot know what the comp is looking
+    /// with. The renderer and the driver walk fill it in with
+    /// [`projected`](Self::projected).
+    pub projection: Projection,
+}
+
+impl PointsParams {
+    /// The same parameters, seen through `projection` (K-561).
+    #[must_use]
+    pub fn projected(mut self, projection: Projection) -> Self {
+        self.projection = projection;
+        self
+    }
 }
 
 /// One frame's particles, structure-of-arrays — the CPU form of the stream
-/// (particulate.md §4, `Vec2` per K-495).
+/// (particulate.md §4, `Vec3` per K-561).
 ///
 /// The GPU form is the same attributes in buffers; `count` there is what
 /// [`len`](Self::len) is here, because a length beside a `Vec` would be a
@@ -240,10 +388,12 @@ pub struct PointsParams {
 /// how it was scheduled.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PointsStream {
-    /// px, the position drawn this frame (closed form plus turbulence).
-    pub position: Vec<[f32; 2]>,
+    /// px in the layer's own three axes, this frame (closed form plus
+    /// turbulence) — **unprojected** (K-561). A consumer that has not declared
+    /// 3D awareness reads [`projected`](Self::projected) instead.
+    pub position: Vec<[f32; 3]>,
     /// px per second — the analytic speed plus turbulence's own rate of change.
-    pub speed: Vec<[f32; 2]>,
+    pub speed: Vec<[f32; 3]>,
     /// Seconds since birth.
     pub age: Vec<f32>,
     /// This particle's whole lifetime, seconds, so a consumer can normalise the
@@ -258,6 +408,11 @@ pub struct PointsStream {
     /// The **birth index** — stable across frames, and what makes trails
     /// possible. There is no separate id space (particulate.md §4).
     pub id: Vec<u64>,
+    /// The camera the stream was evaluated under (K-561) — carried on the
+    /// stream itself so that "where does particle *i* appear?" is one call and
+    /// not a second thing to thread beside it. [`Projection::FLAT`] on a 2D
+    /// layer, and in the driver walk's px@comp evaluation of a 2D layer.
+    pub projection: Projection,
 }
 
 impl PointsStream {
@@ -265,6 +420,30 @@ impl PointsStream {
     #[must_use]
     pub fn len(&self) -> usize {
         self.id.len()
+    }
+
+    /// **What a 2D consumer reads** (K-561): particle `i` where the camera puts
+    /// it on the layer's own plane.
+    ///
+    /// The wire carries one type. A consumer that declares 3D awareness on its
+    /// port ([`crate::fx::Port::three_d`]) reads [`position`](Self::position)
+    /// and does its own geometry; everything else — the Points sample driver,
+    /// and the whole 2D half of the family — reads this, and on a 2D layer the
+    /// two are the same numbers.
+    #[must_use]
+    pub fn projected(&self, i: usize) -> [f32; 2] {
+        self.position
+            .get(i)
+            .map_or([0.0; 2], |p| self.projection.apply(*p).0)
+    }
+
+    /// How much particle `i` foreshortens: 1 on the plane, less further off,
+    /// more nearer, and **nought** for a particle at or behind the camera.
+    #[must_use]
+    pub fn depth_scale(&self, i: usize) -> f32 {
+        self.position
+            .get(i)
+            .map_or(0.0, |p| self.projection.apply(*p).1)
     }
 
     /// Whether nothing is alive — an unwired or unborn stream.
@@ -503,6 +682,12 @@ pub struct PointsSchedule {
     /// *sample* time for a sub-frame re-render, so accumulation motion blur
     /// gets true particle motion for free (K-132).
     pub t: f64,
+    /// Where the composition's camera puts a particle off the layer's plane
+    /// (K-561), in **px@comp** — the third thing the bag cannot carry, and for
+    /// the same reason as the other two: the comp's camera and the layer's own
+    /// placement are not controls on this effect. `None` is a 2D layer, and is
+    /// what every project saved before the axis existed answers.
+    pub projection: Option<Projection>,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,
@@ -541,6 +726,12 @@ mod attr {
     pub const SIZE: u32 = 5;
     pub const TURB_PHASE: u32 = 6;
     pub const ROTATION: u32 = 7;
+    /// Where in the emitter's **depth** this particle starts (K-561). A new id
+    /// rather than a reuse: every earlier draw keeps the number it always drew,
+    /// so a project made before the axis existed is untouched.
+    pub const EMIT_W: u32 = 8;
+    /// The elevation draw, out of the layer's plane (K-561).
+    pub const DIRECTION_Z: u32 = 9;
 }
 
 /// The noise lattices turbulence displaces along, one per axis. Channels of the
@@ -548,6 +739,8 @@ mod attr {
 /// lattice, not a second one (particulate.md §3.2).
 const TURB_CHANNEL_X: u32 = 64;
 const TURB_CHANNEL_Y: u32 = 65;
+/// Turbulence's third lattice (K-561) — a jitter that had x and y gains z.
+const TURB_CHANNEL_Z: u32 = 66;
 
 /// One per-particle draw in `[0, 1)`: `hash(seed, birth index, attribute)`.
 ///
@@ -606,17 +799,22 @@ fn drag_terms(x: f32) -> (f32, f32) {
 /// value, so the whole system leans when the keyframe lands. That is
 /// physically wrong and visually right, and integrating the changing force
 /// instead *is* the simulation this design excludes (K-474).
+///
+/// **Three axes, one algebra** (K-561): the depth component integrates under
+/// exactly the same drag and wind terms as the other two. Gravity does not,
+/// because gravity is `[0, g, 0]` — down is down, and a depth component would
+/// be a control nobody asked for.
 #[must_use]
-pub fn integrate(p0: [f32; 2], v0: [f32; 2], f: &Forces, age: f32) -> ([f32; 2], [f32; 2]) {
+pub fn integrate(p0: [f32; 3], v0: [f32; 3], f: &Forces, age: f32) -> ([f32; 3], [f32; 3]) {
     let k = f.drag.max(0.0);
     let x = k * age;
     let (r, s) = drag_terms(x);
     // No cancellation in this one, at any x, so it needs no branch.
     let decay = (-x).exp();
-    let g = [0.0, f.gravity];
-    let mut pos = [0.0f32; 2];
-    let mut vel = [0.0f32; 2];
-    for i in 0..2 {
+    let g = [0.0, f.gravity, 0.0];
+    let mut pos = [0.0f32; 3];
+    let mut vel = [0.0f32; 3];
+    for i in 0..3 {
         let w = f.wind[i];
         pos[i] = p0[i] + w * age + (v0[i] - w) * age * r + g[i] * age * age * s;
         vel[i] = w + (v0[i] - w) * decay + g[i] * age * r;
@@ -627,33 +825,48 @@ pub fn integrate(p0: [f32; 2], v0: [f32; 2], f: &Forces, age: f32) -> ([f32; 2],
 /// Turbulence's displacement at `age` — a displacement, not an integrated
 /// force, which is the standard trick that keeps it closed form
 /// (particulate.md §3.2).
-fn turbulence(p0: [f32; 2], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32; 2] {
+fn turbulence(p0: [f32; 3], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32; 3] {
     if f.turbulence == 0.0 {
-        return [0.0; 2];
+        return [0.0; 3];
     }
     let scale = f.turbulence_scale.max(1e-3);
     let (qx, qy) = (p0[0] / scale + phase, p0[1] / scale + phase);
     let z = age * f.turbulence_speed;
+    // The lattice is sampled at the birth point's own x and y, as it always
+    // was: a third *input* coordinate would move every existing sample and
+    // repaint every project. The third *output* is a third channel of the same
+    // lattice, which is what "a jitter gains z where x and y have one" means.
     [
         f.turbulence * value3(seed, TURB_CHANNEL_X, qx, qy, z, 0),
         f.turbulence * value3(seed, TURB_CHANNEL_Y, qx, qy, z, 0),
+        f.turbulence * value3(seed, TURB_CHANNEL_Z, qx, qy, z, 0),
     ]
 }
 
 /// Where in the emitter this particle starts.
-fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32) -> Option<[f32; 2]> {
+///
+/// `w` is the draw through the emitter's [`depth`](Emitter::depth) (K-561),
+/// filled uniformly: a Point becomes a segment, an Ellipse a cylinder and a
+/// Rectangle a box. Line and Mask path ignore it and stay on the plane.
+fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Option<[f32; 3]> {
     let (s, c) = e.angle_deg.to_radians().sin_cos();
-    let local = match e.shape {
-        EmitterShape::Point => [0.0, 0.0],
-        EmitterShape::Line => [(u - 0.5) * e.width, 0.0],
+    let (local, depth) = match e.shape {
+        EmitterShape::Point => ([0.0, 0.0], (w - 0.5) * e.depth),
+        EmitterShape::Line => ([(u - 0.5) * e.width, 0.0], 0.0),
         EmitterShape::Ellipse => {
             // √u for the radius, or the middle of the disc would be crowded:
             // area grows as r², so a uniform radius is not a uniform fill.
             let r = u.max(0.0).sqrt();
             let (sa, ca) = (v * std::f32::consts::TAU).sin_cos();
-            [0.5 * e.width * r * ca, 0.5 * e.height * r * sa]
+            (
+                [0.5 * e.width * r * ca, 0.5 * e.height * r * sa],
+                (w - 0.5) * e.depth,
+            )
         }
-        EmitterShape::Rectangle => [(u - 0.5) * e.width, (v - 0.5) * e.height],
+        EmitterShape::Rectangle => (
+            [(u - 0.5) * e.width, (v - 0.5) * e.height],
+            (w - 0.5) * e.depth,
+        ),
         EmitterShape::MaskPath => {
             // The mask's own line, by arc length (K-408). Nothing to walk is
             // the documented no-op: no path, no particles.
@@ -662,13 +875,16 @@ fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32) -> Option<[f32;
             }
             let p = path.point_at(u * path.length());
             // Already an absolute position, so the emitter's own rotation and
-            // position do not move it — the path is where the user drew it.
-            return Some(p);
+            // position do not move it — the path is where the user drew it —
+            // and it stays on the layer's plane, at the depth the emitter sits
+            // at (K-561).
+            return Some([p[0], p[1], e.position[2]]);
         }
     };
     Some([
         e.position[0] + local[0] * c - local[1] * s,
         e.position[1] + local[0] * s + local[1] * c,
+        e.position[2] + depth,
     ])
 }
 
@@ -705,9 +921,12 @@ pub fn evaluate_with_tail(
     t: f64,
     path: &MaskPolyline,
     tail: f32,
-) -> (PointsStream, Vec<[f32; 2]>) {
-    let mut out = PointsStream::default();
-    let mut tails: Vec<[f32; 2]> = Vec::new();
+) -> (PointsStream, Vec<[f32; 3]>) {
+    let mut out = PointsStream {
+        projection: p.projection,
+        ..PointsStream::default()
+    };
+    let mut tails: Vec<[f32; 3]> = Vec::new();
     let cap = p.cap.min(CAP_HARD as u32) as usize;
     if cap == 0 {
         return (out, tails);
@@ -720,6 +939,8 @@ pub fn evaluate_with_tail(
     let eps = (sched.dt() as f32 * 0.5).max(1e-6);
     let spread = e.spread_deg.to_radians();
     let base_dir = e.direction_deg.to_radians();
+    let spread_z = e.spread_z_deg.to_radians();
+    let base_dir_z = e.direction_z_deg.to_radians();
 
     for (b, t_b) in sched.newest_first() {
         let age = (t - t_b) as f32;
@@ -738,15 +959,21 @@ pub fn evaluate_with_tail(
             path,
             draw(p.seed, b, attr::EMIT_U),
             draw(p.seed, b, attr::EMIT_V),
+            draw(p.seed, b, attr::EMIT_W),
         ) else {
             // A Mask path emitter with nothing to walk emits nothing at all,
             // and no later birth will find a path either.
             break;
         };
         let dir = base_dir + (draw(p.seed, b, attr::DIRECTION) - 0.5) * spread;
+        let dir_z = base_dir_z + (draw(p.seed, b, attr::DIRECTION_Z) - 0.5) * spread_z;
         let speed = jitter(e.speed, e.speed_jitter, draw(p.seed, b, attr::SPEED));
         let (sd, cd) = dir.sin_cos();
-        let v0 = [speed * cd, speed * sd];
+        // The elevation tilts the launch out of the plane. At nought — every
+        // project saved before K-561 — `cos` is exactly 1 and `sin` exactly 0,
+        // so the two in-plane components are the bits they always were.
+        let (sz, cz) = dir_z.sin_cos();
+        let v0 = [speed * cd * cz, speed * sd * cz, speed * sz];
         let (pos, vel) = integrate(p0, v0, &p.forces, age);
         let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;
         let d = turbulence(p0, phase, &p.forces, p.seed, age);
@@ -756,6 +983,7 @@ pub fn evaluate_with_tail(
         let speed_out = [
             vel[0] + (d_next[0] - d_prev[0]) / (2.0 * eps),
             vel[1] + (d_next[1] - d_prev[1]) / (2.0 * eps),
+            vel[2] + (d_next[2] - d_prev[2]) / (2.0 * eps),
         ];
         let size = jitter(look.size, look.size_jitter, draw(p.seed, b, attr::SIZE))
             * curve_at(u, &look.size_curve);
@@ -775,6 +1003,9 @@ pub fn evaluate_with_tail(
         // sprites born together do not point the same way.
         let spread_rot =
             (draw(p.seed, b, attr::ROTATION) - 0.5) * look.rotation_jitter_deg.to_radians();
+        // Align to motion follows the motion **in the layer's plane**: a
+        // rotation is one angle in the picture the sprite is stamped into, and
+        // the depth component of the speed is not an angle that picture has.
         let rotation = if look.align_to_motion {
             speed_out[1].atan2(speed_out[0]) + look.rotation_deg.to_radians()
         } else {
@@ -789,9 +1020,10 @@ pub fn evaluate_with_tail(
             let back = (age - tail).max(0.0);
             let (bp, _) = integrate(p0, v0, &p.forces, back);
             let bd = turbulence(p0, phase, &p.forces, p.seed, back);
-            tails.push([bp[0] + bd[0], bp[1] + bd[1]]);
+            tails.push([bp[0] + bd[0], bp[1] + bd[1], bp[2] + bd[2]]);
         }
-        out.position.push([pos[0] + d[0], pos[1] + d[1]]);
+        out.position
+            .push([pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]]);
         out.speed.push(speed_out);
         out.age.push(age);
         out.life.push(life);
@@ -968,12 +1200,16 @@ fn sprite_tap(sp: &Sprite<'_>, u: f32, v: f32) -> [f32; 4] {
 /// A dab and not a full-frame pass: a particle covers a few dozen pixels, and
 /// visiting two million of them per particle to find that out is the shape a
 /// reference implementation cannot afford even as an oracle.
+/// - **Depth** (K-561): every particle is put through the stream's own
+///   [`Projection`] first — where the composition's camera sees it, and how
+///   much smaller or larger for being further off or nearer. On a 2D layer the
+///   projection is flat and this is exactly the arithmetic it always was.
 pub fn draw_stream(
     rgba: &mut [f32],
     w: u32,
     h: u32,
     s: &PointsStream,
-    tails: &[[f32; 2]],
+    tails: &[[f32; 3]],
     style: &DrawStyle,
     sprite: Option<Sprite<'_>>,
 ) {
@@ -985,11 +1221,16 @@ pub fn draw_stream(
         style.mode == RenderMode::Sprite && sp.w > 0 && sp.h > 0 && !sp.rgba.is_empty()
     });
     for i in 0..s.len() {
-        let (Some(&head), Some(&size), Some(&colour)) =
+        let (Some(&head3), Some(&size), Some(&colour)) =
             (s.position.get(i), s.size.get(i), s.colour.get(i))
         else {
             continue;
         };
+        // Through the camera, if there is one. `depth` is nought for a particle
+        // at or behind the camera's plane, which makes the radius nought and
+        // draws nothing — the degenerate case degrades (docs/14 §4).
+        let (head, depth) = s.projection.apply(head3);
+        let size = size * depth;
         let radius = size * 0.5;
         if radius <= 0.0 || colour[3] <= 0.0 || mix <= 0.0 {
             continue;
@@ -1002,7 +1243,10 @@ pub fn draw_stream(
             colour[2] * mix,
             colour[3] * mix,
         ];
-        let tail = tails.get(i).copied().unwrap_or(head);
+        // The tail is a position like any other, so it goes through the same
+        // camera: a streak that runs towards the lens really does run towards
+        // the lens.
+        let tail = tails.get(i).map_or(head, |t| s.projection.apply(*t).0);
         let (rot_s, rot_c) = s.rotation.get(i).copied().unwrap_or(0.0).sin_cos();
         // A rotated square reaches √2 of its half-side at the corners; a
         // capsule reaches its radius past either end.

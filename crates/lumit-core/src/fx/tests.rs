@@ -10502,13 +10502,19 @@ fn every_parameter_declares_a_unit() {
             // any of them, and none is here.
             ("particulate", "position_x"),
             ("particulate", "position_y"),
+            // The third axis (K-561): a depth and an extent through the plane
+            // are lengths like the two beside them, and rescale with the
+            // raster for the same reason.
+            ("particulate", "position_z"),
             ("particulate", "width"),
             ("particulate", "height"),
+            ("particulate", "depth"),
             ("particulate", "initial_speed"),
             ("particulate", "size"),
             ("particulate", "gravity"),
             ("particulate", "wind_x"),
             ("particulate", "wind_y"),
+            ("particulate", "wind_z"),
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
             // What a full channel of a Motion vectors layer means, in pixels
@@ -13509,18 +13515,22 @@ fn the_birth_schedule_is_the_rate_curves_integral() {
 /// solutions at no drag, at `k = 0.5`, and either side of the series guard —
 /// and wind with no drag as exactly motionless wind, which is the documented
 /// behaviour rather than an accident of the algebra.
+///
+/// **All three axes** (K-561): the depth component is held to the same textbook
+/// solution as the other two, with a wind of its own, which is what "the same
+/// drag and wind algebra" has to mean if it is to mean anything.
 #[test]
 fn the_closed_forms_match_the_analytic_solutions() {
     let base = points::Forces {
         gravity: 0.0,
-        wind: [0.0, 0.0],
+        wind: [0.0, 0.0, 0.0],
         drag: 0.0,
         turbulence: 0.0,
         turbulence_scale: 200.0,
         turbulence_speed: 0.0,
     };
-    let p0 = [100.0f32, 50.0];
-    let v0 = [30.0f32, -80.0];
+    let p0 = [100.0f32, 50.0, -25.0];
+    let v0 = [30.0f32, -80.0, 45.0];
 
     // k = 0: p = p0 + v0·t + ½g·t², v = v0 + g·t. Written out here so the
     // test is the textbook and not the implementation.
@@ -13533,24 +13543,28 @@ fn the_closed_forms_match_the_analytic_solutions() {
         let want = [
             p0[0] + v0[0] * age,
             p0[1] + v0[1] * age + 0.5 * 400.0 * age * age,
+            // Gravity stays down (K-561): the depth axis is unaccelerated.
+            p0[2] + v0[2] * age,
         ];
         assert!((pos[0] - want[0]).abs() < 1e-3, "x at {age}");
         assert!((pos[1] - want[1]).abs() < 1e-2, "y at {age}: {pos:?}");
+        assert!((pos[2] - want[2]).abs() < 1e-3, "z at {age}: {pos:?}");
         assert!((vel[1] - (v0[1] + 400.0 * age)).abs() < 1e-2, "vy at {age}");
+        assert!((vel[2] - v0[2]).abs() < 1e-3, "vz at {age}");
     }
 
     // k = 0.5, with wind and gravity: the published form, `g/k` and all,
     // against the rearrangement the implementation uses.
     let f = points::Forces {
         gravity: 400.0,
-        wind: [120.0, 0.0],
+        wind: [120.0, 0.0, -60.0],
         drag: 0.5,
         ..base
     };
     for age in [0.1f32, 1.0, 4.0] {
         let k = 0.5f32;
         let (pos, vel) = points::integrate(p0, v0, &f, age);
-        for i in 0..2 {
+        for i in 0..3 {
             let g = if i == 1 { 400.0f32 } else { 0.0 };
             let w = f.wind[i];
             let term = v0[i] - w - g / k;
@@ -13571,14 +13585,14 @@ fn the_closed_forms_match_the_analytic_solutions() {
     // already lost three of f32's seven digits (see `drag_terms`).
     let f = points::Forces {
         gravity: 400.0,
-        wind: [120.0, 0.0],
+        wind: [120.0, 0.0, -60.0],
         drag: 0.1,
         ..base
     };
     let below = points::integrate(p0, v0, &f, 0.999).0;
     let above = points::integrate(p0, v0, &f, 1.001).0;
     let at = points::integrate(p0, v0, &f, 1.0).0;
-    for i in 0..2 {
+    for i in 0..3 {
         assert!(
             (at[i] - (below[i] + above[i]) * 0.5).abs() < 1e-3,
             "the guard steps at axis {i}: {} against {} and {}",
@@ -13590,7 +13604,7 @@ fn the_closed_forms_match_the_analytic_solutions() {
 
     // Wind acts *through* drag: with no drag, wind does nothing at all.
     let windy = points::Forces {
-        wind: [500.0, -500.0],
+        wind: [500.0, -500.0, 250.0],
         ..base
     };
     let (still, _) = points::integrate(p0, v0, &base, 2.0);
@@ -13760,6 +13774,314 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
             "a particle was born off the path at {at:?}"
         );
     }
+}
+
+// ------------------------------------------------ the third axis (K-561)
+
+/// A camera one `zoom` back from a layer whose plane is at `z = 0`, as the
+/// projection restricted to that plane comes out: a particle at depth `z`
+/// scales by `zoom / (zoom + z)` about the frame's centre.
+///
+/// Written out rather than built through the renderer because this file is
+/// `lumit-core`, which has no compositor in it — and because a hand-written
+/// perspective is what makes the assertions below checkable by eye. The
+/// renderer's own construction is held to the compositor's matrices in
+/// `lumit-render`.
+fn head_on_camera(centre: [f32; 2], zoom: f32) -> points::Projection {
+    // x' = cx + (x − cx)·zoom/(zoom + z), which as a 3×4 is:
+    //   X = x + cx·z/zoom      Y = y + cy·z/zoom      W = 1 + z/zoom
+    // — the same column `lumit_gpu::camera_matrix` writes its perspective into.
+    points::Projection {
+        m: [
+            [1.0, 0.0, centre[0] / zoom, 0.0],
+            [0.0, 1.0, centre[1] / zoom, 0.0],
+            [0.0, 0.0, 1.0 / zoom, 1.0],
+        ],
+    }
+}
+
+/// **The flat projection is the identity, exactly** (K-561, K-258): the plane
+/// comes back bit for bit, at any `z`, and nothing foreshortens.
+///
+/// This is the arithmetic the whole 2D guarantee rests on — a projection that
+/// was *nearly* the identity would move every pre-K-561 picture by a least
+/// significant bit and no test above would notice. The one bit it does **not**
+/// carry is the sign of a zero (`−0 · 1 + 0` is `+0`), which is a distinction
+/// no pixel can hold: every coverage the draw computes from it is the same
+/// number either way, and the picture test below is what says so.
+#[test]
+fn the_flat_projection_returns_the_bits_it_was_given() {
+    let flat = points::Projection::FLAT;
+    assert!(flat.is_flat());
+    for p in [
+        [0.0f32, 0.0, 0.0],
+        [123.456, -78.901, 0.0],
+        [1e-7, 1e7, 4321.0],
+        [-960.0, 540.0, -500.0],
+    ] {
+        let (xy, scale) = flat.apply(p);
+        assert_eq!(xy[0].to_bits(), p[0].to_bits(), "x moved at {p:?}");
+        assert_eq!(xy[1].to_bits(), p[1].to_bits(), "y moved at {p:?}");
+        assert_eq!(scale, 1.0, "the flat projection foreshortened at {p:?}");
+    }
+    // The signed zero, named rather than skipped.
+    assert_eq!(flat.apply([-0.0, -0.0, 7.0]).0, [0.0, 0.0]);
+    // And it survives the raster rescale unchanged, which is what keeps a
+    // reduced-resolution preview of a 2D layer on the same arithmetic.
+    assert!(flat.rescaled(0.5).is_flat());
+    assert!(flat.rescaled(1.0).is_flat());
+}
+
+/// **A camera foreshortens, and the plane does not move** (K-561): a particle
+/// at `z = 0` lands exactly where its x and y say, one further off is drawn
+/// smaller and pulled towards the centre, and one nearer is drawn larger.
+#[test]
+fn the_camera_puts_depth_where_perspective_puts_it() {
+    let proj = head_on_camera([100.0, 100.0], 400.0);
+    let (on_plane, scale) = proj.apply([160.0, 100.0, 0.0]);
+    assert!((on_plane[0] - 160.0).abs() < 1e-3, "{on_plane:?}");
+    assert!((on_plane[1] - 100.0).abs() < 1e-3, "{on_plane:?}");
+    assert!(
+        (scale - 1.0).abs() < 1e-6,
+        "the plane foreshortened: {scale}"
+    );
+
+    // 400 further off: half the size, and half as far from the centre.
+    let (far, far_scale) = proj.apply([160.0, 100.0, 400.0]);
+    assert!((far_scale - 0.5).abs() < 1e-5, "{far_scale}");
+    assert!((far[0] - 130.0).abs() < 1e-3, "{far:?}");
+
+    // 200 nearer: twice the size, twice as far out.
+    let (near, near_scale) = proj.apply([160.0, 100.0, -200.0]);
+    assert!((near_scale - 2.0).abs() < 1e-5, "{near_scale}");
+    assert!((near[0] - 220.0).abs() < 1e-3, "{near:?}");
+
+    // At the camera's own plane: nought, which draws nothing rather than
+    // flinging the particle across the frame (docs/14 §4).
+    assert_eq!(proj.apply([160.0, 100.0, -400.0]).1, 0.0);
+    assert_eq!(proj.apply([160.0, 100.0, -1000.0]).1, 0.0);
+}
+
+/// **The K-258 gate** (K-561): a project saved with the 2D defaults draws the
+/// picture it always drew, bit for bit.
+///
+/// The five new rows all default to nought, so the stream's own x and y — and
+/// therefore every pixel — are the arithmetic they were before the axis
+/// existed. What is asserted is the strongest available form of that: the
+/// evaluation with the depth rows explicitly set to their defaults is
+/// **identical** to one with them absent from the instance altogether, which is
+/// exactly what an old file loads as.
+#[test]
+fn two_dimensional_defaults_draw_the_picture_they_always_drew() {
+    // An instance with no depth rows stored at all — an old file, since a
+    // parameter a document does not carry reads its schema default.
+    let old = particulate(&[
+        ("position_x", fixed(32.0)),
+        ("position_y", fixed(32.0)),
+        ("width", fixed(20.0)),
+        ("height", fixed(20.0)),
+    ]);
+    let mut aged = old.clone();
+    aged.params.retain(|p| {
+        !matches!(
+            p.id.as_str(),
+            "position_z" | "depth" | "direction_z" | "spread_z" | "wind_z"
+        )
+    });
+    assert_eq!(
+        aged.params.len() + 5,
+        old.params.len(),
+        "the five depth rows are not the ones being removed"
+    );
+
+    let fresh = particulate_stream(&old, 2.0);
+    let loaded = particulate_stream(&aged, 2.0);
+    assert!(!fresh.is_empty(), "the fixture drew no particles");
+    assert_eq!(fresh, loaded, "an old file's stream is not the new default");
+
+    // Flat all the way through: no camera, so nothing about z can be seen.
+    //
+    // The *stream's* z is not necessarily nought — the default look has
+    // Turbulence at 40, and turbulence gained a third lattice like every other
+    // jitter with an x and a y (K-561). What the guarantee is about is the
+    // **picture**: with no camera the projection drops the depth, so what is
+    // drawn is exactly the pair it always was.
+    assert!(fresh.projection.is_flat());
+    for (i, p) in fresh.position.iter().enumerate() {
+        assert_eq!(fresh.projected(i), [p[0], p[1]], "particle {i} was moved");
+        assert_eq!(fresh.depth_scale(i), 1.0, "particle {i} foreshortened");
+    }
+    // With no turbulence there is nothing at all to leave the plane with.
+    let still = particulate_stream(&particulate(&[("turbulence_amount", fixed(0.0))]), 2.0);
+    assert!(!still.is_empty());
+    for (i, p) in still.position.iter().enumerate() {
+        assert_eq!(p[2], 0.0, "particle {i} left the plane on 2D defaults");
+        assert_eq!(still.speed[i][2], 0.0, "particle {i} has a depth speed");
+    }
+
+    let mut a = vec![0.0f32; 64 * 64 * 4];
+    let mut b = vec![0.0f32; 64 * 64 * 4];
+    points::draw_discs(&mut a, 64, 64, &fresh, 1.0);
+    points::draw_discs(&mut b, 64, 64, &loaded, 1.0);
+    assert!(a.iter().any(|v| *v > 0.0), "nothing was drawn");
+    assert_eq!(a, b, "an old file's picture moved");
+}
+
+/// **The depth rows do something, and only what they say** (K-561).
+///
+/// Turbulence is the one row that gains a depth component without a control of
+/// its own — "a jitter gains z where x and y have one" — so it is checked
+/// separately from the four rows that are dials.
+#[test]
+fn the_depth_rows_move_particles_off_the_plane() {
+    let flat = particulate_stream(&particulate(&[("turbulence_amount", fixed(0.0))]), 2.0);
+    assert!(!flat.is_empty());
+    assert!(flat.position.iter().all(|p| p[2] == 0.0));
+
+    // Emitter depth spreads the births through the plane; the emitter is a
+    // Point, so nothing else could have.
+    let deep = particulate_stream(
+        &particulate(&[("turbulence_amount", fixed(0.0)), ("depth", fixed(600.0))]),
+        2.0,
+    );
+    let spread = deep
+        .position
+        .iter()
+        .map(|p| p[2])
+        .fold(0.0f32, |a, z| a.max(z.abs()));
+    assert!(spread > 100.0, "Depth did not spread the births: {spread}");
+
+    // The launch elevation gives every particle the same depth speed.
+    let leaning = particulate_stream(
+        &particulate(&[
+            ("turbulence_amount", fixed(0.0)),
+            ("direction_z", fixed(90.0)),
+            ("drag", fixed(0.0)),
+        ]),
+        2.0,
+    );
+    assert!(
+        leaning.speed.iter().all(|v| v[2] > 0.0),
+        "Direction z at 90° did not send the particles away from the camera"
+    );
+
+    // Wind z carries them, and — like the other two axes — only through drag.
+    let becalmed = particulate_stream(
+        &particulate(&[
+            ("turbulence_amount", fixed(0.0)),
+            ("wind_z", fixed(500.0)),
+            ("drag", fixed(0.0)),
+        ]),
+        2.0,
+    );
+    assert!(
+        becalmed.position.iter().all(|p| p[2] == 0.0),
+        "Wind z moved a particle with no drag to carry it"
+    );
+    let blown = particulate_stream(
+        &particulate(&[
+            ("turbulence_amount", fixed(0.0)),
+            ("wind_z", fixed(500.0)),
+            ("drag", fixed(2.0)),
+        ]),
+        2.0,
+    );
+    assert!(
+        blown.position.iter().any(|p| p[2] > 1.0),
+        "Wind z with drag did not carry anything off the plane"
+    );
+
+    // And turbulence, which has no depth dial of its own: its third lattice.
+    let churned = particulate_stream(&particulate(&[("turbulence_amount", fixed(80.0))]), 2.0);
+    assert!(
+        churned.position.iter().any(|p| p[2].abs() > 1.0),
+        "turbulence did not gain its third lattice"
+    );
+}
+
+/// **Determinism and random access hold in three axes** (K-561, §9 items 1–2):
+/// the scrub-order property, re-run on a stream that is off the plane and seen
+/// through a camera.
+#[test]
+fn a_three_dimensional_frame_is_the_same_from_any_scrub_direction() {
+    let e = particulate(&[
+        ("position_x", fixed(64.0)),
+        ("position_y", fixed(64.0)),
+        ("depth", fixed(400.0)),
+        ("direction_z", fixed(20.0)),
+        ("spread_z", fixed(60.0)),
+        ("wind_z", fixed(120.0)),
+        ("drag", fixed(1.0)),
+    ]);
+    let proj = head_on_camera([64.0, 64.0], 500.0);
+    let at = |t: f64| {
+        let mut s = particulate_stream(&e, t);
+        s.projection = proj;
+        s
+    };
+    let ascending: Vec<_> = [3.0f64, 250.0 / 60.0, 500.0 / 60.0]
+        .iter()
+        .map(|t| at(*t))
+        .collect();
+    let scrubbed: Vec<_> = [500.0f64 / 60.0, 3.0, 250.0 / 60.0]
+        .iter()
+        .map(|t| at(*t))
+        .collect();
+    assert!(!ascending[0].is_empty());
+    assert_eq!(ascending[0], scrubbed[1]);
+    assert_eq!(ascending[1], scrubbed[2]);
+    assert_eq!(ascending[2], scrubbed[0]);
+
+    // The picture too, and it is genuinely a *different* picture from the flat
+    // one — otherwise the equality above would be pinning nothing.
+    let draw = |s: &points::PointsStream| {
+        let mut rgba = vec![0.0f32; 128 * 128 * 4];
+        points::draw_discs(&mut rgba, 128, 128, s, 1.0);
+        rgba
+    };
+    let seen = draw(&ascending[0]);
+    let mut plane = ascending[0].clone();
+    plane.projection = points::Projection::FLAT;
+    assert!(seen.iter().any(|v| *v > 0.0), "the camera drew nothing");
+    assert_ne!(seen, draw(&plane), "the camera changed nothing at all");
+    assert_eq!(seen, draw(&scrubbed[1]), "one frame, two pictures");
+}
+
+/// **The cap rule is the cap rule in three axes** (K-561, §9 item 7): what
+/// survives an overload is still the newest by birth index, and halving still
+/// keeps the newest half of that. Depth does not get a vote.
+#[test]
+fn the_cap_rule_ignores_depth() {
+    let over = particulate(&[
+        ("emit_rate", fixed(4000.0)),
+        ("depth", fixed(800.0)),
+        ("spread_z", fixed(180.0)),
+        ("max_particles", EffectValue::Float(Property::fixed(64.0))),
+    ]);
+    let s = particulate_stream(&over, 2.0);
+    assert_eq!(s.len(), 64, "the cap did not bite");
+    let uncapped = particulate_stream(
+        &particulate(&[
+            ("emit_rate", fixed(4000.0)),
+            ("depth", fixed(800.0)),
+            ("spread_z", fixed(180.0)),
+        ]),
+        2.0,
+    );
+    assert!(uncapped.len() > 64);
+    assert_eq!(
+        s.id,
+        uncapped.id[uncapped.len() - 64..],
+        "the survivors are not the newest 64 by birth index"
+    );
+    let mut halved = s.clone();
+    halved.keep_newest(32);
+    assert_eq!(halved.id, s.id[32..], "halving is not the same rule again");
+    assert_eq!(
+        halved.position,
+        s.position[32..],
+        "halving dropped the wrong particles' positions"
+    );
 }
 
 /// **The sprite fallback** (§9 item 10): Sprite mode with no layer bound draws

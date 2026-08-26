@@ -1,7 +1,10 @@
 # The points stream — implementation note
 
 **Decision:** K-491 (the programme is commissioned; K-474 and K-475 confirmed), K-492 (a
-points connection is a graph wire), K-494 (the v1 consumers), K-495 (points are 2D).
+points connection is a graph wire), K-494 (the v1 consumers), **K-561 (points are 3D, and
+the composition's camera sees them — superseding K-495)**, K-596 (how the axis was
+built: the projection's carriage, the port's 3D flag, and projected-space nearest
+distance).
 **Related:** K-446 (Particulate emits a points stream), K-471 (the wiring model), K-472
 (the `Points` port type), K-419 (px@comp), K-031 (preview equals export), K-123 (layer
 references). This note is the *how* for the points-stream programme's **infrastructure**:
@@ -135,7 +138,7 @@ proof of the seam:
 |---|---|
 | **Data input** | `points` — "Points", `PortType::Points`. Wire-only: declared in the signature, not the schema — there is no stored value, nothing to keyframe, no panel row. Unwired reads as an empty stream, the documented no-op. |
 | **Parameter** | Position — 2D point, px@comp, default comp centre, animatable and drivable, with the pick-on-Viewer dropper. The query point. |
-| **Outputs** | Count — "Count", number: live particles this frame. Nearest distance — "Nearest distance", number: px@comp from Position to the nearest live particle. |
+| **Outputs** | Count — "Count", number: live particles this frame. Nearest distance — "Nearest distance", number: px@comp from Position to the nearest live particle, **measured in projected space** (K-561): Position is a point on the frame the user picked by looking at the picture, so the honest answer is how far the nearest particle is *in that picture*. A distance through the depth axis would be measured in a space the query point does not live in. A consumer wanting the true 3D distance declares `Port::three_d` and does its own geometry. |
 | **Empty stream** | Count is 0; Nearest distance is 1e9 — "nothing is anywhere near", which is the honest direction for the wire's typical use (Remap → nearness drives a value). Documented here, pinned by test. |
 | **Temporal window** | 0 — pointwise. The stream at the frame is all it reads. |
 
@@ -164,15 +167,51 @@ recorded constraint), **cross-layer points taps** (§1.2). None blocks, none is 
 
 ## 3. The evaluation contract
 
-### 3.1 The layout, confirmed — and 2D (K-495)
+### 3.1 The layout, confirmed — and 3D (K-561, superseding K-495)
 
 particulate.md §4's `PointsStream` layout is **confirmed as finalised**, including the
-`life` buffer and id-is-birth-index. Positions and speeds are **`Vec2`**: the effect is
-2D, the whole v1 family is 2D, and 2.5D points remain the recorded growth path
-(node-graph.md §6.2) — `position`/`speed` grow to `Vec3` if and when 2.5D is decided,
-which changes buffer strides and nothing in this note's contracts. Deciding `Vec3` now
-would mean a dead z lane in every buffer, every kernel and every test for a feature with
-no decision behind it.
+`life` buffer and id-is-birth-index. Positions and speeds are **`Vec3`** since K-561: a
+particle carries three coordinates, the closed forms integrate the third under the same
+drag and wind algebra, and the growth path node-graph.md §6.2 recorded is the one that
+was taken. The buffer strides moved (GPU: 17 words a particle, not 14) and nothing in
+this note's contracts did.
+
+**The wire stays one type.** A stream is three axes whatever reads it; what varies is
+which of two readings a consumer asks for, and it asks on its **port**:
+
+```rust
+Port::new("points", "Points", PortType::Points)            // reads projected 2D
+Port::new("points", "Points", PortType::Points).three_d()  // reads the three axes
+```
+
+`Port::three_d` is a `bool` beside `id`/`label`/`ty`, false by default, and it is a
+*declaration* rather than a second type: no second socket colour, no second refusal, no
+second edge. A consumer that has not declared awareness reads
+`PointsStream::projected(i)` — where the composition's camera puts particle *i* on the
+layer's own plane — and on a 2D layer that is the pair it always read. Points sample
+declares 2D (§2.2), which is what its Nearest distance being a distance *on the frame*
+requires; the family's own packages decide one by one.
+
+**The projection.** `PointsStream` carries the `Projection` it was evaluated under — one
+row-major 3×4 mapping `(x, y, z, 1)` to `(X, Y, W)`, so the particle is drawn at
+`(X/W, Y/W)` and every length about it (diameter, streak, sprite square) scales by `1/W`.
+`Projection::FLAT` is the identity and is what a 2D layer, a comp with no camera and
+every project saved before K-561 evaluate under; `apply` returns the bits it was handed
+there, so the flat guarantee is arithmetic rather than a promise. A particle at or behind
+the camera's own plane answers a scale of nought and draws nothing, which is the
+degenerate case degrading rather than dividing by a vanishing `W`.
+
+**Where it comes from, and why not from here.** The matrix is built in `lumit-render`
+(`build::points_projection`) out of `lumit_gpu::camera_matrix` and
+`lumit_gpu::place_matrix` — the very two the compositor places layers with — multiplied
+together and then restricted back onto the layer's plane: the product's `H` (its z column
+struck out) inverted and put in front, so `z = 0` returns to where it started and `z ≠ 0`
+returns to where it is *seen*. **No camera is derived twice**: `lumit-core` never computes
+one, it is handed one, which is why `Projection` is a table of numbers and not a pose.
+It rides beside the op in `PointsSchedule.projection` for the same reason the birth
+schedule does — the comp's camera and the layer's placement are no more controls on this
+effect than the layer's clock is — and it is folded into the per-effect cache key beside
+the schedule, so moving the camera retires the pictures it made.
 
 The stream exists in two forms with one meaning:
 

@@ -184,6 +184,116 @@ pub fn parent_world_placement(
     world
 }
 
+/// Where the composition's camera puts a particle that sits off `layer`'s own
+/// plane (K-561) — the points stream's third axis, made visible.
+///
+/// # In plain terms
+///
+/// An effect draws into the layer's own rectangle of pixels, and the compositor
+/// then turns that rectangle in space and photographs it with the comp's
+/// camera. A particle a hundred pixels in front of the rectangle has to be
+/// drawn not where its x and y say but where the camera would *see* it — which
+/// is somewhere else on the rectangle, and smaller or larger for being further
+/// off or nearer.
+///
+/// This works that "somewhere else" out once a frame, as one 3×4 table.
+/// **Nothing here derives a camera**: it is the compositor's own
+/// [`lumit_gpu::camera_matrix`] and [`lumit_gpu::place_matrix`], multiplied
+/// together and then restricted back onto the layer's plane — the plane's own
+/// map `H` (the full product with `z` struck out) inverted and put in front, so
+/// that a particle at `z = 0` comes back to exactly where it started and one
+/// off the plane comes back to where it is seen.
+///
+/// `None` — a 2D layer, or a comp with no active camera — is not "the identity
+/// matrix": the render paths branch on it and leave the positions' bits alone,
+/// which is what makes an old project's picture bit-identical rather than
+/// nearly so (K-258).
+pub fn points_projection(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+) -> Option<lumit_core::fx::points::Projection> {
+    if !layer.switches.three_d {
+        return None;
+    }
+    let pose = crate::track::camera_pose(doc, comp, t_comp)?;
+    let cam = crate::export::camera_mat(comp.width, comp.height, pose);
+    let tr = &layer.transform;
+    let place = lumit_gpu::place_matrix(
+        (
+            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
+        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+    );
+    // Parenting composes exactly as the compositor composes it: `pre × own`.
+    let place = match parent_world_placement(comp, layer, t_comp, context) {
+        Some(pre) => lumit_gpu::concat_place(pre, place),
+        None => place,
+    };
+    let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+    // Rows 0, 1 and 3 of the product — x, y and the homogeneous divide; the z
+    // output is flattened by the perspective matrix and never read.
+    let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
+    let (rx, ry, rw) = (row(0), row(1), row(3));
+    // `H` is the same three rows with the z column struck out: what the plane
+    // itself maps to. Inverting it is what brings the answer back into the
+    // layer's own pixels.
+    let h = [
+        [rx[0], rx[1], rx[3]],
+        [ry[0], ry[1], ry[3]],
+        [rw[0], rw[1], rw[3]],
+    ];
+    let inv = invert3(&h)?;
+    let mut m = [[0.0f32; 4]; 3];
+    for (r, mr) in m.iter_mut().enumerate() {
+        for (c, out) in mr.iter_mut().enumerate() {
+            *out = inv[r][0] * rx[c] + inv[r][1] * ry[c] + inv[r][2] * rw[c];
+        }
+    }
+    Some(lumit_core::fx::points::Projection { m })
+}
+
+/// A 3×3 inverse, or `None` when the matrix is singular — a layer scaled to
+/// nothing, or turned exactly edge-on. An engine crate answers the degenerate
+/// case rather than dividing by nought (14-ENGINEERING-RULES §4), and `None`
+/// here reads as the flat projection, which draws the particles unprojected on
+/// a layer that is drawing no pixels anyway.
+fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
+    let c = |r: usize, k: usize| -> f32 {
+        let (r0, r1) = ((r + 1) % 3, (r + 2) % 3);
+        let (k0, k1) = ((k + 1) % 3, (k + 2) % 3);
+        m[r0][k0] * m[r1][k1] - m[r0][k1] * m[r1][k0]
+    };
+    let det = m[0][0] * c(0, 0) + m[0][1] * c(0, 1) + m[0][2] * c(0, 2);
+    if !det.is_finite() || det.abs() < 1e-12 {
+        return None;
+    }
+    let inv_det = 1.0 / det;
+    // The adjugate is the cofactor matrix transposed.
+    let mut out = [[0.0f32; 3]; 3];
+    for (r, row) in out.iter_mut().enumerate() {
+        for (k, v) in row.iter_mut().enumerate() {
+            *v = c(k, r) * inv_det;
+        }
+    }
+    Some(out)
+}
+
 /// The per-layer motion-blur sub-frame placements for `layer` at comp time
 /// `t_comp` (docs/06 §4, K-120): the layer's own transform re-evaluated at each
 /// shutter sample time. Empty — so the layer draws normally — unless the comp
@@ -434,6 +544,20 @@ pub fn build_comp_draws_at(
     // — which both build their draws through this function — hand the driver
     // the same sound and reach the same number (K-031).
     let audio = crate::audio_tap::DocumentAudio::new(doc, comp);
+
+    // A layer's driver graph, resolved with the camera its own particles would
+    // be drawn through (K-561). One closure for all four resolve sites: the
+    // Points sample driver measures a distance **on the frame**, so a stream it
+    // samples has to be projected exactly as the picture projects it, and a
+    // rule spelled four ways is a rule three of them will eventually break.
+    let drivers_for = |l: &lumit_core::model::Layer,
+                       dlt: f64,
+                       ctx: Arc<ExpressionContext>|
+     -> lumit_core::fx::ResolvedDrivers {
+        let projection = points_projection(expr_doc, comp, l, t_comp, dlt, ctx.clone())
+            .unwrap_or(lumit_core::fx::points::Projection::FLAT);
+        lumit_core::fx::resolve_drivers_projected(&l.graph, dlt, ctx, Some(&audio), projection)
+    };
 
     let pixels_for = |layer: &lumit_core::model::Layer| -> Option<LayerPixels> {
         let context = Arc::new(ExpressionContext {
@@ -715,8 +839,7 @@ pub fn build_comp_draws_at(
             // The referenced layer's own driver graph too (K-471): a wire
             // substitutes where a keyframe would have been read, so it belongs
             // to whichever stack is being resolved.
-            let drivers =
-                lumit_core::fx::resolve_drivers(&src.graph, slt, context.clone(), Some(&audio));
+            let drivers = drivers_for(src, slt, context.clone());
             (
                 lumit_core::fx::resolve_stack_temporal_named(
                     &src.effects,
@@ -908,6 +1031,23 @@ pub fn build_comp_draws_at(
      -> Vec<lumit_core::fx::points::PointsSchedule> {
         use lumit_core::model::EffectNamespace;
         let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        // **The camera carriage** (K-561), worked out once for the layer: a
+        // stream's third axis is only visible through the comp's camera, and
+        // the camera is no more a number in the bag than the layer's clock is.
+        let projection = points_projection(
+            expr_doc,
+            comp,
+            layer,
+            t_comp,
+            slt,
+            Arc::new(ExpressionContext {
+                document: expr_doc.clone(),
+                comp: Some(comp.id),
+                layer: Some(layer.id),
+                comp_time: t_comp,
+                current_depth: 0,
+            }),
+        );
         layer
             .effects
             .iter()
@@ -949,7 +1089,11 @@ pub fn build_comp_draws_at(
                 let mut schedule =
                     lumit_core::fx::points::Schedule::scan(dt, upto, window, &rate_at);
                 schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
-                lumit_core::fx::points::PointsSchedule { schedule, t }
+                lumit_core::fx::points::PointsSchedule {
+                    schedule,
+                    t,
+                    projection,
+                }
             })
             .collect()
     };
@@ -1190,12 +1334,7 @@ pub fn build_comp_draws_at(
                     let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
                     lumit_core::fx::resolve_stack_temporal_named(
                         &layer.effects,
-                        &lumit_core::fx::resolve_drivers(
-                            &layer.graph,
-                            effect_lt,
-                            context.clone(),
-                            Some(&audio),
-                        ),
+                        &drivers_for(layer, effect_lt, context.clone()),
                         effect_lt,
                         frame_lt,
                         comp_diag,
@@ -1413,8 +1552,7 @@ pub fn build_comp_draws_at(
                 let scale = m_w as f32 / m_nat.0.max(1.0);
 
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
-                let drivers =
-                    lumit_core::fx::resolve_drivers(&src.graph, mlt, context.clone(), Some(&audio));
+                let drivers = drivers_for(src, mlt, context.clone());
                 (
                     lumit_core::fx::resolve_stack_temporal_named(
                         &src.effects,
@@ -1485,12 +1623,7 @@ pub fn build_comp_draws_at(
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
                 lumit_core::fx::resolve_stack_temporal_named(
                     &layer.effects,
-                    &lumit_core::fx::resolve_drivers(
-                        &layer.graph,
-                        effect_lt,
-                        context.clone(),
-                        Some(&audio),
-                    ),
+                    &drivers_for(layer, effect_lt, context.clone()),
                     effect_lt,
                     frame_lt,
                     comp_diag * scale,
@@ -2149,6 +2282,140 @@ mod parent_placement_tests {
             parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()))
                 .unwrap();
         assert_eq!(world, place_of(&null));
+    }
+}
+
+/// **The points projection** (K-561): the restriction really is the camera.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod points_projection_tests {
+    use super::*;
+
+    /// One camera and one placement, and the full comp-space projection of a
+    /// point in the layer's own pixels — the compositor's own arithmetic,
+    /// written here as the thing the restriction is measured against.
+    fn seen_by_the_compositor(cam: lumit_gpu::Mat4, place: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 2] {
+        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+        let at = |r: usize| a[0][r] * p[0] + a[1][r] * p[1] + a[2][r] * p[2] + a[3][r];
+        let w = at(3);
+        [at(0) / w, at(1) / w]
+    }
+
+    /// **The claim**, stated as a test: a particle drawn at the projection's
+    /// answer, *on the layer's flat plane*, ends up exactly where the
+    /// compositor would have put the particle at its true depth.
+    ///
+    /// That is the whole of what the third axis does, and it is the one thing a
+    /// hand-written 3×4 could get subtly wrong in a way no picture test would
+    /// name. Both sides read `lumit_gpu`'s own matrices, so what is being
+    /// checked is the restriction and its inverse, not a second camera.
+    #[test]
+    fn a_projected_particle_lands_where_the_camera_would_have_put_it() {
+        let cam = lumit_gpu::camera_matrix(
+            1920.0,
+            1080.0,
+            900.0,
+            (860.0, 600.0, 0.0),
+            (8.0, -20.0, 5.0),
+        );
+        let place = lumit_gpu::place_matrix(
+            (960.0, 540.0),
+            (400.0, 300.0),
+            (120.0, 80.0),
+            17.0,
+            -150.0,
+            25.0,
+            -40.0,
+        );
+        // The restriction, built the way `points_projection` builds it.
+        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&place)).to_cols_array_2d();
+        let row = |r: usize| [a[0][r], a[1][r], a[2][r], a[3][r]];
+        let (rx, ry, rw) = (row(0), row(1), row(3));
+        let h = [
+            [rx[0], rx[1], rx[3]],
+            [ry[0], ry[1], ry[3]],
+            [rw[0], rw[1], rw[3]],
+        ];
+        let inv = invert3(&h).expect("a placed layer is not singular");
+        let mut m = [[0.0f32; 4]; 3];
+        for (r, mr) in m.iter_mut().enumerate() {
+            for (c, out) in mr.iter_mut().enumerate() {
+                *out = inv[r][0] * rx[c] + inv[r][1] * ry[c] + inv[r][2] * rw[c];
+            }
+        }
+        let proj = lumit_core::fx::points::Projection { m };
+
+        for p in [
+            [0.0f32, 0.0, 0.0],
+            [640.0, 200.0, 0.0],
+            [640.0, 200.0, 250.0],
+            [100.0, 700.0, -300.0],
+            [800.0, 800.0, 120.0],
+        ] {
+            let (flat, scale) = proj.apply(p);
+            let drawn = seen_by_the_compositor(cam, place, [flat[0], flat[1], 0.0]);
+            let truth = seen_by_the_compositor(cam, place, p);
+            assert!(
+                (drawn[0] - truth[0]).abs() < 5e-2 && (drawn[1] - truth[1]).abs() < 5e-2,
+                "a particle at {p:?} is drawn at {drawn:?} and belongs at {truth:?}"
+            );
+            // The plane itself is untouched, and off it the scale is the
+            // perspective divide the compositor applied.
+            if p[2] == 0.0 {
+                assert!((scale - 1.0).abs() < 1e-4, "the plane foreshortened");
+                assert!((flat[0] - p[0]).abs() < 1e-2 && (flat[1] - p[1]).abs() < 1e-2);
+            }
+        }
+    }
+
+    /// A layer scaled to nothing has no plane to project onto, and the answer
+    /// is the flat projection rather than a division by nought (docs/14 §4).
+    #[test]
+    fn a_singular_placement_answers_no_projection() {
+        assert!(invert3(&[[0.0; 3]; 3]).is_none());
+        assert!(invert3(&[[1.0, 2.0, 3.0], [2.0, 4.0, 6.0], [0.0, 1.0, 0.0]]).is_none());
+        // And a plain one inverts to something that undoes it.
+        let m = [[2.0, 0.0, 5.0], [0.0, 4.0, -3.0], [0.0, 0.0, 1.0]];
+        let inv = invert3(&m).expect("not singular");
+        for (r, row) in inv.iter().enumerate() {
+            for (c, _) in m.iter().enumerate() {
+                let want = f32::from(r == c);
+                let got: f32 = (0..3).map(|k| row[k] * m[k][c]).sum();
+                assert!((got - want).abs() < 1e-5, "row {r} col {c}: {got}");
+            }
+        }
+    }
+
+    /// The raster rescale is the same projection in smaller pixels (K-266): a
+    /// particle at half scale lands at half the coordinates it landed at, and
+    /// foreshortens by exactly as much.
+    #[test]
+    fn the_projection_rescales_with_the_raster() {
+        let proj = lumit_core::fx::points::Projection {
+            m: [
+                [1.0, 0.0, 0.4, 0.0],
+                [0.0, 1.0, 0.3, 0.0],
+                [0.0, 0.0, 1.0 / 800.0, 1.0],
+            ],
+        };
+        let s = 0.5f32;
+        let half = proj.rescaled(s);
+        for p in [
+            [300.0f32, 200.0, 0.0],
+            [640.0, 100.0, 400.0],
+            [0.0, 0.0, -250.0],
+        ] {
+            let (full_xy, full_scale) = proj.apply(p);
+            let (half_xy, half_scale) = half.apply([p[0] * s, p[1] * s, p[2] * s]);
+            assert!((half_xy[0] - full_xy[0] * s).abs() < 1e-3, "{half_xy:?}");
+            assert!((half_xy[1] - full_xy[1] * s).abs() < 1e-3, "{half_xy:?}");
+            assert!(
+                (half_scale - full_scale).abs() < 1e-5,
+                "foreshortening is not a ratio: {half_scale} against {full_scale}"
+            );
+        }
+        // At full scale it is the same numbers, not nearly the same.
+        assert_eq!(proj.rescaled(1.0), proj);
     }
 }
 

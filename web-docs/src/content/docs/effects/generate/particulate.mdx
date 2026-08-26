@@ -1,0 +1,136 @@
+---
+title: Particulate
+description: What Particulate does, and what each of its controls means.
+---
+
+Particulate is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path | Point | - |
+| **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Position z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Width** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
+| **Height** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
+| **Depth** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
+| **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Mask path** | Masks | This layer's masks | First mask | - |
+| **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
+| **Direction z** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Spread** | Slider | 0 to 360 | 360 | Degrees |
+| **Spread z** | Slider | 0 to 180; up to 360 | 0 | Degrees |
+| **Initial speed** | Slider | 0 to 2000; higher | 90 | Pixels at composition size |
+| **Speed jitter** | Slider | 0 to 100 | 50 | Per cent |
+| **Life** | Slider | 0.1 to 10; down to 0 and higher | 2 | Seconds |
+| **Life jitter** | Slider | 0 to 100 | 30 | Per cent |
+| **Size** | Slider | 0 to 200; higher | 4 | Pixels at composition size |
+| **Size jitter** | Slider | 0 to 100 | 40 | Per cent |
+| **Size over life** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Opacity over life** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **End colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Rotation jitter** | Slider | 0 to 360 | 360 | Degrees |
+| **Spin** | Slider | -720 to 720; any value by typing | 0 | Degrees |
+| **Align to motion** | Checkbox | On or off | Off | - |
+| **Gravity** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Wind x** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Wind y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Wind z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Drag** | Slider | 0 to 10; higher | 0.5 | - |
+| **Turbulence amount** | Slider | 0 to 500; higher | 40 | Pixels at composition size |
+| **Turbulence scale** | Slider | 10 to 1000; higher | 200 | Pixels at composition size |
+| **Turbulence speed** | Slider | 0 to 5; higher | 0.3 | - |
+| **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Sprite layer** | Layer | Any layer in the composition | None | - |
+| **Streak length** | Slider | 0 to 0.1; higher | 0.02 | Seconds |
+| **Max particles** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
+- **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
+- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
+- **Feather** is editable while **Mode** is set to Disc.
+- **Sprite layer** is editable while **Mode** is set to Sprite.
+- **Streak length** is editable while **Mode** is set to Streak.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shape**
+- **Position x**
+- **Position y**
+- **Position z**
+- **Width**
+- **Height**
+- **Depth**
+- **Emitter angle**
+- **Mask path**
+- **Emit rate**
+- **Direction**
+- **Direction z**
+- **Spread**
+- **Spread z**
+- **Initial speed**
+- **Speed jitter**
+- **Life**
+- **Life jitter**
+- **Size**
+- **Size jitter**
+- **Size over life**
+- **Opacity over life**
+- **Colour**
+- **End colour**
+- **Rotation**
+- **Rotation jitter**
+- **Spin**
+- **Align to motion**
+- **Gravity**
+- **Wind x**
+- **Wind y**
+- **Wind z**
+- **Drag**
+- **Turbulence amount**
+- **Turbulence scale**
+- **Turbulence speed**
+- **Mode**
+- **Feather**
+- **Sprite layer**
+- **Streak length**
+- **Max particles**
+- **Seed**
+- **Mix**
+- **Blend**
+- **Matte**
+- **Invert**
+- **Channel**
+
+## Related
+
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

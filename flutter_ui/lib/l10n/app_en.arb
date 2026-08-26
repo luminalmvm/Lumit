@@ -1385,6 +1385,10 @@
   "@fxDirection": {
     "description": "Effect controls — a control on Drop shadow: which way the light comes from."
   },
+  "fxDirectionZ": "Direction z",
+  "@fxDirectionZ": {
+    "description": "Effect controls — a control on Particulate: how far particles lean out of the layer's own plane as they leave, towards or away from the camera."
+  },
   "fxDisc": "Disc",
   "@fxDisc": {
     "description": "Effect controls — one option in the Mode menu on Particulate: each particle is drawn as a soft round dot."
@@ -1592,6 +1596,10 @@
   "fxDecay": "Decay",
   "@fxDecay": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxDepth": "Depth",
+  "@fxDepth": {
+    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it."
   },
   "fxDepthChannel": "Depth channel",
   "@fxDepthChannel": {
@@ -2241,6 +2249,10 @@
   "@fxPositionY": {
     "description": "Effect controls — a control on Transform."
   },
+  "fxPositionZ": "Position z",
+  "@fxPositionZ": {
+    "description": "Effect controls — a control on Particulate: how far in front of or behind the layer's own plane the emitter sits."
+  },
   "fxPosterizeTime": "Posterize time",
   "@fxPosterizeTime": {
     "description": "Effect controls — the name of an effect."
@@ -2609,6 +2621,10 @@
   "@fxSpread": {
     "description": "Effect controls — a control on Particulate: how wide the cone is that particles are launched into."
   },
+  "fxSpreadZ": "Spread z",
+  "@fxSpreadZ": {
+    "description": "Effect controls — a control on Particulate: how much particles differ from one another in Direction z, in degrees."
+  },
   "fxSprite": "Sprite",
   "@fxSprite": {
     "description": "Effect controls — one option in the Mode menu on Particulate: each particle is drawn as a copy of another layer."
@@ -2840,6 +2856,10 @@
   "fxWindY": "Wind y",
   "@fxWindY": {
     "description": "Effect controls — a control on Particulate: the air's own up-and-down speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindZ": "Wind z",
+  "@fxWindZ": {
+    "description": "Effect controls — a control on Particulate: the air's own speed through the layer's plane, towards or away from the camera, which moves particles only while Drag is above zero."
   },
   "fxWipe": "Wipe",
   "@fxWipe": {
