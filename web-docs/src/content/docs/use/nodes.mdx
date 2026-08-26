@@ -65,14 +65,14 @@ an expression.
 
 | Driver | Hands out |
 | --- | --- |
-| **Wiggle** | A number wandering by an Amount at a Frequency. Seeded per node, so it is the same wobble every time you play it. |
-| **Audio level** | The loudness of a named layer's sound at this moment, over a window you set, plus the same reading over the low end alone. |
-| **Colour cycle** | A colour whose hue turns at a Rate from a Phase, at the Saturation and Brightness you give it. |
-| **Math** | Two numbers and an operation. An expression you can see. |
-| **Remap** | Maps a number from one range onto another, with a clamp. |
-| **Smooth** | Its input, softened over Time. |
-| **Points sample** | Reads a [points stream](/effects/generate/particulate/): how many points are alive, and how far the nearest one is from a position. |
-| **Layer points** | Another layer's points, brought into this graph. |
+| [**Wiggle**](/effects/drivers/wiggle/) | A number wandering by an Amount at a Frequency. Seeded per node, so it is the same wobble every time you play it. |
+| [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment, over a window you set, plus the same reading over the low end alone. |
+| [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate from a Phase, at the Saturation and Brightness you give it. |
+| [**Math**](/effects/drivers/math/) | Two numbers and an operation. An expression you can see. |
+| [**Remap**](/effects/drivers/remap/) | Maps a number from one range onto another, with a clamp. |
+| [**Smooth**](/effects/drivers/smooth/) | Its input, softened over Time. |
+| [**Points sample**](/effects/drivers/points-sample/) | Reads a points stream: how many points are alive, and how far the nearest one is from a position. |
+| [**Layer points**](/effects/drivers/layer-points/) | Another layer's points, brought into this graph. |
 
 Add one from the `Tab` search — they are grouped under **Drivers** — and wire its output to
 a parameter's socket.
@@ -145,6 +145,7 @@ evaluation of it.
 
 ## Related
 
+- [Working with the node graph](/tutorials/node-graph/) - the walkthrough.
 - [Effects](/use/effects/) - the same stack as a list.
 - [Expressions](/use/expressions/) - the other way to drive a value.
 - [Workspaces and panels](/use/workspaces/)
