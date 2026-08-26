@@ -1477,8 +1477,16 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // would promote that one, for ever. A frame in memory is warm enough; it
     // goes up when playback asks for it.
     let (_, ram_budget, _, _, _) = crate::framecache::stats();
-    // ponytail: the RAM budget is shared with every other comp and scale; a
-    // fill that counts only its own frames can over-reach by what they hold.
+    // ponytail: `reach` spends the RAM budget as though this comp and this
+    // scale owned all of it. They do not — the tier holds every other comp's
+    // and every other scale's frames too — so the over-reach is at most one
+    // whole RAM budget in frames, and the tail of the walk renders frames the
+    // LRU then evicts before playback ever asks for them. The trigger is the
+    // fill never setting `fill_exhausted` on a work area that fits the two
+    // budgets: the worker keeps rendering while idle, and Settings' cache
+    // stats show misses climbing on each pass round a loop that should be
+    // warm. The fix is small — `framecache::stats()` already returns the used
+    // bytes, so subtract them and count only the RAM actually free.
     let reach = (budget + ram_budget) / frame_bytes;
     // Frames the disk holds are asked for as the walk passes them, and the walk
     // carries on. A load is a message to another thread, thus queueing several
@@ -1647,10 +1655,15 @@ pub struct PlayRequest {
 /// stalling the picture. How far ahead is `capacity()`, adapted from the
 /// measured p95 render cost. Dropping this struct (stop, seek, a new play)
 /// drops the ring and every in-flight frame with it — the cancellation edge.
-// ponytail: renders are still serial on this one worker thread, so cancellation
-// latency is bounded by one frame's render, not the impl note's 15 ms. Epoch
-// tokens inside the render walk (and the worker pool they exist for) are the
-// upgrade, docs/impl/playback-scheduler.md §1-2.
+// ponytail: renders are still serial on this one worker thread, so a stop, a
+// seek or a new play waits for the frame already in flight. The ceiling is that
+// one frame's render — 200 ms for the reference comp at 32 animated layers, by
+// the measurement recorded in docs/TODO.md's deferred worker-pool entry —
+// against the 15 ms docs/impl/playback-scheduler.md §1 asks for. The trigger is
+// that gap seen by hand: dragging the playhead during playback of a heavy comp
+// and watching the picture finish the old frame before it follows. The upgrade
+// is in-render epoch tokens, the open item under docs/TODO.md "Next -
+// engine/bridge follow-ups → Playback scheduler - what remains".
 /// How many banked frames count as a full pre-roll, and how long the sound is
 /// ever made to wait for them (docs/impl/playback-scheduler.md §5).
 const PRE_ROLL_FRAMES: usize = 3;
@@ -3345,8 +3358,14 @@ fn cut_to_prefix(
         lumit_core::graph::NodeRef::Effect(prefix.effect),
     )?;
     // ponytail: one document clone per cut frame, which is what every drag
-    // preview already costs. Memoise by (prefix, revision) on the state if a
-    // heavy project ever shows it.
+    // preview already costs. The ceiling is that the clone scales with the
+    // *document* — layer and keyframe count — not with the picture, so it is
+    // free on a small comp and grows without the frame getting any harder. The
+    // trigger is docs/13 §2.1's mandate breaking here first: an effect-list
+    // drag on a comp of hundreds of layers missing B1's 8 ms UI frame while the
+    // same drag on a handful of layers is smooth. The fix is to memoise the cut
+    // document by `(prefix, revision)` on the worker state — a drag holds both
+    // still, so one clone would serve the whole gesture.
     lumit_core::graph::truncated_effects(document, comp, prefix.layer.layer_id, keep)
 }
 

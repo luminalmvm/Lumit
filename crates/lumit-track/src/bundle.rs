@@ -436,10 +436,18 @@ impl PointBlock {
 /// held by the damping, which is what LM's diagonal term is for.
 ///
 /// ponytail: the reduced camera system is dense and factorised outright, so the
-/// cost is cubic in the keyframe count. That is the right trade at the tens-to-
-/// low-hundreds this pipeline selects (docs/impl/tracking.md §4 says as much);
-/// a shot that somehow lands thousands of keyframes wants a sparse
-/// factorisation here, not a bigger machine.
+/// cost is cubic in its width — six columns per keyframe plus one per focal
+/// knot. That is the right trade at the tens-to-low-hundreds this pipeline
+/// selects (docs/impl/tracking.md §4 says as much): 100 keyframes is a 600×600
+/// factorisation, tens of megaflops, lost in the noise beside the residuals.
+/// Cubic is unforgiving past that — 300 keyframes is 27× that work and 1000 is
+/// a thousand times it, minutes inside a single LM iteration. The trigger is
+/// therefore countable before it is felt: a solve whose keyframe selection
+/// comes back with more than ~300 cameras (a long handheld take solved end to
+/// end rather than in segments), or a camera track whose progress sits still
+/// for minutes between iterations while `cancel` is the only way out. That
+/// shot wants a sparse factorisation of the reduced system here, not a bigger
+/// machine.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bundle_adjust(
     cams: &mut [BundleCamera],

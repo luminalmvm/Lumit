@@ -1362,9 +1362,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         );
         return;
       }
-      // ponytail: masks and art are previewed one or the other, art first — one
-      // request patches one of them, and a layer whose mask *and* art are being
-      // dragged at once is rare enough to catch up on release.
+      // ponytail: masks and art are previewed one or the other, art first —
+      // one request patches one of them. The ceiling is precise: with both
+      // kinds of point in the drag, the art moves live and the mask outline
+      // stays where it was until the pointer is released, at which point it
+      // jumps to catch up. The trigger is a marquee that caught a mask point
+      // and a shape-art point on the same layer, then a drag — the only way to
+      // reach it, and the reason it is rare. The fix is one request carrying
+      // both patches rather than a choice between them.
       final masks = [
         for (final mask in box.masks)
           maskWithPointsMoved(box, mask, _points, d) ?? mask,

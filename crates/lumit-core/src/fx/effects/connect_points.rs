@@ -352,12 +352,17 @@ impl ConnectPoints {
     /// the walk `O(n · k)` for `k` the crowd in a neighbourhood rather than
     /// `O(n²)` for the whole field.
     ///
-    /// (ponytail: uniform buckets, no rebalancing. The ceiling is a *clump* —
-    /// every point of a stream inside one square is `O(m²)` again, bounded by
-    /// Max points and by Max connections cutting the inner walk short. The
-    /// trigger for anything cleverer, a k-d tree or a sorted sweep, is a
-    /// profile showing a real comp spending it; docs/13 §7.3's B12–B14 are
-    /// where that would show.)
+    /// (ponytail: uniform buckets, no rebalancing. The ceiling is a *clump*:
+    /// `m` points inside one square is `O(m²)` distance tests again, and the
+    /// only things that bound it are Max points — 200 000 on the slider, a
+    /// million at `points::CAP_HARD` — and Max connections, at most 64, ending
+    /// each point's inner walk early. A hundredth of a default field in one
+    /// square is 2000 points and four million tests for that square alone. The
+    /// trigger is the shape that produces it rather than a profile: a
+    /// Particulate stream emitted from a tight nozzle, or any bag whose points
+    /// pile into far less than the frame, missing docs/13 §2's B12–B14 while
+    /// the same point count spread evenly holds them. That comp wants a k-d
+    /// tree or a sorted sweep here.)
     #[must_use]
     fn buckets(seen: &[[f32; 2]], reach: f32) -> HashMap<(i32, i32), Vec<u32>> {
         let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::with_capacity(seen.len());

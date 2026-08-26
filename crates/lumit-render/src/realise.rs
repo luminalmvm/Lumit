@@ -700,9 +700,15 @@ impl Realiser<'_> {
     /// exactly this reason, K-421), so filing one under the layer and the time
     /// would go stale the moment somebody edited a layer below. Caching would
     /// also save the smaller half: the neighbour composite is a whole extra comp
-    /// render and the flow is ~8 ms on top of it. The upgrade is to name the
-    /// below-composite the way K-422 named a nested comp's frame, and then both
-    /// halves can be cached under the one name.
+    /// render and the flow is ~8 ms on top of it. So the ceiling is a doubled
+    /// comp render for every frame that reaches a flow effect above an
+    /// adjustment, and the trigger is that doubling measured: docs/13 B3's
+    /// scrub p95 on a comp whose flow effect sits on an adjustment layer
+    /// against the same effect over footage, where the decode worker's cache
+    /// answers instead. If the composite path is the one missing B3's 50 ms
+    /// while the footage path holds it, this is the whole of the difference.
+    /// The upgrade is to name the below-composite the way K-422 named a nested
+    /// comp's frame, and then both halves can be cached under the one name.
     fn measure_flow(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> Option<wgpu::Texture> {
         let cell = self.flow?;
         // The solver reads these two pictures on an encoder of its own, and a

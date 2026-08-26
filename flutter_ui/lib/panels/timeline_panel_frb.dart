@@ -3093,8 +3093,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ui.model.refresh();
                   // They went on at the top; walk them down to the drop, the
                   // bottom-most first so each one's slot is free when it moves.
-                  // ponytail: one undo step per layer — a drop-at-index on the
-                  // engine side would make it one, if that ever grates.
+                  // ponytail: every call here is its own committed op, so the
+                  // ceiling is two undo steps per file — the add, then the
+                  // walk down to the drop. A ten-file drop takes twenty
+                  // presses of Ctrl-Z to put back, and the middle of that
+                  // sequence shows the layers at the top of the stack, which
+                  // is a position the user never asked for. The trigger is any
+                  // multi-select drop of more than two or three files followed
+                  // by an undo — reachable the first time somebody drags a
+                  // folder's worth of footage in. The fix is engine-side: an
+                  // add-at-index op, so one drop is one step.
                   final fresh = [
                     for (var i = 0; i < footage.length; i++)
                       ui.model.layers[i].layer,

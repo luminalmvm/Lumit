@@ -58,8 +58,16 @@ pub const VALUE_PORT: &str = "value";
 /// How many times the input is read across the window.
 ///
 /// ponytail: a fixed nine-tap box average, and a box is a blunt filter. Nine
-/// taps is smooth enough for a driver and cheap enough to run per frame; if a
-/// visible stair ever shows up, weight the taps rather than adding more.
+/// taps is cheap enough to run per frame, but fixed taps across a window the
+/// user sets means the sampling thins as the window opens: the taps sit
+/// `time / 8` apart, so anything past `8 / fps` seconds — 0.13 s at 60 —
+/// samples wider than a frame and the average starts skipping detail rather
+/// than averaging it. At the slider's own maximum of 2 s the taps are a
+/// quarter of a second apart. The trigger is the symptom that comes with it:
+/// a driven parameter that steps or jitters at a long Time where the input is
+/// moving fast, which a user meets by turning Time up and getting *less*
+/// smooth, not more. The fix is to weight the taps — a triangle or Gaussian
+/// over the same nine — before it is to read the input more times.
 const TAPS: u32 = 9;
 
 /// Smooth's behaviour.

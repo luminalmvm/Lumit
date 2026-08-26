@@ -64,10 +64,16 @@ pub mod wiggle;
 ///
 /// ponytail: a flat budget instead of memoising each `(node, port, time)`. A
 /// graph shaped like a diamond re-evaluates its shared upstream once per path,
-/// and a Smooth multiplies its subtree by its tap count — fine for the handful
-/// of nodes a layer carries, and this is the ceiling that stops a pathological
-/// or hand-edited graph from taking a frame with it. Add the memo if a real
-/// graph ever spends it.
+/// and a Smooth multiplies its subtree by its nine taps — so cost is
+/// exponential in stacked Smooths, and four of them over a shared subtree
+/// (9⁴ = 6561 visits) spends this budget before the walk finishes. That is the
+/// ceiling, and it is a visible one, not a slow one: the walk returns `None`
+/// the moment the budget runs out, so the driven parameter drops back to its
+/// own keyframes mid-frame — a value that snaps as the graph grows. The
+/// trigger is that snap on a graph a user could plausibly build, which in
+/// practice means three or more Smooths in series; a driver graph that big
+/// wants the `(node, port, time)` memo, and the memo makes the diamond free
+/// as well.
 const EVAL_BUDGET: u32 = 4096;
 
 /// How deep the walk may recurse, so a very long chain cannot overflow the
@@ -405,7 +411,13 @@ impl Eval<'_> {
 
         // ponytail: one small arena per node evaluation. It is the same shape
         // the effect stack resolves through, so the substitution and unit rules
-        // stay in one place; pool them if a profile ever shows the allocation.
+        // stay in one place. The ceiling is one allocation per visit, so a
+        // layer's drivers can cost up to `EVAL_BUDGET` — 4096 — small
+        // allocations in a single frame, all on the UI-facing evaluation path.
+        // The trigger is docs/13 B1: an animated comp whose layers carry
+        // drivers missing the 8 ms UI frame with the allocator, not the
+        // arithmetic, on top of the profile. Pool the arenas on `Eval` then —
+        // they are the same size every time and die in visit order.
         let mut bag = ResolvedStack::new();
         resolve_into_arena(
             def,

@@ -945,10 +945,14 @@ pub const SRGB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb
 // octave (its step near 1.0 is 1/2048, which is 32 sixteen-bit codes), so a
 // sixteen-bit file carries the working format's own precision rather than a
 // full sixteen bits of it — eight times finer than the widened eight-bit path
-// it replaces, and far finer below the highlights. The upgrade, if banding
-// ever appears in a delivered gradient, is `Rgba16Unorm` behind the optional
-// `TEXTURE_FORMAT_16BIT_NORM` feature, with this as the fallback for adapters
-// that lack it.
+// it replaces, and far finer below the highlights. The ceiling is therefore
+// the top stop and only the top stop: 2048 distinct codes there where the file
+// can carry 65 536, so a gradient crossing it steps every 32 codes. The
+// trigger is that step seen in a delivered sixteen-bit file — a slow bright
+// gradient (a sky, a soft-box falloff) banding above roughly 0.5 while the
+// same gradient in the shadows is clean. The upgrade is `Rgba16Unorm` behind
+// the optional `TEXTURE_FORMAT_16BIT_NORM` feature, with this as the fallback
+// for adapters that lack it.
 pub const DEEP_DISPLAY_FORMAT: wgpu::TextureFormat = WORKING_FORMAT;
 
 /// The same pixel format with the hardware's sRGB encode taken off it.

@@ -264,10 +264,15 @@ unsafe fn texture_from_surface(
     descriptor.set_mipmap_level_count(1);
     descriptor.set_usage(metal::MTLTextureUsage::ShaderRead | metal::MTLTextureUsage::RenderTarget);
     // ponytail: `Managed` on a discrete-GPU Mac is written by us and read by
-    // Flutter without an explicit `synchronizeResource` blit between the two —
-    // correct on the unified-memory Macs this ships for, and the upgrade if a
-    // dual-GPU Intel Mac ever shows a stale frame is a raw-Metal blit encoder
-    // issuing that synchronise after the copy.
+    // Flutter without an explicit `synchronizeResource` blit between the two.
+    // The ceiling is exactly the non-unified branch below: on Apple silicon and
+    // every unified-memory Intel Mac the storage mode is `Shared` and there is
+    // nothing to synchronise, so this can only bite on a discrete-GPU Intel
+    // Mac — a 2019-or-earlier MacBook Pro or iMac with an AMD card. The trigger
+    // there is visible and specific: the viewer showing the previous frame, or
+    // half of it, while the timeline says otherwise. The fix is a raw-Metal
+    // blit encoder issuing `synchronizeResource` after the copy, on this branch
+    // only.
     descriptor.set_storage_mode(if device.has_unified_memory() {
         metal::MTLStorageMode::Shared
     } else {

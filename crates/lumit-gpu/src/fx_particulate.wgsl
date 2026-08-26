@@ -476,10 +476,14 @@ fn pt_scan(
 fn pt_blocks() {
     let blocks = (p.candidates + SCAN_BLOCK - 1u) / SCAN_BLOCK;
     var total = 0u;
-    // ponytail: one lane walks the block totals. There is one entry per 256
-    // candidates — four thousand of them at the million-particle hard cap, which
-    // is microseconds — so a second level of parallel scan would be machinery
-    // bought against nothing.
+    // ponytail: one lane walks the block totals, and the arithmetic says it
+    // always can. There is one entry per SCAN_BLOCK = 256 candidates, so the
+    // million-particle hard cap (`points::CAP_HARD`) gives 3907 iterations of
+    // two loads and an add — single-digit microseconds even at one lane's
+    // share of the card, against the 16 ms docs/13 B14 allows the whole effect
+    // at that cap. There is no trigger, because there is no input that can
+    // make this loop longer: the cap bounds it outright. A second level of
+    // parallel scan would buy back microseconds of a 16 ms budget.
     for (var b = 0u; b < blocks; b = b + 1u) {
         let n = block_sums[b];
         block_sums[b] = total;

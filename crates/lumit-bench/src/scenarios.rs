@@ -100,9 +100,15 @@ const SCRUB: Quality = Quality {
 /// and down (K-186); it lives in `lumit-bridge`, which an engine-side harness
 /// must not depend on. Pinning the middle rung measures the same work at a
 /// fixed quality, which is what a regression gate needs — a controller that
-/// silently settled a rung lower would otherwise read as "faster". If B6 ever
-/// needs to answer "which tier did this machine hold?", lift the controller
-/// into an engine crate and drive it here.
+/// silently settled a rung lower would otherwise read as "faster".
+///
+/// The ceiling is that B6 answers "how fast is the middle rung here?", never
+/// "which rung did this machine hold?" — so the bench and the shipped build can
+/// disagree without either being wrong. The trigger is that disagreement in
+/// numbers: B6 measuring under the docs/13 §2 floor (30 fps on the reference
+/// laptop) on a machine where the app itself plays the same comp at a sustained
+/// 60, or the reverse. Then the bench is no longer describing playback, and the
+/// fix is to lift the controller into an engine crate and drive it from here.
 const HALF: Quality = Quality {
     draft: false,
     auto_res: true,
