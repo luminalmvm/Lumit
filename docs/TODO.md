@@ -88,9 +88,15 @@ a chained pair scales a keyed half whole (K-610); and every remaining ponytail:
 comment names a ceiling and an observable trigger - none says 'if a profile ever
 shows it' with nothing measurable behind it.
 
-**FP6 - guides (U), after everything above.** 8.1 build guide trued for three
-platforms; 8.2 the 1000-line splits of owner-edited files; 8.3 the audio-workspace
-tutorial trued against the finished code; 8.4 the scripts, kept current.
+**FP6 - guides and the splits: LANDED 2026-08-26.** The six owner-edited giants came
+apart mechanically (timeline into fourteen files, graph editor into six, the control
+kit into a barrel of families, Viewer into four, Project into five, main.dart to a
+66-line entry point) with every existing test passing unchanged; three pieces stayed
+whole with their reasons in the commits (a state class is one job). The learn docs
+and scripts are trued against the tree, including the OFX broker as a second build
+product. One merge-machinery defect was caught and repaired: a commit built from a
+stale private index briefly unmade the Viewer split (restored byte-identical), and a
+restored session now keeps its own fronted tabs over K-569's fronting.
 
 **FP7 - web-docs, dead last (with V).** The full manual pass in the owner's own
 voice as the example: 7.18 export.mdx with its picture; the viewer pictures
