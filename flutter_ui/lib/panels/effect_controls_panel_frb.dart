@@ -706,6 +706,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           _effects.write(layer, id, param, value);
                           ui.model.refresh();
                         },
+                        onWritePair: (id, values) {
+                          _effects.writeAll(layer, id, values);
+                          ui.model.refresh();
+                        },
                         onLive: (id, param, value) => setState(() {
                           _effects.live(comp, layer, id, param, value,
                               frame: ui.playheadFrame.value,
@@ -906,6 +910,11 @@ class _EffectSection extends StatelessWidget {
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onLive;
 
+  /// Several parameters of one effect in one op — what a chained pair's
+  /// proportional write commits through, so it costs one undo step (K-610).
+  final void Function(UuidValue effect, Map<String, BridgeEffectValue> values)?
+      onWritePair;
+
   /// Whether a parameter group's twirl is open, and toggling it. Held by the
   /// panel rather than here because this card is rebuilt from the read model on
   /// every change, and a fold that reset itself each time would be unusable.
@@ -953,6 +962,7 @@ class _EffectSection extends StatelessWidget {
     required this.onStackChanged,
     required this.onWrite,
     required this.onLive,
+    this.onWritePair,
     this.renaming = false,
     this.onRenamed,
     this.onRenameCancelled,
@@ -1359,6 +1369,7 @@ class _EffectSection extends StatelessWidget {
             onSeek: onSeek,
             onWrite: onWrite,
             onLive: onLive,
+            onWritePair: onWritePair,
             twoColumn: true,
             // A point is one row over two parameters, so it goes quiet only
             // when both halves have been taken over — which is how the schema

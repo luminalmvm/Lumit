@@ -18735,3 +18735,40 @@ Tests: in `lumit-core`, `a_square_selector_moves_the_letters_inside_it_and_no_ot
 `a_letter_scaled_or_faded_to_nothing_draws_nothing`; in the bridge,
 `adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step`; in Flutter,
 `the animators section adds, edits and removes an animator`.
+
+## K-610 — A chained pair scales a keyed half whole: every key's value, its time and its ease kept
+
+**Status: DECIDED (2026-08-26).** Completes the chain K-443 drew. Amends
+[07-UX-SPEC.md](07-UX-SPEC.md) §4.3 in passing: what a proportional write does to an animated
+parameter.
+
+**The rule.** Dragging or typing one well of a chained point pair multiplies the *other* half by
+the factor the dragged well moved by — and where that half is keyframed, the factor multiplies
+**every keyframe's value**. Each key keeps its time, its interpolation kind and its eased shape:
+a bezier side's `speed` is in value units per second and so goes with the values, while
+influences and times live on the other axis and are untouched. An Auto side's remembered ease is
+not evaluated and is left as it is; an expression computes its own number and is not rewritten,
+so an expression sibling simply does not follow. The arithmetic is `scale_property` in
+`crates/lumit-core/src/fx/builtins.rs` — the same maths the K-558 per-cent-to-pixels migration
+rescales a keyed property with — mirrored in Dart as `scaledScalar`, because the chain has always
+been UI-time arithmetic and the document's only business is *which* pairs are tied (K-443).
+
+**Rejected: scaling only the value under the playhead.** It is the smaller change and it is
+wrong. Writing a scaled number at the playhead plants a keyframe nobody asked for, in the middle
+of a curve somebody shaped, and leaves every other key at its old value — so the ratio the chain
+exists to keep is kept for exactly one frame. A curve is one thing; the chain scales it as one
+thing or leaves it alone.
+
+**Nought still separates the pair**, unchanged: a well showing nought has no factor at all, so a
+pair dragged off zero comes apart rather than staying stuck there. The *before* number a factor
+is measured from is what the well is showing — the static value, or what the curve reads at the
+playhead — which is also what makes a keyed half able to drive the chain rather than only follow
+it.
+
+**One gesture is one undo step.** The proportional write commits both halves in a single
+`SetLayerEffects`, the op the chain toggle itself rides, rather than as two writes that would
+undo half a gesture at a time (`EffectStackEditor.writeAll`).
+
+Tests: in Flutter, `a chained pair scales a keyed half key by key` — the curve untouched while
+the pair is separate, every key doubled with times and sides held when it is chained, one undo
+restoring both halves, and a nought factor writing nothing.

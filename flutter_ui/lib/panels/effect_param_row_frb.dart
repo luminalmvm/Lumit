@@ -1409,6 +1409,14 @@ class EffectPointRowFrb extends StatelessWidget {
       onWrite;
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onLive;
+
+  /// Write several of this effect's parameters as **one op**, for the chain's
+  /// proportional write: two [onWrite] calls are two undo steps, and a gesture
+  /// that moved one well is one edit. Null where the caller has no stack to
+  /// commit through — the Graph panel's driver boxes, which never chain.
+  final void Function(UuidValue effect, Map<String, BridgeEffectValue> values)?
+      onWritePair;
+
   final bool twoColumn;
 
   /// Whether the pair is editable, per the effect's greying rules — the same
@@ -1438,6 +1446,7 @@ class EffectPointRowFrb extends StatelessWidget {
     required this.onSeek,
     required this.onWrite,
     required this.onLive,
+    this.onWritePair,
     this.twoColumn = false,
     this.enabled = true,
     this.linked = false,
@@ -1524,35 +1533,49 @@ class EffectPointRowFrb extends StatelessWidget {
     // *which* pairs are tied (K-443), so nothing below reaches the engine
     // except the two writes it would have made anyway.
     //
-    // The factor comes off the well being dragged: `next / before`. Two cases
-    // leave the sibling alone rather than guessing. A value of **nought** has
-    // no factor at all — every number is nought times something — so a pair
-    // dragged off zero separates instead of staying stuck there. And a
-    // **keyframed** sibling is left alone too: scaling it means rewriting a
-    // whole curve, which is a bigger decision than a chain glyph, and one
-    // nobody has made.
+    // The factor comes off the well being dragged: `next / before`, where
+    // *before* is the number that well is showing — its static value, or what
+    // its curve reads at the playhead. A value of **nought** has no factor at
+    // all — every number is nought times something — so a pair dragged off
+    // zero separates instead of staying stuck there.
     //
-    // ponytail: proportional writes cover the static case, which is every
-    // point pair nobody has animated. A keyed sibling wants a decision about
-    // what "scale a curve" means before it can be written.
-    double? siblingValue(BridgeParamInfo other, double factor) {
-      if (!linked) return null;
-      final scalar = other.id == xParam.id ? sx : sy;
-      if (scalar is! BridgeScalar_Static) return null;
-      return scalar.field0 * factor;
-    }
+    // A **keyed** sibling scales whole (K-610): every keyframe's value times
+    // the factor, each key keeping its time, its interpolation and its eased
+    // shape, which is the same arithmetic `scale_property` does engine-side
+    // ([scaledScalar]). Scaling only the value under the playhead would plant
+    // keys nobody made.
+    double? currentOf(BridgeScalar? scalar) => switch (scalar) {
+          BridgeScalar_Static(:final field0) => field0,
+          final BridgeScalar_Keyframed keyed =>
+            sampleScalar(scalar: keyed, time: timeOfFrame(comp, frame)),
+          _ => null,
+        };
 
     void writeChannel(BridgeParamInfo param, double next,
         {required bool live}) {
-      final write = live ? onLive : onWrite;
-      write(id, param.id, BridgeEffectValue.float(BridgeScalar.static_(next)));
       final scalar = param.id == xParam.id ? sx : sy;
-      if (scalar is! BridgeScalar_Static || scalar.field0 == 0) return;
+      final before = currentOf(scalar);
+      final value = BridgeEffectValue.float(scalar == null
+          ? BridgeScalar.static_(next)
+          : scalarWithValueAt(scalar, next, comp, frame));
       final other = param.id == xParam.id ? yParam : xParam;
-      final scaled = siblingValue(other, next / scalar.field0);
-      if (scaled == null) return;
-      write(
-          id, other.id, BridgeEffectValue.float(BridgeScalar.static_(scaled)));
+      final otherScalar = other.id == xParam.id ? sx : sy;
+      final scaled = (!linked ||
+              before == null ||
+              before == 0 ||
+              otherScalar == null ||
+              otherScalar is BridgeScalar_Expression)
+          ? null
+          : BridgeEffectValue.float(scaledScalar(otherScalar, next / before));
+      // Both halves as **one** op where the caller can commit one: two writes
+      // would be two undo steps for a gesture that moved one well.
+      if (!live && scaled != null && onWritePair != null) {
+        onWritePair!(id, {param.id: value, other.id: scaled});
+        return;
+      }
+      final write = live ? onLive : onWrite;
+      write(id, param.id, value);
+      if (scaled != null) write(id, other.id, scaled);
     }
 
     Widget field(BridgeParamInfo param, BridgeScalar? scalar) {
@@ -1572,12 +1595,9 @@ class EffectPointRowFrb extends StatelessWidget {
             min: kind.hardMin ?? -1000000,
             max: kind.hardMax ?? 1000000,
             speed: speed,
-            onCommit: (v) => onWrite(
-              id,
-              param.id,
-              BridgeEffectValue.float(
-                  scalarWithValueAt(scalar, v, comp, frame)),
-            ),
+            // Through the same road a static well writes through, so a keyed
+            // half drags its chained sibling exactly as a static one does.
+            onCommit: (v) => writeChannel(param, v, live: false),
           ),
         );
       }
@@ -1984,17 +2004,27 @@ class EffectStackEditor {
     UuidValue effect,
     String param,
     BridgeEffectValue value,
+  ) =>
+      writeAll(layer, effect, {param: value});
+
+  /// Several parameters of one effect as **one** op, and so one undo step —
+  /// what a chained pair's proportional write is (K-610), where two [write]
+  /// calls would undo half a gesture at a time.
+  void writeAll(
+    LayerReference layer,
+    UuidValue effect,
+    Map<String, BridgeEffectValue> values,
   ) {
     // A release ends the drag: a held preview tick would render provisional
     // values *after* the commit, putting the pre-commit picture back on screen.
     _throttle.cancel();
-    // **This parameter and no other.** Everything the gesture previewed is
-    // dropped first, so a commit writes exactly what it was handed: a pair
-    // writes its two halves as two ops, which is what a keyframe on a pair
-    // already costs, rather than folding a sibling into someone else's op.
-    _staged
-      ..clear()
-      ..[(effect, param)] = value;
+    // **These parameters and no others.** Everything the gesture previewed is
+    // dropped first, so a commit writes exactly what it was handed rather than
+    // folding a stale tick into someone else's op.
+    _staged.clear();
+    for (final entry in values.entries) {
+      _staged[(effect, entry.key)] = entry.value;
+    }
     try {
       layer.setEffects(effects: stackWith(layer));
     } catch (_) {

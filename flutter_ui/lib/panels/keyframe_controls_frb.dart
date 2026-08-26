@@ -86,6 +86,38 @@ BridgeScalar scalarWithValueAt(
   return BridgeScalar.keyframed(next);
 }
 
+/// The scalar with **every** value multiplied by `k`, curve shape held.
+///
+/// This is what scaling a chained pair's other half means (K-610): each key
+/// keeps its time and its interpolation, and the whole curve is the same shape
+/// drawn against a stretched value axis. A bezier side's `speed` is in value
+/// units per second, so it goes with the values; influences and times are the
+/// other axis and are left alone. An Auto side's remembered ease is not
+/// evaluated, and an expression computes its own number — both are untouched.
+///
+/// The same arithmetic as `scale_property` in `crates/lumit-core/src/fx/
+/// builtins.rs`, which is how the K-558 migration rescaled a keyed property.
+BridgeScalar scaledScalar(BridgeScalar scalar, double k) => switch (scalar) {
+      BridgeScalar_Static(:final field0) => BridgeScalar.static_(field0 * k),
+      BridgeScalar_Keyframed(:final field0) => BridgeScalar.keyframed([
+          for (final key in field0)
+            BridgeKeyframe(
+              time: key.time,
+              value: key.value * k,
+              interpIn: _scaledSide(key.interpIn, k),
+              interpOut: _scaledSide(key.interpOut, k),
+            ),
+        ]),
+      BridgeScalar_Expression() => scalar,
+    };
+
+BridgeSideInterp _scaledSide(BridgeSideInterp side, double k) => switch (side) {
+      BridgeSideInterp_Bezier(:final field0) => BridgeSideInterp.bezier(
+          BridgeBezierSide(
+              speed: field0.speed * k, influence: field0.influence)),
+      _ => side,
+    };
+
 /// A property's name as a **flat sheet** writes it (K-499, §3.2 of
 /// `docs/impl/timeline-interaction.md`): the group it came out of, muted, a
 /// middle dot, then the property's own name — `Transform · Opacity`.

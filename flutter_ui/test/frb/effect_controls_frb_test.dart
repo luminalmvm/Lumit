@@ -1888,6 +1888,109 @@ void main() {
           reason: 'x doubled, so y doubled — the ratio is what is kept');
     });
 
+    /// A **keyed** other half scales whole (K-610): every key's value times the
+    /// factor, every key's time, interpolation and eased shape held. Scaling
+    /// only the number under the playhead would plant keys nobody made.
+    testWidgets('a chained pair scales a keyed half key by key', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'lens_flare');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      BridgeScalar scalarOf(String param) => (p.layer
+              .getInfo()
+              .effects
+              .single
+              .values
+              .firstWhere((e) => e.id == param)
+              .value as BridgeEffectValue_Float)
+          .field0;
+
+      // x static, y a two-key curve with an eased side worth keeping.
+      const eased = BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: 12, influence: 0.4));
+      final keys = [
+        const BridgeKeyframe(
+          time: BridgeRational(num: 0, den: 1),
+          value: 50,
+          interpIn: BridgeSideInterp.linear(),
+          interpOut: eased,
+        ),
+        const BridgeKeyframe(
+          time: BridgeRational(num: 1, den: 1),
+          value: -20,
+          interpIn: eased,
+          interpOut: BridgeSideInterp.hold(),
+        ),
+      ];
+      final stack = p.layer.getEffects();
+      stack.single
+        ..setValue(
+            id: 'light_x',
+            value: const BridgeEffectValue.float(BridgeScalar.static_(100)))
+        ..setValue(
+            id: 'light_y', value: BridgeEffectValue.float(
+                BridgeScalar.keyframed(keys)));
+      p.layer.setEffects(effects: stack);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      Future<void> typeX(String value) async {
+        await tester.tap(find.byKey(ValueKey<String>('fx-float-$id-light_x')));
+        await tester.pump();
+        await tester.enterText(find.byType(EditableText).first, value);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+      }
+
+      // Unchained, the curve is not touched at all.
+      await typeX('200');
+      expect(scalarOf('light_y'), BridgeScalar.keyframed(keys),
+          reason: 'a separate pair moves alone, curve and all');
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-pair-link-$id-light_x')));
+      await tester.pumpAndSettle();
+      await typeX('400');
+
+      final scaled = scalarOf('light_y') as BridgeScalar_Keyframed;
+      expect(scaled.field0.length, 2, reason: 'no key is added or dropped');
+      expect([for (final k in scaled.field0) k.value], [100.0, -40.0],
+          reason: 'x doubled, so every key doubled');
+      expect([for (final k in scaled.field0) k.time], [keys[0].time, keys[1].time],
+          reason: 'times are the other axis');
+      expect(scaled.field0.first.interpIn, const BridgeSideInterp.linear());
+      expect(scaled.field0.last.interpOut, const BridgeSideInterp.hold());
+      expect(
+          scaled.field0.first.interpOut,
+          const BridgeSideInterp.bezier(
+              BridgeBezierSide(speed: 24, influence: 0.4)),
+          reason: 'speed lives on the value axis and scales with it; '
+              'influence is the shape and does not');
+
+      // One undo step for the whole gesture, both halves together.
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(scalarOf('light_y'), BridgeScalar.keyframed(keys));
+      expect(scalarOf('light_x'), const BridgeScalar.static_(200),
+          reason: 'the pair is one op, so one undo puts both back');
+
+      // Nought has no factor: a pair dragged off zero separates rather than
+      // multiplying a whole curve by nothing.
+      final zeroed = p.layer.getEffects();
+      zeroed.single.setValue(
+          id: 'light_x',
+          value: const BridgeEffectValue.float(BridgeScalar.static_(0)));
+      p.layer.setEffects(effects: zeroed);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      await typeX('50');
+      expect(scalarOf('light_y'), BridgeScalar.keyframed(keys),
+          reason: 'every number is nought times something');
+    });
+
     /// **A driven parameter says so** (K-471): a driver wired to it in the
     /// Graph panel wins over its keyframes, so the row draws a hollow ring in
     /// the wire's own colour, the word *driven*, and the driver's name in the
