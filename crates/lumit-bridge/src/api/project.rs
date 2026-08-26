@@ -351,13 +351,23 @@ impl ProjectReference {
 
         // A run of one is a still, and a still is not a sequence: it decodes,
         // saves and relinks exactly as it did before this existed.
-        let run = lumit_media::sequence::is_still(&picked)
+        //
+        // What is kept is what the import needs: the run's first file and the
+        // name to file it under. A build with no decoder finds no run at all —
+        // recognising a sequence and playing one are the same crate's work, so
+        // a build that cannot play a run does not pretend to import one, and
+        // the picked file comes in as the single still it is.
+        #[cfg(feature = "media")]
+        let run: Option<(std::path::PathBuf, String)> = lumit_media::sequence::is_still(&picked)
             .then(|| lumit_media::sequence::detect(&picked))
             .flatten()
-            .filter(|run| run.count > 1);
+            .filter(|run| run.count > 1)
+            .map(|run| (run.first.clone(), run.display_name()));
+        #[cfg(not(feature = "media"))]
+        let run: Option<(std::path::PathBuf, String)> = None;
 
         let (file, name) = match &run {
-            Some(run) => (run.first.clone(), run.display_name()),
+            Some((first, display)) => (first.clone(), display.clone()),
             None => (
                 picked,
                 std::path::Path::new(&path)
@@ -420,6 +430,7 @@ impl ProjectReference {
 
         // Outside the lock, and after the item exists: start reading the file
         // now so the first question about it is a look-up.
+        #[cfg(feature = "media")]
         crate::probe::request(lumit_media::MediaSource {
             path: file,
             sequence_fps: run.map(|_| {
@@ -427,6 +438,9 @@ impl ProjectReference {
                 (r.num(), r.den())
             }),
         });
+        // Nothing to probe without a decoder, and the call says so itself.
+        #[cfg(not(feature = "media"))]
+        crate::probe::request(file);
 
         Ok(FootageReference::new(self.id, item_id))
     }

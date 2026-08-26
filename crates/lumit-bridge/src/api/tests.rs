@@ -352,6 +352,9 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
 /// — all they share at the end is `.png`, so "the folder moved" comes out as
 /// "everything up to half a frame number moved", and the sibling is swept to a
 /// path that does not exist.
+// Sequences are the decoder crate's to recognise: without it the pick is
+// taken at face value, and there is no run for this row to ask about.
+#[cfg(feature = "media")]
 #[test]
 fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -604,6 +607,9 @@ fn a_work_area_is_clamped_to_the_composition() {
 /// named for its span, pointed at its first frame — and picking the rest of the
 /// files afterwards (which is what selecting the whole folder does) hands back
 /// the item that is already there rather than filing it again.
+// A build with no decoder imports the picked still as a still, so there is
+// no run for this row to ask about.
+#[cfg(feature = "media")]
 #[test]
 fn a_run_of_numbered_stills_imports_once_whichever_file_is_picked() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -8967,6 +8973,9 @@ fn only_a_loaded_config_can_deliver_its_spaces() {
 /// The dialogue's pre-queue check asks the project, so an OCIO name is refused
 /// or allowed by whether *this* project can actually deliver it — and the
 /// refusal names the space, which is what the footer shows.
+// The check refuses every spec outright without an encoder, so the answer it
+// gives here is about the missing feature rather than about the config.
+#[cfg(feature = "media")]
 #[test]
 fn the_export_check_answers_for_this_project_s_colour_config() {
     let (project, _footage, dir) = project_with_footage();

@@ -136,6 +136,11 @@ impl FootageReference {
     /// than the bare path, because for an image sequence the two are different
     /// questions — the path is the file that gets stat-ed and relinked, the run
     /// is what actually plays.
+    ///
+    /// A build with no decoder has nothing that opens media and so no caller
+    /// for this; the questions that survive there are about the *file*, and
+    /// [`Self::resolve_path`] is the one that answers them.
+    #[cfg(feature = "media")]
     pub(crate) fn resolve_source(
         p: &LumitBridgeState,
         f: &FootageItem,
@@ -173,6 +178,9 @@ impl FootageReference {
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
+        // Only the sequence rewrite below moves the pick, and that is the
+        // decoder's to do.
+        #[cfg_attr(not(feature = "media"), allow(unused_mut))]
         let mut picked = PathBuf::from(&path);
         let proj = self.project()?;
 
@@ -180,6 +188,7 @@ impl FootageReference {
         // it while the user is still looking at the picker's afterglow: the
         // panel asks every repointed item for its status the moment the change
         // lands.
+        #[cfg(feature = "media")]
         let mut repointed: Vec<lumit_media::MediaSource> = Vec::new();
 
         let ops = {
@@ -200,6 +209,13 @@ impl FootageReference {
             // `frame0001.png` against `frame0042.png`, find `.png` as all they
             // share, and sweep every sibling to a prefix built out of half a
             // frame number.
+            //
+            // Working out which run a file belongs to is the decoder crate's
+            // job, so a build without it cannot do this: there the picked file
+            // is taken at face value, which is the same thing that build does
+            // with the sequence everywhere else — it reads as the one file it
+            // can name.
+            #[cfg(feature = "media")]
             if matches!(
                 doc.item(self.id),
                 Some(lumit_core::model::ProjectItem::Footage(f)) if f.sequence.is_some()
@@ -269,6 +285,7 @@ impl FootageReference {
                     }
                 }
                 media.fingerprint = lumit_project::fingerprint_path(&candidate).ok();
+                #[cfg(feature = "media")]
                 repointed.push(lumit_media::MediaSource {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
@@ -296,6 +313,7 @@ impl FootageReference {
 
         // After the commit and outside the lock: queueing is a channel send,
         // but the rule is the rule (docs/14 §3).
+        #[cfg(feature = "media")]
         for src in &repointed {
             crate::probe::request(src);
         }
@@ -453,10 +471,9 @@ impl FootageReference {
             lumit_core::model::ProjectItem::Footage(footage_item) => {
                 // An unresolvable path is missing media, same as one that
                 // resolves but no longer decodes.
-                let Some(src) = Self::resolve_source(&proj, footage_item) else {
+                let Some(path) = Self::resolve_path(&proj, footage_item) else {
                     return Ok(LumitMediaStatus::Missing);
                 };
-                let path = src.path.clone();
                 // Whether a file is *there* is not a question for the decoder,
                 // and a media-less build used to answer "ready" for a path that
                 // plainly was not on disk (K-273). Asking the filesystem costs
@@ -478,7 +495,8 @@ impl FootageReference {
                 #[cfg(not(feature = "media"))]
                 let probed = true;
                 #[cfg(feature = "media")]
-                let probed = crate::probe::ensure_probed(&src).is_some();
+                let probed = Self::resolve_source(&proj, footage_item)
+                    .is_some_and(|src| crate::probe::ensure_probed(&src).is_some());
 
                 if probed {
                     Ok(LumitMediaStatus::Ready)

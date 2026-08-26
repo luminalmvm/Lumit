@@ -1255,7 +1255,9 @@ mod tests {
 
     /// The colour-blind form of [`super::spec_check`], for the rows that have
     /// nothing to do with colour management: a project naming no config, which
-    /// is what every test below is.
+    /// is what every test below is. Every row that asks it is about what a
+    /// container can carry, so they are all `media` rows and so is this.
+    #[cfg(feature = "media")]
     fn spec_check(spec: &BridgeExportSpec) -> String {
         super::spec_check(spec, &ColourState::default())
     }

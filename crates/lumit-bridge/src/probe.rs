@@ -252,49 +252,51 @@ fn unqueue(src: &MediaSource) {
 /// A file already answered for, already queued, or queued past the budget is
 /// not queued again. Nothing depends on this having run: it only decides
 /// whether [`ensure_probed`] finds its answer waiting or pays for it.
+#[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
-    #[cfg(feature = "media")]
+    let src = src.into();
+    let Some(stamp) = stamp(src.on_disk()) else {
+        return;
+    };
     {
-        let src = src.into();
-        let Some(stamp) = stamp(src.on_disk()) else {
+        let Ok(mut held) = cache().lock() else {
             return;
         };
+        if held
+            .by_path
+            .get(&src)
+            .is_some_and(|entry| entry.stamp == stamp)
         {
-            let Ok(mut held) = cache().lock() else {
-                return;
-            };
-            if held
-                .by_path
-                .get(&src)
-                .is_some_and(|entry| entry.stamp == stamp)
-            {
-                return;
-            }
-            if held.queued.len() >= MAX_QUEUED || !held.queued.insert(src.clone()) {
-                return;
-            }
+            return;
         }
-        let job = Job {
-            src: src.clone(),
-            generation: generation().load(Ordering::Relaxed),
-        };
-        match jobs() {
-            // A worker thread that could not be spawned leaves the queue
-            // marker behind and would block this path for the session, so it
-            // is taken back off.
-            None => unqueue(&src),
-            Some(tx) => {
-                if tx.send(job).is_err() {
-                    unqueue(&src);
-                }
-            }
+        if held.queued.len() >= MAX_QUEUED || !held.queued.insert(src.clone()) {
+            return;
         }
     }
-    #[cfg(not(feature = "media"))]
-    {
-        let _ = src;
+    let job = Job {
+        src: src.clone(),
+        generation: generation().load(Ordering::Relaxed),
+    };
+    match jobs() {
+        // A worker thread that could not be spawned leaves the queue
+        // marker behind and would block this path for the session, so it
+        // is taken back off.
+        None => unqueue(&src),
+        Some(tx) => {
+            if tx.send(job).is_err() {
+                unqueue(&src);
+            }
+        }
     }
 }
+
+/// The same call in a build with no decoder, where there is nothing to probe
+/// and so nothing to do. It still takes whatever the caller has — a path, a
+/// `MediaSource` — because the callers are the same callers, and the
+/// documented promise ("nothing depends on this having run") is the promise
+/// that lets this be empty rather than a stub that pretends to queue.
+#[cfg(not(feature = "media"))]
+pub(crate) fn request<T>(_src: T) {}
 
 /// This file's vital statistics, probing here and now when the worker has not
 /// already. `None` when the file is missing or will not read.
