@@ -13,98 +13,32 @@ this file is the concrete backlog underneath it.
 
 ---
 
-## Now - the finishing programme (owner, 2026-08-25; K-557..K-564)
+## The finishing programme: COMPLETE (2026-08-25..26, K-557..K-612)
 
-The owner's commission off the Caddis-study audit: everything below lands, in roughly
-this order; U (guides) after all of it, and the web-docs pass (with V, the proofread)
-dead last. Delete each package when it lands, as ever. Owner rulings already taken:
-no Alt-click label reset (the per-effect Reset button suffices); no `F` fit-panel key
-(backtick's maximise suffices) but the Escape ladder is wanted and documented; 7.22
-hover-scrub thumbnails only if cheap (skip if they cost frame time); A14 release-notes
-format is the owner's own later; Mix keeps its name (K-563); multi-window stays gated
-(K-449).
+All seven waves landed and their per-wave summaries were pruned as they went; git log
+and the decisions from K-557 to K-612 are the record. What the programme's own runs
+surfaced and deliberately left open, so it is not re-derived:
 
-**FP1 - units and semantics: LANDED 2026-08-25**, all five packages (the K-558 sweep
-with its migrate_percent_to_px compat road - Vegas needed nothing, already px; K-559;
-the flare's Invert; composite flow K-565; the seeded-wiggle test fix). One true
-remainder is recorded under Next: footage simply playing beneath an adjustment still
-contributes no flow (the decode-planner FX-1 sibling), and the composite flow
-measurement carries a named ponytail: cache upgrade.
-
-**FP2 - chrome, panels, interaction: LANDED 2026-08-25**, all fourteen packages
-(K-566..K-575: the 1.1 baseline and overlay-anchored popups, arithmetic wells, the
-effect-controls run behaviours and fronting, the timeline chrome batch, the lane
-selection's move/delete and the Animated filter, bracket trim/slide labels, the
-Curves/Levels channel column and size option, folder label inheritance, custom
-easings, the project swatch shelf, separate axes, the playhead keeping its moment,
-the razor through eased ramps, user workspaces, the Escape ladder, and the two-word
-tooltip gate). Small remainders recorded: the workspace strip has no overflow
-behaviour yet; swatches carry a name and alpha in the model with no controls; the
-numbered workspace.switch.N labels share the numbered-marker translation limit;
-settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
-
-**FP3 - engine features: LANDED 2026-08-26**, all eleven packages (K-577..K-588: the
-three Settings pages - Audio, Autosave with its revision-gated timer thread, Export
-defaults; VRAM read on all three platforms and device-loss recovery; track-then-nudge
-on a correction base; the planar tracker as its own effect with corner-pin auto-setup;
-the neighbour-judged zoom detector and focal knots that close K-540's train-POV loss;
-camera-track warm/clear on project life, precomp analysis, keyframed masks; OS
-drag-and-drop onto the Project panel (desktop_drop, K-581); pen pressure on paint
-strokes; Stretch and freeze-at-playhead; panel adds landing on the whole selection).
-Owed remainders, recorded in their notes: on-canvas quad handles for the planar
-tracker (wants a generic effect-point overlay); planar on a Precomp; the 2D
-point-track exports; SolveNote surfaced across the bridge; an audio device-change
-stream rebuild during playback; docs/13 B9's five-second measurement on real loss.
-
-**FP3.5 and the OFX host: LANDED 2026-08-26.** The last two locks let the project go
-(add6e2e0), the no-decoder build stopped pretending (7dea1973), and OFX hosting landed
-whole as K-589..K-595: the lumit-ofx crate (forgery-proof handles, property and
-parameter suites, in-process render), the broker process (a dying plugin costs one
-frame and respawns), the registry widened so a plugin is an effect the render cannot
-tell apart, discovery with per-plugin disable prefs, the Effects & presets OFX group,
-and a conformance bench that runs openfx-misc and ntsc-rs - which found and fixed six
-host faults the day it ran. 7.23's LFX half stays waiting on the LFX C ABI
-(docs/12, roadmap phase 4 - not commissioned).
-
-**FP4 - the points family and shapes: LANDED 2026-08-26** (K-596..K-609): Particulate
-in 3D through the composition camera with the flat path bit-identical; border
-emission; Grid, Scatter, Emit from image as producers; Clone to points, Trail,
-Connect points as consumers on the wire; the cross-layer Layer points tap; shape
-booleans on i_overlay with subtract holes; path morphing by vertex order; text on a
-path by arc length; text to shapes and to points; per-glyph and per-word animators
-with range selectors. Owed remainders recorded in their K entries: shape rows in the
-graph editor want a channel kind of their own (K-606); Source rows are not keyable
-from the Timeline (K-607's path offset waits with Camera zoom); Emit from image and
-Scatter cannot feed a driver until points-stream.md par.3.3's GPU carriage; morph has
-no feature matching; animators have no rename/reorder.
-
-**FP5 - the ponytail ledger: RESOLVED 2026-08-26** (K-610..K-612): 25 owed glyphs
-drawn (rendered, looked at, and six redrawn for reading as the wrong thing), Iconoir
-dropped entirely, the tick is a drawing everywhere but the native macOS bar (whose
-API has no channel for one); the snapshot photographs the visible region at full
-detail (K-612); the OCIO fingerprint names its LUT files; mattes and light-wrap
-plates read through their own colour space; the audio tap evicts least-recently-used;
-a chained pair scales a keyed half whole (K-610); and every remaining ponytail:
-comment names a ceiling and an observable trigger - none says 'if a profile ever
-shows it' with nothing measurable behind it.
-
-**FP6 - guides and the splits: LANDED 2026-08-26.** The six owner-edited giants came
-apart mechanically (timeline into fourteen files, graph editor into six, the control
-kit into a barrel of families, Viewer into four, Project into five, main.dart to a
-66-line entry point) with every existing test passing unchanged; three pieces stayed
-whole with their reasons in the commits (a state class is one job). The learn docs
-and scripts are trued against the tree, including the OFX broker as a second build
-product. One merge-machinery defect was caught and repaired: a commit built from a
-stale private index briefly unmade the Viewer split (restored byte-identical), and a
-restored session now keeps its own fronted tabs over K-569's fronting.
-
-**FP7 - web-docs, dead last (with V).** The full manual pass in the owner's own
-voice as the example: 7.18 export.mdx with its picture; the viewer pictures
-regenerated again (K-524 moved the bar); the Drivers category and Particulate pages
-the generator's --check already demands; new pages for what the redesign added
-(views, workspaces, the node graph, multi-keyframe editing, proxies, sequences,
-OCIO); then V's proofread and separator pass. Closes with a table of every changed
-page for the owner's own review.
+- **The physical Lens flare renders nothing on a headless run** - bit-identical to the
+    plate at defaults AND with a bright area light placed on the frame. The manual's
+    flare page has no figure because of it. Smells adjacent to the MSAA/fp16-additive
+    history (K-258 era); wants its own investigation with a non-empty-output assertion.
+- **Shots sweep 4 crashes natively about one run in three** ("Lost connection to
+    device", no Dart exception, different point each run). All its pictures were
+    gathered across runs; the sweep is unreliable and the crash is an engine bug in
+    hiding.
+- **Six screenshots the manual still wants** (pages ship without them, no placeholders):
+    camera-track.png, planar-track.png, project-settings-colour.png,
+    viewer-colour-menu.png, text-animators.png, shape-combine.png.
+- **Clone to points / Trail / Connect points have no example pictures by nature** -
+    the effect-example harness stages one effect on one layer and their stream arrives
+    on a wire. An example route through a two-effect stage would fix all three.
+- **The audio device-change stream** (a device vanishing mid-playback rebuilds on the
+    next open, not live) - K-586's recorded remainder.
+- Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
+    FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
+    unused settingsHelpChromeLabels to cull.
+- The three site clips (web/public/clips/) remain the owner's own recording.
 
 ## Now - the preview must keep up
 
