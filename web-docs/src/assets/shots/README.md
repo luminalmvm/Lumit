@@ -35,7 +35,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `layer-switches.png` | [/use/layers/](/use/layers/) | The switches on a layer's row. |
 | `mask.png` | [/use/masks/](/use/masks/) | A mask on a layer, with its feather showing. |
 | `new-composition.png` | [/start/first-composition/](/start/first-composition/) | The new composition dialogue. |
-| `project-panel.png` | [/panels/project/](/panels/project/) | The Project panel, holding footage, a folder and a composition. |
+| `project-panel.png` | [/panels/project/](/panels/project/), [/use/proxies/](/use/proxies/) | The Project panel, holding footage, a folder and a composition. |
 | `scopes.png` | [/panels/scopes/](/panels/scopes/) | The waveform and vectorscope reading the current frame. |
 | `speed-ramp.png` | [/use/retime/](/use/retime/) | A speed ramp in the graph editor, seen through the Speed lens. |
 | `timeline-lanes.png` | [/panels/timeline/](/panels/timeline/) | A layer twirled open, showing its properties and their keyframes. |
@@ -47,9 +47,9 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `viewer.png` | [/panels/viewer/](/panels/viewer/) | The Viewer, with a layer selected and its transform gizmo showing. |
 | `export-queue.png` | [/use/export/](/use/export/) | The export queue, with one composition waiting. |
 | `welcome.png` | [/start/install/](/start/install/) | The welcome screen: the three cards and the RECENT well. |
-| `nodes-workspace.png` | [/use/workspaces/](/use/workspaces/) | The Nodes workspace: the graph across the window, Viewer beside it. |
+| `nodes-workspace.png` | [/use/nodes/](/use/nodes/) | The Nodes workspace: the graph across the window, Viewer beside it. |
 | `graph-panel.png` | [/use/nodes/](/use/nodes/), [/tutorials/node-graph/](/tutorials/node-graph/) | The Node graph panel: a wired image chain and a driver. |
-| `effects-presets-ofx.png` | [/panels/effects-presets/](/panels/effects-presets/) | An OFX plugin's own heading in the panel, under the folded built-in categories. |
+| `effects-presets-ofx.png` | [/panels/effects-presets/](/panels/effects-presets/), [/use/plugins/](/use/plugins/) | An OFX plugin's own heading in the panel, under the folded built-in categories. |
 | `layers-shut.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, everything shut: summary diamonds on the bars. |
 | `layers-open.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, a layer twirled open: shaped marks on two lanes. |
 | `layers-selected.png` | [/panels/timeline/](/panels/timeline/), [/tutorials/many-keyframes/](/tutorials/many-keyframes/) | The same, with one keyframe picked. |
