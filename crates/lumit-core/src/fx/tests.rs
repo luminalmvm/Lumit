@@ -10535,6 +10535,13 @@ fn every_parameter_declares_a_unit() {
             // per composition area and rescales nowhere — it is measured
             // against the comp, not against the raster.
             ("scatter", "size"),
+            // Connect points (K-602): how far apart two points may be and
+            // still be joined, and how thick the line between them is. Both
+            // are distances in the picture and must travel with the stream —
+            // which is rescaled beside them — or a half-resolution preview
+            // would weave a different web from the export's.
+            ("connect_points", "max_distance"),
+            ("connect_points", "width"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement (K-429).
             ("motion_blur", "vector_scale"),
@@ -14718,6 +14725,302 @@ fn trail_declares_a_points_input_and_its_back_sample_rows() {
             "the draw builder looks for {id} and would find nothing"
         );
     }
+}
+
+// ----------------------------------------- Connect points (K-602)
+
+/// A Connect points instance with its declared defaults, and `edits` applied.
+fn connect_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("connect_points").expect("Connect points is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("connect_points has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The web one instance draws over `stream`, through the one expression both
+/// render paths read.
+fn connect_links(e: &EffectInstance, stream: &PointsStream) -> (PointsStream, Vec<[f32; 3]>) {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::connect_points::ConnectPoints::read(Params::new(&bag)).links(stream)
+}
+
+/// Every pair of `stream` within `reach` of each other, **by a full
+/// comparison** — the `n²` answer the bucketed walk has to reproduce exactly.
+fn pairs_within(stream: &PointsStream, reach: f32) -> usize {
+    let mut n = 0;
+    for i in 0..stream.len() {
+        for j in i + 1..stream.len() {
+            let (a, b) = (stream.projected(i), stream.projected(j));
+            if (b[0] - a[0]).hypot(b[1] - a[1]) <= reach {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// **A line per pair within reach, and no line to anything further** (K-602).
+///
+/// A lattice on a known spacing is the fixture that can say which pairs those
+/// are without measuring anything: at a reach between the spacing and its
+/// diagonal, every cell joins its four orthogonal neighbours and nothing else,
+/// which for a 4 × 3 grid is exactly 17 lines.
+#[test]
+fn connect_points_joins_the_pairs_within_reach_and_no_others() {
+    let stream = grid_stream(
+        &grid(&[
+            ("columns", fixed(4.0)),
+            ("rows", fixed(3.0)),
+            ("planes", fixed(1.0)),
+            ("spacing_x", fixed(50.0)),
+            ("spacing_y", fixed(50.0)),
+            ("jitter_x", fixed(0.0)),
+            ("jitter_y", fixed(0.0)),
+        ]),
+        0.0,
+    );
+    assert_eq!(stream.len(), 12, "the fixture is not the lattice it says");
+    let e = |reach: f64| {
+        connect_points(&[
+            ("max_distance", fixed(reach)),
+            ("max_links", fixed(64.0)),
+            ("fade", fixed(0.0)),
+        ])
+    };
+    // Orthogonal only: 3 horizontal links on each of 3 rows, 2 vertical on
+    // each of 4 columns.
+    let (orthogonal, tails) = connect_links(&e(60.0), &stream);
+    assert_eq!(
+        orthogonal.len(),
+        3 * 3 + 2 * 4,
+        "not the four-neighbour web"
+    );
+    assert_eq!(tails.len(), orthogonal.len(), "a segment with no far end");
+    for (at, back) in orthogonal.position.iter().zip(&tails) {
+        let d = (back[0] - at[0]).hypot(back[1] - at[1]);
+        assert!(d <= 60.0 + 1e-3, "a line reached {d}, past Max distance");
+    }
+    // Past the diagonal, the six diagonals of each 2 × 2 block join too.
+    let (diagonal, _) = connect_links(&e(75.0), &stream);
+    assert_eq!(diagonal.len(), 17 + 2 * 3 * 2, "the diagonals did not join");
+}
+
+/// **The buckets find what a full comparison finds** (K-602) — the property the
+/// whole optimisation rests on, and the one a regression would quietly break:
+/// cutting the plane into squares must change what the walk *costs*, never what
+/// it answers.
+///
+/// A jittered lattice rather than a regular one, so the pairs fall at every
+/// distance and across every cell boundary instead of at a handful of exact
+/// spacings.
+#[test]
+fn connect_points_pairs_exactly_as_a_full_comparison_would() {
+    let stream = grid_stream(
+        &grid(&[
+            ("columns", fixed(7.0)),
+            ("rows", fixed(5.0)),
+            ("planes", fixed(1.0)),
+            ("spacing_x", fixed(40.0)),
+            ("spacing_y", fixed(40.0)),
+            ("jitter_x", fixed(30.0)),
+            ("jitter_y", fixed(30.0)),
+        ]),
+        0.0,
+    );
+    // Max connections at its hard ceiling, so the *pairing* is what is being
+    // measured rather than the allowance running out.
+    for reach in [1.0, 25.0, 47.0, 90.0, 400.0] {
+        let (web, _) = connect_links(
+            &connect_points(&[("max_distance", fixed(reach)), ("max_links", fixed(64.0))]),
+            &stream,
+        );
+        assert_eq!(
+            web.len(),
+            pairs_within(&stream, reach as f32),
+            "the buckets and a full comparison disagree at reach {reach}"
+        );
+    }
+}
+
+/// **Max connections is counted at both ends** (K-602): a point never grows
+/// more lines than the dial allows, whichever end of the pair it is.
+#[test]
+fn connect_points_holds_every_point_to_its_connection_allowance() {
+    let stream = grid_stream(
+        &grid(&[
+            ("columns", fixed(6.0)),
+            ("rows", fixed(6.0)),
+            ("planes", fixed(1.0)),
+            ("spacing_x", fixed(40.0)),
+            ("spacing_y", fixed(40.0)),
+        ]),
+        0.0,
+    );
+    let (web, tails) = connect_links(
+        &connect_points(&[("max_distance", fixed(200.0)), ("max_links", fixed(2.0))]),
+        &stream,
+    );
+    // Count the lines meeting each point, by the place it sits at — the fixture
+    // is a lattice, so a position names one point.
+    let mut degree: Vec<(usize, u32)> = (0..stream.len()).map(|i| (i, 0)).collect();
+    let mut bump = |at: [f32; 3]| {
+        let found = (0..stream.len()).find(|i| stream.position[*i] == at);
+        if let Some(i) = found {
+            degree[i].1 += 1;
+        }
+    };
+    for (at, back) in web.position.iter().zip(&tails) {
+        bump(*at);
+        bump(*back);
+    }
+    for (i, d) in &degree {
+        assert!(*d <= 2, "point {i} grew {d} lines past an allowance of 2");
+    }
+    assert!(!web.is_empty(), "the allowance refused everything");
+}
+
+/// **Fade and Taper are the distance falloff** (K-602): a longer line is
+/// dimmer and thinner than a shorter one, and at nought both dials leave every
+/// line alike.
+#[test]
+fn connect_points_fades_and_tapers_the_longer_lines() {
+    // Three points in a row: a short pair and a long one, from the same walk.
+    let stream = PointsStream {
+        position: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [90.0, 0.0, 0.0]],
+        speed: vec![[0.0; 3]; 3],
+        age: vec![0.0; 3],
+        life: vec![1.0; 3],
+        size: vec![4.0; 3],
+        rotation: vec![0.0; 3],
+        colour: vec![[1.0, 1.0, 1.0, 1.0]; 3],
+        id: vec![0, 1, 2],
+        projection: points::Projection::FLAT,
+    };
+    let dials = |fade: f64, taper: f64| {
+        connect_points(&[
+            ("max_distance", fixed(100.0)),
+            ("max_links", fixed(64.0)),
+            ("fade", fixed(fade)),
+            ("taper", fixed(taper)),
+            ("width", fixed(10.0)),
+        ])
+    };
+    let (flat, _) = connect_links(&dials(0.0, 0.0), &stream);
+    assert_eq!(flat.len(), 3, "every pair is inside 100 px");
+    for c in &flat.colour {
+        assert!((c[3] - 1.0).abs() < 1e-5, "a line dimmed at Fade nought");
+    }
+    for s in &flat.size {
+        assert!((s - 10.0).abs() < 1e-5, "a line thinned at Taper nought");
+    }
+
+    let (falling, tails) = connect_links(&dials(100.0, 50.0), &stream);
+    for (i, back) in tails.iter().enumerate() {
+        let at = falling.position[i];
+        let u = (back[0] - at[0]).abs() / 100.0;
+        assert!(
+            (falling.colour[i][3] - (1.0 - u)).abs() < 1e-4,
+            "Fade did not follow the length"
+        );
+        assert!(
+            (falling.size[i] - 10.0 * (1.0 - 0.5 * u)).abs() < 1e-4,
+            "Taper did not follow the length"
+        );
+    }
+}
+
+/// **The cap rule** (K-475): over Max points the newest by birth index are the
+/// ones that may be joined, and the rest are not considered at all.
+#[test]
+fn connect_points_over_its_cap_joins_the_newest_points() {
+    let stream = grid_stream(
+        &grid(&[
+            ("columns", fixed(6.0)),
+            ("rows", fixed(1.0)),
+            ("planes", fixed(1.0)),
+            ("spacing_x", fixed(20.0)),
+        ]),
+        0.0,
+    );
+    let (web, tails) = connect_links(
+        &connect_points(&[
+            ("max_distance", fixed(500.0)),
+            ("max_links", fixed(64.0)),
+            ("max_points", fixed(3.0)),
+        ]),
+        &stream,
+    );
+    // Three points make three pairs, and they are the last three cells.
+    assert_eq!(web.len(), 3, "the cap did not trim the field");
+    let newest: Vec<[f32; 3]> = stream.position[stream.len() - 3..].to_vec();
+    for (at, back) in web.position.iter().zip(&tails) {
+        assert!(newest.contains(at) && newest.contains(back), "past the cap");
+    }
+}
+
+/// **Determinism** (K-031): the same stream and the same dials make the same
+/// web, bit for bit — which is what the `id`-ordered walk and the
+/// distance-then-`id` ordering of each point's candidates are for.
+#[test]
+fn connect_points_draws_the_same_web_twice() {
+    let stream = grid_stream(
+        &grid(&[
+            ("columns", fixed(8.0)),
+            ("rows", fixed(6.0)),
+            ("jitter_x", fixed(20.0)),
+            ("jitter_y", fixed(20.0)),
+        ]),
+        0.0,
+    );
+    let e = connect_points(&[("max_distance", fixed(90.0)), ("max_links", fixed(3.0))]);
+    assert_eq!(connect_links(&e, &stream), connect_links(&e, &stream));
+}
+
+/// **Nothing to join draws nothing** — the documented calm: no wire, one point,
+/// a reach of nought, or an allowance of nought all come to an empty web rather
+/// than to a fault (14-ENGINEERING-RULES §4).
+#[test]
+fn connect_points_with_nothing_to_join_draws_nothing() {
+    let full = connect_points(&[("max_distance", fixed(500.0)), ("max_links", fixed(8.0))]);
+    assert!(connect_links(&full, &PointsStream::default()).0.is_empty());
+
+    let stream = grid_stream(&grid(&[("columns", fixed(4.0)), ("rows", fixed(1.0))]), 0.0);
+    for edits in [
+        vec![("max_distance", fixed(0.0)), ("max_links", fixed(8.0))],
+        vec![("max_distance", fixed(500.0)), ("max_links", fixed(0.0))],
+    ] {
+        assert!(
+            connect_links(&connect_points(&edits), &stream).0.is_empty(),
+            "a dial at nought still drew lines"
+        );
+    }
+}
+
+/// **A consumer declares its socket the same way a driver does** (K-492,
+/// K-602) — the signature answers for it, so the seam, the validator and the
+/// draw builder need no name of this effect anywhere.
+#[test]
+fn connect_points_declares_a_points_input() {
+    let def = BUILTIN_DEFS
+        .get("connect_points")
+        .expect("Connect points is in the catalogue");
+    let sig = def.signature();
+    assert!(points::consumes_points(sig), "no Points input declared");
+    assert!(!points::wants_schedule(sig), "a consumer emits nothing");
+    assert!(points::wants_carriage(sig), "and still wants a carriage");
+    assert_eq!(sig.input("points"), Some(PortType::Points));
 }
 
 // ------------------------------------------- border emission (K-597)

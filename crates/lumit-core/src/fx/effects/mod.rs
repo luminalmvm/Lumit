@@ -32,6 +32,7 @@ pub mod chromatic_aberration;
 pub mod clone_to_points;
 pub mod colour_balance;
 pub mod colour_control;
+pub mod connect_points;
 pub mod contrast;
 pub mod corner_pin;
 pub mod curves;

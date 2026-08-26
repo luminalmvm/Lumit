@@ -103,6 +103,8 @@ Complexity
 Composite on original
 Conductivity state
 Confidence
+Connect points
+Connections
 Contrast
 Controls
 Conversion
@@ -377,6 +379,8 @@ Math
 Matte
 Matte key
 Max clones
+Max connections
+Max distance
 Max ghosts
 Max particles
 Max points
@@ -616,6 +620,7 @@ Sub scaling
 Sub settings
 Subtract
 Symmetric
+Taper
 Temperature
 Temporal
 Texture

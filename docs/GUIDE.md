@@ -10775,12 +10775,34 @@ system already leaned on. **Fade** dims the far end of the tail; at nought the w
 as solid as the point. And the dabs go down oldest first, so the near end of a tail covers
 the far end, in the same order on every computer.
 
-**What comes still later** plugs into the same socket: Connect points, lines between nearby
-particles. It is a named future package;
-it will not need the plumbing rebuilt, because the socket, the wire and the
-stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
-the effect's own design — every slider, formula and budget — in
-docs/impl/particulate.md.
+**Connect points: the web, and why it does not ask every point about every other one.** The
+third thing that reads a wire draws a line between any two points that are close enough
+together — the look where drifting particles web up as they pass and let go again. The
+drawing is nothing new: a line here is the same soft dab as everything else, with its two
+ends in different places, which is the trick Trail already leaned on.
+
+The interesting part is the *finding*. Asked plainly, "which pairs are close?" is a question
+every point puts to every other point, and that is about half of *n* squared questions —
+twenty thousand particles would be two hundred million questions, every frame, and the frame
+would be gone. So the picture is first cut into squares, each one Max distance across, and
+each point is filed in the square it falls in. Two points more than one square apart cannot
+possibly be close enough, so a point only ever asks the eight squares around its own, plus
+its own. The answer is identical to the exhaustive one — there is a test that says so, by
+running both and comparing — and the work is a small multiple of the number of points
+instead of its square. The one case it does not save is a *clump*: if every point piles into
+one square, that square is back to asking itself everything, which is why Max points and Max
+connections both exist and why the shortcut is written down in the code with the note that a
+cleverer structure is what to reach for if a real project ever spends the time.
+
+Two smaller decisions, both about the picture being the same everywhere. **Max connections**
+is counted at both ends of a pair, so no point ever grows more lines than the dial says,
+whichever end it is. And when a point has more near neighbours than it has room for, it takes
+the nearest ones — with the point's own number breaking any tie, so two computers never
+choose differently.
+
+**What is left of the family** is not a consumer at all: a way for one layer's graph to read
+*another* layer's points. The full plan lives in docs/impl/points-stream.md, and the
+effect's own design — every slider, formula and budget — in docs/impl/particulate.md.
 
 ## 24. What the export writes, and how big: colour spaces and resampling, in plain terms
 

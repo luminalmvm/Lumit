@@ -5841,6 +5841,69 @@ this repeats a point's own arithmetic instead, which is why it costs nothing to 
 
 ---
 
+### 3.92 Connect points — lines between the points that are near each other
+
+A **Generate** effect (K-602), the third points **consumer**. Every pair of points in a
+wired stream closer together than **Max distance** is joined by a line: particles drifting
+past each other web up and let go again, a Grid becomes a mesh, a Scatter inside a
+silhouette becomes a constellation. The plexus look, as one wire.
+
+**A line is a capsule, and a capsule is a disc that has been stretched.** Nothing new is
+drawn: the shared points draw already runs a dab from a head to a tail (K-601), so a segment
+is one entry in an ordinary stream whose tail is somewhere other than its head. Four effects,
+one rasteriser.
+
+**Parameters.** **Max distance** (px@comp, default 120 — how far apart two points may be and
+still be joined; nought joins nothing), **Max connections** (0–32, hard 64, default 4 — the
+most lines that may meet at any one point, counted at **both** ends), Taper (per cent,
+default 0 — how much a longer line thins), **Fade** (per cent, default 100 — how much a
+longer line dims, so the web comes and goes instead of switching on), Width (px@comp,
+default 2), Feather (per cent), Colour (multiplies the colour a line inherits), **Max
+points** (1–200 000, hard 1 000 000, default 2 000 — the budget dial, not animatable). Plus
+the host Mix with its Blend (K-425). No panel row for the stream: it is a wire-only input
+(impl/points-stream.md §4.1).
+
+**Algorithm sketch.** Cut the plane, then walk it once:
+
+```
+points = the wire's stream, newest Max points by birth index      # px@comp
+cells  = the projected plane in squares of one Max distance, indices in id order
+for i in id order, while point i has room:
+    near = every j > i in the nine squares around i, within Max distance
+    order near by distance, id breaking every tie
+    for each (d, j) in near, while both ends have room:
+        u    = d / Max distance
+        line from point i to point j, width · (1 − Taper·u), colour · (1 − Fade·u)
+```
+
+Four notes:
+
+- **The buckets are what keep this off the `n²` path.** Asking every point about every other
+  is `n²/2` questions — a hundred million a frame at twenty thousand points. Two points more
+  than one square apart cannot be within reach, so the nine squares around a point are the
+  whole of what it has to ask, and the walk is `O(n·k)` for `k` the crowd in a neighbourhood.
+  The remaining ceiling is a *clump*: a whole stream inside one square is `O(m²)` again,
+  bounded by Max points and by Max connections cutting the inner walk short. Marked in the
+  code with its upgrade trigger, and pinned by a test that holds the bucketed answer against
+  a full comparison at five reaches.
+- **Max connections is counted at both ends.** A pair is joined only while *both* points
+  still have room, so the dial means what it says everywhere rather than only at the point
+  being walked — and the total is bounded at `n · Max connections / 2` lines.
+- **Determinism is the walk's order, twice over** (K-031): points in `id` order — a fact of
+  the evaluation rather than of scheduling — and each point's candidates ordered by distance
+  with `id` breaking every tie. Painter's order is the order the lines were found in.
+- **A line inherits the mean of its two ends' own colours**, so a producer's Colour over life
+  still reads along the web; the Colour row multiplies that, and is white by default.
+
+`moderate` cost, `FullFrame` ROI, premultiplied, temporal window `{0}`, not seeded in the
+§1.3 sense. Mix 0, an unwired stream, Max distance 0, Max connections 0 and Width 0 are the
+bit-exact identity; an unwired stream also wears the `!` mark K-509 gave the family. A wire
+from Scatter reads the empty stream, for K-599's recorded reason.
+
+AE has no equivalent; the look is bought as a plugin there.
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

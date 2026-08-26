@@ -47,6 +47,7 @@ use super::effects::{
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
+    connect_points::{ConnectPoints, ConnectPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     curves::{Curves, CurvesDef},
@@ -205,10 +206,11 @@ crate::catalogue![
     // points rather than pixels, and declare the same Points output.
     GridDef => Grid,
     ScatterDef => Scatter,
-    // The consumers (K-600, K-601), after the producers they read: the first
-    // stack effects to take a points wire rather than hand one out.
+    // The consumers (K-600, K-601, K-602), after the producers they read: the
+    // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
     TrailDef => Trail,
+    ConnectPointsDef => ConnectPoints,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

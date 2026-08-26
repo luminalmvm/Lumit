@@ -272,6 +272,14 @@
   "@fxConductivityState": {
     "description": "Effect controls — a control on Lightning: the bolt's shape, animated to make it writhe."
   },
+  "fxConnectPoints": "Connect points",
+  "@fxConnectPoints": {
+    "description": "Effect controls — the name of the Connect points effect, which draws a line between every pair of points in a points stream that are near enough to each other."
+  },
+  "fxConnections": "Connections",
+  "@fxConnections": {
+    "description": "Effect controls — a group heading on Connect points, over the controls that decide which pairs of points are joined by a line."
+  },
   "fxConversion": "Conversion",
   "@fxConversion": {
     "description": "Effect controls — a control on Polar coordinates."
@@ -2165,6 +2173,14 @@
   "@fxMaxTrails": {
     "description": "Effect controls — a control on Trail: the most points that may grow a tail, which is also how much of the frame's time the effect may spend."
   },
+  "fxMaxConnections": "Max connections",
+  "@fxMaxConnections": {
+    "description": "Effect controls — a control on Connect points: the most lines that may meet at any one point."
+  },
+  "fxMaxDistance": "Max distance",
+  "@fxMaxDistance": {
+    "description": "Effect controls — a control on Connect points: how far apart two points may be and still be joined by a line."
+  },
   "fxMaxGhosts": "Max ghosts",
   "@fxMaxGhosts": {
     "description": "Effect controls — a control on Lens flare."
@@ -2764,6 +2780,10 @@
   "fxSubtract": "Subtract",
   "@fxSubtract": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxTaper": "Taper",
+  "@fxTaper": {
+    "description": "Effect controls — a control on Connect points: how much a line thins out as it gets longer."
   },
   "fxTemperature": "Temperature",
   "@fxTemperature": {

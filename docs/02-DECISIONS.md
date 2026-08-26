@@ -18213,3 +18213,47 @@ also what let Clone to points reach Sprite mode: one rasteriser, three effects, 
 sample — so a producer's Opacity over life still reads correctly along the tail — dimmed by
 how far back that sample is. At Fade nought a dab is exactly the point's own colour, which
 is what makes the row about the tail and nothing else.
+
+## K-602 — Connect points joins the pairs a bucketed plane finds, not the pairs an n² walk finds
+
+**DECIDED 2026-08-26**, taking the third of
+[docs/impl/points-stream.md](impl/points-stream.md) §2.3's named consumers. Connect points
+draws a line between every pair of a wired stream's points that are closer together than Max
+distance — the plexus look, as one wire.
+
+**The drawing is not new, and deliberately so.** A line is a capsule, and a capsule whose two
+ends coincide is a disc: the shared points draw grew a per-point tail for Trail (K-601), so a
+segment is one ordinary stream entry with its tail somewhere other than its head. Four
+effects now share one rasteriser and none of them has forked it.
+
+**The pairing is bucketed, and that is a recorded shortcut with a stated ceiling.** Asked
+plainly the question is `n²/2` distances — a hundred million a frame at the family's default
+cap, which docs/13 would never let through. So the *projected* plane (K-561: nearness is
+judged where the camera puts a point, because a line is drawn on the picture) is cut into
+squares of one Max distance, each holding the indices that fall in it in ascending order, and
+a point asks only the nine squares around its own. Two points further apart than one square
+cannot be within reach, so the answer is **identical** to the exhaustive one and the work is
+`O(n·k)`. That identity is the test that matters:
+`connect_points_pairs_exactly_as_a_full_comparison_would` runs both at five reaches over a
+jittered lattice and compares the counts. The ceiling the buckets do **not** remove is a
+clump — a whole stream inside one square is `O(m²)` again — bounded by Max points and by Max
+connections cutting the inner walk short, and marked with a `ponytail:` comment naming a k-d
+tree or a sorted sweep as the upgrade and a profile as its trigger.
+
+**Max connections is counted at both ends.** A pair is joined only while both of its points
+still have room, which is what makes the dial mean what it says at every point rather than
+only at the one being walked — and it bounds the whole web at `n · Max connections / 2`
+lines, which is the allocation the budget rule wants (14-ENGINEERING-RULES §6).
+
+**Determinism is the walk's order, twice over** (K-031). Points are walked in `id` order — a
+fact of the evaluation rather than an artefact of scheduling (particulate.md §5) — and each
+point's candidates are ordered by distance with `id` breaking every tie, through `total_cmp`
+rather than `partial_cmp` so a nonsense coordinate orders rather than making the sort's
+answer depend on which comparison ran first. Painter's order is then the order the lines were
+found in.
+
+**A line inherits the mean of its two ends' own colours**, multiplied by the Colour row,
+which is white by default. A producer's Colour over life therefore still reads along the web,
+and the row is a tint rather than a replacement. **Fade** defaults to 100 for one reason: a
+plexus whose lines switch on at exactly Max distance pops, and popping is the first thing
+anybody has to go and fix.

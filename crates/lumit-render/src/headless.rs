@@ -5937,6 +5937,110 @@ surfaces:
         assert_eq!(tailed, frame_of(&wired), "two renders of one frame differ");
     }
 
+    /// **A points wire reaches Connect points and the web lands on the frame**
+    /// (K-602) — the whole path the effect depends on, through the export walk:
+    /// the edge is read, the producer's stream is evaluated on the carriage, the
+    /// pairing runs, and the lines are drawn.
+    ///
+    /// A Grid rather than a Particulate producer, because a lattice is the
+    /// fixture whose pairs are decided by arithmetic rather than by dice — and
+    /// because the family's two producers must both reach a consumer through the
+    /// one seam.
+    #[test]
+    fn a_points_wire_puts_a_web_of_lines_on_the_frame() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (64u32, 48u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |wired: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+
+            // The lattice sits inside the *layer's* own rectangle, which the
+            // matrix fixture makes 12 × 10 — a stream is in the layer's pixels,
+            // and a web drawn off the edge of the solid is a web nobody sees.
+            let mut producer = lumit_core::fx::instantiate("grid").unwrap();
+            for (id, v) in [
+                ("columns", 3.0),
+                ("rows", 3.0),
+                ("planes", 1.0),
+                ("spacing_x", 4.0),
+                ("spacing_y", 3.0),
+                ("position_x", 6.0),
+                ("position_y", 5.0),
+                ("size", 1.0),
+                // Emit the stream and draw nothing, so what lands on the frame
+                // is the web and only the web.
+                ("mix", 0.0),
+            ] {
+                set(&mut producer, id, v);
+            }
+            let producer_id = producer.id;
+
+            let mut consumer = lumit_core::fx::instantiate("connect_points").unwrap();
+            for (id, v) in [
+                ("max_distance", 5.0),
+                ("max_links", 4.0),
+                ("width", 1.5),
+                ("fade", 0.0),
+            ] {
+                set(&mut consumer, id, v);
+            }
+            let consumer_id = consumer.id;
+
+            let graph = LayerGraph {
+                edges: if wired {
+                    vec![Edge {
+                        from: OutputRef::EffectData {
+                            effect: producer_id,
+                            port: "points".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(consumer_id),
+                            port: "points".into(),
+                        },
+                    }]
+                } else {
+                    Vec::new()
+                },
+                ..LayerGraph::default()
+            };
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![producer, consumer];
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let wired = build(true);
+        let cut_built = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 6, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let webbed = frame_of(&wired);
+        let cut = frame_of(&cut_built);
+        assert_ne!(webbed, cut, "a wired stream must put lines on the frame");
+        assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
+    }
+
     /// **The degradation rung never engages on an export walk** (K-475, PS7;
     /// docs/13 §2's note under B12–B14).
     ///

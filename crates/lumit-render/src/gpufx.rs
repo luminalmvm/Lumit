@@ -395,6 +395,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scatter,
     &CloneToPoints,
     &Trail,
+    &ConnectPoints,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -4067,6 +4068,65 @@ impl GpuEffect for Trail {
     }
 }
 
+/// Connect points (docs/08 §3.92, K-602): the lines between the points of a
+/// wired stream that are near enough to each other.
+///
+/// Nothing here decides anything — `ConnectPoints::links` did the pairing and
+/// the reducing, in the one expression the CPU reference also reads. What this
+/// settles is the rearrangement into this raster and the camera, exactly as its
+/// two sibling consumers do.
+struct ConnectPoints;
+impl GpuEffect for ConnectPoints {
+    fn match_name(&self) -> &'static str {
+        "connect_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::connect_points::ConnectPoints as C;
+        let inst = C::read(p);
+        let px_scale = C::px_scale_of(p);
+        let style = inst.draw_style();
+        // Nothing wired: the picture passes through, the documented calm.
+        let Some(stream) = points_input_at(aux, 0, px_scale) else {
+            return tex.clone();
+        };
+        let (segments, tails) = inst.links(&stream);
+        let points = draw_points_tailed(&segments, &tails);
+        // The camera, in the raster this frame is drawn at (K-561, K-266) —
+        // `None` on a 2D layer, where it is no matrix at all (K-258).
+        let projection = aux
+            .schedule()
+            .and_then(|c| c.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                alpha_test: false,
+                alpha_invert: false,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -4971,6 +5031,110 @@ mod tests {
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the tail draw is not bit-stable");
+    }
+
+    // ------------------------------------------- Connect points (K-602)
+
+    /// **The web the card draws is the web the reference drew** (K-602): the
+    /// instanced capsules land where the software dabs land, inside the
+    /// `moderate` class's perceptual epsilon — and both are handed the *same*
+    /// segments, so a disagreement here is the rasteriser's alone.
+    #[test]
+    fn a_connect_points_draw_matches_the_cpu_reference() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+
+        let stream = lumit_core::fx::effects::grid::Grid {
+            columns: 7,
+            rows: 5,
+            planes: 1,
+            spacing_x: 18.0,
+            spacing_y: 18.0,
+            spacing_z: 0.0,
+            position_x: 64.0,
+            position_y: 48.0,
+            position_z: 0.0,
+            jitter_x: 6.0,
+            jitter_y: 6.0,
+            jitter_z: 0.0,
+            seed: 7,
+            size: 4.0,
+            feather: 100.0,
+            colour: [0.9, 0.7, 0.4, 1.0],
+            max_points: 4_000,
+            mix: 100.0,
+        }
+        .stream(lumit_core::fx::points::Projection::FLAT);
+        assert!(stream.len() > 20, "the fixture emitted nothing");
+
+        let connect = lumit_core::fx::effects::connect_points::ConnectPoints {
+            max_distance: 26.0,
+            max_links: 3,
+            taper: 40.0,
+            fade: 80.0,
+            width: 3.0,
+            feather: 60.0,
+            colour: [1.0, 1.0, 1.0, 1.0],
+            max_points: 4_000,
+            mix: 100.0,
+        };
+        let (segments, tails) = connect.links(&stream);
+        assert!(segments.len() > 10, "the web has {} lines", segments.len());
+        let style = connect.draw_style();
+
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(&mut cpu, w, h, &segments, &tails, &style, None);
+
+        let points = draw_points_tailed(&segments, &tails);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: None,
+            alpha_test: false,
+            alpha_invert: false,
+            seed: 0,
+            mode: 0,
+            sprite: None,
+        };
+        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        let drawn: f32 = gpu.iter().sum();
+        assert!(drawn > 1.0, "the web drew nothing ({drawn})");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("connect points draw: worst |Δ| {worst:.3e}");
+        assert!(worst < 2e-2, "worst |Δ| {worst}");
+
+        // A line that was really a dab would make the comparison pass by
+        // comparing two pictures of dots.
+        let dots = draw_points_tailed(&segments, &[]);
+        let flat = fx.points_draw(
+            &ctx,
+            &tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &dots,
+                ..op
+            },
+        );
+        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
+        assert_ne!(gpu, flat, "the lines joined nothing up");
+
+        // Bit-stable against itself (docs/08 §2.4).
+        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        assert_eq!(gpu, twice, "the web draw is not bit-stable");
     }
 
     // ---------------------------------------------------------------
