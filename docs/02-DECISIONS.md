@@ -17072,3 +17072,52 @@ and Export still owed their own stock.
   the machine on General — made picking that entry and clicking away the same answer, and
   the entry could never be taken at all. The answer is boxed in a one-item list. This fixed
   the language row too, which had been unselectable since it was written.
+
+## K-587 — Settings → Autosave is built, and the timer is the engine's
+
+**DECIDED 2026-08-26.** K-465 named the Autosave page from the approved Settings drawing
+and left it unbuilt, under its own rule that a page arrives with the settings it would
+hold — "there is no autosave interval" was the reason. There is one now, so the page is in
+the sidebar, after Audio and before Preview and cache, in the order the drawing lists them.
+Nothing else here reverses an earlier entry; K-465's page list is amended to eight built
+pages, with Export the last one still owed its own stock.
+
+- **The timer lives where the document lives.** The frontend could have run a five-minute
+  clock — it has one for playback — but it cannot answer the question that decides whether
+  a copy is worth writing: *has the document moved?* A frontend timer could only ask for a
+  save regardless, and a project nobody has touched since lunch would be copied twelve
+  times an hour, rotating the last real edit off the end of the copies meant to protect
+  it. So `lumit-bridge` owns a thread of its own (`crate::autosave`), and the whole
+  decision is engine-side.
+- **Three gates, and a write only past all three**: the interval has elapsed; the
+  document's store revision has moved since the last *save* and since its own last
+  *autosave*; and the project has a path to write beside. The third is why an unsaved
+  project gets no copies — they live in an `autosaves/` folder next to the project file
+  and there is no file yet — and that case is the crash journal's, which needs no path
+  (docs/10 §4).
+- **No lock is held across the write.** The read guard covers the decision, the path and
+  an `Arc` clone of the document; it is dropped, and only then does anything serialise or
+  touch a disk. This is the shape `measure_document` was corrected into after the freeze
+  of 9d96a24f: a Rust `RwLock` turns new readers away as soon as a writer is waiting, so a
+  guard held across a save is the whole interface stopped. `ProjectReference::autosave` is
+  corrected to the same shape in this commit, which settles the autosave half of FP3.5.
+- **The rotation is untouched**, deliberately: `lumit_project::autosave` already wrote
+  `<stem>.autosave-<k>.lum` with 1 the newest, which is exactly what `list_autosaves`
+  walks and what the recovery dialogue offers (K-488). The scheduler calls the road that
+  was already there rather than laying a second one.
+- **Zero minutes is off, and off is honoured rather than refused.** The row reports it on
+  the line underneath — the one thing K-465 still allows under a setting — rather than
+  rejecting the number, because a user who saves by hand and does not want copies beside
+  their project is entitled to that. The thread stays alive and idle when off, since the
+  setting can be turned back on and an exited thread could not hear it.
+- **The cadence is application settings, not project data** (`autosave_minutes`,
+  `autosave_keep`), threaded like the cache budgets and the audio device (K-586): the
+  engine holds the live values with no store behind them, and the frontend hands them over
+  at boot and on every change (`set_autosave`). How often *this machine* copies your work
+  is a property of the machine, so a project sent to somebody else says nothing about it.
+  The boot call is made unconditionally rather than skipped when it matches the default,
+  because that call is what starts the timer.
+- **Two rows and no third.** Interval in minutes and copies kept, both the drawing's
+  number wells. No "autosave before risky operations" switch: docs/10 §4 names that
+  behaviour but nothing in the engine performs it yet, and K-465's rule against drawing a
+  row with nothing behind it applies to this page as much as to the others.

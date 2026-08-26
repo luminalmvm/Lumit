@@ -464,6 +464,33 @@ void main() {
         isNull);
   });
 
+  /// **The autosave cadence is settings, not project data** (K-587, docs/10
+  /// §4): how often this machine copies your work is a property of the machine.
+  /// Zero minutes is off and must survive the round trip as zero — a file that
+  /// read it back as the default would turn autosave on again behind the user.
+  test('the autosave cadence round-trips, including off', () {
+    expect(Workspace().autosaveMinutes, 5);
+    expect(Workspace().autosaveKeep, 5);
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'ui_scale': 1.0}))
+            .autosaveMinutes,
+        5,
+        reason: 'a file written before this field existed gets the default');
+
+    final ws = Workspace()..setAutosave(0, 12);
+    final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+    expect(back.autosaveMinutes, 0, reason: 'off stays off');
+    expect(back.autosaveKeep, 12);
+
+    // A hand-edited file cannot ask for a negative interval or for no copies
+    // at all: one is meaningless and the other is a rotation with nothing in
+    // it. Both are clamped rather than refused.
+    final edited = Workspace()
+      ..applyJson(<String, dynamic>{'autosave_minutes': -3, 'autosave_keep': 0});
+    expect(edited.autosaveMinutes, 0);
+    expect(edited.autosaveKeep, 1);
+  });
+
   /// **Effect graphs use theme colour** (owner, desk test). Off by shipped
   /// default — a Levels histogram's red hump and a Curves Red tab draw in red,
   /// and only Master takes the theme's own colour — and it round-trips, so the

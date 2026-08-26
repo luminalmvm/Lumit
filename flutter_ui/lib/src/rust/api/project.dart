@@ -120,6 +120,12 @@ class ProjectReference {
   /// The document is rebased against the project folder first, so no
   /// machine-specific path is written into a copy that may be opened
   /// elsewhere.
+  ///
+  /// The read guard covers the decision and an `Arc` clone of the document,
+  /// and is dropped before anything touches the disk: serialising and fsyncing
+  /// a project is far too slow to hold a lock across, and a lock held here is
+  /// the whole interface waiting (docs/14 §5, and the shape `measure_document`
+  /// was corrected into).
   String autosave({required String projectPath, required int keep}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceAutosave(
           that: this, projectPath: projectPath, keep: keep);

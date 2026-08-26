@@ -24,6 +24,8 @@
 //!
 //! - [`api`] — the frb surface: one module per panel-sized concern (project,
 //!   composition, layer, effect, export, …) plus the render worker thread.
+//! - [`autosave`] — the timer behind the rotating copies: when to write one,
+//!   and which open projects have moved enough to deserve it.
 //! - [`edits`] — the layer and asset defaults shared by every add path.
 //! - [`media`] — probing footage and decoding frames (`media` feature).
 //! - `render` — the composited-comp Viewer path (`render` feature): turns
@@ -68,6 +70,7 @@ mod frb_generated;
 // media+render when it also held the v0 ops that needed them.
 #[cfg(feature = "media")]
 mod audio;
+mod autosave;
 mod beats;
 mod edits;
 mod export;

@@ -2709,9 +2709,10 @@ whenever the user likes. Its **Clear** asks before deleting,
 unlike the other two tiers': RAM and VRAM cost a re-render each, while this one destroys files
 that may be a night's work and there is nothing to undo. With nothing parked it does not ask —
 a question about deleting nothing is only noise. The status line's cache meter grew a matching
-third bar (Disk), which asks the same question when clicked. The **Export** and **Autosave**
-groups are not built: neither has anything behind it on this frontend
-([TODO.md](TODO.md)), and an empty page is a promise the window cannot keep.
+third bar (Disk), which asks the same question when clicked. **Autosave** is its own page
+(K-587): how often a spare copy is written, in minutes, and how many copies are kept, with
+zero minutes meaning off. The **Export** group is not built: it has nothing behind it on
+this frontend ([TODO.md](TODO.md)), and an empty page is a promise the window cannot keep.
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context
 display); the keymap serialises to a shareable file. An "After Effects" alternate preset

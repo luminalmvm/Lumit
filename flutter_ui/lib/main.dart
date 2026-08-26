@@ -43,7 +43,8 @@ import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
+import 'package:lumit_flutter/src/rust/api/shell.dart'
+    show bootLog, setAutosave;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
@@ -1690,6 +1691,14 @@ class LumitUiState extends ChangeNotifier {
     // rather than made with an empty id, so nothing happens on a fresh install.
     final device = this.workspace.audioDevice;
     if (device != null) setAudioDevice(id: device);
+    // How often a spare copy of the work is written, and how many are kept.
+    // Always handed over rather than skipped when it matches the default: this
+    // is what starts the engine's timer, so a fresh install with no settings
+    // file still autosaves.
+    setAutosave(
+      minutes: this.workspace.autosaveMinutes,
+      keep: this.workspace.autosaveKeep,
+    );
     // Where the parked frames go. Restored the same way, and by name rather
     // than by index so a reordered enum cannot silently move a user's cache.
     final where = perf.diskCacheLocation;

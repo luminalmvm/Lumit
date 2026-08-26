@@ -206,7 +206,11 @@ Rules, binding:
   the target. A crash mid-save can never corrupt the previous save.
 - **Autosave**: every N minutes (default 5) and before risky operations (export start,
   plugin install), rotating `<name>.autosave-<k>.lum` copies (default keep 5) in an
-  `autosaves/` folder beside the project.
+  `autosaves/` folder beside the project. The timer is the engine's (K-587): it writes
+  only when the document's revision has moved since the last save or the last copy, and
+  only for a project that has a path to write beside — an unsaved project is covered by
+  the journal alone. N and the keep count are application settings, handed over by the
+  frontend at boot and on change; N = 0 turns autosave off.
 - **Journal recovery**: the operation journal ([03-DATA-MODEL.md](03-DATA-MODEL.md) §10) is
   appended between saves to `<global cache root>/<project-uuid>/journal/ops.jsonl` (kept out
   of the `.lum` beside the project so shared projects carry no local paths). After a crash,

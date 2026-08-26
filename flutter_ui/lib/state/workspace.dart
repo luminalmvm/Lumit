@@ -505,6 +505,24 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// How often Lumit writes a spare copy of every open project, in minutes,
+  /// and how many copies it keeps (docs/10 §4). Zero minutes is off.
+  ///
+  /// Application settings rather than project data — how often this machine
+  /// copies your work is a property of the machine — so they live here and are
+  /// handed to the engine at boot and on every change. The timer itself is the
+  /// engine's, because the document is: the frontend never decides when a copy
+  /// is due, and never asks whether one is.
+  int autosaveMinutes = 5;
+  int autosaveKeep = 5;
+
+  /// Set the cadence and write the file. A deliberate act, like the keymap.
+  void setAutosave(int minutes, int keep) {
+    autosaveMinutes = minutes;
+    autosaveKeep = keep;
+    save();
+  }
+
   /// Remember where the disk cache should live: the engine's own location name,
   /// and the folder for the custom one (null for the other two).
   void setDiskCacheLocation(String location, String? folder) {
@@ -1128,6 +1146,8 @@ class Workspace extends ChangeNotifier {
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
+        'autosave_minutes': autosaveMinutes,
+        'autosave_keep': autosaveKeep,
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
@@ -1188,6 +1208,12 @@ class Workspace extends ChangeNotifier {
     // already doing.
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
+    // Absent means the shipped cadence, which is what a file written before the
+    // Autosave page existed was already getting. Zero minutes is off and is
+    // kept; a negative number is a hand-edited file and reads as off too, since
+    // there is no sense in which it could mean anything else.
+    autosaveMinutes = (j['autosave_minutes'] as int? ?? 5).clamp(0, 240);
+    autosaveKeep = (j['autosave_keep'] as int? ?? 5).clamp(1, 50);
     customThemes = [];
     final rawThemes = j['custom_themes'];
     if (rawThemes is List) {

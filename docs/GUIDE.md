@@ -7626,8 +7626,9 @@ the same reason.
   cannot be understood — an unreadable layout must never stop a project opening.
 - **The document** — every committed edit copies the document, pushes an undo
   entry, appends a line to the journal and fsyncs before the interface sees it.
-  Autosave keeps three rotating copies beside the project; if they are newer than
-  the file on open, Lumit offers to replay them.
+  Autosave keeps a few rotating copies beside the project — how many, and how
+  often, is a setting (§29); if they are newer than the file on open, Lumit
+  offers to replay them.
 
 Rearranging panels is deliberately *not* an edit: it goes through `set_ui_state`,
 a side door that skips undo, the journal and the dirty flag.
@@ -11103,3 +11104,48 @@ hatches it so you can see it happening rather than wondering where the movement 
 Afterwards the freeze is two ordinary keyframes. Drag either one and the hold gets longer or
 shorter; there is no special "freeze object" to learn.
 
+
+## 29. Autosave, in plain terms
+
+Lumit writes a spare copy of your project every so often, so that a crash, a power cut
+or a wrong turn costs minutes rather than an afternoon. The copies land in an
+`autosaves/` folder beside the project file, named `scene.autosave-1.lum`,
+`scene.autosave-2.lum` and so on, with **1 always the newest**: each new copy pushes the
+others down a place and the oldest falls off the end. That is all "rotating" means.
+
+Settings → Autosave has the only two answers there are to give: **how often**, in
+minutes, and **how many copies to keep**. Zero minutes turns it off, which is a real
+choice and not an error — the row says so under itself rather than refusing the number.
+The defaults are five minutes and five copies.
+
+### Why the timer lives in the engine
+
+The obvious place to put a five-minute timer is the interface: it already has a clock
+running for playback. It is the wrong place, for a reason worth understanding. The
+document lives in Rust, and only Rust knows whether it has actually changed. A timer in
+the interface could only ask "is it time yet?" and then ask the engine to save
+regardless — and a project nobody has touched since lunch would be copied twelve times an
+hour, quietly rotating the last real edit off the end of the copies that were meant to
+protect it. The engine's timer asks the document instead: *has the revision moved since
+the last save or the last copy?* If not, nothing is written at all.
+
+Two other rules it keeps:
+
+- **A project that has never been saved gets no copies.** The copies live beside the
+  project file, and there is no file yet, so there is nowhere to put them. That case is
+  covered by the *crash journal* instead — the running list of every edit, kept in
+  Lumit's own cache folder, which the recovery dialogue replays.
+- **Nothing is locked while the copy is written.** Saving a project means turning the
+  whole document into text and waiting for the disk to confirm it, which is far too slow
+  to do while holding the document still. So the timer takes what it needs — a
+  snapshot, which costs nothing, because the document is shared rather than copied — lets
+  go, and only then writes. Holding on instead is exactly the mistake that froze the
+  application once before: in Rust, once one thread is waiting to *write* to something,
+  every reader queues behind it, so a slow job holding the door shut stops the entire
+  interface.
+
+The interval and the count are **application settings, not project settings**: how often
+this machine copies your work is a property of the machine, so they live in the local
+settings file and a project sent to somebody else says nothing about them. The interface
+hands both to the engine when Lumit starts and again whenever you change them, and the
+engine holds nothing else — there is no autosave state in the `.lum` file.

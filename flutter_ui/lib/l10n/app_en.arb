@@ -6378,6 +6378,10 @@
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
   },
+  "unitMinutes": "minutes",
+  "@unitMinutes": {
+    "description": "The minutes unit, shown after a number of minutes — Settings → Autosave's interval."
+  },
   "unitPercent": "percent",
   "@unitPercent": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
@@ -8163,6 +8167,26 @@
   "settingsPageAudio": "Audio",
   "@settingsPageAudio": {
     "description": "Settings window: name of a page in the sidebar — where sound comes out."
+  },
+  "settingsPageAutosave": "Autosave",
+  "@settingsPageAutosave": {
+    "description": "Settings window: name of a page in the sidebar — how often Lumit writes a spare copy of the project."
+  },
+  "settingsGroupSpareCopies": "Spare copies",
+  "@settingsGroupSpareCopies": {
+    "description": "Settings window, Autosave: the heading over the settings that decide how often a spare copy of the project is written and how many are kept."
+  },
+  "settingsAutosaveEvery": "Save a copy every",
+  "@settingsAutosaveEvery": {
+    "description": "Settings window, Autosave: the name of the row whose number is the interval between autosaves. The word 'minutes' is shown after the number, so this reads as one sentence: 'Save a copy every 5 minutes'."
+  },
+  "settingsAutosaveKeep": "Copies kept",
+  "@settingsAutosaveKeep": {
+    "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
+  },
+  "settingsAutosaveOff": "Autosave is off — only the crash journal is protecting unsaved work.",
+  "@settingsAutosaveOff": {
+    "description": "Settings window, Autosave: the line under the interval row when the interval is zero. Zero is a real choice, not an error, so this reports it calmly. The crash journal is Lumit's running record of edits, which recovery replays."
   },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {

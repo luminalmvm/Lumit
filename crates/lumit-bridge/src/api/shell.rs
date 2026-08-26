@@ -89,6 +89,24 @@ pub struct BridgeAutosave {
     pub path: String,
 }
 
+/// How often Lumit writes a rotating copy of every open project, and how many
+/// copies it keeps (docs/10-FILE-FORMAT.md §4).
+///
+/// `minutes` of 0 turns autosave off, which is a setting a user is entitled to
+/// hold. Both values are application settings rather than project data — how
+/// often this machine copies your work is a property of the machine — so the
+/// frontend owns the file they live in and calls this at boot and on every
+/// change. The timer itself is the engine's, because the document is.
+///
+/// Nothing is written for a project that has not moved since its last save or
+/// its own last autosave, and nothing is written for one that has never been
+/// saved: the copies live beside the project file, and the crash journal is
+/// what covers a project with no file yet.
+#[frb(sync)]
+pub fn set_autosave(minutes: u32, keep: u32) {
+    crate::autosave::schedule(minutes, keep);
+}
+
 /// The autosaves beside `project`, newest first.
 ///
 /// An empty list is an ordinary answer, not an error: a project that has never
@@ -143,18 +161,27 @@ impl ProjectReference {
     /// The document is rebased against the project folder first, so no
     /// machine-specific path is written into a copy that may be opened
     /// elsewhere.
+    ///
+    /// The read guard covers the decision and an `Arc` clone of the document,
+    /// and is dropped before anything touches the disk: serialising and fsyncing
+    /// a project is far too slow to hold a lock across, and a lock held here is
+    /// the whole interface waiting (docs/14 §5, and the shape `measure_document`
+    /// was corrected into).
     #[frb(sync)]
     pub fn autosave(&self, project_path: String, keep: u32) -> Result<String, BridgeError> {
         let state = self.state()?;
-        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
-
-        let target = if project_path.trim().is_empty() {
-            state.path.clone().ok_or(BridgeError::NoProjectPath)?
-        } else {
-            std::path::PathBuf::from(project_path)
+        let (document, target) = {
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            let target = if project_path.trim().is_empty() {
+                state.path.clone().ok_or(BridgeError::NoProjectPath)?
+            } else {
+                std::path::PathBuf::from(project_path)
+            };
+            (state.store.snapshot(), target)
         };
+
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
-        let doc = lumit_project::rebase_for_save(&state.store.snapshot(), dir);
+        let doc = lumit_project::rebase_for_save(&document, dir);
 
         lumit_project::autosave(&doc, &target, keep.max(1) as usize)
             .map(|written| written.to_string_lossy().into_owned())

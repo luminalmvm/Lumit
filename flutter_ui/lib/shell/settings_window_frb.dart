@@ -10,12 +10,12 @@
 // drawing has room for neither, and what a setting does is said by its name.
 //
 // **The pages are the drawing's.** General, Appearance, Timeline, Viewer,
-// Audio, Preview and cache, Shortcuts. The drawing lists two more — Autosave
-// and Export — and they are not here, because there is nothing to put on them:
-// the engine has no autosave interval and no export defaults to offer yet, and
-// an empty page is a promise the window cannot keep. They arrive with the
-// settings they would hold, which is how Audio arrived (K-586): it waited until
-// the engine could name the machine's outputs and be told which to play through.
+// Audio, Autosave, Preview and cache, Shortcuts. The drawing lists one more —
+// Export — and it is not here, because there is nothing to put on it: the
+// engine keeps no export defaults between sessions yet, and an empty page is a
+// promise the window cannot keep. It arrives with the settings it would hold,
+// which is how Audio arrived (K-586) and then Autosave (K-587): each waited
+// until the engine could actually do the thing its page would set.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
 // and the engine has no opinion about it. Timeline and Viewer are working
@@ -138,6 +138,7 @@ enum SettingsPage {
   timeline,
   viewer,
   audio,
+  autosave,
   previewAndCache,
   shortcuts;
 
@@ -150,6 +151,7 @@ enum SettingsPage {
         SettingsPage.timeline => l10n.panelTimeline,
         SettingsPage.viewer => l10n.panelViewer,
         SettingsPage.audio => l10n.settingsPageAudio,
+        SettingsPage.autosave => l10n.settingsPageAutosave,
         SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
         SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
@@ -518,6 +520,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       SettingsPage.timeline => _timeline(t, ui),
       SettingsPage.viewer => _viewer(t, ui),
       SettingsPage.audio => _audioPage(t, ui),
+      SettingsPage.autosave => _autosavePage(t, ui),
       SettingsPage.previewAndCache => _performance(t, ui),
       SettingsPage.shortcuts => _keymap(t, ui),
     };
@@ -638,6 +641,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.pushViewerLook();
       case SettingsPage.audio:
         _chooseAudioDevice(workspace, null);
+      case SettingsPage.autosave:
+        _setAutosave(workspace, minutes: 5, keep: 5);
       case SettingsPage.previewAndCache:
         _perfEdit(() {
           workspace.performance.playback = PlaybackMode.adaptive;
@@ -1410,6 +1415,87 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     setAudioDevice(id: id ?? '');
     workspace.setAudioDevice(id);
     setState(() => _audio = listAudioDevices());
+  }
+
+  // ---- Autosave ------------------------------------------------------------
+
+  /// How often Lumit writes a spare copy of the work, and how many it keeps
+  /// (K-587, building K-465's Autosave page — drawn in the Settings drawing and
+  /// unbuilt until the engine had a timer to set).
+  ///
+  /// Two numbers and nothing else, because there are only two answers to give.
+  /// The copies rotate beside the project in an `autosaves/` folder, newest
+  /// first, and they are what the recovery dialogue offers after a session that
+  /// ended badly. **Zero minutes is off** and is a setting a user is entitled
+  /// to hold — the row says so underneath itself rather than refusing the
+  /// number, which is the one thing K-465 still allows a line under a setting.
+  ///
+  /// Nothing here decides *when* a copy is due: the engine holds the timer,
+  /// because the engine holds the document and is the only side that knows
+  /// whether it has moved since the last one.
+  List<Widget> _autosavePage(LumitTheme t, LumitUiState ui) {
+    final workspace = ui.workspace;
+    return _sections(t, [
+      (
+        l10n.settingsGroupSpareCopies,
+        [
+          _row(
+            t,
+            l10n.settingsAutosaveEvery,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 70,
+                  height: settingsControlHeight,
+                  child: DragValueField(
+                    key: const ValueKey('settings-autosave-minutes'),
+                    value: workspace.autosaveMinutes.toDouble(),
+                    min: 0,
+                    max: 240,
+                    speed: 0.1,
+                    decimals: 0,
+                    onChanged: (minutes) => _setAutosave(workspace,
+                        minutes: minutes.round(), keep: workspace.autosaveKeep),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(l10n.unitMinutes,
+                    style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+              ],
+            ),
+            description:
+                workspace.autosaveMinutes == 0 ? l10n.settingsAutosaveOff : '',
+          ),
+          _row(
+            t,
+            l10n.settingsAutosaveKeep,
+            SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-autosave-keep'),
+                value: workspace.autosaveKeep.toDouble(),
+                min: 1,
+                max: 50,
+                speed: 0.1,
+                decimals: 0,
+                onChanged: (keep) => _setAutosave(workspace,
+                    minutes: workspace.autosaveMinutes, keep: keep.round()),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ]);
+  }
+
+  /// Take the cadence: tell the engine, then write it to the settings file.
+  /// Both every time, so the two never disagree about what is in force.
+  void _setAutosave(Workspace workspace,
+      {required int minutes, required int keep}) {
+    setAutosave(minutes: minutes, keep: keep);
+    setState(() => workspace.setAutosave(minutes, keep));
   }
 
   // ---- Shortcuts (K-199) ---------------------------------------------------

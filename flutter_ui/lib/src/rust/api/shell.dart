@@ -26,6 +26,23 @@ BridgePlaybackTier playbackTier() =>
 BridgePlaybackTier resetRealtime() =>
     BridgeLib.instance.api.crateApiShellResetRealtime();
 
+/// How often Lumit writes a rotating copy of every open project, and how many
+/// copies it keeps (docs/10-FILE-FORMAT.md §4).
+///
+/// `minutes` of 0 turns autosave off, which is a setting a user is entitled to
+/// hold. Both values are application settings rather than project data — how
+/// often this machine copies your work is a property of the machine — so the
+/// frontend owns the file they live in and calls this at boot and on every
+/// change. The timer itself is the engine's, because the document is.
+///
+/// Nothing is written for a project that has not moved since its last save or
+/// its own last autosave, and nothing is written for one that has never been
+/// saved: the copies live beside the project file, and the crash journal is
+/// what covers a project with no file yet.
+void setAutosave({required int minutes, required int keep}) =>
+    BridgeLib.instance.api
+        .crateApiShellSetAutosave(minutes: minutes, keep: keep);
+
 /// The autosaves beside `project`, newest first.
 ///
 /// An empty list is an ordinary answer, not an error: a project that has never
