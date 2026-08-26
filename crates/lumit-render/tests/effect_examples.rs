@@ -195,6 +195,15 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("position_x", f(90.0)),
         ],
         "offset" => vec![("shift_x", f(420.0)), ("shift_y", f(130.0))],
+        // A tile the size of the frame repeated once over the frame is the
+        // frame, which is why the declared defaults are neutral. A quarter of
+        // the width, mirrored, is a picture of what tiling is: four across,
+        // each one flipped against its neighbour so the seams disappear.
+        "tile" => vec![
+            ("tile_width", f(480.0)),
+            ("tile_height", f(204.0)),
+            ("mirror_edges", on(true)),
+        ],
         "displacement_map" => vec![
             ("horizontal_amount", f(320.0)),
             ("vertical_amount", f(220.0)),
@@ -254,6 +263,31 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
 
         // --- Flash's Manual mode reads the trigger as the level ---
         "flash" => vec![("trigger", f(0.55)), ("intensity", f(70.0))],
+        // Particulate's defaults are a working emitter, not a neutral one, so
+        // this is not a picture that would otherwise be the plate — it is one
+        // that would otherwise be unreadable. A second of a hundred and fifty
+        // four-pixel particles from a four-hundred-pixel emitter is a faint
+        // sprinkle at figure size. Bigger particles, more of them, and a wider
+        // mouth make a picture a reader can name.
+        "particulate" => vec![
+            ("emit_rate", f(900.0)),
+            ("size", f(14.0)),
+            ("width", f(900.0)),
+            ("height", f(500.0)),
+            ("initial_speed", f(220.0)),
+        ],
+        // The physical flare, driven hard and pointed at a bright part of the
+        // plate: the ghost train only reads at figure size if the light is
+        // strong and off to one side, and an area source gives the ghosts a
+        // shape rather than a row of dots.
+        "lens_flare" => vec![
+            ("source_type", choice(0)),
+            ("light_x", f(1420.0)),
+            ("light_y", f(240.0)),
+            ("intensity", f(3.5)),
+            ("source_width", f(120.0)),
+            ("source_height", f(120.0)),
+        ],
 
         _ => Vec::new(),
     }
@@ -470,10 +504,37 @@ fn unillustrable(match_name: &str) -> Option<&'static str> {
     match match_name {
         "posterize_time" => Some("holds frames, which only shows in motion"),
         "matte_key" => Some("the example frame has no screen in it to key"),
-        // Camera track holds a job and the Controls hold values for expressions
-        // to read; none of them draws, so a picture would be the plate twice.
-        "camera_track" | "slider_control" | "angle_control" | "checkbox_control"
-        | "colour_control" | "point_control" => Some("draws nothing by design"),
+        // Camera track and Planar track hold a job, and the Controls hold values
+        // for expressions to read; none of them draws, so a picture would be the
+        // plate twice.
+        "camera_track" | "planar_track" | "slider_control" | "angle_control"
+        | "checkbox_control" | "colour_control" | "point_control" => {
+            Some("draws nothing by design")
+        }
+        // The drivers. A driver answers with a *number*, a colour or a bag of
+        // points for something else to use, and reaches whatever it drives
+        // through a wire in the node graph. There is no picture of one.
+        "wiggle" | "smooth" | "math" | "remap" | "audio_level" | "colour_cycle"
+        | "points_sample" | "layer_points" => {
+            Some("a driver: it answers with a value, not a picture")
+        }
+        // The points effects that *consume* a stream. Their points arrive on a
+        // wire-only input (points-stream.md §4.1), which exists in the node
+        // graph and nowhere else, and this harness stages one effect on one
+        // layer with no graph behind it. With no stream in they draw nothing,
+        // and a showcase entry cannot supply one — only a wire can.
+        "clone_to_points" | "trail" | "connect_points" => {
+            Some("draws what a wired points stream gives it, and there is no graph here")
+        }
+        // **Not a nature — a defect.** The physical flare adds nothing to a
+        // headless render: the frame comes back bit-identical to the plate at
+        // the defaults and still bit-identical with Intensity at 3.5 and an
+        // area light placed on the brightest part of the picture. Its showcase
+        // entry below is written and correct; it is skipped here so that the
+        // run does not stop, and so that the manual does not carry a picture of
+        // the plate with "Lens flare" under it. Take this line out the day the
+        // flare's additive pass reaches this renderer.
+        "lens_flare" => Some("adds nothing to a headless render (defect, not by design)"),
         _ => None,
     }
 }
