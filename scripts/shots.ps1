@@ -27,8 +27,10 @@
     See docs/learn/09-DOING-IT-YOURSELF.md.
 
 .PARAMETER Sweep
-    Which sweep to run: 1 to 7, or retakes, or round_v2. What each one covers is
-    written at the top of its own file in flutter_ui/tool/shots/.
+    Which sweep to run: 1 to 7, or one of the named ones - graph, modes, retakes,
+    round_v2, welcome. What each one covers is written at the top of its own file
+    in flutter_ui/tool/shots/, and a name that folder does not have is refused
+    with the full list rather than guessed at.
 
 .PARAMETER Shape
     The theme shape to photograph in: sharp (the default) or round. The manual is
