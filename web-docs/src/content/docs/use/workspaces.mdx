@@ -1,59 +1,141 @@
 ---
 title: Workspaces and panels
-description: Arrange the application to suit the work.
+description: Arrange the application to suit the work, and keep the arrangement.
 sidebar:
   order: 19
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-Lumit's **panels** can dock, split, and float. An arrangement of panels is a **workspace**.
+Lumit's **panels** dock and split. An arrangement of panels is a **workspace**, and there
+are six shipped ones plus however many you save.
 
 <Shot file="workspace.png" caption="A workspace: Viewer, Timeline, and Project docked together." eager/>
 
 ## The panels
 
+Every panel is in the **Window** menu, with a tick showing whether it is in the arrangement.
+Toggling one adds or drops it, and the menu stays open while you do it.
+
 | Panel | What it is for |
 | --- | --- |
-| **Viewer** | The preview, and tools that can alter items within it. |
+| **Viewer** | The picture, and the tools that work on it. |
 | **Project** | Assets and folders. |
-| **Timeline** | Time, layers, Graph editor, and keyframes. |
-| **Effect Controls** | The selected layer's effect parameters. |
-| **Effects & Presets** | Panel listing all presets and effects you have available |
-| **Scopes** | Waveform and vectorscope readouts. |
-| **Hierarchy** | The open comp's layers as a tree, precomps expandable. |
+| **Timeline** | Time, layers, keyframes, and the graph editor. |
+| **Effect controls** | The selected layer's whole effect stack, parameter by parameter. |
+| **Effects & presets** | Every effect, preset and installed [plugin](/use/plugins/). |
+| **Node graph** | The selected layer's stack drawn as boxes and wires. See [The node graph](/use/nodes/). |
+| **Node** | The parameter rows of whichever box the Node graph has picked. |
+| **Easing** | Shape a curve and apply it to the selected keyframes. |
+| **Scopes** | Waveform and vectorscope. |
+| **Hierarchy** | The open composition's layers as a tree, precomps expandable. |
+| **Debug view** | Engine readouts. Off unless you turn it on from the Help menu. |
 
 ## Rearrange
 
-Drag a panel's tab to move it. Drop it near an edge to split, or onto another tab group to
-join it. Drag it out of the window to float it.
+Drag a panel's tab. The frame you drag it over shows where it would land:
 
-## Show and hide
+- **Over the middle** joins that group as another tab.
+- **Near an edge** splits the frame and puts the panel on that side. The panels either side
+  resize proportionally.
 
-The **Window** menu lists every panel with a tick showing whether it is currently visible. 
-Toggle to add or drop a panel.
+Drag a seam between two panels to change their share. Press `` ` `` (backtick) with the
+pointer over a panel to maximise it to the whole window, and again to put it back.
 
-## Workspaces
+Right-clicking a panel's tab offers **Close panel**, which is the same thing as un-ticking it
+in the Window menu.
 
-There are several built-in presets (Edit, Effects, Colour, Audio). Your current
-workspace persists between sessions.
-
-:::note[Not yet built]
-Custom workspaces can not currently be saved, but will persist across sessions unless you switch
-workspace. These are planned.
+:::note[Not built yet]
+Panels cannot be torn off into their own operating-system window. The **Pop out** row is
+drawn greyed out rather than hidden, because it is coming: it waits on multi-window support
+in the toolkit Lumit is built on.
 :::
+
+## The shipped workspaces
+
+The strip at the right-hand end of the toolbar switches between them, and so does **Window ▸
+Workspace**. `Alt+Shift+1` to `Alt+Shift+9` reach them by position, counting the presets
+first and then your own.
+
+| Workspace | Arranged for |
+| --- | --- |
+| **Edit** | The default. Project left, Viewer centre, Effects & presets right, Timeline across the bottom. |
+| **Effects** | Effect controls promoted to a column of its own, Effects & presets widened. |
+| **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer and the Node panel down the right. |
+| **Colour** | Scopes given a wide right-hand column, Viewer dominant. |
+| **Audio** | A taller Timeline with waveforms open, Viewer reduced. |
+| **Retiming** | The Easing panel taking the right-hand column outright, so it stays on screen while the selection changes under it. |
+
+Rearranging under a preset moves the panels and leaves the preset alone — a factory layout
+is not yours to overwrite. **Window ▸ Workspace ▸ Reset workspace** puts the preset you are
+on back to how it shipped, without touching any of your own.
+
+## Save your own
+
+**Window ▸ Workspace ▸ Save as new workspace…** asks for a name and writes the arrangement
+out. It joins the strip beside the presets, drawn the same way — a workspace somebody saved
+is a workspace, not a lesser kind of one.
+
+The same menu carries **Rename workspace…**, **Delete workspace**, **Export workspace…** and
+**Import workspace…**, each live only on one of your own. Export writes a `.lumworkspace`
+file you can send to somebody; Import reads one. The stored file and the exported file are
+the same file, so there is nothing to keep in step.
+
+Your workspaces are listed alphabetically, which is what makes `Alt+Shift+7` reach the same
+one on the next launch. A name is taken only once: saving a second *Grading* gives you
+*Grading 2*, and the status line says so, so an import can never overwrite an arrangement you
+made.
+
+**A workspace of your own keeps what you drag into it.** Move a panel while one is in force
+and the change is written back to its file. Deleting one leaves the panels on screen exactly
+where they are — it forgets the name, not the layout.
+
+After a restart the strip ticks nothing. What persists is the arrangement, which you are free
+to drag about; a name ticked over a layout the panels no longer match would be a lie. Click a
+name and both the tick and the write-back come back.
+
+:::note[Not built yet]
+**Assign shortcut to this workspace** is in the Window menu and does nothing yet. The nine
+positional chords work.
+:::
+
+## What the project keeps, and what you keep
+
+The two are deliberately separate, so a project opened on another machine looks like the same
+*edit* under somebody else's panel arrangement.
+
+| Yours, per user | The project's |
+| --- | --- |
+| Which panels are open, where, and how wide | Which compositions are open, and which is in front |
+| Timeline column visibility and widths | Per-composition Viewer state: resolution, magnification, channel, guides |
+| Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom |
+| Where a settings or export window was left | Guides, markers, the region of interest |
+
+Switching workspace never closes, reloads or re-renders anything. It only moves panels, and a
+panel that is open in the old arrangement and absent from the new one keeps its state for the
+session.
+
+## How large everything draws
+
+**Settings ▸ Appearance ▸ Interface ▸ Scale** runs from 75 % to 200 % in steps of 5, with a
+field beside the slider for typing an exact number. Use it for a dense laptop screen or a
+monitor across the room.
+
+Three more settings sit under it. **Tooltips** is on or off, with nothing in between — a
+tooltip is a name, not a lesson. **Motion** decides how much controls animate as they change.
+**Compact** tightens the row spacing throughout, which buys back a surprising amount of a
+small screen.
 
 ## The command palette
 
-`Ctrl+Shift+P` opens the command palette: search for any command and run it.
+`Ctrl+Shift+P` opens the command palette. Search for any command and run it.
 
 ## The menu bar
 
-Nine menus: **File, Edit, Composition,
-Layer, Effect, Animation, View, Window, Help**.
-
-A menu item that requires something you have not selected appears disabled.
+Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, Help**. A menu
+item that needs something you have not selected appears disabled rather than missing.
 
 ## Related
 
-- [Keyboard shortcuts](/reference/shortcuts/)
+- [Settings](/use/settings/) - including the keymap, on its Shortcuts page.
+- [The node graph](/use/nodes/)

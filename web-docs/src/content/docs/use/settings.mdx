@@ -1,53 +1,92 @@
 ---
 title: Settings
-description: The settings window.
+description: The settings window, page by page.
 sidebar:
   order: 19.5
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-Open the settings window from **Edit ▸ Settings…**.
+Open the settings window from **Edit ▸ Settings…**. Almost everything in it is a preference
+about this machine rather than a fact about the project — what belongs to the project is in
+**File ▸ Project settings…** instead.
 
 <Shot file="settings.png" caption="The settings window, on the Appearance page." eager/>
 
+The window is resizable, and it remembers where you left it.
+
 ## General
 
-Reset the panel layout to its default arrangement.
+**Language**, which follows the system unless you choose otherwise. Whether the welcome
+screen appears on launch. And **Reset workspace**, which puts the arrangement you are on
+back to how it shipped.
+
+Beneath those, whether Lumit checks for updates, and what it found last time it looked.
 
 ## Appearance
 
-- **Colour scheme**: seven built-in schemes, grouped dark and light.
-- **Custom colours**: allows you to alter the colour scheme according to your own preferences for complete customisation.
-  If it also possible to import and export themes.
-- **Corners** and **Motion**: Corners change the style of the application, and motion can be reduced or off if you'd prefer.
-- **Scopes** and **Viewer surround**: both default to neutral colours but can use the theme's colours instead.
+- **Theme**: seven built-in schemes grouped dark and light, plus your own. **Customise…**
+  opens the theme editor; themes can be exported and imported. **Accent** and **Shape** tune
+  whichever scheme is in force.
+- **Interface**: [**Scale**](/use/workspaces/#how-large-everything-draws), 75 % to 200 %.
+  **Tooltips**, on or off. **Motion**, for how much controls animate. **Compact**, which
+  tightens the row spacing throughout. And **Chrome labels**, deciding whether the bars carry
+  words, icons, or icons everywhere.
+- **Viewer**: whether the scopes and an effect's own graphs take the theme's colours or their
+  own, and whether the surround behind the picture is neutral or themed.
 
-## Interface
+## Timeline
 
-- **Interface scale** and **tooltips**.
-- **Transform in Effect controls**: displays a layer's Transform properties in the effect controls.
-- **Editing**: whether Retime opens to the Value or Speed lens, whether video footage is automatically
-  placed in a sequence layer when adding to a composition, whether the playhead stays where playback paused, 
-  and whether pasted layers keep their original time positioning rather than pasting at the playhead.
+Editing habits: whether [Retime](/use/retime/) opens to the Value or the Speed lens and
+whether it reads in seconds, whether video is placed in a [Sequence
+layer](/use/sequence-layers/) automatically, whether pasted layers keep their original time
+rather than landing at the playhead, and whether the playhead stays where playback stopped.
 
-## Keymap
+Then the panel habits: whether Transform appears in Effect controls, whether an ease opens in
+a popup or the [Easing panel](/use/workspaces/), and whether layer names are drawn on the lane
+bars.
 
-Allows viewing of shortcuts and rebinding. Rebind by clicking a chord; conflicts are flagged. 
-Keymaps can be exported and imported.
+## Viewer
 
-## Performance
+Whether the picture is smoothed when zoomed in, and whether the tone-map button appears on
+the Viewer bar. Tone mapping is a way of looking and never reaches an export — see [Colour
+management](/use/colour-management/).
 
-- **Playback**: Every frame, or Adaptive resolution.
+## Audio
+
+The output device. Follows the system unless you name one.
+
+## Autosave
+
+How often a spare copy is written, and how many are kept. Setting the interval to nothing
+turns autosave off.
+
+## Export
+
+What the export dialogue opens on: a preset, a filename template, and whether it asks for a
+destination each time or uses a folder you name. These are about how you export, not about
+any one project, so a `.lum` sent to somebody else says nothing about where their copy of
+Lumit writes files.
+
+## Preview and cache
+
+- **Playback**: every frame, or adaptive resolution.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
-  graphics card, and frames parked on disk. The disk cache's location is set here as well,
-  per machine or per project.
+  graphics card, and frames parked on disk. The disk cache's location is set here too, per
+  machine or per project.
+
+## Shortcuts
+
+Every command and its chord. Rebind by clicking one; conflicts are flagged. Keymaps export
+and import.
 
 :::note[Not built yet]
-Colour management, plugins, autosave interval, and export defaults are planned.
+There is no page listing installed [plugins](/use/plugins/) — switching one off is a command
+on its row in the Effects & presets panel.
 :::
 
 ## Related
 
-- [Workspaces](/use/workspaces/)
+- [Workspaces and panels](/use/workspaces/)
+- [Colour management](/use/colour-management/) - in Project settings, not here.
 - [Previewing](/use/preview/)
