@@ -49,6 +49,10 @@ const n = (v) => String(v);
 
 const CONTROL = {
   float: "Slider",
+  // A closed range (K-414). It reads as a Float here on purpose: the row is a
+  // slider either way, and the difference - that there is nothing past the ends
+  // to type - is already what the Range column says.
+  slider: "Slider",
   int: "Slider, whole numbers",
   angle: "Dial",
   choice: "Dropdown",
@@ -87,6 +91,7 @@ const anchor = (label) =>
 function rangeCell(p) {
   switch (p.kind) {
     case "float":
+    case "slider":
     case "int": {
       const s = `${n(p.slider_min)} to ${n(p.slider_max)}`;
       if (p.hard_min === undefined && p.hard_max === undefined) return `${s}; any value by typing`;
@@ -123,6 +128,7 @@ function rangeCell(p) {
 function defaultCell(p) {
   switch (p.kind) {
     case "float":
+    case "slider":
     case "int":
       return n(p.default);
     case "angle":

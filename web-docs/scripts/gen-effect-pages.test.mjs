@@ -52,7 +52,23 @@ const REFERENCE = {
       category: "Stylise",
       category_slug: "stylise",
       groups: [],
-      params: [{ id: "matte", label: "Matte", kind: "layer", unit: "raw" }],
+      params: [
+        // A closed range (K-414): the ends are the slider and the hard bounds
+        // at once, so the row must read as an ordinary slider with no "any
+        // value by typing" after it.
+        {
+          id: "completion",
+          label: "Completion",
+          kind: "slider",
+          unit: "percent",
+          default: 50,
+          slider_min: 0,
+          slider_max: 100,
+          hard_min: 0,
+          hard_max: 100,
+        },
+        { id: "matte", label: "Matte", kind: "layer", unit: "raw" },
+      ],
     },
     {
       // Set matte's shape: no universal matte, yet rows called Matte and
@@ -217,6 +233,11 @@ test("an effect with no picture gets no figure and no import", () => {
     const page = readFileSync(join(f.out, "stylise", "no-picture.mdx"), "utf8");
     assert.ok(!page.includes("import Compare"), "an imported component nothing uses");
     assert.ok(!page.includes("<Compare"), "a figure for a picture that is not there");
+    // And the closed range prints its ends rather than a pair of dashes.
+    assert.ok(
+      page.includes("| **Completion** | Slider | 0 to 100 | 50 | Per cent |"),
+      "a closed-range slider must print its range and default",
+    );
   } finally {
     rmSync(f.dir, { recursive: true, force: true });
   }
