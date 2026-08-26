@@ -78,13 +78,15 @@ from the Timeline (K-607's path offset waits with Camera zoom); Emit from image 
 Scatter cannot feed a driver until points-stream.md par.3.3's GPU carriage; morph has
 no feature matching; animators have no rename/reorder.
 
-**FP5 - the ponytail ledger, resolved.** Each `ponytail:` marker either gets its
-upgrade built or its comment rewritten with a concrete trigger a profile can hit;
-none may name no trigger. Known builds: the menu tick becomes a drawn glyph (with
-K-440's owed set); the Viewer snapshot photographs the visible region; the OCIO
-fingerprint folds in `files_read()`; `realise.rs` carries the space name on
-`LayerInputDraw`; the audio-tap cache goes least-recently-used; the keyed-sibling
-proportional write gets its decision (scale every key by the factor) and its entry.
+**FP5 - the ponytail ledger: RESOLVED 2026-08-26** (K-610..K-612): 25 owed glyphs
+drawn (rendered, looked at, and six redrawn for reading as the wrong thing), Iconoir
+dropped entirely, the tick is a drawing everywhere but the native macOS bar (whose
+API has no channel for one); the snapshot photographs the visible region at full
+detail (K-612); the OCIO fingerprint names its LUT files; mattes and light-wrap
+plates read through their own colour space; the audio tap evicts least-recently-used;
+a chained pair scales a keyed half whole (K-610); and every remaining ponytail:
+comment names a ceiling and an observable trigger - none says 'if a profile ever
+shows it' with nothing measurable behind it.
 
 **FP6 - guides (U), after everything above.** 8.1 build guide trued for three
 platforms; 8.2 the 1000-line splits of owner-edited files; 8.3 the audio-workspace
@@ -481,18 +483,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
     built and consuming** (K-530): the three-way setting ships as Icons, is read by the
     Timeline's column toggles, and carries its word in every tooltip. What is left is
     converting the rest of the chrome a surface at a time.
-- **The glyphs the set still owes** (K-440). The set is adopted application-wide, but
-    thirty of the names in `flutter_ui/lib/icons/icons.dart` have no drawing in it yet and
-    still show an Iconoir stand-in or a painter-drawn mark: the puppet tools (pin, starch,
-    overlap, bend), the roto pair (roto brush, refine edge), the pen group's vertex tools
-    (add, delete, convert) and mask feather, the camera navigation tools (orbit, pan,
-    dolly), clone stamp, eraser, vertical type, rotate, star, solid, the fx switch (the
-    add-effect plus is right on a button and wrong on a layer's switch, and one name draws
-    both), collapse transformations, the label tag, the snap magnet, tone map, the node
-    panel's mark, the filled keyframe, and four marks that are Lumit's own artwork and stay
-    painter-drawn on purpose (the Null layer, the rounded-rectangle tool, the Viewer's
-    layer-controls box, the zoom slider's hills). Draw each in `tool/icons/glyphs.json`,
-    re-run the generator, and move its one line in `icons.dart`; no panel changes.
 - **Phase 2 - panels and windows** (K-441, K-442, K-443, K-444, K-449): the effect controls
     (fixed columns, square stopwatch, reserved keyframe-nav slot, linked vector
     wells, the crosshair point picker, Mix row with blend mode and matte channel,
