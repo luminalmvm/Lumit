@@ -1,6 +1,6 @@
 ---
 title: Clone to points
-description: What Clone to points does, and what each of its controls means.
+description: "Stamps a layer's picture at every point of a stream."
 ---
 
 Clone to points is a **Generate** effect.
@@ -12,6 +12,22 @@ Clone to points is a **Generate** effect.
 {/* END GENERATED */}
 
 ## What it does
+
+Wire a producer's teal **Points** socket into this effect, pick a layer, and that layer's
+picture is stamped once per point — at the point's place, turned by the point's own
+rotation, sized by the point's own size and tinted by its colour. A hundred snowflakes from
+[Particulate](/effects/generate/particulate/), a lattice of thumbnails from
+[Grid](/effects/generate/grid/), a logo scattered inside a silhouette from
+[Scatter](/effects/generate/scatter/).
+
+The points can come from an effect in this layer's own stack, or from another layer entirely
+through a [Layer points](/effects/drivers/layer-points/) tap.
+
+Stamps are laid down oldest first, so a newer point covers an older one, and that order is
+the same on every machine and from either scrub direction.
+
+With nothing wired in, or with no Clone layer set, the picture passes straight through. The
+box in the graph carries the no-stream mark, so you can see which of the two it is.
 
 ## Parameters
 
@@ -38,18 +54,23 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Clone layer**
-- **Scale**
-- **Rotation**
-- **Tint**
-- **Max clones**
-- **Mix**
-- **Blend**
-- **Matte**
-- **Invert**
-- **Channel**
+- **Clone layer**: the layer whose picture is stamped. Nothing is drawn until you set it.
+- **Scale**: multiplies each point's own size. At 100 a stamp is as wide as the point would
+  have been as a disc, so most rigs want this well above 100.
+- **Rotation**: added to each point's own rotation, so a producer's spin still reads.
+- **Tint**: how much of the point's colour the stamp takes on. A point's colour carries its
+  fading as well as its hue, so at nought a stamp is opaque wherever the layer is, and at
+  100 it follows the point all the way out.
+- **Max clones**: the most points that may be stamped. A stream longer than this is trimmed
+  to its newest. A capacity declaration, so it does not animate.
+- **Mix**: how much of the result replaces the picture underneath.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
 
 ## Related
 
+- [Particulate](/effects/generate/particulate/)
+- [Grid](/effects/generate/grid/)
+- [Layer points](/effects/drivers/layer-points/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

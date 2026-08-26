@@ -1,6 +1,6 @@
 ---
 title: Trail
-description: What Trail does, and what each of its controls means.
+description: "Draws where every point of a stream has just been."
 ---
 
 Trail is a **Generate** effect.
@@ -12,6 +12,21 @@ Trail is a **Generate** effect.
 {/* END GENERATED */}
 
 ## What it does
+
+Wire a producer's teal **Points** socket into this effect and every point grows a tail: a
+line of dots, or one connected ribbon, running back through the places it was a moment ago
+and fading as it goes.
+
+Nothing is remembered between frames. Instead of keeping a history, Trail asks the producer
+again at each of a handful of earlier moments and reads each point's older self out of the
+answer. That is why frame 500 costs what frame 3 costs, from a cold start and from either
+scrub direction, and why a tail is the same however you arrived at the frame.
+
+A point that had not been born yet at one of those earlier moments simply has a shorter
+tail, which is the honest picture rather than a fault.
+
+With nothing wired in, the picture passes straight through and the box carries the
+no-stream mark.
 
 ## Parameters
 
@@ -40,20 +55,30 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Samples**
-- **Spacing**
-- **Style**
-- **Scale**
-- **Feather**
-- **Fade**
-- **Max trails**
-- **Mix**
-- **Blend**
-- **Matte**
-- **Invert**
-- **Channel**
+- **Samples**: how many earlier moments are looked at, and so how many dabs long a tail is.
+  Each one costs another evaluation of the producer, so this is the dial that decides what
+  the effect costs.
+- **Spacing**: how far apart in time those moments are. A composition frame is the natural
+  setting and the default is close to one. Wider spacing buys a longer tail for the same
+  number of samples, at the price of a gappier one.
+- **Style**: **Dots** draws one dab per sample, which is the honest picture of what was
+  actually looked at. **Segments** joins each dab to the one before it into a continuous
+  ribbon.
+- **Scale**: multiplies each point's own size — the diameter of a dot, or the thickness of a
+  segment.
+- **Feather**: how soft a dab's edge is.
+- **Fade**: how far the far end of a tail fades out. At 100 the oldest sample is invisible
+  and the tail dies away; at nought the whole tail is as solid as the point itself.
+- **Max trails**: the most points that may grow a tail. A stream longer than this is trimmed
+  to its newest. A capacity declaration, so it does not animate.
+- **Mix**: how much of the result replaces the picture underneath.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
 
 ## Related
 
+- [Particulate](/effects/generate/particulate/)
+- [Echo](/effects/temporal/echo/) - trails made of whole frames rather than of points.
+- [Clone to points](/effects/generate/clone-to-points/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

@@ -1,17 +1,32 @@
 ---
 title: Grid
-description: What Grid does, and what each of its controls means.
+description: "A lattice of points, and the discs that make it visible."
 ---
+
+import Compare from "../../../../components/Compare.astro";
 
 Grid is a **Generate** effect.
 
 {/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
 
-
+<Compare label="Grid" category="generate" slug="grid" />
 
 {/* END GENERATED */}
 
 ## What it does
+
+Puts a point at every cell of a regular lattice — rows, columns, and planes receding into
+depth — and draws each one as a soft disc. There is no time in it: the grid at frame 500 is
+the grid at frame 3.
+
+The discs are only half of what it is for. Grid also hands the same points out on a teal
+**Points** socket, so the family that reads a stream can build on it: a copy of a layer at
+every cell with [Clone to points](/effects/generate/clone-to-points/), a mesh over the
+lattice with [Connect points](/effects/generate/connect-points/), a tail behind each cell
+with [Trail](/effects/generate/trail/).
+
+Turn Mix down to nought and the stream is still handed out while nothing is drawn. That is
+how you use Grid purely as a source of points.
 
 ## Parameters
 
@@ -52,30 +67,34 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Columns**
-- **Rows**
-- **Planes**
-- **Spacing x**
-- **Spacing y**
-- **Spacing z**
-- **Position x**
-- **Position y**
-- **Position z**
-- **Jitter x**
-- **Jitter y**
-- **Jitter z**
-- **Seed**
-- **Size**
-- **Feather**
-- **Colour**
-- **Max points**
-- **Mix**
-- **Blend**
-- **Matte**
-- **Invert**
-- **Channel**
+- **Columns**, **Rows** and **Planes**: how many cells across, down, and through the layer's
+  plane. Planes at 1 is flat, which is what a 2D layer wants; more than one only shows once
+  the layer is 3D and the composition has a camera. See [Cameras and 3D](/use/camera/).
+- **Spacing x**, **Spacing y** and **Spacing z**: the gap between cells along each axis. The
+  lattice is as big as its spacing makes it — it is not fitted to the frame.
+- **Position x**, **Position y** and **Position z**: where the middle of the lattice sits.
+  Position z is how far in front of or behind the layer's own plane it floats; nought is on
+  the plane.
+- **Jitter x**, **Jitter y** and **Jitter z**: how far a cell may wander off its place, so a
+  lattice can be nudged out of its own perfection. Each cell gets the same nudge every
+  frame.
+- **Seed**: which jitter. Reseed to roll a different one.
+- **Size**: the diameter of the disc a point is drawn as.
+- **Feather**: how soft that disc's edge is. At nought it is a hard circle.
+- **Colour**: what the discs are drawn in. Values above 1 are legal, and useful under a
+  [Glow](/effects/stylise/glow/).
+- **Max points**: the most points that may exist at once. It is a capacity declaration
+  rather than a look control, so it does not animate; a lattice bigger than the cap is cut
+  off at the end.
+- **Mix**: how much of the drawing lands on the picture. At nought the points are still
+  emitted on the socket.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
 
 ## Related
 
+- [Scatter](/effects/generate/scatter/) - points thrown at random rather than ruled out.
+- [Clone to points](/effects/generate/clone-to-points/)
+- [Connect points](/effects/generate/connect-points/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

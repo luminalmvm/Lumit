@@ -1,6 +1,6 @@
 ---
 title: Connect points
-description: What Connect points does, and what each of its controls means.
+description: "Joins points that are near each other with lines."
 ---
 
 Connect points is a **Generate** effect.
@@ -12,6 +12,21 @@ Connect points is a **Generate** effect.
 {/* END GENERATED */}
 
 ## What it does
+
+Wire a producer's teal **Points** socket into this effect and every pair of points closer
+together than **Max distance** is joined by a line. Particles drifting past each other web
+up and let go again; a [Grid](/effects/generate/grid/) becomes a mesh; a
+[Scatter](/effects/generate/scatter/) inside a silhouette becomes a constellation of it.
+
+Nearness is measured on the frame rather than in space, so on a 3D layer two points join
+when they look close through the composition's camera.
+
+Each line takes the average of the colours of the two points it joins, so a producer whose
+particles change colour as they age still reads along the web. **Colour** multiplies that,
+which is why it is white by default.
+
+With nothing wired in, the picture passes straight through and the box carries the
+no-stream mark.
 
 ## Parameters
 
@@ -43,21 +58,31 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Max distance**
-- **Max connections**
-- **Taper**
-- **Fade**
-- **Width**
-- **Feather**
-- **Colour**
-- **Max points**
-- **Mix**
-- **Blend**
-- **Matte**
-- **Invert**
-- **Channel**
+- **Max distance**: how far apart two points may be and still be joined. Nought joins
+  nothing.
+- **Max connections**: the most lines that may meet at any one point, which is what stops a
+  dense crowd turning into a solid sheet. A pair is joined only when both ends still have
+  room.
+- **Taper**: how much a line thins as it lengthens. At nought every line is the same width;
+  at 100 a line at exactly Max distance has no width left.
+- **Fade**: how much a line fades as it lengthens. At 100 a line at exactly Max distance is
+  invisible, so the web comes and goes rather than switching on and off. That is the
+  default, because a plexus that pops is the first thing anyone has to go and fix.
+- **Width**: the thickness of a line.
+- **Feather**: how soft a line's edge is.
+- **Colour**: multiplies the colour each line inherits from its two ends. White leaves it
+  alone.
+- **Max points**: the most points that may be considered. A stream longer than this is
+  trimmed to its newest, which bounds the pairing as well as the drawing. A capacity
+  declaration, so it does not animate.
+- **Mix**: how much of the result replaces the picture underneath.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
+  see [Effects](/use/effects/).
 
 ## Related
 
+- [Particulate](/effects/generate/particulate/)
+- [Grid](/effects/generate/grid/)
+- [Trail](/effects/generate/trail/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)
