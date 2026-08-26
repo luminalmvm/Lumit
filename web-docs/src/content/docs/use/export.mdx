@@ -5,52 +5,166 @@ sidebar:
   order: 18
 ---
 
-**Export** renders your work and provides you with an output file(s).
+import Shot from "../../../components/Shot.astro";
+
+**Export** writes a composition out as a file. One dialogue collects the settings, and a
+queue does the writing.
 
 ## Export a composition
 
-1. Select the composition.
+<Shot file="export.png" caption="The export dialogue, on the Output tab." eager/>
+
+1. Front the composition, or select it in the Project panel.
 2. Choose **File ▸ Export**, or press `Ctrl+Alt+M`.
-3. Set the format, preset, range and destination.
-4. Start it.
+3. Pick a preset, or set the fields yourself.
+4. Choose where to write with **Browse**.
+5. Press **EXPORT**.
 
-The dialogue exports one composition at a time.
+**Composition ▸ Add to export queue** (`Ctrl+M`) opens the same dialogue. The difference
+is which button you press at the end of it: **EXPORT** sets the queue running, **Add to
+queue** leaves the item waiting for you to start it.
 
-## Export doesn't block
+## One page, and the tabs say where you are
 
-Export runs apart from the interface. You can carry on editing while it writes.
+The dialogue is a single scrolling page rather than a stack of them. The tab row at the
+top — **Output**, **Time**, **Picture**, **Colour**, **Audio**, **Metadata** — follows
+whichever section you have scrolled to, and clicking a tab scrolls that section into view
+and lights it for a moment. Nothing is hidden behind a tab you did not open.
+
+| Section | What it holds |
+| --- | --- |
+| **Output** | Video, image sequence or audio only; the format; where to write; and whether to make a noise or open the folder when it finishes. |
+| **Composition** | Quality, resolution, whether effects and solo switches are honoured, proxies, guide layers, the disk cache and colour depth. Part of the Output tab. |
+| **Time** | The span, the frame rate, and overrides for motion blur and Retime blend. |
+| **Picture** | Channels and alpha, depth, bit rate, resize, crop, and the resampler. |
+| **Colour** | The space the file is written and tagged in. |
+| **Audio** | Whether sound is written, at what sample rate, sample width, channel layout and bit rate. |
+| **Metadata** | Title, author, copyright, comment and created, plus any field of your own. |
+
+Every field starts at the truth rather than at a number. The frame rate starts as the
+composition's own; the span starts as the work area where one is set and the whole
+composition where it is not.
+
+The footer states what pressing the button would produce — frames, length, size, rate, and
+an estimate of the file. When a setting is one the format cannot carry, the footer says so
+there instead, and both buttons go quiet until it is fixed.
 
 ## Presets
 
-| Preset | For |
+A **preset** is the whole settings payload under a name, not a stamp on three fields of
+it. Picking one fills in every section at once.
+
+| Preset | What it is |
 | --- | --- |
-| **YouTube 1080p60** | H.264, high bitrate. |
-| **YouTube 1440p60** | HEVC; the scene's quality trick. |
-| **Vertical 1080×1920** | Shorts, TikTok, Reels. |
-| **PNG sequence** | One lossless still per frame, with alpha. |
+| **Master** | The composition's own frame and rate, HEVC at a worked-out bit rate, everything on. What you export when the file is for you. |
+| **YouTube 1080p60** | 1920×1080, H.264, 16 Mb/s target. |
+| **YouTube 1440p60** | 2560×1440, HEVC, 25 Mb/s target. |
+| **YouTube 4K60** | 3840×2160, HEVC, 45 Mb/s target. |
+| **Vertical 1080×1920p60** | H.264 for shorts and reels. |
 
-## Codecs and encoders
+Those five ship with Lumit and cannot be changed — a project that says "YouTube 1080p60"
+has to mean the same thing on someone else's machine. **Save as…** stores the settings in
+force under a name of your own; **Edit** renames the one showing, and offers to delete it.
+Your presets live with the application rather than with the project, so they follow you
+between files.
 
-Video exports as **H.264** or **HEVC**. Lumit probes for a hardware encoder (NVENC, AMF
-or QSV) and picks one automatically. A software fallback is always available. Audio is
-AAC. A PNG sequence is lossless, and it carries no audio and no bitrate.
+**Set as default** remembers the preset and format showing as what the dialogue opens on
+next time. Where the export is always written is a separate question, and it lives in
+**Edit ▸ Settings ▸ Export**: ask each time, beside the project, or always the same
+folder, with a filename template.
 
-## Export is always full quality
+## What each format can hold
+
+The engine decides. A control the chosen format cannot honour is drawn **disabled**
+rather than left out or left live, so a setting never quietly does nothing.
+
+| Format | Picture | Sound | Alpha | Depth | Bit rate | Colour space | Metadata |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **H.264 (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
+| **HEVC (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
+| **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
+| **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
+| **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
+| **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
+
+An image sequence writes one numbered file per frame beside the name you chose. The
+`image2` muxer it goes through has nowhere to keep container metadata, which is why that
+whole section is dead for a sequence.
+
+## Audio only
+
+The third chip on the Output row writes sound and no picture — the composition's finished
+mix as an M4A or a WAV. Everything to do with the picture goes dead, and the Audio
+section is where the work is: 44.1, 48 or 96 kHz; 16 bit, or 24 for the uncompressed
+forms; stereo, or the finished stereo mix folded down to mono once.
+
+## Colour space
+
+The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
+Linear, Rec. 709, Rec. 2020 or Display P3. A container that can state its space says which
+one in its own header, and a still sequence — which states none — is offered only the
+space an untagged file is universally taken to be.
+
+Where the project names a colour configuration, that configuration's own output spaces
+appear under a heading of their own. A file written through one of those is left
+**untagged** rather than mis-tagged, because there is no reliable set of primaries to
+state. A space the configuration cannot actually deliver is listed and dead, with the
+reason on hover, rather than left out for you to hunt for.
+
+An export asking for a space this build cannot transform to is refused rather than written
+wrongly.
+
+## The render settings
+
+Two rows in the Composition group decide what the export reads rather than how it is
+encoded, and both default to the delivery answer whatever the project is set to:
+
+- **Proxies** — *Use no proxies*. A stand-in switched on to keep previews fast is not a
+  picture anybody meant to ship. See [Proxies](/use/proxies/).
+- **Guide layers** — *All off*.
+
+**Motion blur** and **Retime blend** in the Time section are overrides on the export's own
+throwaway copy of the composition: leave them at *Current settings* to get what you see,
+or force them off for a fast check. Neither touches the project.
+
+## The queue
+
+<Shot file="export-queue.png" caption="The export queue, with one composition waiting."/>
+
+Both buttons put the item in the queue, and the queue window opens on top so nothing is
+started somewhere you cannot see it. **Window ▸ Export queue** reopens it later.
+
+One export runs at a time and the rest wait. Each row says which composition it came
+from, what it is writing, and how it is getting on — *Waiting*, the frame it is on and the
+encoder writing it, *Done*, or the failure in the engine's own words. **START** sets a
+stopped queue running.
+
+- **Drag a waiting row** to move it up or down. The order of the list is the order they
+  run in; a row that is running, has run, or has failed cannot be picked up.
+- **The × on a row** cancels it while it is writing, and forgets it once it has stopped.
+
+An item is photographed the moment it is queued, so it goes on writing what you asked for
+however much you change the project afterwards.
+
+## Export does not block, and it does not cut corners
+
+Export runs apart from the interface. You can carry on editing while it writes. The status
+strip at the bottom of the window says which frame it is on and which encoder is writing
+it, and carries a Cancel that works whether the queue window is open or not.
 
 [Adaptive degradation](/use/preview/) and preview resolution touch the preview alone. An
-export always runs at full quality.
-
-To go faster, an export may **bake** internally, flattening retimes, rasterising and
-pre-compositing. Baking happens inside the export pipeline, and your project is never
-altered by it.
+export always runs at the quality the dialogue asks for. To go faster it may **bake**
+internally — flattening retimes, rasterising, pre-compositing — inside the export pipeline
+only. Your project is never altered by it.
 
 :::note[Not built yet]
-An export queue, where several items are lined up with their own range, preset and
-filename, is planned but not built. So are ProRes and DNxHR intermediate codecs, free
-width and height (sizes are preset-driven today), and an export priority control.
+ProRes and DNxHR intermediate codecs are not offered, and there is no export priority
+control. OCIO is the one face in the dialogue drawn dead in this build: the **Managed by**
+row reads back the configuration the project names and cannot be set from here.
 :::
 
 ## Related
 
 - [Preview and playback](/use/preview/)
 - [Compositions](/use/compositions/)
+- [Settings](/use/settings/)

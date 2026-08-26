@@ -70,15 +70,50 @@ Frame interpolation is a render setting either way. It does not change the retim
 
 ## Stretch
 
-:::note[Not built yet]
-Stretch is specified but not built. Use Retime for now: a straight line through the graph
-is a constant rate.
-:::
+**Stretch** asks the question the other way round: not "what does the curve do", but "play
+this at 50% and give it the length that implies". Right-click the layer's row in the
+Timeline and choose **Stretch…**.
 
-**Stretch** would be a uniform rate multiplier on the whole layer. Unlike Retime, it
-rescales the layer's keyframes with it.
+The dialogue takes a **new speed** in per cent or a **new duration**, and editing either
+well moves the other — they are one number seen twice. At half speed a layer is twice as
+long, and a montage is usually fighting you about one of the two rather than the other.
+
+The layer is anchored at its **in point**: it starts where it started, and its end moves.
+The frame showing at the in point is the frame that stays there.
+
+Stretch is not a second rate multiplier hiding behind the map. It rescales the Retime map
+itself, so the graph editor goes on showing the true curve, and an existing shape is kept —
+every key's time is scaled about the in point and its eased sides go with it, which is the
+same shape said over a longer or shorter stretch. A layer with no map yet gets the plain
+one first, so stretching an ordinary layer means what it looks like it means. One undo
+step: the length and the map move together or not at all.
+
+A **clip** inside a Sequence layer has **Speed…** instead, and no duration well. A clip's
+place and length are fixed — re-speeding one never moves its edges — so a duration to type
+would be a promise Lumit is right to refuse. **Reset speed** on the same menu puts it back
+to 100%.
+
+## Freeze a frame where you are
+
+Right-click the layer's row and choose **Freeze frame at playhead**. The moment showing is
+held for one second, everything after it is pushed that far later, and the map is cropped
+back to the layer's own out point — so the layer's length never changes and anything cut to
+the beat stays cut to the beat. The tail may newly overrun, and that is drawn rather than
+quietly repaired.
+
+The hold is two ordinary keyframes once it is made, so it drags and eases like anything
+else. It is refused on a Sequence layer, whose clips carry their own maps, and at a moment
+on or outside the layer's own ends, where there is nothing to split.
+
+## The razor through a ramp
+
+A [Sequence layer's](/use/sequence-layers/) razor cuts straight through an eased speed
+ramp. The two halves' maps, laid end to end, are the curve that was there before — not
+close to it, the same — so each half goes on playing the source moment it was playing, and
+neither edge moves.
 
 ## Related
 
 - [The graph editor](/use/graph-editor/)
 - [Sequence layers](/use/sequence-layers/)
+- [Keyframes](/use/keyframes/)

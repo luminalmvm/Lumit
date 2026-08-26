@@ -22,7 +22,12 @@ Right-click the editor and choose **Remove expression** to go back to a plain va
 property keeps the number it was showing.
 
 Transform properties and effect parameters both take one. Anything made of several
-numbers — a point, a colour — does not yet.
+numbers — a point, a colour — does not yet, and the menu simply does not offer it there.
+
+A [driver on the node graph](/use/nodes/) is the other way to make a value come from
+somewhere else. Reach for an expression when the rule is arithmetic you can write down, and
+for a driver when it is something the composition already has — the loudness of a track, a
+wobble, another layer's points.
 
 ## What the script can read
 
@@ -66,4 +71,5 @@ keyframes to take hold of — to change the shape, change the script.
 
 - [Keyframes](/use/keyframes/)
 - [The graph editor](/use/graph-editor/)
+- [The node graph](/use/nodes/)
 - [Transform](/use/transform/)

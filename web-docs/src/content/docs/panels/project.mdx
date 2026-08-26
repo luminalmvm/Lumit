@@ -7,35 +7,107 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The Project panel holds all imported footage, compositions, and other layers created.
+The Project panel is the shelf the project's things live on: everything imported, every
+composition, and everything else made outside a timeline.
+
+<Shot file="project-panel.png" caption="The Project panel, holding a folder of compositions, sound, footage with a proxy attached, and a still." eager/>
 
 | Item | What it is |
 | --- | --- |
 | **Footage item** | A reference to a media file on disk. |
-| **Audio item** | A reference to an audio file on disk. |
-| **Composition** | Compositions can be used as footage and contain other elements within them. |
-| **Folder** | Used for grouping items within the project panel. |
+| **Audio item** | A reference to a sound file on disk. |
+| **Composition** | A timeline. It can be used as footage inside another composition. |
+| **Folder** | A grouping inside the panel. It creates no folder on your computer. |
 | **Solid** | A solid colour. |
 
+Top to bottom the panel is a preview card for whatever is picked, a search well with the
+colour filter beside it, a row of column headings, the tree, and a bottom bar.
 
-<Shot file="project-panel.png" caption="The Project panel, holding footage, a folder and a composition." eager/>
+## The preview card
 
-## The Header
+Select an item and the card at the top shows what Lumit knows about it: a thumbnail, the
+name, and the facts — resolution, frame rate, duration, codec. Sound reads its rate and
+channels; a folder reads how many items it holds.
 
-When you select an item, if there's additional infomation it will display it here.
-This includes: filename, type, resolution, frame rate, and duration.
+## Bringing things in
 
-## New composition
+- **Drag files onto the panel** from your file manager. The panel lights up while they
+  hover. This is the same command as **File ▸ Import footage**, so a batch is one undo step
+  and image sequences are spotted for you.
+- **Drop a folder** and it is read one level deep for files Lumit can take, sorted, and
+  handed over as if you had picked them — which is how a folder of numbered stills becomes
+  one image-sequence item.
+- **Double-click empty space** in the tree to open the import dialogue.
 
-The panel carries a **New composition** button. Additionally if you drag footage onto 
-it the dialogue will match the footage's resolution, framerate, and length.
+A `.lum` project, or an After Effects `.aep` or `.zip`, is *not* opened by dropping it.
+Opening a project throws away the one on screen and importing an After Effects project is a
+long conversion with a report at the end; neither should happen because something landed on
+a panel. The status line names the menu road instead.
 
-:::note[Note yet built]
-Begin able to re-interpret the footage you imported is planned. This includes properties such as :
-frame rate, alpha, and colour space. See [Importing media](/use/importing/).
-:::
+## Clicking and opening
+
+A click selects the moment the button goes down. A click on the row that is *already* the
+lone selection **opens** it — so a double-click is "select, then open" in one motion.
+
+| Item | What opening does |
+| --- | --- |
+| **Composition** | Fronts it in the Viewer and Timeline. |
+| **Footage** | Raises **New composition** with the resolution, frame rate and length already matched to it. |
+| **Folder** | Shows or hides its children. |
+
+Footage and composition rows drag onto the Timeline; a composition lands as a Precomp
+layer. Dropped onto **COMPOSITION** on the bottom bar instead, they raise the same
+New composition dialogue with the media's size, rate and length filled in, and every
+dropped item lands in the finished composition as a layer.
+
+Renaming is `Enter`, or **Rename** on the row's own menu.
+
+## Colour labels
+
+Right-click a row and pick a chip from the **Label** strip. The tag tints the item's glyph
+rather than adding a dot beside it, so the tree stays a tight list of names.
+
+**A folder hands its colour down.** A row with no tag of its own wears the colour of the
+nearest tagged folder above it, and only an item with neither falls back to the plain
+per-type tint. An explicit tag always wins over an inherited one, which is what makes
+tagging one clip inside a tagged folder mean something.
+
+The dots beside the search well filter by colour: tap one to narrow the tree to the items
+wearing it, tap the neutral dot — or the held colour again — to show everything.
+
+## Proxies
+
+A **proxy** is a smaller stand-in that keeps previews fast. Attach one from the row's menu:
+**Set proxy…** points at a file you already have, **Make proxy** transcodes one in the
+background, **Use proxy** decides whether this item reads from it, and **Clear proxy**
+forgets it. A row reading from its proxy wears a `proxy` badge beside `in use`.
+
+**PROXIES** on the bottom bar is the master switch for the whole project — using proxies,
+or using originals — and an export reads the originals whatever it is set to. See
+[Proxies](/use/proxies/).
+
+## Missing files
+
+If a file moves, its row wears a `missing` badge and the glyph turns to a broken link. The
+badge *is* the relink control: click it and pick the new path, and every layer using the
+item recovers. **Find missing footage** on the row menu searches for it instead.
+
+The count at the right of the bottom bar reads `1 missing · 10 items` when anything is
+broken, and clicking it filters the tree down to the broken rows alone.
+
+## Colour space
+
+A footage item's own menu carries a **Colour space** submenu: *As the file says*, which is
+where every item starts, and — where the project names a colour configuration — that
+configuration's own space names underneath. Use it when a file arrives untagged or tagged
+wrongly. See [Colour management](/use/colour-management/).
+
+It is the only piece of footage interpretation that exists. Overriding a file's frame rate
+or its alpha is planned; there is nowhere to do it today.
 
 ## Related
 
 - [Importing media](/use/importing/)
+- [Proxies](/use/proxies/)
 - [Compositions](/use/compositions/)
+- [Projects](/use/projects/)
