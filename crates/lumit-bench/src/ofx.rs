@@ -97,12 +97,15 @@ pub fn ensure(dir: &Path) -> Result<Vec<PathBuf>, String> {
 
 /// openfx-misc: Natron's plugin set, built with its own CMake project.
 fn openfx_misc(work: &Path, into: &Path) -> Result<(), String> {
+    // The compiler is asked for **before** the download: a hundred megabytes of
+    // somebody else's source, fetched and then found to be unbuildable, is a
+    // rude way to say "no cmake here".
+    tool("cmake")?;
     let checkout = clone(
         work,
         "openfx-misc",
         "https://github.com/NatronGitHub/openfx-misc.git",
     )?;
-    tool("cmake")?;
     let build = checkout.join("build");
     run(Command::new("cmake")
         .arg("-S")
@@ -121,12 +124,12 @@ fn openfx_misc(work: &Path, into: &Path) -> Result<(), String> {
 /// ntsc-rs: one plugin, built by Cargo, laid out as a bundle by hand because
 /// its build does not make one.
 fn ntsc_rs(work: &Path, into: &Path) -> Result<(), String> {
+    tool("cargo")?;
     let checkout = clone(
         work,
         "ntsc-rs",
         "https://github.com/valadaptive/ntsc-rs.git",
     )?;
-    tool("cargo")?;
     run(Command::new("cargo").current_dir(&checkout).args([
         "build",
         "--release",
