@@ -250,6 +250,62 @@ fn preview_degrades_where_delivery_refuses() {
     );
 }
 
+/// A config that reaches a look-up-table file beside it, so the file the
+/// transform names is part of what the colour comes out as.
+const WITH_LUT: &str = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: shaped
+    to_reference: !<FileTransform> {src: curve.spi1d, interpolation: linear}
+"#;
+
+const LUT_BEFORE: &str = "Version 1\nFrom 0.0 1.0\nLength 2\nComponents 1\n{\n0.0\n1.0\n}\n";
+const LUT_AFTER: &str = "Version 1\nFrom 0.0 1.0\nLength 3\nComponents 1\n{\n0.0\n0.25\n1.0\n}\n";
+
+/// **A config is not one file** (docs/impl/ocio.md §5.5). Editing a `.spi1d`
+/// the config points at leaves `config.ocio` byte for byte as it was, and it
+/// changes every picture the config makes — so it must retire the frames it
+/// made, exactly as editing the config itself does.
+#[test]
+fn editing_a_look_up_table_the_config_names_also_retires_its_frames() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, WITH_LUT).unwrap();
+    std::fs::write(dir.path().join("curve.spi1d"), LUT_BEFORE).unwrap();
+    let doc = doc_naming(&path);
+
+    let mut state = ColourState::default();
+    state.sync(&doc);
+    assert!(state.loaded().unwrap().usable());
+    let before = state.frame_identity();
+    assert_ne!(before, 0);
+
+    // Nothing touched: the same name, so a project merely being redrawn keeps
+    // its cache.
+    state.sync(&doc);
+    assert_eq!(state.frame_identity(), before);
+
+    std::fs::write(dir.path().join("curve.spi1d"), LUT_AFTER).unwrap();
+    state.sync(&doc);
+    assert_ne!(
+        state.frame_identity(),
+        before,
+        "an edited look-up table must retire the frames it made"
+    );
+    assert!(state.loaded().unwrap().usable());
+    let after = state.frame_identity();
+    state.sync(&doc);
+    assert_eq!(state.frame_identity(), after, "and then settle");
+}
+
 /// The built-in colour family is untouched by any of this: a project with no
 /// config exports exactly as it did.
 #[test]

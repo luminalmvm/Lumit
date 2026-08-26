@@ -113,6 +113,51 @@ impl LoadedConfig {
         &self.bridge
     }
 
+    /// Every look-up-table file this config's transforms name, resolved through
+    /// `search_path` and deduplicated, in path order.
+    ///
+    /// In plain terms: a config is not one file. It points at `.spi3d`, `.cube`
+    /// and `.clf` files beside it, and those files are as much a part of what
+    /// the colour comes out as is what the config itself says — so anything
+    /// asking "has this config changed" has to ask about them too (§5.5).
+    ///
+    /// It is the files a resolve *can* read rather than the ones some
+    /// particular resolve did: this walks the declarations, which needs no
+    /// bookkeeping inside the resolve and cannot go stale when a different edge
+    /// is asked for next. A path that no longer resolves is simply not listed;
+    /// the resolve that wants it refuses by name, which is its job, not this
+    /// one's.
+    #[must_use]
+    pub fn files_read(&self) -> Vec<std::path::PathBuf> {
+        let mut srcs = Vec::new();
+        let mut walk = |spec: &Option<TransformSpec>| {
+            if let Some(s) = spec {
+                collect_files(s, &mut srcs);
+            }
+        };
+        for space in self.config.spaces.values() {
+            walk(&space.to_reference);
+            walk(&space.from_reference);
+        }
+        for look in self.config.looks.values() {
+            walk(&look.transform);
+            walk(&look.inverse_transform);
+        }
+        for vt in self.config.view_transforms.values() {
+            walk(&vt.from_scene_reference);
+            walk(&vt.to_scene_reference);
+            walk(&vt.from_display_reference);
+            walk(&vt.to_display_reference);
+        }
+        let mut out: Vec<_> = srcs
+            .iter()
+            .filter_map(|src| self.config.resolve_lut_path(src).ok())
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
     // -- the reference space, and the bridge across it ----------------------
 
     /// The config's reference space → Lumit's working space.
@@ -545,6 +590,19 @@ impl LoadedConfig {
             }
             TransformSpec::Builtin { style, dir } => builtin::resolve(style, *dir)?,
         })
+    }
+}
+
+/// The `src` of every `FileTransform` in one spec, groups walked through.
+fn collect_files(spec: &TransformSpec, out: &mut Vec<String>) {
+    match spec {
+        TransformSpec::Group(children, _) => {
+            for child in children {
+                collect_files(child, out);
+            }
+        }
+        TransformSpec::File { src, .. } => out.push(src.clone()),
+        _ => {}
     }
 }
 

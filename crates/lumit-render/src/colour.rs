@@ -184,6 +184,11 @@ pub struct ColourState {
     /// What `loaded` was built from, so an unchanged document costs one
     /// comparison rather than one parse.
     from: Option<(String, u64)>,
+    /// The look-up-table files the loaded config names
+    /// ([`LoadedConfig::files_read`]), kept so the next sync can ask whether any
+    /// of them has been edited — the file list is only knowable once the config
+    /// has been parsed, and editing a LUT leaves the config's own bytes alone.
+    files: Vec<std::path::PathBuf>,
 }
 
 impl ColourState {
@@ -194,6 +199,7 @@ impl ColourState {
         let Some(media) = &doc.colour.config else {
             self.loaded = None;
             self.from = None;
+            self.files.clear();
             return;
         };
         let path = if media.absolute_path.is_empty() {
@@ -202,12 +208,31 @@ impl ColourState {
             media.absolute_path.clone()
         };
         let bytes = std::fs::read(&path).ok();
-        let hash = bytes.as_ref().map_or(0, |b| content_hash(b));
+        // The LUT list belongs to the config already loaded, which is the only
+        // list there is until this one is parsed: an edited LUT changes this
+        // hash, the parse below hands back the list again, and a *changed* list
+        // can only come from a changed config file, which changed the hash on
+        // its own bytes.
+        let hash = bytes
+            .as_ref()
+            .map_or(0, |b| content_hash(b, self.files.as_slice()));
         if self.from.as_ref() == Some(&(path.clone(), hash)) {
             return;
         }
-        self.from = Some((path.clone(), hash));
-        self.loaded = Some(Arc::new(load(&path, hash, bytes.is_some())));
+        let mut loaded = load(&path, hash, bytes.is_some());
+        self.files = loaded
+            .config
+            .as_ref()
+            .map(LoadedConfig::files_read)
+            .unwrap_or_default();
+        // Re-fold with the list this config actually names, so the identity
+        // stored is the one the next sync will compute rather than one parse
+        // behind it.
+        if let Some(b) = &bytes {
+            loaded.hash = content_hash(b, &self.files);
+        }
+        self.from = Some((path.clone(), loaded.hash));
+        self.loaded = Some(Arc::new(loaded));
     }
 
     /// The config in force, in whichever state it is. `None` means the project
@@ -299,14 +324,41 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
     }
 }
 
-/// The config file's content hash, folded to the 64 bits a frame key wants.
-fn content_hash(bytes: &[u8]) -> u64 {
-    // ponytail: the config file's bytes only. §5.5 also names the resolved
-    // look-up-table files' bytes, which `lumit-colour` does not report back;
-    // editing a `.spi3d` in place without touching `config.ocio` therefore
-    // keeps the frames it made. Reloading the project picks it up. The upgrade
-    // is a `files_read()` accessor on `LoadedConfig` folded in here.
-    let d = blake3::hash(bytes);
+/// The config's content hash — the config file's own bytes, plus the identity
+/// of every look-up-table file it names (§5.5) — folded to the 64 bits a frame
+/// key wants.
+///
+/// A config is not one file: it points at `.spi3d`, `.cube` and `.clf` files
+/// beside it, and editing one of those changes the picture just as surely as
+/// editing the config does. So each one is folded in here, and a frame made
+/// before the edit is named differently from a frame made after it.
+///
+/// ponytail: the LUT files are folded in by path, length and last-modified
+/// stamp rather than by their bytes — the same identity
+/// [`crate::fxops::LutCache`] keys an effect's `.cube` on (K-271), and for the
+/// same reason: this runs at the top of every render, and re-reading tens of
+/// megabytes of cube per frame to be told nothing changed is a cost that only
+/// shows up on someone else's machine. The ceiling is an edit that changes
+/// neither length nor stamp — a hex editor swapping bytes in place, or a build
+/// step restoring the mtime it found — which keeps the frames it made until the
+/// project is reloaded. If that ever bites, hash the bytes and cache each
+/// file's hash against its stamp.
+fn content_hash(bytes: &[u8], files: &[std::path::PathBuf]) -> u64 {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(bytes);
+    for file in files {
+        hasher.update(file.as_os_str().as_encoded_bytes());
+        if let Ok(meta) = std::fs::metadata(file) {
+            hasher.update(&meta.len().to_le_bytes());
+            if let Ok(Ok(stamp)) = meta
+                .modified()
+                .map(|m| m.duration_since(std::time::UNIX_EPOCH))
+            {
+                hasher.update(&stamp.as_nanos().to_le_bytes());
+            }
+        }
+    }
+    let d = hasher.finalize();
     let mut k = [0u8; 8];
     k.copy_from_slice(&d.as_bytes()[..8]);
     // Zero is "no config" (see `frame_identity`), so nudge the one-in-2^64 hash

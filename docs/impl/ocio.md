@@ -540,9 +540,15 @@ rather than a new test being invented.
 
 Colour state folds into the existing keys; nothing new is invented:
 
-- the **config content hash** (config file bytes + every resolved LUT file's bytes,
+- the **config content hash** (config file bytes + every resolved LUT file's identity,
   i.e. the fingerprint the artefact cache already keys on) folds into the frame key's
-  quality field — edit the config on disk and every frame retires;
+  quality field — edit the config *or one of its LUTs* on disk and every frame
+  retires. The LUT files enumerate through `LoadedConfig::files_read`, and each
+  counts by path, length and last-modified stamp rather than by its bytes — the
+  identity the effect LUT cache already uses (K-271) — because this is recomputed at
+  the top of every render and re-reading tens of megabytes of cube per frame to be
+  told nothing changed is not a cost worth paying. The ceiling is an edit that
+  changes neither length nor stamp; reloading the project picks that up;
 - a footage item's **space name** folds into its decode-job fields (docs/06 §5.2 keys
   decode by fields), so reassigning one item retires that item's frames only;
 - the **display/view choice** folds into the display-encoded RAM-tier key beside the
