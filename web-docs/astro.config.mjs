@@ -139,6 +139,7 @@ r.addEventListener("input",set);set()})})`,
                         "use/nodes",
                         "use/fx-console",
                         "use/presets",
+                        "use/plugins",
                       ],
                     },
                     {
