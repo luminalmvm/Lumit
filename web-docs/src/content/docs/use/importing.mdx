@@ -23,13 +23,21 @@ Dragging files from your file manager onto the Project panel works as well.
 Use **folders** to group assets. A folder groups assets in the panel and nothing more;
 it does not create folders on your computer.
 
+## Image sequences
+
+Pick any one file of a folder of numbered stills and the whole run imports as a single
+footage item. See [Image sequences](/use/image-sequences/).
+
 ## Interpretation
 
-Frame rate and alpha are read from the file itself. So is the colour space, and Lumit
-uses what it finds.
+Frame rate and alpha are read from the file itself, and so is the colour space.
+
+Where a project carries a colour configuration you can say what a clip arrived in, from the
+**Colour space** submenu on its row — see [Colour management](/use/colour-management/).
 
 :::note[Not built yet]
-Overriding the interpreted values is planned. Currently there is no way to do this.
+Overriding the frame rate or the alpha of an imported file is planned. Currently there is
+no way to do this, which includes the rate of an image sequence.
 :::
 
 ## Missing files
@@ -39,13 +47,9 @@ every layer using it recovers.
 
 ## Proxies
 
-A **proxy** is a smaller stand-in for a footage item that keeps preview fast. Generation
-happens in the background, and because the toggle is global, a proxy never reaches your
-export.
-
-:::note[Not built yet]
-Proxies are planned; none of this exists in Lumit today.
-:::
+A **proxy** is a smaller stand-in for a footage item that keeps preview fast, made or
+attached from the footage row's own menu. Exports read the originals unless you ask them
+not to. See [Proxies](/use/proxies/).
 
 ## After Effects projects
 

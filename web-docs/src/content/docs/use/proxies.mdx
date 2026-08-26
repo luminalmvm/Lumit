@@ -1,0 +1,79 @@
+---
+title: Proxies
+description: Work against small stand-in files, and deliver from the originals.
+sidebar:
+  order: 2.5
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **proxy** is a smaller stand-in file for a footage item. Lumit reads it while you work, so
+a timeline full of 6K plates behaves like one full of small ones, and reads the original
+again when you deliver.
+
+<Shot file="project-panel.png" caption="A footage row reading from its proxy, wearing the proxy badge beside its name." eager/>
+
+The original is never replaced. The item keeps its own file, and the proxy sits beside it as
+a second reference with its own switch.
+
+## Make one
+
+Right-click a footage row in the [Project panel](/panels/project/) and choose **Make proxy**.
+
+Lumit reads every frame of the source and writes it out at half width, as a `.mov` named
+after the original with `_proxy` on the end, **beside the original file**. A proxy belongs
+to the footage rather than to the project — one clip used by three projects wants one proxy,
+and a folder of clips carries its proxies when it moves.
+
+It runs in the background. The status line counts the frames as they are written and carries
+a Cancel that works from wherever you are; a cancelled job removes the half-written file
+rather than leaving a trap that looks finished. When it lands it attaches itself to the item.
+
+**Set proxy…** on the same menu attaches a file you already have.
+
+## Switch between them
+
+| Where | What it does |
+| --- | --- |
+| **Use proxy**, on the footage row's menu | Whether *this* item reads from its proxy. Ticked. |
+| **PROXIES**, on the Project panel's bottom bar | Whether the project reads proxies at all. On by default, so making one has an effect without a second action. |
+| **Clear proxy**, on the row's menu | Forgets the proxy. The file on disk is left alone. |
+
+A row wears a quiet **proxy** badge while its own tick is on, so what the badge means is
+"this item is being read from its stand-in", not "this item has one somewhere".
+
+Switching proxies off hands back the frames that were cached before you switched them on,
+rather than rendering them again.
+
+## What does not change
+
+The **original's numbers govern**. Size, rate and duration come from the original file
+whichever one is being read, so a transform, a mask, a paint stroke or an effect parameter
+means exactly what it meant before — a proxy changes the pixel count and nothing else, in
+the same way a lower preview resolution does.
+
+**Sound always comes from the original.** A proxy carries no audio that Lumit reads.
+
+## When Lumit ignores a proxy
+
+A proxy is quietly ignored, and the original read instead, when it is missing, unreadable,
+or **disagrees about the footage** — a different frame count or a different frame rate.
+Its frame 300 would not be the original's frame 300, and putting the wrong moment on the
+timeline with nothing on screen to say so is worse than being slow.
+
+A **missing original** still shows the colour-bar slate whatever proxy is attached. The
+layer is the original, and playing on from the stand-in would hide a lost file from the one
+person who needs to know about it.
+
+## Delivery
+
+The export dialogue's **Proxies** row reads *Use no proxies*, and it opens that way whatever
+the project is switched to. Turning proxies on to work with therefore cannot quietly ship
+the small picture. If you genuinely want the stand-ins in the file — a quick review copy —
+*Use all proxies* is there.
+
+## Related
+
+- [Importing media](/use/importing/)
+- [The Project panel](/panels/project/)
+- [Exporting](/use/export/)

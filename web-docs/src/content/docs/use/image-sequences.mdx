@@ -1,0 +1,78 @@
+---
+title: Image sequences
+description: A folder of numbered stills, imported as one piece of footage.
+sidebar:
+  order: 2.6
+---
+
+A folder of numbered stills — an EXR render, a scan, a frame dump — imports as **one footage
+item**, not as a hundred assets. It behaves like any other clip from then on: it trims, it
+retimes, it caches, it goes in a Sequence layer.
+
+## Import a run
+
+1. **File ▸ Import**, or drag onto the Project panel.
+2. Pick **any one file** of the run.
+
+Lumit reads the folder round the file you picked and imports the whole run as a single item.
+Picking a different frame of the same run imports the same item, not a second one.
+
+What is recognised as a run:
+
+- **Still-image formats only.** A folder of `clip0001.mp4`…`clip0100.mp4` is a hundred
+  clips, and gluing them together would be a destructive guess.
+- **The frame number is the longest run of digits in the name.** `shot_v2_0043.exr` is frame
+  43 of version 2, not frame 2.
+- **Padding has to match.** `%04d` does not name `frame7.png`, so a differently-padded
+  neighbour is a different run.
+- **A numbered still with no numbered neighbours** stays the single still it is.
+- **A `%` anywhere in the path** refuses the run outright.
+
+## Gaps end a run
+
+Given `0001` to `0100` with `0050` missing, picking `0007` imports `0001`–`0049`, and
+picking `0060` imports `0051`–`0100`.
+
+A gap is never bridged. Closing it silently would show the wrong picture at the wrong time
+with nothing on screen to say so, and refusing the whole thing would let one deleted frame
+reject a shot. Clamping is the only one of the three that cannot lie about which frame you
+are looking at.
+
+## The rate
+
+Stills carry no frame rate of their own, so the project has to say. Every sequence starts at
+**25 fps**.
+
+:::note[Not built yet]
+There is nowhere to change a sequence's rate. The value is per item and the engine already
+carries it; the control is the gap. Until it exists, a 24 fps render conforms at 25 and runs
+a little short.
+:::
+
+## The files are the truth
+
+Where a run starts, how long it is and which files are in it are **read from the folder every
+time the project opens** — none of it is stored. Add ten frames to the folder overnight and
+the item is ten frames longer the next morning, with nothing to reconcile and no re-import.
+
+The project stores the path of the run's **first file**, which is a real file, so saving,
+moving the project, fingerprinting and relinking all work the ordinary way.
+
+## Relinking
+
+Relink a sequence by pointing at **any frame** of it. Lumit resolves whatever you picked back
+to the run's first frame before anything else reads it, which is also what stops a folder of
+two thousand stills confusing the sweep that offers to relink the siblings beside it.
+
+## From After Effects
+
+Sequences in an imported After Effects project come across as sequences. After Effects
+stores the folder and the name either side of the frame number, which is enough to rebuild
+the run.
+
+## Related
+
+- [Importing media](/use/importing/)
+- [Sequence layers](/use/sequence-layers/) - a different thing with a similar name: several
+  clips cut back to back on one layer.
+- [Exporting](/use/export/) - writing a numbered run out again.

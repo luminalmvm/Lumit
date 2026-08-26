@@ -95,7 +95,15 @@ r.addEventListener("input",set);set()})})`,
                   items: [
                     {
                       label: "Projects and media",
-                      items: ["use/projects", "use/importing", "use/compositions", "use/export"],
+                      items: [
+                        "use/projects",
+                        "use/importing",
+                        "use/proxies",
+                        "use/image-sequences",
+                        "use/colour-management",
+                        "use/compositions",
+                        "use/export",
+                      ],
                     },
                     {
                       label: "Layers",
