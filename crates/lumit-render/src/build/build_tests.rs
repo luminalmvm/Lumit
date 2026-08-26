@@ -113,6 +113,8 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
                 expression: None,
                 size: 24.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                path: None,
+                path_offset: lumit_core::anim::Property::zero(),
                 extra: serde_json::Map::new(),
             },
         },
@@ -1075,4 +1077,86 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         again.first().expect("one draw").mask_paths,
         "two builds of one document flattened differently"
     );
+}
+
+/// **Text on a path** (K-607): the layer's picture is drawn into the box the
+/// curve asks for, and a row naming nothing — or a mask since deleted — lays
+/// the line straight rather than emptying the layer (docs/14 §4).
+#[test]
+fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
+    use lumit_core::model::TextDocument;
+    let mask = lumit_core::mask::Mask::rectangle(20.0, 30.0, 300.0, 120.0);
+    let layer = |path: Option<Uuid>| Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: "type".into(),
+        kind: LayerKind::Text {
+            document: TextDocument {
+                text: "Lumit".into(),
+                expression: None,
+                size: 48.0,
+                fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                path,
+                path_offset: lumit_core::anim::Property::zero(),
+                extra: serde_json::Map::new(),
+            },
+        },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        // The mask is geometry only, so it gates nothing and only lends its
+        // curve — which is exactly the mask somebody draws to run type along.
+        masks: vec![lumit_core::mask::Mask {
+            mode: lumit_core::mask::MaskMode::None,
+            ..mask.clone()
+        }],
+        paint: Vec::new(),
+        effects: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let sizes = |path: Option<Uuid>| {
+        let comp = Composition {
+            id: Uuid::now_v7(),
+            name: "C".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![layer(path)],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let doc = std::sync::Arc::new(Document::new());
+        let map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+        let mut visited = vec![comp.id];
+        let draws = build_comp_draws(&doc, &comp, 0.0, &map, &mut visited);
+        assert_eq!(draws.len(), 1);
+        draws[0].natural_size
+    };
+
+    let straight = sizes(None);
+    // The rectangle reaches (320, 150), plus one text size of room for what
+    // sits above and below the baseline: 368 × 198, corner at the layer's own
+    // origin so the mask still means what it meant.
+    assert_eq!(sizes(Some(mask.id)), (368.0, 198.0));
+    // A mask that is not there is not a path: the line lays straight, exactly
+    // as it does with the row unset.
+    assert_eq!(sizes(Some(Uuid::now_v7())), straight);
+    assert!(straight.0 > 0.0 && straight.0 < 368.0, "{straight:?}");
 }

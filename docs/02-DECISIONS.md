@@ -18490,3 +18490,78 @@ Regression tests: in `lumit-core`, `a_shape_with_no_keys_is_its_still_path_at_ev
 `a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit`; in Flutter,
 `a shape item carries a Path row that keys its shape`. No new strings: the row reads the
 `shapePath` key that already existed, whose description now covers both its uses.
+
+## K-607 — A line of type runs along one of its layer's own masks, and the offset is arc length
+
+**Status: DECIDED (2026-08-26).** The first half of K-564's text-as-data package. Amends
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §9.1.
+
+**The path is a mask id, and that is the smallest honest source.** After Effects gives a
+text layer a Path Options group whose Path dropdown lists the layer's own masks, and this
+is the same, for a reason that is not deference: the layer already carries paths that can
+be drawn with the pen, dragged point by point (K-224), keyed and eased (K-224, K-344), and
+read by every path-walking effect through one carriage (K-408). A path of the text
+document's own would be a second place to keep a curve, needing a second set of tools to
+draw it with and a second answer to "is it animated". `TextDocument` therefore gains
+`path: Option<Uuid>` and nothing else geometric. The reference is **calm about being
+wrong**: unset lays the line straight, and so does a mask id naming a mask since deleted —
+both flatten to the empty polyline every "names nothing" reading already comes to, and the
+Source row says *Missing mask* while the picture says the words. Deleting a mask must
+never empty a layer.
+
+**The mask's mode is not consulted.** A mask drawn *for* the type is normally in `None`
+mode — geometry only, gates nothing — but a mask in Add is offered too, and then it both
+carries the words and cuts the layer, which is what it says on the row it is on. That is
+the rule K-408 already set for every effect that walks a path, and repeating it here costs
+nothing.
+
+**The pen measures arc length.** The advance walk is the one `rasterise_line` already
+does — each glyph steps the pen by its own advance — with the pen's distance read against
+[`MaskPolyline`]'s arc table rather than along the x axis, and each glyph stamped turned to
+`tangent_at` there. `tangent_at` is new and sits beside `point_at`, sharing its binary
+search: the edge's own direction, not a smoothed one, so a glyph leans by exactly as much
+as the flattened curve leans and two consumers of one polyline can never disagree. The
+glyph is stamped by **inverse** mapping — walk the target pixels, ask the glyph what it
+has there — because scattering a bitmap forward leaves holes at every angle that is not a
+right angle.
+
+**Offset is px@comp along the curve, and it is a `Property`.** The dial slides the whole
+line by a distance, not by a percentage of a length that changes when the shape is edited;
+it is the same unit the curve is measured in, which is what makes "slide it 20 px" mean
+the same thing on a circle and on a scrawl. A **closed** path wraps, so a ring of type
+runs round for ever; an **open** one drops the glyphs that fall off either end, which is
+what running out of curve looks like — a pile of letters on the last vertex is not. The
+`Property` is written as a bare number while it is still, so a document nobody has slid
+writes the bytes it always did and every frame it has banked keeps its name.
+
+**The layer's box grows, and its corner does not move.** A line on a path is drawn into a
+buffer reaching the far side of the curve with one text size of room round it, and the
+buffer's corner stays at the layer's own (0, 0). The alternative — the path's bounding box,
+as a shape layer uses its art's — would move the corner, and the corner is where *every*
+mask on the layer is measured from, so fitting the box to one mask would slide all the
+others. The named cost: a curve dragged to a negative coordinate is off the layer, exactly
+as a mask point there already is, and its glyphs clip. The box is clamped at 16 384 px so
+a mask dragged somewhere absurd cannot ask for an absurd allocation.
+
+**The name folds the row, not the curve.** The mask itself is already in the frame key
+through the layer's mask walk, so what the text arm adds is which mask is named and where
+the line has been slid to at this frame — both of which change the picture without changing
+a glyph. An offset on a layer with no path is inert, so it cannot retire frames of a line
+that never reads it.
+
+**Not built here:** keying the offset from the Timeline. The Source rows are not keyable —
+Camera zoom has waited on the same thing since K-023 — so the dial writes a still value and
+reads *Animated* when something else has keyed it. The model, the seam and the renderer all
+carry the curve, so the day source rows key, this one keys with them. Also not built: a
+line running along a *shape layer's* contents, and per-character animators, both of which
+wait on §9.1's styled-runs model.
+
+Tests: in `lumit-text`, `the_offset_walks_the_line_along_the_path_by_arc_length`,
+`a_turned_path_turns_the_glyphs`, `a_closed_path_wraps_where_an_open_one_runs_out`,
+`empty_text_on_a_path_draws_nothing`, `an_empty_path_draws_nothing`,
+`a_line_on_a_path_is_deterministic`, `the_path_box_covers_the_curve`; in `lumit-core`,
+`a_polyline_reports_the_direction_it_is_running_in`,
+`text_on_a_path_round_trips_and_a_straight_line_writes_no_key`; in `lumit-render`,
+`a_text_layer_on_a_path_draws_into_the_paths_own_box`; in `lumit-eval`,
+`a_line_on_a_path_keys_by_its_path_and_its_offset`. New strings: `sourceTextPath`,
+`sourceTextPathNone`, `sourceTextPathOffset`.

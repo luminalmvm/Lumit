@@ -286,6 +286,10 @@ fn text(props: &[Property]) -> TextDocument {
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(72.0),
         fill: fill.unwrap_or(lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0])),
+        // After Effects' text-on-a-path rides in the layer's own mask list,
+        // which the importer does not read yet: an imported title lays straight.
+        path: None,
+        path_offset: lumit_core::anim::Property::zero(),
         extra: serde_json::Map::new(),
     }
 }

@@ -5107,6 +5107,18 @@
   "@sourceText": {
     "description": "Field label: the words a text layer shows."
   },
+  "sourceTextPath": "Path",
+  "@sourceTextPath": {
+    "description": "Field label in the Source rows of a text layer: which mask on the layer the words run along."
+  },
+  "sourceTextPathNone": "None",
+  "@sourceTextPathNone": {
+    "description": "Option in the text layer's Path picker: the words lay in a straight line rather than along a mask."
+  },
+  "sourceTextPathOffset": "Path offset",
+  "@sourceTextPathOffset": {
+    "description": "Field label in the Source rows of a text layer: how far along the mask the words start, in pixels."
+  },
   "sourceZoom": "Zoom",
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."

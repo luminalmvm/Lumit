@@ -1792,6 +1792,7 @@ name = "lumit-text"
 version = "0.2.0"
 dependencies = [
  "fontdue",
+ "lumit-core",
  "thiserror 2.0.18",
 ]
 

@@ -4,7 +4,9 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `text_document_of`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
@@ -80,16 +82,31 @@ class BridgeTextDocument {
   final double size;
   final BridgeColourRgba fill;
 
+  /// The mask **on this layer** whose curve the glyphs run along (K-607).
+  /// Unset lays the line straight, and so does a mask id that names nothing.
+  final UuidValue? path;
+
+  /// How far along that curve the line starts, px@comp, on the composition's
+  /// clock like every other animatable channel that crosses here (K-213).
+  final BridgeScalar pathOffset;
+
   const BridgeTextDocument({
     required this.text,
     this.expression,
     required this.size,
     required this.fill,
+    this.path,
+    required this.pathOffset,
   });
 
   @override
   int get hashCode =>
-      text.hashCode ^ expression.hashCode ^ size.hashCode ^ fill.hashCode;
+      text.hashCode ^
+      expression.hashCode ^
+      size.hashCode ^
+      fill.hashCode ^
+      path.hashCode ^
+      pathOffset.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -99,5 +116,7 @@ class BridgeTextDocument {
           text == other.text &&
           expression == other.expression &&
           size == other.size &&
-          fill == other.fill;
+          fill == other.fill &&
+          path == other.path &&
+          pathOffset == other.pathOffset;
 }

@@ -900,6 +900,8 @@ impl CompositionReference {
                     expression: None,
                     size,
                     fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                    path: None,
+                    path_offset: lumit_core::anim::Property::zero(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -989,7 +991,12 @@ impl CompositionReference {
         let layer = crate::edits::base_layer(
             "Text".into(),
             lumit_core::model::LayerKind::Text {
-                document: crate::api::assets::text_document_of(document),
+                // A brand-new layer starts its source at zero, so any keys on
+                // the offset dial arrive on the comp's clock unshifted.
+                document: crate::api::assets::text_document_of(
+                    document,
+                    lumit_core::time::Rational::ZERO,
+                )?,
             },
             comp.duration.0,
             TransformGroup {

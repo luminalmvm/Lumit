@@ -788,11 +788,34 @@ pub fn build_comp_draws_at(
                 // what was typed; an expression-driven one is evaluated here,
                 // which is what makes a caption able to print a live value.
 
-                let r = lumit_text::rasterise_line(
-                    &document.resolved_text(context.clone()),
-                    document.size as f32,
-                    [fill[0], fill[1], fill[2]],
-                );
+                let line = document.resolved_text(context.clone());
+                let size = document.size as f32;
+                // **Text on a path** (K-607). The named mask's own flattened
+                // curve, read through the carriage every path-walking effect
+                // reads (K-408) — so the glyphs and a Stroke on the same mask
+                // agree about where the curve is. A layer whose row names
+                // nothing, or a mask since deleted, flattens to an empty
+                // polyline and the line lays straight: refuse calmly, never
+                // an empty layer (docs/14 §4).
+                let spine = document
+                    .path
+                    .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
+                    .filter(|p| !p.is_empty());
+                let r = match &spine {
+                    Some(path) => {
+                        let (w, h) = lumit_text::path_box(path, size);
+                        lumit_text::rasterise_on_path(
+                            &line,
+                            size,
+                            [fill[0], fill[1], fill[2]],
+                            path,
+                            document.path_offset.value_at(lt) as f32,
+                            w,
+                            h,
+                        )
+                    }
+                    None => lumit_text::rasterise_line(&line, size, [fill[0], fill[1], fill[2]]),
+                };
                 (r.rgba, r.width, r.height, (r.width as f32, r.height as f32))
             }),
             // Vector art: rasterised at the size the frame is being drawn at,
@@ -2611,6 +2634,8 @@ mod render_below_at_tests {
                     expression: None,
                     size: 48.0,
                     fill: LinearColour([1.0, 0.5, 0.2, 1.0]),
+                    path: None,
+                    path_offset: lumit_core::anim::Property::zero(),
                     extra: serde_json::Map::new(),
                 },
             },

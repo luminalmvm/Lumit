@@ -9,7 +9,9 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
@@ -92,6 +94,66 @@ void main() {
       await tester.pump();
       expect(text.getText()!.expression, isNull);
       expect(text.getText()!.text, 'placeholder');
+    });
+
+    // Text on a path (K-607): the words follow one of the layer's own masks,
+    // picked by name, and the offset dial only appears once there is a curve
+    // to slide along.
+    testWidgets('a text layer runs its words along one of its masks',
+        (tester) async {
+      final p = withComp();
+      final text = p.comp.addTextLayer();
+      text.addMask(
+        mask: BridgeMask(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Arc',
+          vertices: const [
+            BridgeVertex(
+                x: 0, y: 40, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 200, y: 40, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+          ],
+          closed: false,
+          inverted: false,
+          opacity: const BridgeScalar.static_(100),
+          mode: BridgeMaskMode.none,
+          feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
+          expansion: const BridgeScalar.static_(0),
+          pathKeys: const [],
+        ),
+      );
+      p.uiState.selectedLayer.value = text;
+      await mount(tester, p);
+
+      // Straight to begin with, so there is nothing to slide.
+      expect(text.getText()!.path, isNull);
+      expect(find.byKey(const ValueKey('src-text-path-offset')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('src-text-path')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Arc').last);
+      await tester.pumpAndSettle();
+
+      expect(text.getText()!.path, text.getMasks().single.id,
+          reason: 'the picked mask reached the document');
+      expect(find.byKey(const ValueKey('src-text-path-offset')), findsOneWidget,
+          reason: 'a curve to slide along brings the dial with it');
+
+      await tester.tap(find.byKey(const ValueKey('src-text-path-offset')));
+      await tester.pump();
+      await tester.enterText(find.byType(EditableText).last, '25');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(
+          (text.getText()!.pathOffset as BridgeScalar_Static).field0, 25);
+
+      // And typing into the layer leaves the curve alone.
+      await tester.enterText(find.byKey(const ValueKey('src-text')), 'Lumit');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(text.getText()!.path, isNotNull,
+          reason: 'a retype must not straighten the line');
     });
 
     testWidgets('a camera layer shows its zoom and commits it', (tester) async {

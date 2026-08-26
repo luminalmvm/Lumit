@@ -1071,6 +1071,18 @@ nothing rather than failing the frame. `text` is untouched while an expression d
 layer and is what the layer says again once the expression is cleared; an empty or
 whitespace-only expression *is* "cleared", never "an expression that says nothing".
 
+**The line can run along a path (K-607).** `path` is optionally the id of a **mask on this
+layer** — the layer already carries drawable, keyable paths, so the words follow one of those
+rather than a curve of the document's own. The glyphs are laid by **arc length** along the
+flattened mask (the same `MaskPolyline` every path-walking effect reads, K-408), each turned to
+the direction the curve runs in there, and `path_offset` slides the whole line along it in
+**px@comp**, animatable like any other number. A closed path wraps; an open one drops the glyphs
+that fall off either end. Both fields are absent from the file until they are used, and every way
+of naming nothing — unset, or a mask since deleted — lays the line straight rather than emptying
+the layer. A line on a path is drawn into a box reaching the far side of the curve with one text
+size of room round it, its corner still at the layer's own origin so the layer's other masks keep
+meaning what they meant.
+
 The rasteriser and the frame cache key both read the line through one resolver, so they can
 never disagree about what the layer says — a disagreement would serve a cached frame of the
 previous line. A frame-varying expression therefore keys per frame by construction, and a

@@ -332,6 +332,9 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           text: '',
           size: options.textSize,
           fill: options.fillRgba,
+          // A layer being made has no mask to run along yet, so it lays
+          // straight (K-607).
+          pathOffset: const BridgeScalar.static_(0),
         ),
         x: cx,
         y: cy,
@@ -398,11 +401,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           frame: BigInt.from(widget.uiState.playheadFrame.value),
           scale: widget.uiState.viewerScale,
           layer: layer,
-          document: BridgeTextDocument(
-            text: _controller.text,
-            size: _size,
-            fill: _fill,
-          ),
+          document: _document(layer, _controller.text),
         );
       } catch (_) {
         // A preview is a courtesy; the typing carries on without it.
@@ -450,7 +449,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// had never moved, leaving the words exactly where they were and the undo
   /// looking broken.
   void _write(LayerReference layer, String text) {
-    final document = BridgeTextDocument(text: text, size: _size, fill: _fill);
+    final document = _document(layer, text);
     if (!_created) {
       layer.setText(document: document);
       return;
@@ -462,6 +461,20 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       anchorY: placed.anchor.dy,
       positionX: placed.position.dx,
       positionY: placed.position.dy,
+    );
+  }
+
+  /// The document to write for `layer` saying `text`, carrying its **path**
+  /// along (K-607): typing into a line that runs round a curve must not
+  /// straighten it, and the document is written whole.
+  BridgeTextDocument _document(LayerReference layer, String text) {
+    final current = layer.getText();
+    return BridgeTextDocument(
+      text: text,
+      size: _size,
+      fill: _fill,
+      path: current?.path,
+      pathOffset: current?.pathOffset ?? const BridgeScalar.static_(0),
     );
   }
 

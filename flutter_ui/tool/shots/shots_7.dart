@@ -79,7 +79,7 @@ Future<void> main() async {
 
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(
+    document: const BridgeTextDocument(pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),

@@ -13,6 +13,7 @@
 //! per-layer settings. Editing a text layer changes only that layer.
 
 use flutter_rust_bridge::frb;
+use uuid::Uuid;
 
 use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidReference, BridgeError};
 
@@ -39,6 +40,12 @@ pub struct BridgeTextDocument {
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: BridgeColourRgba,
+    /// The mask **on this layer** whose curve the glyphs run along (K-607).
+    /// Unset lays the line straight, and so does a mask id that names nothing.
+    pub path: Option<Uuid>,
+    /// How far along that curve the line starts, px@comp, on the composition's
+    /// clock like every other animatable channel that crosses here (K-213).
+    pub path_offset: BridgeScalar,
 }
 
 /// A solid asset's definition.
@@ -55,7 +62,9 @@ impl LayerReference {
     /// This layer's text document, or `None` when it is not a text layer.
     #[frb(sync)]
     pub fn get_text(&self) -> Result<Option<BridgeTextDocument>, BridgeError> {
-        let lumit_core::model::LayerKind::Text { document } = self.item()?.kind else {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let lumit_core::model::LayerKind::Text { document } = layer.kind else {
             return Ok(None);
         };
         Ok(Some(BridgeTextDocument {
@@ -63,6 +72,8 @@ impl LayerReference {
             expression: document.expression,
             size: document.size,
             fill: colour_of(document.fill),
+            path: document.path,
+            path_offset: BridgeScalar::read_at(&document.path_offset, offset),
         }))
     }
 
@@ -73,13 +84,14 @@ impl LayerReference {
     /// its size is one action to the user and should be one undo step.
     #[frb(sync)]
     pub fn set_text(&self, document: BridgeTextDocument) -> Result<(), BridgeError> {
-        let lumit_core::model::LayerKind::Text { .. } = self.item()?.kind else {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Text { .. } = layer.kind else {
             return Err(BridgeError::NotText);
         };
         self.commit(lumit_core::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
-            document: text_document_of(document),
+            document: text_document_of(document, layer.start_offset.0)?,
         })
     }
 
@@ -110,7 +122,7 @@ impl LayerReference {
         let mut ops = vec![lumit_core::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
-            document: text_document_of(document),
+            document: text_document_of(document, offset)?,
         }];
         for (prop, value) in [
             (TransformProp::AnchorX, anchor_x),
@@ -204,8 +216,11 @@ pub(crate) fn colour_of(c: lumit_core::model::LinearColour) -> BridgeColourRgba 
 #[frb(ignore)]
 /// The document as the model holds it. One conversion, used by every path that
 /// writes text — a new layer, a retype, a preview.
-pub(crate) fn text_document_of(document: BridgeTextDocument) -> lumit_core::model::TextDocument {
-    lumit_core::model::TextDocument {
+pub(crate) fn text_document_of(
+    document: BridgeTextDocument,
+    offset: lumit_core::time::Rational,
+) -> Result<lumit_core::model::TextDocument, BridgeError> {
+    Ok(lumit_core::model::TextDocument {
         text: document.text,
         // An empty box means no expression, not an expression that says
         // nothing — otherwise clearing the field would leave the layer
@@ -214,8 +229,13 @@ pub(crate) fn text_document_of(document: BridgeTextDocument) -> lumit_core::mode
         expression: document.expression.filter(|e| !e.trim().is_empty()),
         size: document.size,
         fill: linear_of(document.fill),
+        path: document.path,
+        path_offset: lumit_core::anim::Property {
+            animation: document.path_offset.animation_at(offset)?,
+            extra: serde_json::Map::new(),
+        },
         extra: serde_json::Map::new(),
-    }
+    })
 }
 
 pub(crate) fn linear_of(c: BridgeColourRgba) -> lumit_core::model::LinearColour {

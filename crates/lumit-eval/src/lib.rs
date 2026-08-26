@@ -1156,6 +1156,15 @@ fn feed_source(
             for c in document.fill.0 {
                 h.update(&c.to_le_bytes());
             }
+            // Text on a path (K-607). The mask this names is already fed to
+            // the key by the layer's own mask walk, so what is left is which
+            // mask it is and how far the line has been slid along it — both of
+            // which change the picture without changing a single glyph.
+            if let Some(path) = document.path {
+                h.update(b"onpath/");
+                h.update(path.as_bytes());
+                feed_f64(h, document.path_offset.value_at(lt));
+            }
         }
         LayerKind::Precomp { comp } => {
             if visited.contains(comp) {
@@ -1474,6 +1483,8 @@ mod tests {
                     expression: None,
                     size: 72.0,
                     fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                    path: None,
+                    path_offset: lumit_core::anim::Property::zero(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -2961,6 +2972,32 @@ mod tests {
         assert_ne!(key(&doc, &comp, 1.0), key(&doc, &comp, 2.0));
         // Same time, same words, same key — the resolution stays deterministic.
         assert_eq!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.0));
+    }
+
+    /// **Text on a path is in the name** (K-607). Naming a mask and sliding the
+    /// line along it both change the picture without changing a single glyph,
+    /// so a key that ignored them would serve the straight line back for ever.
+    #[test]
+    fn a_line_on_a_path_keys_by_its_path_and_its_offset() {
+        let doc = Document::new();
+        let mask = lumit_core::mask::Mask::ellipse(60.0, 40.0, 30.0, 18.0);
+        let comp_with_path = |path: Option<uuid::Uuid>, offset: f64| {
+            let mut l = text_layer("Lumit", 0.0, 10.0, 0.0);
+            l.masks = vec![mask.clone()];
+            if let LayerKind::Text { document } = &mut l.kind {
+                document.path = path;
+                document.path_offset = lumit_core::anim::Property::fixed(offset);
+            }
+            comp_with(vec![l])
+        };
+        let straight = key(&doc, &comp_with_path(None, 0.0), 1.0);
+        let on_path = key(&doc, &comp_with_path(Some(mask.id), 0.0), 1.0);
+        let slid = key(&doc, &comp_with_path(Some(mask.id), 25.0), 1.0);
+        assert_ne!(straight, on_path, "naming a path left the name alone");
+        assert_ne!(on_path, slid, "sliding the line left the name alone");
+        // An offset nobody has touched is inert on a straight layer: it cannot
+        // retire frames of a line that never reads it.
+        assert_eq!(straight, key(&doc, &comp_with_path(None, 25.0), 1.0));
     }
 
     /// The stored `text` is dead while an expression drives the layer: editing

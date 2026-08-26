@@ -13464,11 +13464,15 @@ impl SseDecode for crate::api::assets::BridgeTextDocument {
         let mut var_expression = <Option<String>>::sse_decode(deserializer);
         let mut var_size = <f64>::sse_decode(deserializer);
         let mut var_fill = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
+        let mut var_path = <Option<uuid::Uuid>>::sse_decode(deserializer);
+        let mut var_pathOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::assets::BridgeTextDocument {
             text: var_text,
             expression: var_expression,
             size: var_size,
             fill: var_fill,
+            path: var_path,
+            path_offset: var_pathOffset,
         };
     }
 }
@@ -18465,6 +18469,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextDocument {
             self.expression.into_into_dart().into_dart(),
             self.size.into_into_dart().into_dart(),
             self.fill.into_into_dart().into_dart(),
+            self.path.into_into_dart().into_dart(),
+            self.path_offset.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -20796,6 +20802,8 @@ impl SseEncode for crate::api::assets::BridgeTextDocument {
         <Option<String>>::sse_encode(self.expression, serializer);
         <f64>::sse_encode(self.size, serializer);
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.fill, serializer);
+        <Option<uuid::Uuid>>::sse_encode(self.path, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.path_offset, serializer);
     }
 }
 

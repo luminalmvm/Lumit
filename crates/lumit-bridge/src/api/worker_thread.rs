@@ -3391,6 +3391,7 @@ fn render_comp(
 fn apply_text_preview(
     kind: &mut lumit_core::model::LayerKind,
     document: crate::api::assets::BridgeTextDocument,
+    offset: lumit_core::time::Rational,
 ) {
     if let lumit_core::model::LayerKind::Text { document: existing } = kind {
         // Through the one conversion, so the typing preview carries the
@@ -3398,7 +3399,11 @@ fn apply_text_preview(
         // rule as a committed write. Rebuilding the document by hand here
         // dropped the expression, so a preview frame of an expression-driven
         // caption fell back to the typed words mid-keystroke.
-        *existing = crate::api::assets::text_document_of(document);
+        // Keys the seam cannot read are a preview nobody can draw, so the
+        // layer keeps the document it has rather than the frame failing.
+        if let Ok(written) = crate::api::assets::text_document_of(document, offset) {
+            *existing = written;
+        }
     }
 }
 
@@ -3443,7 +3448,8 @@ fn render_comp_with_preview(
         comp.layers[index].graph.nodes = drivers;
     }
     if let Some(document) = req.text {
-        apply_text_preview(&mut comp.layers[index].kind, document);
+        let offset = comp.layers[index].start_offset.0;
+        apply_text_preview(&mut comp.layers[index].kind, document, offset);
     }
     if let Some(paint) = req.paint {
         // Keys cross the seam on the comp clock (K-213), so the layer's own
@@ -5284,6 +5290,8 @@ mod tests {
                 b: 0.0,
                 a: 1.0,
             },
+            path: None,
+            path_offset: crate::api::effect::BridgeScalar::Static(0.0),
         };
 
         let mut text = LayerKind::Text {
@@ -5292,10 +5300,12 @@ mod tests {
                 expression: None,
                 size: 72.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                path: None,
+                path_offset: lumit_core::anim::Property::zero(),
                 extra: serde_json::Map::new(),
             },
         };
-        super::apply_text_preview(&mut text, typed.clone());
+        super::apply_text_preview(&mut text, typed.clone(), lumit_core::time::Rational::ZERO);
         let LayerKind::Text { document } = &text else {
             panic!("still a text layer");
         };
@@ -5306,7 +5316,7 @@ mod tests {
         // A layer that is not text takes the preview without changing: a stale
         // request must never fail a frame.
         let mut other = LayerKind::Adjustment;
-        super::apply_text_preview(&mut other, typed);
+        super::apply_text_preview(&mut other, typed, lumit_core::time::Rational::ZERO);
         assert!(matches!(other, LayerKind::Adjustment));
     }
 

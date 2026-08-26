@@ -302,6 +302,8 @@ mod tests {
             expression: expression.map(str::to_owned),
             size: 48.0,
             fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            path: None,
+            path_offset: crate::anim::Property::zero(),
             extra: serde_json::Map::new(),
         }
     }

@@ -1593,6 +1593,27 @@ pub struct TextDocument {
     /// Pixel size at natural scale.
     pub size: f64,
     pub fill: LinearColour,
+    /// **Text on a path** (K-607): the id of a mask **on this layer** whose
+    /// curve the glyphs run along. Unset — the ordinary case — is absent from
+    /// the file and lays the line straight, and so is a mask id that names
+    /// nothing, so deleting the mask hands the words back rather than
+    /// emptying the layer.
+    ///
+    /// A mask id rather than a path of its own: the layer already carries
+    /// drawable, keyable, draggable paths, and a second place to put one would
+    /// be a second set of tools to edit it with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<Uuid>,
+    /// How far along the path the first glyph starts, px@comp. Animatable like
+    /// every other number in the document, and written as a bare number while
+    /// it is still, so a document nobody has slid writes the bytes it always
+    /// did.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub path_offset: Property,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -3001,6 +3022,46 @@ mod tests {
         assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
     }
 
+    /// **A line on a path round-trips, and a straight one writes what it always
+    /// wrote** (K-607, K-258). The two new fields are absent from the file
+    /// until they are used, so every `.lum` ever saved opens here unchanged —
+    /// and, just as importantly, every frame those projects have banked keeps
+    /// its name.
+    #[test]
+    fn text_on_a_path_round_trips_and_a_straight_line_writes_no_key() {
+        let mask = crate::mask::Mask::ellipse(60.0, 40.0, 30.0, 18.0);
+        let mut document = TextDocument {
+            text: "Lumit".into(),
+            expression: None,
+            size: 48.0,
+            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            path: None,
+            path_offset: crate::anim::Property::zero(),
+            extra: serde_json::Map::new(),
+        };
+
+        let straight = serde_json::to_string(&document).unwrap();
+        assert!(
+            !straight.contains("path"),
+            "a straight line wrote a path key: {straight}"
+        );
+        assert_eq!(
+            serde_json::from_str::<TextDocument>(&straight).unwrap(),
+            document
+        );
+
+        document.path = Some(mask.id);
+        document.path_offset = crate::anim::Property::fixed(37.5);
+        let json = serde_json::to_string(&document).unwrap();
+        assert_eq!(
+            serde_json::from_str::<TextDocument>(&json).unwrap(),
+            document
+        );
+        // The offset writes as a bare number while it is still, the way every
+        // other still property in the document does.
+        assert!(json.contains("\"path_offset\":37.5"), "{json}");
+    }
+
     /// **The adjustment switch survives a save/load, and an old file is
     /// byte-identical** (K-537): a layer that is not an adjustment writes no
     /// key at all, so a project saved before the flag existed loads exactly as
@@ -3215,6 +3276,8 @@ mod tests {
                 expression: None,
                 size: 12.0,
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                path: None,
+                path_offset: crate::anim::Property::zero(),
                 extra: serde_json::Map::new(),
             },
         };

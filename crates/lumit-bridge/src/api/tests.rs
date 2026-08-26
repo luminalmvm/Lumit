@@ -4765,6 +4765,8 @@ fn a_text_layer_round_trips_its_document() {
             b: 0.0,
             a: 1.0,
         },
+        path: None,
+        path_offset: crate::api::effect::BridgeScalar::Static(0.0),
     })
     .expect("set");
 
@@ -4794,6 +4796,8 @@ fn a_text_layer_round_trips_its_document() {
                 b: 0.0,
                 a: 1.0
             },
+            path: None,
+            path_offset: crate::api::effect::BridgeScalar::Static(0.0),
         }),
         Err(BridgeError::NotText)
     ));
@@ -4820,6 +4824,8 @@ fn a_text_expression_round_trips_and_clears() {
             b: 1.0,
             a: 1.0,
         },
+        path: None,
+        path_offset: crate::api::effect::BridgeScalar::Static(0.0),
     };
 
     text.set_text(document(Some("time * 2"))).expect("set");

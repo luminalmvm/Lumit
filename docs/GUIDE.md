@@ -8769,6 +8769,54 @@ per-frame path is run tens of thousands of times a second, so the question is
 never "is this fast enough once", it is "what is this multiplied by sixty, by
 the number of layers".
 
+### Words that follow a curve
+
+Type sits on a straight line because a line of type is laid the obvious way: put
+the first letter down, step to the right by how wide that letter is, put the next
+one down, and so on. That step is called the *advance*, and walking it is all
+"laying out a line" means when the line is straight.
+
+Running type round a curve is the same walk with one substitution. Instead of
+stepping to the right by the advance, you step *along the curve* by the advance —
+and to do that you need to know two things at any distance along it: what point
+you are at, and which way the curve is heading there. Lumit already knew the
+first. Every curve in the document — a mask, a shape's outline — gets flattened
+into a chain of short straight pieces with a running total of how far along each
+one starts, and asking "where am I 60 pixels in" is a binary search through those
+totals. That machinery went in for painting brush stamps along a stroke, and the
+particle emitters, the Stroke effect and now a line of type all read the same
+table, which is why they can never disagree about where the curve is.
+
+What was missing was the second thing: which way it is heading. That is one more
+question against the same table — find the short straight piece you have landed
+on, and its direction *is* the answer, no smoothing needed, because the flattening
+already chose those pieces. Each letter is then stamped rotated to that direction,
+with the baseline lying along the curve.
+
+Rotating a letter is the one part that is genuinely fiddly. The font machinery
+hands back a little upright grey rectangle for each glyph — a bitmap of how much
+ink covers each pixel — and there is no way to ask for a tilted one. The naive fix
+is to take each pixel of that rectangle, work out where it lands once turned, and
+put it there; that leaves the picture full of holes, because a turned grid does not
+land on a grid. So it is done backwards: walk the pixels of the *destination*,
+work out where each one came from in the upright rectangle, and read the ink there,
+mixing the four nearest values. Every destination pixel gets asked exactly once,
+so nothing is missed. "Inverse mapping" is the name for this, and it is the same
+trick every image rotation in the program uses.
+
+Which curve? One of the layer's own masks, picked by name in a **Path** row. That
+is not a shortcut so much as a refusal to build a second thing: a mask is already
+a curve you can draw with the pen, drag point by point, and keyframe, so pointing
+the words at one gets all of that for free. If you delete the mask afterwards the
+words simply lay straight again and the row says *Missing mask* — a layer going
+blank because you tidied something up would be the worse answer by a long way.
+
+The **Path offset** dial slides the whole line along the curve, measured in pixels
+of curve rather than in per cent, so "move it twenty" means the same distance on a
+circle as on a scribble. On a closed curve the line wraps round for ever; on an
+open one, letters pushed past either end are simply not drawn, which is what
+running out of curve honestly looks like.
+
 ### A mask that moves, and the number in the file that stays a number
 
 A mask is a drawn shape that decides which of a layer's pixels show. Until now the shape

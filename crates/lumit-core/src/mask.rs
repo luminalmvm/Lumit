@@ -1157,6 +1157,39 @@ impl MaskPolyline {
         if self.is_empty() {
             return [0.0, 0.0];
         }
+        let (i, t) = self.edge_at(s);
+        let (a, b) = (self.points[i], self.points[i + 1]);
+        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+    }
+
+    /// The **unit direction** the path is running in `s` px along it, `s`
+    /// clamped the way [`Self::point_at`] clamps it (K-607).
+    ///
+    /// The edge's own direction, not a smoothed one: the flattening already
+    /// chose the chords, so two consumers reading the same polyline get the
+    /// same answer, and a glyph sitting on a curve leans by exactly as much as
+    /// the curve leans there. `[1.0, 0.0]` — straight along +x, the unturned
+    /// direction — for an empty polyline and for a zero-length edge, so a
+    /// caller never divides by nothing and never faults (docs/14 §4).
+    #[must_use]
+    pub fn tangent_at(&self, s: f32) -> [f32; 2] {
+        if self.is_empty() {
+            return [1.0, 0.0];
+        }
+        let (i, _) = self.edge_at(s);
+        let (a, b) = (self.points[i], self.points[i + 1]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len = dx.hypot(dy);
+        if len > 0.0 {
+            [dx / len, dy / len]
+        } else {
+            [1.0, 0.0]
+        }
+    }
+
+    /// The edge `s` px along the path lands on, and how far along that edge it
+    /// sits (0..=1). Callers have already ruled out the empty polyline.
+    fn edge_at(&self, s: f32) -> (usize, f32) {
         let s = s.clamp(0.0, self.length());
         // The last index whose arc is <= s: `partition_point` counts the
         // entries strictly below, so subtracting one lands on it, and the
@@ -1166,7 +1199,6 @@ impl MaskPolyline {
             .partition_point(|&a| a <= s)
             .saturating_sub(1)
             .min(self.points.len() - 2);
-        let (a, b) = (self.points[i], self.points[i + 1]);
         let span = self.arc[i + 1] - self.arc[i];
         // A zero-length edge (two coincident vertices) hands back its start
         // rather than dividing by nothing.
@@ -1175,7 +1207,7 @@ impl MaskPolyline {
         } else {
             0.0
         };
-        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+        (i, t)
     }
 }
 
@@ -1368,6 +1400,48 @@ mod tests {
         assert!(one.closed);
         let (first, last) = (one.points[0], one.points[one.points.len() - 1]);
         assert!((first[0] - last[0]).abs() < 1e-4 && (first[1] - last[1]).abs() < 1e-4);
+    }
+
+    /// **The direction a path is running in, at a distance along it** (K-607) —
+    /// what a line of type leans by, and what a mask-walking effect turns its
+    /// stamp to. A square gives four directions with nothing to argue about,
+    /// and the corner reads as the edge it is about to leave.
+    #[test]
+    fn a_polyline_reports_the_direction_it_is_running_in() {
+        let square = flatten_path(&Mask::rectangle(0.0, 0.0, 100.0, 100.0).path, 0.25);
+        let side = square.length() / 4.0;
+        let near = |got: [f32; 2], want: [f32; 2]| {
+            assert!(
+                (got[0] - want[0]).abs() < 1e-3 && (got[1] - want[1]).abs() < 1e-3,
+                "got {got:?}, wanted {want:?}"
+            );
+        };
+        // Each side's midpoint, so the reading is never on a join.
+        let dirs: Vec<[f32; 2]> = (0..4)
+            .map(|i| square.tangent_at(side * (i as f32 + 0.5)))
+            .collect();
+        // Every direction is a unit vector, and consecutive sides are a
+        // quarter turn apart — whichever corner the rectangle happens to start.
+        for d in &dirs {
+            assert!((d[0].hypot(d[1]) - 1.0).abs() < 1e-3, "not a unit: {d:?}");
+        }
+        for w in dirs.windows(2) {
+            let dot = w[0][0] * w[1][0] + w[0][1] * w[1][1];
+            assert!(dot.abs() < 1e-3, "sides not square: {dot}");
+        }
+        // An empty polyline is the no-op's direction: straight along +x, never
+        // a panic and never a zero vector something would divide by.
+        near(MaskPolyline::default().tangent_at(5.0), [1.0, 0.0]);
+        // Two coincident points is an edge with no direction of its own, and
+        // reads the same way rather than dividing by nothing.
+        let stuck = MaskPolyline {
+            points: vec![[7.0, 7.0], [7.0, 7.0]],
+            arc: vec![0.0, 0.0],
+            closed: false,
+            feather: 0.0,
+            expansion: 0.0,
+        };
+        near(stuck.tangent_at(0.0), [1.0, 0.0]);
     }
 
     /// The tolerance means what it says: the shipped flattening is already

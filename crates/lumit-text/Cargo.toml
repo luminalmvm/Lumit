@@ -8,6 +8,9 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+# The flattened path a line can run along is the mask's own polyline (K-607):
+# one arc-length walk in this engine, not a second one written here.
+lumit-core = { path = "../lumit-core" }
 fontdue = "0.9"
 thiserror = "2"
 

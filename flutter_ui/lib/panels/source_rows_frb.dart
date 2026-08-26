@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'package:lumit_flutter/src/rust/api/solid.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
@@ -109,6 +110,12 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
       String? expression,
       double? size,
       BridgeColourRgba? fill,
+      // Sentinel-free: the path is a nullable value whose "clear me" is null,
+      // so clearing it is asked for by passing `clearPath` rather than by a
+      // null nobody can tell from "leave it alone".
+      UuidValue? path,
+      bool clearPath = false,
+      BridgeScalar? pathOffset,
     }) {
       widget.layer.setText(
         document: BridgeTextDocument(
@@ -118,10 +125,14 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           expression: expression ?? _expression!.text,
           size: size ?? document.size,
           fill: fill ?? document.fill,
+          path: clearPath ? null : (path ?? document.path),
+          pathOffset: pathOffset ?? document.pathOffset,
         ),
       );
       widget.onChanged();
     }
+
+    final offset = document.pathOffset;
 
     return [
       _row(
@@ -182,7 +193,66 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           onPicked: (c) => write(fill: c),
         ),
       ),
+      // **Text on a path** (K-607): the words run along one of the layer's own
+      // masks. "None" is the straight line every text layer starts as, and a
+      // layer with no masks drawn yet offers nothing else — which is the
+      // honest reading rather than a row that promises a curve there is none
+      // of. A mask in None mode is offered like any other: that mode is
+      // geometry only, and is exactly the mask somebody draws to run type
+      // along.
+      _row(
+        t,
+        l10n.sourceTextPath,
+        SizedBox(
+          width: _cellWidth + 60,
+          child: BareLazyDropdown<UuidValue?>(
+            key: const ValueKey('src-text-path'),
+            label: _pathLabel(document.path),
+            options: () => [
+              (null, l10n.sourceTextPathNone),
+              for (final m in widget.layer.getMasks()) (m.id, m.name),
+            ],
+            onChanged: (picked) =>
+                write(path: picked, clearPath: picked == null),
+          ),
+        ),
+      ),
+      // Only while there is a curve to slide along: an offset with no path is
+      // a dial that does nothing.
+      if (document.path != null)
+        _row(
+          t,
+          l10n.sourceTextPathOffset,
+          offset is BridgeScalar_Static
+              ? SizedBox(
+                  width: _cellWidth,
+                  child: DragValueField(
+                    key: const ValueKey('src-text-path-offset'),
+                    value: offset.field0,
+                    min: -100000,
+                    max: 100000,
+                    decimals: 1,
+                    onChanged: (v) => write(
+                      pathOffset: BridgeScalar.static_(v.toDouble()),
+                    ),
+                  ),
+                )
+              : Text(l10n.animated,
+                  style: t.small.copyWith(color: t.textMuted)),
+        ),
     ];
+  }
+
+  /// The name of the mask the words run along, the straight-line entry when
+  /// there is none, and a calm "missing" when the mask has since been deleted —
+  /// which renders straight rather than empty, so the row and the picture say
+  /// the same thing.
+  String _pathLabel(UuidValue? id) {
+    if (id == null) return l10n.sourceTextPathNone;
+    for (final m in widget.layer.getMasks()) {
+      if (m.id == id) return m.name;
+    }
+    return l10n.missingMask;
   }
 
   Widget _zoomRow(LumitTheme t, BridgeScalar zoom) {
