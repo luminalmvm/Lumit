@@ -1564,6 +1564,37 @@ class LayerReference {
   String copySequenceShape({UuidValue? clip}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCopySequenceShape(that: this, clip: clip);
 
+  /// **Text to points** (K-608): a copy of this Type layer beside it, fitted
+  /// with **Emit from image**, so the words become a points stream in the
+  /// shape of themselves.
+  ///
+  /// Fill-sampled rather than walked round the outlines, because that is what
+  /// the points family consumes — see the decision entry. The original is
+  /// kept, as with Text to shapes, and the copy is one `Op`.
+  LayerReference createPointsFromText() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreatePointsFromText(
+        that: this,
+      );
+
+  /// **Text to shapes** (K-608): a copy of this Type layer beside it, whose
+  /// picture is the glyph outlines as vector art.
+  ///
+  /// The original is kept and untouched, which is After Effects' convention
+  /// and the only one that survives a mistake: the words are still typeable,
+  /// still keyed, still expression-driven, and the copy is a drawing.
+  ///
+  /// Converted **at `frame`**, because a line the words of which come from an
+  /// expression says something different at every frame and the honest answer
+  /// is what it says at the moment the command is used. A line on a path
+  /// converts curved: the outlines are placed by the same walk the rasteriser
+  /// uses, so the copy lands on top of the layer it came from rather than
+  /// near it.
+  ///
+  /// One `Op`, so one undo step — the whole layer arrives at once.
+  LayerReference createShapesFromText({required PlatformInt64 frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateShapesFromText(
+          that: this, frame: frame);
+
   /// Razor: cut the clip under `frame` in two, at the playhead.
   ///
   /// The two halves keep their places — a cut must not shift what comes after

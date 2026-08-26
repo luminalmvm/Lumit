@@ -1083,6 +1083,15 @@ the layer. A line on a path is drawn into a box reaching the far side of the cur
 size of room round it, its corner still at the layer's own origin so the layer's other masks keep
 meaning what they meant.
 
+**The words convert, and the layer is kept (K-608).** Layer ▸ Create ▸ *Shapes from text* makes a
+`Shape` layer beside the Type layer whose contents are the glyph outlines — exact cubics from the
+font, laid out by the same walk (so a line on a path converts curved), each glyph's contours after
+the first combined `Xor` so a counter is a hole. *Points from text* makes a copy carrying **Emit
+from image**, so the words become a points stream in the shape of themselves; fill-sampled rather
+than walked round the outlines, because that is the shape the points family consumes (K-608
+argues it). Both are one op, both leave the original Type layer exactly as it was, and a line
+with no ink refuses rather than making an empty layer.
+
 The rasteriser and the frame cache key both read the line through one resolver, so they can
 never disagree about what the layer says — a disagreement would serve a cached frame of the
 previous line. A frame-varying expression therefore keys per frame by construction, and a

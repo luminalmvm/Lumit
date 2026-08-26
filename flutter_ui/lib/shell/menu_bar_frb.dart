@@ -873,7 +873,37 @@ List<MenuSection> lumitMenus(
         MenuEntry.todo(l10n.menuLayerStyles),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuReveal),
-        MenuEntry.todo(l10n.menuCreate),
+        // Create ▸ — what a layer can be turned *into*, keeping the layer it
+        // was (K-608). Both rows are live only on a Type layer, said by greying
+        // out rather than by an error after the click; the copy lands directly
+        // above the original, where a duplicate goes.
+        MenuEntry.submenu(l10n.menuCreate, [
+          MenuEntry(
+              l10n.menuCreateShapesFromText,
+              _typed(layer)
+                  ? onLayer((l) {
+                      try {
+                        l.createShapesFromText(
+                            frame: ui.playheadFrame.value);
+                        app.notifyDocumentChanged();
+                      } catch (_) {
+                        // A line with no ink has no art to make, and says so
+                        // through the status line rather than taking the
+                        // interface down.
+                      }
+                    })
+                  : null),
+          MenuEntry(
+              l10n.menuCreatePointsFromText,
+              _typed(layer)
+                  ? onLayer((l) {
+                      try {
+                        l.createPointsFromText();
+                        app.notifyDocumentChanged();
+                      } catch (_) {}
+                    })
+                  : null),
+        ]),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuCamera),
         MenuEntry.todo(l10n.menuAutoOutline),
@@ -1073,6 +1103,17 @@ bool _sequenced(LayerReference? layer) {
 
 /// Whether this layer can cross between footage and sequence at all. Only
 /// footage has clips to cut, and only a sequence has any to put back.
+/// Whether this is a Type layer — the one kind Create ▸ has anything to offer
+/// (K-608).
+bool _typed(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() == BridgeLayerKind.text;
+  } catch (_) {
+    return false;
+  }
+}
+
 bool _convertible(LayerReference? layer) {
   if (layer == null) return false;
   try {

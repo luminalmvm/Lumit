@@ -485,6 +485,48 @@ void main() {
       }
     });
 
+    // Text to shapes and Text to points (K-608): the copy lands beside the
+    // original, which is still there and still a Type layer.
+    testWidgets('Layer ▸ Create turns a text layer into shapes and into points',
+        (tester) async {
+      final p = await mount(tester);
+      await makeComp(tester);
+      final comp = p.uiState.selectedComp!;
+      final text = comp.addTextLayer();
+      p.uiState.setSelection([text]);
+      await tester.pump();
+
+      await choose(tester, 'Layer', 'Shapes from text', under: 'Create');
+      await tester.pump();
+      expect(comp.getLayers(), hasLength(2), reason: 'a copy beside it');
+      expect(text.getText()!.text, 'Text',
+          reason: 'the original is kept, still saying what it said');
+
+      await choose(tester, 'Layer', 'Points from text', under: 'Create');
+      await tester.pump();
+      expect(comp.getLayers(), hasLength(3));
+      expect(
+          comp
+              .getLayers()
+              .any((l) => l.getEffects().any((e) => e.name() == 'emit_from_image')),
+          isTrue,
+          reason: 'the points copy emits from the words');
+    });
+
+    testWidgets('Layer ▸ Create is dead on a layer that is not type',
+        (tester) async {
+      final p = await mount(tester);
+      await makeComp(tester);
+      final comp = p.uiState.selectedComp!;
+      p.uiState.setSelection([comp.addSolidLayer()]);
+      await tester.pump();
+
+      await choose(tester, 'Layer', 'Shapes from text', under: 'Create');
+      await tester.pump();
+      expect(comp.getLayers(), hasLength(1),
+          reason: 'a solid has no words to convert, and the row is greyed out');
+    });
+
     testWidgets('the layer items are disabled without a composition',
         (tester) async {
       final p = await mount(tester);

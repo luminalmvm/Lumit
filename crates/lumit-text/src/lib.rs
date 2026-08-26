@@ -15,7 +15,7 @@
 
 use std::sync::OnceLock;
 
-use lumit_core::mask::MaskPolyline;
+use lumit_core::mask::{BezierPath, MaskPolyline, Vertex};
 
 /// Inter Regular, embedded at compile time — deterministic across machines.
 static INTER: &[u8] = include_bytes!("../../../assets/fonts/Inter-Regular.otf");
@@ -270,6 +270,288 @@ fn sample_coverage(bitmap: &[u8], bw: usize, bh: usize, fx: f32, fy: f32) -> u8 
     (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8
 }
 
+// ---- Glyph outlines (K-608) ---------------------------------------------
+
+/// One glyph's curves, in the same layer pixels the raster would be drawn into.
+///
+/// A glyph is **several** contours whenever it has a counter — the ring of an
+/// `o`, the two eyes of an `8` — and the outer and inner rings wind opposite
+/// ways in the font. They are kept together here because what makes the hole is
+/// the pair, so whatever draws them has to know which contours belong to one
+/// letter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlyphOutline {
+    pub ch: char,
+    pub contours: Vec<BezierPath>,
+}
+
+/// Where one glyph sits: its origin, and the two directions its own x and y run
+/// in there. Straight layout is the unturned frame; a line on a path gets one
+/// frame per glyph from the curve.
+#[derive(Clone, Copy)]
+struct Frame {
+    origin: [f32; 2],
+    along: [f32; 2],
+    down: [f32; 2],
+}
+
+impl Frame {
+    fn point(&self, lx: f32, ly: f32) -> (f64, f64) {
+        (
+            f64::from(self.origin[0] + lx * self.along[0] + ly * self.down[0]),
+            f64::from(self.origin[1] + lx * self.along[1] + ly * self.down[1]),
+        )
+    }
+}
+
+/// The outlines of `text` at `size`, laid out **exactly where the rasteriser
+/// would put the ink** — straight, or along `path` when one is given (K-608).
+///
+/// The same advance walk as [`rasterise_line`] and [`rasterise_on_path`], read
+/// from the same metrics, so a converted layer sits on top of the layer it came
+/// from rather than near it. Empty text, and a font that cannot be parsed, both
+/// come back as an empty list: nothing to convert is not an error.
+#[must_use]
+pub fn glyph_outlines(
+    text: &str,
+    size: f32,
+    path: Option<&MaskPolyline>,
+    offset: f32,
+) -> Vec<GlyphOutline> {
+    let font = font();
+    let size = size.clamp(4.0, 512.0);
+    let Ok(face) = ttf_parser::Face::parse(INTER, 0) else {
+        return Vec::new();
+    };
+    let upem = f32::from(face.units_per_em());
+    if upem <= 0.0 {
+        return Vec::new();
+    }
+    let scale = size / upem;
+
+    // The straight layout's own top edge, so a converted line lands on the
+    // raster it replaces rather than a text size above it.
+    let mut min_y = f32::MAX;
+    for ch in text.chars() {
+        let (m, _) = font.rasterize(ch, size);
+        min_y = min_y.min(-(m.ymin as f32) - m.height as f32);
+    }
+    if min_y == f32::MAX {
+        return Vec::new();
+    }
+    let total = path.map_or(0.0, MaskPolyline::length);
+
+    let mut out = Vec::new();
+    let mut pen = 0.0f32;
+    for ch in text.chars() {
+        let (metrics, _) = font.rasterize(ch, size);
+        let wanted = offset + pen;
+        pen += metrics.advance_width;
+        let frame = match path {
+            None => Frame {
+                origin: [wanted, -min_y],
+                along: [1.0, 0.0],
+                down: [0.0, 1.0],
+            },
+            Some(p) if !p.is_empty() => {
+                let s = if p.closed {
+                    if total > 0.0 {
+                        wanted.rem_euclid(total)
+                    } else {
+                        0.0
+                    }
+                } else if wanted < 0.0 || wanted > total {
+                    continue; // ran off the end, exactly as the raster does
+                } else {
+                    wanted
+                };
+                let tan = p.tangent_at(s);
+                Frame {
+                    origin: p.point_at(s),
+                    along: tan,
+                    down: [-tan[1], tan[0]],
+                }
+            }
+            // A path that names nothing lays straight, the one reading the
+            // whole feature keeps.
+            Some(_) => Frame {
+                origin: [wanted, -min_y],
+                along: [1.0, 0.0],
+                down: [0.0, 1.0],
+            },
+        };
+        let Some(id) = face.glyph_index(ch) else {
+            continue;
+        };
+        let mut outliner = Outliner {
+            scale,
+            frame,
+            contours: Vec::new(),
+            current: Vec::new(),
+            start: (0.0, 0.0),
+        };
+        if face.outline_glyph(id, &mut outliner).is_none() {
+            continue; // a space, or a glyph the font draws with nothing
+        }
+        outliner.finish();
+        if !outliner.contours.is_empty() {
+            out.push(GlyphOutline {
+                ch,
+                contours: outliner.contours,
+            });
+        }
+    }
+    out
+}
+
+/// Turns `ttf-parser`'s pen strokes into the document's own `BezierPath`.
+///
+/// Two conversions happen on the way: the font's y runs **up** and the
+/// picture's runs down, and a **quadratic** curve — what a TrueType glyph is
+/// made of — becomes the cubic every path in this document is made of, by the
+/// exact equivalence (the two cubic handles sit two thirds of the way to the
+/// quadratic's single control point). Nothing is approximated.
+struct Outliner {
+    scale: f32,
+    frame: Frame,
+    contours: Vec<BezierPath>,
+    current: Vec<Vertex>,
+    start: (f64, f64),
+}
+
+impl Outliner {
+    /// A font point, placed.
+    fn at(&self, x: f32, y: f32) -> (f64, f64) {
+        self.frame.point(x * self.scale, -y * self.scale)
+    }
+
+    /// A font-space offset, turned. `from` is the point it leaves.
+    fn handle(&self, from: (f64, f64), cx: f32, cy: f32) -> (f64, f64) {
+        let c = self.at(cx, cy);
+        (c.0 - from.0, c.1 - from.1)
+    }
+
+    fn push(&mut self, pos: (f64, f64), tan_in: (f64, f64)) {
+        self.current.push(Vertex {
+            pos,
+            tan_in,
+            tan_out: (0.0, 0.0),
+        });
+    }
+
+    /// Close the contour being walked, if there is one.
+    ///
+    /// A font's contour ends where it started, so the last vertex is usually the
+    /// first one over again: it is dropped and its incoming handle moves onto
+    /// the first vertex, which is what makes the join a curve rather than a
+    /// corner.
+    fn end_contour(&mut self) {
+        let mut vertices = std::mem::take(&mut self.current);
+        if vertices.len() >= 2 {
+            let last = vertices[vertices.len() - 1];
+            let first = vertices[0];
+            let same =
+                (last.pos.0 - first.pos.0).abs() < 1e-6 && (last.pos.1 - first.pos.1).abs() < 1e-6;
+            if same {
+                vertices.pop();
+                if let Some(v) = vertices.first_mut() {
+                    v.tan_in = last.tan_in;
+                }
+            }
+        }
+        if vertices.len() >= 3 {
+            self.contours.push(BezierPath {
+                vertices,
+                closed: true,
+            });
+        }
+    }
+
+    fn finish(&mut self) {
+        self.end_contour();
+    }
+}
+
+impl ttf_parser::OutlineBuilder for Outliner {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.end_contour();
+        self.start = self.at(x, y);
+        self.push(self.start, (0.0, 0.0));
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        let p = self.at(x, y);
+        self.push(p, (0.0, 0.0));
+    }
+
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        let Some(previous) = self.current.last().map(|v| v.pos) else {
+            return;
+        };
+        let end = self.at(x, y);
+        let control = self.at(x1, y1);
+        // The exact quadratic-to-cubic equivalence: both handles two thirds of
+        // the way from their own end to the single control point.
+        let out = (
+            (control.0 - previous.0) * 2.0 / 3.0,
+            (control.1 - previous.1) * 2.0 / 3.0,
+        );
+        let into = (
+            (control.0 - end.0) * 2.0 / 3.0,
+            (control.1 - end.1) * 2.0 / 3.0,
+        );
+        if let Some(v) = self.current.last_mut() {
+            v.tan_out = out;
+        }
+        self.push(end, into);
+    }
+
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        let Some(previous) = self.current.last().map(|v| v.pos) else {
+            return;
+        };
+        let end = self.at(x, y);
+        let out = self.handle(previous, x1, y1);
+        let into = self.handle(end, x2, y2);
+        if let Some(v) = self.current.last_mut() {
+            v.tan_out = out;
+        }
+        self.push(end, into);
+    }
+
+    fn close(&mut self) {
+        self.end_contour();
+    }
+}
+
+/// The shape items a Type layer converts to (K-608): its glyph outlines, in the
+/// layer's own pixels, painted with the layer's fill.
+///
+/// **A letter's counter is a hole because the contours are combined `Xor`.**
+/// This crate's rasteriser fills by the even-odd rule, and `Xor` *is* even-odd,
+/// so the ring of an `o` comes out hollow with no winding rule to reason about
+/// and no per-glyph special case. Each glyph starts a run of its own, so two
+/// letters that happen to overlap union rather than cancel.
+#[must_use]
+pub fn shape_items_for(
+    text: &str,
+    size: f32,
+    fill: lumit_core::model::LinearColour,
+    path: Option<&MaskPolyline>,
+    offset: f32,
+) -> Vec<lumit_core::shape::ShapeItem> {
+    let mut items = Vec::new();
+    for glyph in glyph_outlines(text, size, path, offset) {
+        for (i, contour) in glyph.contours.into_iter().enumerate() {
+            let mut item =
+                lumit_core::shape::ShapeItem::filled(glyph.ch.to_string(), contour, fill);
+            item.combine = u32::from(i > 0) * 4;
+            items.push(item);
+        }
+    }
+    items
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -440,6 +722,144 @@ mod tests {
         let path = poly(vec![[20.0, 100.0], [120.0, 40.0], [240.0, 160.0]], false);
         let go = || rasterise_on_path("Lumit", 36.0, [200, 40, 90], &path, 7.5, 300, 220).rgba;
         assert_eq!(go(), go());
+    }
+
+    // ---- Glyph outlines (K-608) ------------------------------------------
+
+    /// **The outlines land where the ink lands.** A converted layer that sat a
+    /// few pixels off the words it came from would be useless, so the two are
+    /// measured against each other: the same line, rasterised twice — once as
+    /// glyph coverage, once as the vector art the conversion makes — and the
+    /// two pictures have to agree about where the letters are and roughly how
+    /// much of them there is. This is the round-trip test for the whole
+    /// quadratic-to-cubic conversion; a handle two thirds wrong shows up here
+    /// as ink in the wrong place.
+    #[test]
+    fn the_outlines_land_where_the_ink_lands() {
+        let (text, size) = ("Lumit", 96.0f32);
+        let raster = rasterise_line(text, size, [255, 255, 255]);
+        let items = shape_items_for(
+            text,
+            size,
+            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
+            None,
+            0.0,
+        );
+        assert!(!items.is_empty(), "no outlines came back");
+
+        // Draw the art into the raster's own box, so the two are comparable
+        // pixel for pixel.
+        let (w, h) = (raster.width, raster.height);
+        let art = lumit_core::shape::rasterise_contents(
+            &items,
+            w,
+            h,
+            0.0,
+            0.0,
+            f64::from(w),
+            f64::from(h),
+            0.0,
+        );
+        let bbox = |rgba: &[u8]| {
+            let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
+            for y in 0..h {
+                for x in 0..w {
+                    if rgba[((y * w + x) * 4 + 3) as usize] > 8 {
+                        x0 = x0.min(x);
+                        y0 = y0.min(y);
+                        x1 = x1.max(x);
+                        y1 = y1.max(y);
+                    }
+                }
+            }
+            (x0, y0, x1, y1)
+        };
+        let ink =
+            |rgba: &[u8]| -> f64 { rgba.chunks_exact(4).map(|p| f64::from(p[3])).sum::<f64>() };
+        let (ax0, ay0, ax1, ay1) = bbox(&art);
+        let (rx0, ry0, rx1, ry1) = bbox(&raster.rgba);
+        let near = |a: u32, b: u32| (a as i64 - b as i64).abs() <= 3;
+        assert!(
+            near(ax0, rx0) && near(ay0, ry0) && near(ax1, rx1) && near(ay1, ry1),
+            "art {ax0},{ay0}..{ax1},{ay1} vs ink {rx0},{ry0}..{rx1},{ry1}"
+        );
+        let ratio = ink(&art) / ink(&raster.rgba);
+        assert!((0.85..1.2).contains(&ratio), "ink ratio {ratio}");
+    }
+
+    /// **A counter is a hole.** An `o` is two rings, and the second combines
+    /// into the first by `Xor`, which is exactly the even-odd rule this crate's
+    /// rasteriser fills by — so the middle comes out empty with no winding rule
+    /// to reason about.
+    #[test]
+    fn a_letter_with_a_counter_is_two_rings_and_a_hole() {
+        let items = shape_items_for(
+            "o",
+            96.0,
+            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
+            None,
+            0.0,
+        );
+        assert_eq!(items.len(), 2, "an o is an outer ring and a counter");
+        assert_eq!(items[0].combine, 0, "the first ring starts a run");
+        assert_eq!(items[1].combine, 4, "the counter cuts by even-odd");
+
+        // And the middle of the drawn `o` really is empty.
+        let art =
+            lumit_core::shape::rasterise_contents(&items, 100, 100, 0.0, 0.0, 100.0, 100.0, 0.0);
+        let centre = ((50 * 100 + 50) * 4 + 3) as usize;
+        assert_eq!(art[centre], 0, "the counter filled in");
+
+        // Two letters do not cancel each other: each starts a run of its own.
+        let pair = shape_items_for(
+            "oo",
+            96.0,
+            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
+            None,
+            0.0,
+        );
+        assert_eq!(
+            pair.iter().filter(|i| i.combine == 0).count(),
+            2,
+            "the second letter joined the first letter's run"
+        );
+    }
+
+    /// A line on a path converts **curved**: the outlines take the same frames
+    /// the glyphs are stamped in, so the copy sits on the words it came from.
+    #[test]
+    fn outlines_follow_the_path_the_words_follow() {
+        let down = poly(vec![[200.0, 20.0], [200.0, 380.0]], false);
+        let straight = shape_items_for(
+            "Lumit",
+            48.0,
+            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
+            None,
+            0.0,
+        );
+        let curved = shape_items_for(
+            "Lumit",
+            48.0,
+            lumit_core::model::LinearColour([1.0, 1.0, 1.0, 1.0]),
+            Some(&down),
+            0.0,
+        );
+        assert_eq!(straight.len(), curved.len(), "the same letters either way");
+        let (sx0, sy0, sx1, sy1) =
+            lumit_core::shape::contents_bounds(&straight, 0.0).expect("straight art");
+        let (cx0, cy0, cx1, cy1) =
+            lumit_core::shape::contents_bounds(&curved, 0.0).expect("curved art");
+        // Wide across, tall down — the run turned with the curve.
+        assert!(sx1 - sx0 > sy1 - sy0, "straight run is not wide");
+        assert!(cy1 - cy0 > cx1 - cx0, "the run did not turn");
+    }
+
+    /// Nothing to convert is not an error here: an empty line, and a line of
+    /// spaces, both come back with no outlines and the command above refuses.
+    #[test]
+    fn a_line_with_no_ink_has_no_outlines() {
+        assert!(glyph_outlines("", 48.0, None, 0.0).is_empty());
+        assert!(glyph_outlines("   ", 48.0, None, 0.0).is_empty());
     }
 
     /// The box reaches the far side of the curve with room for the letters,

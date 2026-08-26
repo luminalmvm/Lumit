@@ -1794,6 +1794,7 @@ dependencies = [
  "fontdue",
  "lumit-core",
  "thiserror 2.0.18",
+ "ttf-parser",
 ]
 
 [[package]]
@@ -1820,6 +1821,7 @@ dependencies = [
  "lumit-ofx-testplug",
  "lumit-project",
  "lumit-render",
+ "lumit-text",
  "lumit-track",
  "serde",
  "serde_json",

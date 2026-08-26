@@ -8817,6 +8817,52 @@ circle as on a scribble. On a closed curve the line wraps round for ever; on an
 open one, letters pushed past either end are simply not drawn, which is what
 running out of curve honestly looks like.
 
+### Turning words into a drawing, and into a crowd
+
+A letter in a font is not a picture. It is a set of curves — the outline of the
+shape, stored once and drawn at whatever size you ask for, which is why type stays
+crisp when a photograph does not. Everything up to now used those curves and threw
+them away: the font machinery was asked "fill in this letter at 48 pixels", it did,
+and what came back was a little grey rectangle of coverage. Two new commands under
+**Layer ▸ Create** ask for the curves themselves instead.
+
+**Shapes from text** hands you the letters as vector art — the same shape layer you
+would get by drawing with the pen, with every point draggable. Three things are
+worth knowing about how it is done.
+
+The curves come out of the font in the font's own terms and have to be translated
+twice. The font's vertical axis points up, and the picture's points down, so every
+y is flipped. And a font's curves are *quadratic* — one bend control per segment —
+where every path in Lumit is *cubic*, with two. That sounds like it would need an
+approximation and it does not: there is an exact recipe (each cubic handle sits two
+thirds of the way from its end to the quadratic's single control), so the shapes you
+get are the shapes the font has, not a good likeness of them.
+
+Then there is the hole in the middle of an **o**. A letter like that is two rings,
+and in the font they wind opposite ways so that a fill rule can tell inside from
+outside. Lumit's fill rule is *even-odd* — cross an edge, you are inside; cross
+another, you are outside again — and the shape layer already has a way of saying
+"combine these two by even-odd", because combining shapes shipped before this did.
+So the counter is a hole for free: the second ring joins the first with the
+combine already there, and nothing new had to understand winding.
+
+**Points from text** is the other direction: instead of the letters as curves, the
+words as a *cloud*. It puts a copy of the layer down carrying the **Emit from image**
+effect, which throws candidate points at a picture and keeps the ones that land
+somewhere bright — so the words become a crowd in the shape of themselves, thinning
+where the letters are soft at the edges.
+
+That is a deliberate choice over the obvious-sounding alternative, which is to put
+points *on the outlines*. Two reasons. The machinery that walks a drawn curve and
+places things along it handles one curve at a time, and a word is many — "Lumit" is
+six separate rings — so outlines would have meant changing that machinery. And a
+crowd filling the letters is what people mean by text made of particles; points
+strung round the edges is a wire frame, which is a different and rarer thing.
+
+Both commands leave the original layer exactly where it was, still saying what it
+said, still editable as text. Converting is something you try, and a command you
+cannot back out of is a command nobody tries twice.
+
 ### A mask that moves, and the number in the file that stays a number
 
 A mask is a drawn shape that decides which of a layer's pixels show. Until now the shape

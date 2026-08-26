@@ -12,6 +12,10 @@ publish = false
 # one arc-length walk in this engine, not a second one written here.
 lumit-core = { path = "../lumit-core" }
 fontdue = "0.9"
+# The glyph *outlines* Text to shapes needs (K-608). fontdue rasterises and
+# hands back bitmaps only; the curves come from the font parser fontdue itself
+# is built on, so this is the same crate at the same version, named directly.
+ttf-parser = "0.21"
 thiserror = "2"
 
 [lints]

@@ -4742,6 +4742,89 @@ fn a_strokes_trim_round_trips_and_is_clamped() {
 
 // --- Assets: what a layer is made of --------------------------------------
 
+/// **Text to shapes and Text to points** (K-608): each makes a copy beside the
+/// original, and the original is untouched — the layer is still a Type layer
+/// still saying what it said, which is what makes the commands safe to try.
+#[test]
+fn converting_a_text_layer_leaves_the_original_where_it_was() {
+    use crate::api::assets::{BridgeColourRgba, BridgeTextDocument};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let text = comp.add_text_layer().expect("a text layer");
+    text.set_text(BridgeTextDocument {
+        text: "Lumit".into(),
+        expression: None,
+        size: 72.0,
+        fill: BridgeColourRgba {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        path: None,
+        path_offset: crate::api::effect::BridgeScalar::Static(0.0),
+    })
+    .expect("set");
+    let before = comp.get_layers().expect("layers").len();
+
+    let shapes = text.create_shapes_from_text(0).expect("outlines");
+    assert!(
+        !shapes.get_shape_contents().expect("contents").is_empty(),
+        "the copy has no art"
+    );
+    assert_eq!(
+        text.get_text().expect("text").expect("still text").text,
+        "Lumit",
+        "the original was converted rather than copied"
+    );
+    assert_eq!(comp.get_layers().expect("layers").len(), before + 1);
+
+    let points = text.create_points_from_text().expect("points");
+    let names: Vec<String> = points
+        .get_effects()
+        .expect("effects")
+        .iter()
+        .map(BridgeEffectInstance::name)
+        .collect();
+    assert!(
+        names.iter().any(|n| n == "emit_from_image"),
+        "the copy emits nothing: {names:?}"
+    );
+    assert_eq!(comp.get_layers().expect("layers").len(), before + 2);
+
+    // A line with no ink has no art to make, and says so rather than leaving
+    // an empty layer behind.
+    text.set_text(BridgeTextDocument {
+        text: "   ".into(),
+        expression: None,
+        size: 72.0,
+        fill: BridgeColourRgba {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        path: None,
+        path_offset: crate::api::effect::BridgeScalar::Static(0.0),
+    })
+    .expect("set");
+    assert!(matches!(
+        text.create_shapes_from_text(0),
+        Err(BridgeError::NothingToConvert)
+    ));
+
+    // And neither command is offered anything but a Type layer.
+    assert!(matches!(
+        layer.create_shapes_from_text(0),
+        Err(BridgeError::NotText)
+    ));
+    assert!(matches!(
+        layer.create_points_from_text(),
+        Err(BridgeError::NotText)
+    ));
+}
+
 /// A text layer's words are editable and round-trip exactly. Before this the
 /// frontend could add a Text layer and never change what it said.
 #[test]

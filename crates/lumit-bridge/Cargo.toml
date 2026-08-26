@@ -52,6 +52,9 @@ shared-texture-macos = ["lumit-render/shared-texture-macos"]
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
+# Glyph outlines, for Text to shapes (K-608). The layout lives with the
+# rasteriser so the copy lands exactly where the ink was.
+lumit-text = { path = "../lumit-text" }
 # Reading an After Effects bundle and mapping it to a Document (docs/11 §2,
 # docs/impl/ae-import.md phase 3). An engine crate depending on lumit-core
 # alone, so the docs/05 layering is unbroken.

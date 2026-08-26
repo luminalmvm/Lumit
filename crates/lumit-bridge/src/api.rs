@@ -98,6 +98,10 @@ pub enum BridgeError {
     NotText,
     /// The edit named a camera layer and the layer is not one.
     NotCamera,
+    /// Text to shapes was asked of a layer whose words come to nothing — an
+    /// empty line, or one made only of spaces (K-608). There is no art to make,
+    /// so the command says so rather than leaving an empty layer behind.
+    NothingToConvert,
     /// Analyse was pressed while another analysis is already running. One at a
     /// time is deliberate (K-417): two disk-bound jobs share one drive and
     /// halve each other.
@@ -219,6 +223,9 @@ impl fmt::Display for BridgeError {
             }
             BridgeError::NotText => write!(f, "That is not a text layer"),
             BridgeError::NotCamera => write!(f, "That is not a camera layer"),
+            BridgeError::NothingToConvert => {
+                write!(f, "That layer has no words to convert")
+            }
             BridgeError::AnalysisBusy => write!(f, "Another analysis is already running"),
             BridgeError::NotLinked => write!(f, "That camera has no solve to bake"),
             BridgeError::NoSolve => write!(f, "Nothing has been solved at those points"),

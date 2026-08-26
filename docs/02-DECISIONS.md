@@ -18565,3 +18565,70 @@ Tests: in `lumit-text`, `the_offset_walks_the_line_along_the_path_by_arc_length`
 `a_text_layer_on_a_path_draws_into_the_paths_own_box`; in `lumit-eval`,
 `a_line_on_a_path_keys_by_its_path_and_its_offset`. New strings: `sourceTextPath`,
 `sourceTextPathNone`, `sourceTextPathOffset`.
+
+## K-608 — Text converts to shapes by its outlines and to points by its picture, and the words are kept
+
+**Status: DECIDED (2026-08-26).** The second half of K-564's text-as-data package, building on
+K-607. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §9.1.
+
+**Both commands make a copy and leave the original alone.** After Effects' convention, and the
+only one that survives a mistake: the Type layer is still typeable, still keyed, still
+expression-driven, and the new layer beside it is a drawing or an emitter. Each is **one `Op`**,
+so one undo step, and the copy lands directly above the original where a duplicate goes. Neither
+switches the original off — a layer going dark because you tried a command is a surprise, and the
+`Ctrl+Z` is right there.
+
+**The outlines come from the font parser fontdue is already built on.** fontdue rasterises and
+hands back bitmaps; there is no outline in its API. `ttf-parser` is in the tree underneath it at
+0.21, so it is named directly rather than added — same crate, same version, no new dependency.
+Two conversions happen on the way in and both are exact: the font's y runs up and the picture's
+runs down, and a TrueType quadratic becomes the document's cubic by the equivalence that puts
+both handles two thirds of the way to the single control point. Nothing is flattened and nothing
+is approximated, so the shapes are as editable as anything drawn with the pen.
+
+**A counter is a hole because the contours combine `Xor`.** A glyph is several contours whenever
+it has one — the ring of an `o`, the two eyes of an `8` — and in the font the inner ring winds the
+other way. This crate's rasteriser fills by **even-odd** (K-605 wrote that down), and `Xor` *is*
+even-odd, so a glyph's contours after the first join by `Xor` and the middle comes out empty with
+no winding rule to reason about. Each glyph starts a run of its own, so two letters that overlap
+union rather than cancel.
+
+**The layout is the rasteriser's, including the curve.** The outlines are placed by the same
+advance walk and, where K-607's path is set, by the same per-glyph frames — so a converted line
+lands *on* the words it came from rather than near them. Two places had to agree for that to be
+true. The anchor moves by the art's bounding-box corner, because a shape layer's pixels start at
+that corner (K-237) and a text layer's start at the origin; without it the copy sat the first
+glyph's left bearing out. And the masks and the paint do **not** come across: both are drawn in
+layer pixels measured from the box corner, so carrying them over would put them somewhere else —
+and the path mask has already done its work, since the curve is in the outlines.
+
+**Text to points is fill-sampled, through Emit from image, and here is why not outlines.** The
+points family's producers place points from geometry they own, and the only geometry carriage it
+has is `EmitterShape::MaskPath`, which walks **one** polyline. A word is many contours — `Lumit`
+is six — so emitting from the outlines would need a multi-contour emitter, which is a change to
+the family's own kernel and uniform and belongs to the family, not to a text command. Emit from
+image is already exactly this job: it keeps the candidates that land on something bright, and
+K-603 named "a title" as the case it was written for. Fill-sampled is also the better *picture*:
+a word as a thinning crowd in the shape of itself is what people mean by text made of particles,
+where outline points are a wire frame. The copy carries the effect with its **Source row unset**,
+which reads the effect's own input — the words underneath it — rather than naming the layer,
+because a name breaks the moment the layer is renamed. The family's recorded ceiling comes with
+it unchanged (K-599, K-603): an image-fed stream cannot feed a driver or a stack consumer, the
+GPU arena carriage is what would answer that, and this command neither worsens it nor is blocked
+by it.
+
+**A line with no ink refuses.** An empty line, or one made only of spaces, has no art to make, so
+Text to shapes says so rather than leaving an empty layer behind. Both rows are live only on a
+Type layer and say so by greying out, never by an error after the click.
+
+**Not built:** converting a *styled* line (there is one style, §9.1), per-character layers, and
+"create masks from text". Each is the same outline walk with a different destination and none of
+them is blocked by anything here.
+
+Tests: in `lumit-text`, `the_outlines_land_where_the_ink_lands` (the round trip — the same line
+rasterised as coverage and as vector art, measured against each other),
+`a_letter_with_a_counter_is_two_rings_and_a_hole`, `outlines_follow_the_path_the_words_follow`,
+`a_line_with_no_ink_has_no_outlines`; in the bridge,
+`converting_a_text_layer_leaves_the_original_where_it_was`; in Flutter, `Layer ▸ Create turns a
+text layer into shapes and into points` and `Layer ▸ Create is dead on a layer that is not type`.
+New strings: `menuCreateShapesFromText`, `menuCreatePointsFromText`.

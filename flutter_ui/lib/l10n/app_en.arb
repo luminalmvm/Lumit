@@ -3719,6 +3719,14 @@
   "@menuCreate": {
     "description": "Menu item."
   },
+  "menuCreatePointsFromText": "Points from text",
+  "@menuCreatePointsFromText": {
+    "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer that emits a stream of points in the shape of its words."
+  },
+  "menuCreateShapesFromText": "Shapes from text",
+  "@menuCreateShapesFromText": {
+    "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer whose picture is the outlines of its letters as editable vector shapes."
+  },
   "menuCropCompToWorkArea": "Crop comp to work area",
   "@menuCropCompToWorkArea": {
     "description": "Menu item."
