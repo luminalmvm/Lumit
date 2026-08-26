@@ -162,8 +162,33 @@ Each of these is a future work package with its own design step, all consuming t
 contract in §3 unchanged: **Connect points** (lines between near particles — plexus),
 **Clone to points** (a layer instanced per particle, generalising Sprite mode),
 **Trail** (history drawn from closed-form back-evaluation, like Streak but longer),
-**Scatter** (an image broken to points and displaced), **Emit-from-image** (with §2.2's
-recorded constraint), **cross-layer points taps** (§1.2). None blocks, none is built.
+**cross-layer points taps** (§1.2). None blocks, none is built.
+
+**The generators are built** (K-598, K-599): **Grid**, a lattice of points with a jitter
+per axis, and **Scatter**, points thrown uniformly inside the layer's own alpha or a
+chosen matte. Both are stack effects declaring the same `Points` output Particulate does
+and drawing their own points as discs beside it — the family's *producers*, where
+everything else named here is a consumer. Three things they settled belong in this note,
+because they are the family's rather than one effect's:
+
+- **A generator's points are worked out on the host** and drawn through
+  `FxEngine::points_draw`, which fills the §3.1 stream layout and runs Particulate's own
+  instanced quad. A generator is hundreds of cells or candidates of closed form, not a
+  million particles of algebra, so a compute pass of its own would cost more than the sums
+  and would duplicate the compaction in a second shader module. The consequence is a
+  guarantee rather than a saving: what a generator draws *is* what its CPU reference
+  evaluated.
+- **Scatter answers §2.2's recorded constraint** (K-599). Its stream is a function of the
+  input picture, which does not exist at resolve time, so it takes the **refusal** branch:
+  a points wire from Scatter into a driver reads the documented empty stream, tested as
+  such. The constraint stands unchanged for Emit-from-image, which is the same shape of
+  thing.
+- **Scatter's GPU carriage is deferred, deliberately.** Its rejection happens in the vertex
+  stage — the only place a host-built candidate set can meet a picture that exists only on
+  the card — so what the card holds is the *candidate* set with the refused ones given no
+  size, not a compacted stream. Nothing reads a GPU stream today (§3.3's carriage is
+  "designed now, built with its first consumer"), and the compaction lands with that
+  consumer. Marked in the code, not left to be discovered.
 
 ## 3. The evaluation contract
 

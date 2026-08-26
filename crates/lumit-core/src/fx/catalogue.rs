@@ -64,6 +64,7 @@ use super::effects::{
     gamma::{Gamma, GammaDef},
     glow::{Glow, GlowDef},
     gradient::{Gradient, GradientDef},
+    grid::{Grid, GridDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
     hue_shift::{HueShift, HueShiftDef},
     invert::{Invert, InvertDef},
@@ -197,6 +198,9 @@ crate::catalogue![
     // K-398 opened this category for, and it is the first entry to declare a
     // data output beside its picture (K-472).
     ParticulateDef => Particulate,
+    // The generators (K-598), beside it and for the same reason: they make
+    // points rather than pixels, and declare the same Points output.
+    GridDef => Grid,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

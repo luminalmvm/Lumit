@@ -10676,9 +10676,29 @@ falls behind while you are working, the same rule runs again at half the number,
 again after that. That never happens on an export: a delivery is not allowed to be the
 cheaper picture.
 
+**The generators: points without particles.** A particle system is one way to decide where
+points go, and it is not the only one. **Grid** puts them on a lattice — so many columns,
+so many rows, so many planes receding into the distance, spaced by a distance you type,
+with a jitter dial per axis for when a perfect lattice looks too perfect. Nothing is born
+and nothing ages: a cell is where the arithmetic says it is, at every frame, which is why
+Grid has no clock in it at all and its Seed only decides the jitter.
+
+Grid hands out the same stream Particulate does, through the same socket, and the wire on
+the far end cannot tell which made it. That is the point of having settled the shape first.
+It also draws its own points as soft discs, because a generator you cannot see is a
+generator you cannot aim — and if you want the points without the discs, turn Mix down to
+nothing: the stream is still made and the picture is left alone.
+
+One difference worth knowing about, because it is visible. Particulate works its particles
+out **on the graphics card**, since there can be a million of them and each one is a page
+of algebra. Grid works its points out on the processor and posts the answers to the card,
+because a few hundred cells of arithmetic is cheaper to do than to set up a card program
+for. What that buys is not speed but honesty: the points Grid *draws* are, digit for digit,
+the points its reference implementation worked out — the same numbers, through the same
+disc-drawing code Particulate's particles go through.
+
 **What comes later** plugs into the same socket: Connect points (lines between nearby
-particles), Clone to points (a layer stamped at every particle), Trail, Scatter, and
-emitting particles from the image's own bright pixels. Each is a named future package;
+particles), Clone to points (a layer stamped at every particle), and Trail. Each is a named future package;
 none of them will need the plumbing rebuilt, because the socket, the wire and the
 stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
 the effect's own design — every slider, formula and budget — in

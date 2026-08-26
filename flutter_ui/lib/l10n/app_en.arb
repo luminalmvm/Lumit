@@ -416,6 +416,18 @@
   "@fxJagged": {
     "description": "Effect controls — an option of Scribble’s Wiggle type: the waver snaps to a new arrangement several times a second."
   },
+  "fxJitterX": "Jitter x",
+  "@fxJitterX": {
+    "description": "Effect controls — a control on Grid: how far across a point may wander from its place on the lattice."
+  },
+  "fxJitterY": "Jitter y",
+  "@fxJitterY": {
+    "description": "Effect controls — a control on Grid: how far down a point may wander from its place on the lattice."
+  },
+  "fxJitterZ": "Jitter z",
+  "@fxJitterZ": {
+    "description": "Effect controls — a control on Grid: how far towards or away from the camera a point may wander from its place on the lattice."
+  },
   "fxLeftToRight": "Left to right",
   "@fxLeftToRight": {
     "description": "Effect controls — a Flip order option on Card wipe."
@@ -563,6 +575,18 @@
   "fxSpacing": "Spacing",
   "@fxSpacing": {
     "description": "Effect controls — a control on Scribble and Stroke: how far apart the strokes or the brush stamps are laid."
+  },
+  "fxSpacingX": "Spacing x",
+  "@fxSpacingX": {
+    "description": "Effect controls — a control on Grid: the gap between columns of the lattice."
+  },
+  "fxSpacingY": "Spacing y",
+  "@fxSpacingY": {
+    "description": "Effect controls — a control on Grid: the gap between rows of the lattice."
+  },
+  "fxSpacingZ": "Spacing z",
+  "@fxSpacingZ": {
+    "description": "Effect controls — a control on Grid: the gap between the lattice's planes, one behind another."
   },
   "fxSpherize": "Spherize",
   "@fxSpherize": {
@@ -1901,6 +1925,10 @@
   "@fxGravity": {
     "description": "Effect controls — a control on Particulate: a steady downward pull on every particle."
   },
+  "fxGrid": "Grid",
+  "@fxGrid": {
+    "description": "Effect controls — the name of the Grid effect, which makes a lattice of points, and the heading of its first group of controls."
+  },
   "fxGreen": "Green",
   "@fxGreen": {
     "description": "Effect controls — a control on RGB split."
@@ -2128,6 +2156,10 @@
   "fxMaxParticles": "Max particles",
   "@fxMaxParticles": {
     "description": "Effect controls — a control on Particulate: the most particles that may be alive at once, which is also how much of the frame's time the effect may spend."
+  },
+  "fxMaxPoints": "Max points",
+  "@fxMaxPoints": {
+    "description": "Effect controls — a control on Grid and Scatter: the most points either may make at once, which is also the memory they are given."
   },
   "fxMirror": "Mirror",
   "@fxMirror": {
@@ -7259,6 +7291,10 @@
   "fxPlacement": "Placement",
   "@fxPlacement": {
     "description": "Effect controls — a control on Texturize: what happens outside one copy of the texture."
+  },
+  "fxPlanes": "Planes",
+  "@fxPlanes": {
+    "description": "Effect controls — a control on Grid: how many copies of the lattice recede into the distance."
   },
   "fxReduceBrightness": "Reduce brightness",
   "@fxReduceBrightness": {

@@ -261,6 +261,7 @@ Gravity
 Green
 Green blur
 Greens
+Grid
 Hard
 Hard colour
 Hard light
@@ -309,6 +310,9 @@ Iris centre y
 Iris points
 Iris wipe
 Jagged
+Jitter x
+Jitter y
+Jitter z
 Key out safe
 Key out unsafe
 LUT
@@ -371,6 +375,7 @@ Matte
 Matte key
 Max ghosts
 Max particles
+Max points
 Maximum
 Maximum signal
 Median
@@ -435,6 +440,7 @@ Pin light
 Pinning
 Placement
 Planar track
+Planes
 Point
 Point control
 Point x
@@ -561,6 +567,9 @@ Source
 Source height
 Source width
 Spacing
+Spacing x
+Spacing y
+Spacing z
 Speed jitter
 Spherize
 Spiky

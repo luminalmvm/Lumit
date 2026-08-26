@@ -1058,11 +1058,23 @@ pub fn build_comp_draws_at(
                     lumit_core::fx::points::wants_schedule(def.signature()) && def.is_image_op();
                 wants.then_some((e, def))
             })
-            .map(|(e, _def)| {
+            .map(|(e, def)| {
                 // A pinned effect (K-132) is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
                 let t = if e.sample_temporally { slt } else { frame_slt };
+                // **A generator has no births to schedule** (K-598): its points
+                // are arithmetic over its own parameters, and what it wants
+                // from this carriage is the camera and the clock. Asked by the
+                // schema rather than by name, so a producer that grows an Emit
+                // rate later needs no edit here.
+                if !def.schema().params.iter().any(|p| p.id == "emit_rate") {
+                    return lumit_core::fx::points::PointsSchedule {
+                        schedule: lumit_core::fx::points::Schedule::default(),
+                        t,
+                        projection,
+                    };
+                }
                 let upto = (t / dt).floor() as i64;
                 let context = Arc::new(ExpressionContext {
                     document: expr_doc.clone(),

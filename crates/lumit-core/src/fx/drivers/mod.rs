@@ -409,12 +409,15 @@ impl Eval<'_> {
         if !inst.enabled || !layer.switches.fx {
             return None;
         }
-        // The one producer there is (K-494). A second one would make this a
-        // trait method; today that would be an interface with one implementer.
-        if inst.effect.match_name != "particulate" {
+        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
+        // Something that does not emit points has no stream to hand over, and
+        // the walk asks the signature rather than a list of names (K-598).
+        // **Which** producer it is still decides how the stream is made, at the
+        // bottom of this function, because a birth schedule and a lattice are
+        // not the same arithmetic.
+        if !super::points::wants_schedule(def.signature()) {
             return None;
         }
-        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
 
         // The producer's own incoming wires, evaluated first — the same shape
         // `resolve_drivers` uses for the whole stack, scoped to this effect.
@@ -464,7 +467,19 @@ impl Eval<'_> {
             self.context.clone(),
             &wired,
         );
-        let p = super::effects::particulate::Particulate::read(bag.get(0)?.params);
+        let params = bag.get(0)?.params;
+        // **A generator's stream is arithmetic and nothing else** (K-598): no
+        // schedule to scan, no mask to flatten, no clock to read. It is here
+        // rather than behind a trait method because the two producers want
+        // genuinely different things from the document — Particulate wants the
+        // whole history of its Emit rate track — and a trait method wide enough
+        // to carry both would be an interface shaped by its callers.
+        if inst.effect.match_name == "grid" {
+            let stream = Rc::new(super::effects::grid::Grid::read(params).stream(self.projection));
+            self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+            return Some(stream);
+        }
+        let p = super::effects::particulate::Particulate::read(params);
 
         // The mask-path emitter's polyline, flattened at composition scale, by
         // the rule the draw builder applies: a row the panel does not show, or
@@ -1331,6 +1346,54 @@ mod tests {
             near(&cut, &context_cut),
             "a driven producer must move the crowd the sample reads"
         );
+    }
+
+    /// **A second producer, on the same wire** (K-598): a Grid's lattice reads
+    /// through the Points sample exactly as a particle field does, because the
+    /// walk asks the *signature* who emits points rather than carrying a name.
+    /// The count is the lattice, cell for cell, and the nearest distance is a
+    /// spacing away from a point sat on the lattice's own centre.
+    #[test]
+    fn a_grids_lattice_reads_through_the_points_sample() {
+        let mut producer = inst("grid");
+        set(&mut producer, "columns", 5.0);
+        set(&mut producer, "rows", 3.0);
+        set(&mut producer, "spacing_x", 100.0);
+        set(&mut producer, "spacing_y", 100.0);
+
+        let sampler = inst("points_sample");
+        let target = inst("blur");
+        let wired = LayerGraph {
+            nodes: vec![sampler.clone()],
+            edges: vec![
+                stream_edge(&producer, &sampler),
+                edge(
+                    &sampler,
+                    points_sample::COUNT_PORT,
+                    NodeRef::Effect(target.id),
+                    "radius",
+                ),
+                edge(
+                    &sampler,
+                    points_sample::NEAREST_PORT,
+                    NodeRef::Effect(target.id),
+                    "mix",
+                ),
+            ],
+            ..LayerGraph::default()
+        };
+        let context = staged(vec![producer.clone(), target.clone()], wired.clone());
+        let resolved = resolve_drivers(&wired, 1.0, context, None);
+        let read = |id: &str| {
+            resolved
+                .param(NodeRef::Effect(target.id), ParamId::new(id))
+                .expect("the wire carries something")
+                .as_f32()
+        };
+        assert_eq!(read("radius"), 15.0, "five columns of three rows");
+        // The sampler's default Position is the comp's centre, and an odd
+        // lattice has a cell sat exactly on it.
+        assert_eq!(read("mix"), 0.0, "the centre cell is where the query is");
     }
 
     /// The documented no-ops (§2.2): an unwired socket and an empty stream both

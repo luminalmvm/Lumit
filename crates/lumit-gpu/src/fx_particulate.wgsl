@@ -106,7 +106,11 @@ struct Params {
     proj2: vec4<f32>,
 
     project: u32,
-    _pad0: f32,
+    // Set by the generic points draw when the consumer is Scatter (K-599): the
+    // vertex stage reads the picture's own alpha under each point and refuses
+    // the ones the hash outvotes. Nought for Particulate, whose points were
+    // already decided by the compaction.
+    alpha_test: u32,
     _pad1: f32,
     _pad2: f32,
 };
@@ -129,6 +133,10 @@ const A_TURB_PHASE: u32 = 6u;
 const A_ROTATION: u32 = 7u;
 const A_EMIT_W: u32 = 8u;
 const A_DIRECTION_Z: u32 = 9u;
+
+// Scatter's acceptance die (K-599), well clear of the per-particle draws above
+// and of the turbulence lattices below.
+const A_ACCEPT: u32 = 16u;
 
 // The turbulence lattices, matching `points::TURB_CHANNEL_X/Y/Z`.
 const TURB_X: u32 = 64u;
@@ -581,6 +589,9 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(1) @binding(0) var<uniform> dp: Params;
 @group(1) @binding(1) var<storage, read> dstream: array<u32>;
 @group(1) @binding(2) var sprite: texture_2d<f32>;
+// The picture the points were thrown at, for the alpha test above (K-599).
+// Particulate binds its own input here and never reads it.
+@group(1) @binding(3) var alpha_src: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -615,7 +626,23 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     let pt = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, tail3);
     let head = ph.xy;
     let tail = pt.xy;
-    let size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
+    var size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
+    if (dp.alpha_test != 0u) {
+        // **Rejection over the raster** (K-599): the point stands where the
+        // alpha under it outvotes its own die. A refused point is given no
+        // size, which draws nothing at all — a disc of no radius covers no
+        // pixel — rather than being compacted away, because the picture is the
+        // only thing this pass makes.
+        let id = dstream[r_id(cap) + ii * 2u];
+        let px = vec2<i32>(
+            clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
+            clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
+        );
+        let a = textureLoad(alpha_src, px, 0).a;
+        if (a <= nc_hash01(dp.seed, A_ACCEPT, bitcast<i32>(id), 0, 0)) {
+            size = 0.0;
+        }
+    }
     let rot = bitcast<f32>(dstream[r_rot(cap) + ii]);
     let rg = unpack2x16float(dstream[r_colour(cap) + ii * 2u]);
     let ba = unpack2x16float(dstream[r_colour(cap) + ii * 2u + 1u]);

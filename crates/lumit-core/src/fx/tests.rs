@@ -10517,6 +10517,20 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "wind_z"),
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
+            // Grid (K-598): every length in a lattice — the gaps between
+            // cells, where its centre sits, how far a cell may wander, and the
+            // disc a point is drawn as. The three counts and the per cents are
+            // not lengths and are not here.
+            ("grid", "spacing_x"),
+            ("grid", "spacing_y"),
+            ("grid", "spacing_z"),
+            ("grid", "position_x"),
+            ("grid", "position_y"),
+            ("grid", "position_z"),
+            ("grid", "jitter_x"),
+            ("grid", "jitter_y"),
+            ("grid", "jitter_z"),
+            ("grid", "size"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement (K-429).
             ("motion_blur", "vector_scale"),
@@ -13776,6 +13790,187 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
+// ------------------------------------------------------ Grid (K-598)
+
+/// A Grid instance with its declared defaults, and `edits` applied.
+fn grid(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("grid").expect("Grid is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("grid has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The lattice one instance emits at layer time `t`, in px@comp.
+fn grid_stream(e: &EffectInstance, t: f64) -> PointsStream {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        t,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::grid::Grid::read(Params::new(&bag)).stream(points::Projection::FLAT)
+}
+
+/// **The lattice is a lattice**: as many points as cells, spaced by Spacing,
+/// centred on Position, and `id` the walk's own index.
+#[test]
+fn a_grid_emits_one_point_per_cell_on_its_spacing() {
+    let e = grid(&[
+        ("columns", fixed(5.0)),
+        ("rows", fixed(3.0)),
+        ("planes", fixed(1.0)),
+        ("spacing_x", fixed(100.0)),
+        ("spacing_y", fixed(50.0)),
+    ]);
+    let s = grid_stream(&e, 0.0);
+    assert_eq!(s.len(), 15, "five columns of three rows");
+    assert_eq!(
+        s.id,
+        (0..15).collect::<Vec<u64>>(),
+        "id is the walk's index"
+    );
+    // Row-major from the top left corner, centred on the comp's middle.
+    for (i, at) in s.position.iter().enumerate() {
+        let (c, r) = (i % 5, i / 5);
+        let want = [
+            960.0 + (c as f32 - 2.0) * 100.0,
+            540.0 + (r as f32 - 1.0) * 50.0,
+            0.0,
+        ];
+        assert_eq!(*at, want, "cell {i}");
+    }
+}
+
+/// **Depth is the third count** (K-561): planes recede from the layer's own
+/// plane, centred on it, and one plane is exactly flat.
+#[test]
+fn a_grids_planes_recede_from_the_layers_plane() {
+    let flat = grid_stream(&grid(&[("planes", fixed(1.0))]), 0.0);
+    for at in &flat.position {
+        assert_eq!(at[2], 0.0, "one plane is the layer's own");
+    }
+    let deep = grid_stream(
+        &grid(&[
+            ("columns", fixed(1.0)),
+            ("rows", fixed(1.0)),
+            ("planes", fixed(3.0)),
+            ("spacing_z", fixed(200.0)),
+        ]),
+        0.0,
+    );
+    assert_eq!(
+        deep.position.iter().map(|at| at[2]).collect::<Vec<f32>>(),
+        vec![-200.0, 0.0, 200.0]
+    );
+}
+
+/// **Determinism, and no clock in it** (K-474's property, applied to a
+/// generator): two evaluations of one frame agree bit for bit, and so do two
+/// different frames — a lattice has no time in it, which is why its schema
+/// declares itself unseeded.
+#[test]
+fn a_grid_is_the_same_lattice_twice_and_at_every_frame() {
+    let e = grid(&[("jitter_x", fixed(40.0)), ("jitter_y", fixed(40.0))]);
+    let a = grid_stream(&e, 2.5);
+    assert_eq!(a, grid_stream(&e, 2.5), "two evaluations disagreed");
+    assert_eq!(a, grid_stream(&e, 91.0), "the lattice moved with the clock");
+}
+
+/// **Jitter is a seeded draw, bounded by its own dial**: ±half of it about the
+/// cell, and a different seed is a different lattice.
+#[test]
+fn a_grids_jitter_is_seeded_and_stays_inside_its_dial() {
+    let plain = grid_stream(&grid(&[]), 0.0);
+    let jittered = grid_stream(
+        &grid(&[("jitter_x", fixed(30.0)), ("jitter_y", fixed(30.0))]),
+        0.0,
+    );
+    let mut moved = 0;
+    for (a, b) in plain.position.iter().zip(jittered.position.iter()) {
+        assert!(
+            (a[0] - b[0]).abs() <= 15.0 + 1e-4 && (a[1] - b[1]).abs() <= 15.0 + 1e-4,
+            "a cell wandered past half its dial: {a:?} to {b:?}"
+        );
+        if a != b {
+            moved += 1;
+        }
+    }
+    assert!(moved > plain.len() / 2, "the jitter moved almost nothing");
+
+    let reseeded = grid_stream(
+        &grid(&[
+            ("jitter_x", fixed(30.0)),
+            ("jitter_y", fixed(30.0)),
+            ("seed", EffectValue::Seed(9)),
+        ]),
+        0.0,
+    );
+    assert_ne!(jittered.position, reseeded.position, "the seed did nothing");
+}
+
+/// **The cap rule, a generator's shape of it** (K-475): a lattice past Max
+/// points keeps the **first** cap by index. A lattice has no birth order, so
+/// the rule is a prefix of the one fixed ordering rather than the newest —
+/// deterministic, and the same from any scrub direction.
+#[test]
+fn a_grid_over_its_cap_keeps_the_first_cells_by_index() {
+    let e = grid(&[
+        ("columns", fixed(40.0)),
+        ("rows", fixed(40.0)),
+        ("max_points", fixed(100.0)),
+    ]);
+    let capped = grid_stream(&e, 0.0);
+    assert_eq!(capped.len(), 100);
+    assert_eq!(capped.id, (0..100).collect::<Vec<u64>>());
+
+    let whole = grid_stream(
+        &grid(&[("columns", fixed(40.0)), ("rows", fixed(40.0))]),
+        0.0,
+    );
+    assert_eq!(whole.len(), 1600);
+    assert_eq!(capped.position, whole.position[..100], "a different prefix");
+}
+
+/// The px@comp rule (K-419), through the resolve step every effect shares: at
+/// half raster every length in the lattice is half of what it was, so the
+/// preview draws the picture the export draws.
+#[test]
+fn a_grid_rescales_with_the_raster() {
+    let e = grid(&[("spacing_x", fixed(100.0)), ("spacing_y", fixed(100.0))]);
+    let at = |px_scale: f32| {
+        let bag = resolve_bag(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            px_scale,
+            &MarkerContext::NONE,
+        );
+        crate::fx::effects::grid::Grid::read(Params::new(&bag)).stream(points::Projection::FLAT)
+    };
+    let full = at(1.0);
+    let half = at(0.5);
+    assert_eq!(full.len(), half.len());
+    for (a, b) in full.position.iter().zip(half.position.iter()) {
+        for k in 0..3 {
+            assert!(
+                (a[k] * 0.5 - b[k]).abs() < 1e-3,
+                "a cell did not follow the raster: {a:?} against {b:?}"
+            );
+        }
+    }
+    assert!(
+        (full.size[0] * 0.5 - half.size[0]).abs() < 1e-3,
+        "the disc did not"
+    );
+}
+
 // ------------------------------------------- border emission (K-597)
 
 /// A still emitter of the given shape: nothing carries a particle off the
@@ -14499,13 +14694,14 @@ fn particulates_frame_key_follows_its_seed_and_its_controls() {
     assert_ne!(key(&e, 1.0), key(&nudged, 1.0), "the rate is in the key");
 }
 
-/// **Particulate declares a Points output, and nothing else grew one**
-/// (K-472, K-492, points-stream.md §4.1): the signature split leaves every
-/// other declaration exactly as it was, which is the property that made
-/// `Image { extra }` the shape rather than a third signature kind.
+/// **The points producers are exactly the ones that declare a data output**
+/// (K-472, K-492, points-stream.md §4.1; the generators, K-598): the signature
+/// split leaves every other declaration exactly as it was, which is the
+/// property that made `Image { extra }` the shape rather than a third
+/// signature kind. A new producer belongs on this list and nowhere else.
 #[test]
-fn only_particulate_declares_a_data_output_beside_its_picture() {
-    let with_extras: Vec<(&str, Vec<&str>)> = BUILTIN_DEFS
+fn the_points_producers_declare_a_data_output_beside_their_picture() {
+    let mut with_extras: Vec<(&str, Vec<&str>)> = BUILTIN_DEFS
         .iter()
         .filter(|d| matches!(d.signature(), Signature::Image { extra } if !extra.is_empty()))
         .map(|d| {
@@ -14515,17 +14711,23 @@ fn only_particulate_declares_a_data_output_beside_its_picture() {
             )
         })
         .collect();
-    assert_eq!(with_extras, vec![("particulate", vec!["points"])]);
-    let port = BUILTIN_DEFS
-        .get("particulate")
-        .expect("declared")
-        .signature()
-        .output("points");
+    with_extras.sort_unstable();
     assert_eq!(
-        port,
-        Some(PortType::Points),
-        "the socket is teal, or it is nothing"
+        with_extras,
+        vec![("grid", vec!["points"]), ("particulate", vec!["points"])]
     );
+    for name in ["particulate", "grid"] {
+        let port = BUILTIN_DEFS
+            .get(name)
+            .expect("declared")
+            .signature()
+            .output("points");
+        assert_eq!(
+            port,
+            Some(PortType::Points),
+            "{name}'s socket is teal, or it is nothing"
+        );
+    }
 }
 
 /// **An over-life curve starts on the shape it declared** (K-412 with

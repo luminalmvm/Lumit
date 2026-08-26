@@ -5579,6 +5579,71 @@ is owed rather than pretended.
 
 ---
 
+### 3.88 Grid — a lattice of points, and the discs that show it
+
+A **Generate** effect (K-598), and the first of the points **generators**: like Particulate
+it declares a `Points` output beside its picture, and unlike Particulate it has no time in
+it at all. Rows, columns and planes, spaced by a distance you type, with a jitter dial per
+axis. There is nothing to be born, nothing to age, nothing to carry off — a cell is where
+the arithmetic says it is, at every frame, for ever.
+
+**Parameters**, in two groups. *Grid*: Columns (1–100, hard 1 000, default 10), Rows
+(default 6), **Planes** (default 1 — the count *through* the layer's plane, K-561), Spacing
+x / Spacing y / Spacing z (px@comp, 0–1000, default 120), Position x / y / **z** (px@comp —
+the lattice's centre), Jitter x / y / z (px@comp, 0–500, default 0), Seed. *Point*: Size
+(px@comp, default 8 — the diameter of the disc a point is drawn as), Feather (per cent),
+Colour (scene-linear, values above 1 legal), **Max points** (1–200 000, hard 1 000 000,
+default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend (K-425).
+
+**Algorithm sketch.** One expression, no walk:
+
+```
+i     = ((plane · Rows) + row) · Columns + column     # the point's id, for ever
+p_i   = Position + (column − (Columns−1)/2)·Spacing x , … same in y and z
+p_i  += (hash(Seed, i, axis) − ½) · Jitter axis       # the one seeded draw
+keep the first `Max points` by index                  # the cap rule, a generator's shape
+seen  = M·(x, y, z, 1) ; draw at seen.xy/seen.w, size ÷ seen.w   # the comp's camera
+```
+
+Five notes:
+
+- **`id` is the index, and the index is the walk.** A consumer following one cell keeps
+  following it while the lattice grows around it — the same promise Particulate's birth
+  index makes, from the same place: an ordering that is a fact of the arithmetic rather
+  than an artefact of how it was computed.
+- **The cap rule keeps the *first* cap, not the newest.** Particulate keeps the newest
+  because a particle set has a birth order and the newest are the ones the eye is
+  following; a lattice has no birth order at all. What survives is a prefix of the one
+  fixed ordering — deterministic, identical from any scrub direction, and reached by
+  *stopping* rather than trimming, so an over-large lattice costs the cap and not the
+  lattice.
+- **The points are drawn on the host and posted to the card** (K-598). Particulate works
+  its particles out in a compute pass because there can be a million of them and each is a
+  page of algebra; a lattice is a few hundred cells of arithmetic, and posting the answers
+  costs less than a pass would. What it buys is better than speed: the points the effect
+  *draws* are bit for bit the points its CPU reference evaluated, through the very
+  instanced quad Particulate's discs go through, so the two paths cannot describe different
+  lattices.
+- **Mix at nought emits the stream and draws nothing**, which is this effect's emit-only
+  mode without a row of its own — the row every effect already carries, meaning what it
+  always means.
+- **Not seeded**, in the §1.3 sense, and deliberately unlike Particulate: `seeded` says the
+  pixels are a function of *time* under constant parameters, and folds the layer's clock
+  into the cache key for it. A lattice has no clock in it, and folding one in would retire
+  every cached frame on every scrub for nothing. The jitter is still a seeded, stateless
+  hash (§2.4) with the standard reseed button.
+
+`moderate` cost, `FullFrame` ROI (a jittered cell may be anywhere), premultiplied, temporal
+window `{0}`. Mix 0 and Max points 0 are the bit-exact identity. **The Matte takes the
+generic strength semantic** (§2.6), the same reading Particulate takes: the points are
+drawn in full and dissolved back by the matte afterwards.
+
+AE has no equivalent; the closest things are the grid-of-copies rigs people build by hand
+out of Repeaters and expressions, which is the work this exists to delete once Clone to
+points lands ([impl/points-stream.md](impl/points-stream.md) §2.3).
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

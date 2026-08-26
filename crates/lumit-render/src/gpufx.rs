@@ -391,6 +391,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &Particulate,
+    &Grid,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -3771,6 +3772,74 @@ impl GpuEffect for Particulate {
     }
 }
 
+/// Every point of a host-built stream, as the generic draw reads them
+/// (K-598): one conversion, called by Grid and by Scatter, so a generator
+/// cannot come to describe its own points differently from the CPU reference
+/// that made them.
+fn draw_points_of(s: &lumit_core::fx::points::PointsStream) -> Vec<lumit_gpu::fx::DrawPoint> {
+    (0..s.len())
+        .map(|i| lumit_gpu::fx::DrawPoint {
+            position: s.position.get(i).copied().unwrap_or([0.0; 3]),
+            size: s.size.get(i).copied().unwrap_or(0.0),
+            rotation: s.rotation.get(i).copied().unwrap_or(0.0),
+            colour: s.colour.get(i).copied().unwrap_or([0.0; 4]),
+            // The stream's `id` is the generator's own index, and it fits a
+            // word: a lattice and a candidate set are both bounded by the cap.
+            id: u32::try_from(s.id.get(i).copied().unwrap_or(0)).unwrap_or(u32::MAX),
+        })
+        .collect()
+}
+
+/// Grid (docs/08 §3.88, K-598): a lattice worked out on the host and drawn
+/// through Particulate's own instanced quad.
+///
+/// Nothing here decides anything — `Grid::stream` and `Grid::draw_style` did
+/// the reducing, in the one expression the CPU reference also reads. The
+/// camera arrives on the carriage the birth schedule rides (points-stream.md
+/// §3.3): a generator declares a Points output, so the draw builder fills a
+/// slot for it, and the projection is what this one reads out of it.
+struct Grid;
+impl GpuEffect for Grid {
+    fn match_name(&self) -> &'static str {
+        "grid"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::grid::Grid as G;
+        let inst = G::read(p);
+        let style = inst.draw_style();
+        // The camera, in the raster this frame is drawn at (K-561, K-266).
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(G::px_scale_of(p)));
+        let stream = inst.stream(projection.unwrap_or_default());
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                alpha_test: false,
+                seed: inst.seed,
+            },
+        )
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -4228,6 +4297,145 @@ mod tests {
             let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
             assert_eq!(gpu, twice, "mode {mode} is not bit-stable");
         }
+    }
+
+    // ------------------------------------------------- Grid (K-598)
+
+    /// A Grid over the little raster, off-centre and jittered, so nothing in
+    /// the comparison below can pass by symmetry.
+    fn grid_fixture(planes: i32) -> lumit_core::fx::effects::grid::Grid {
+        lumit_core::fx::effects::grid::Grid {
+            columns: 7,
+            rows: 5,
+            planes,
+            spacing_x: 15.0,
+            spacing_y: 17.0,
+            spacing_z: 40.0,
+            position_x: 60.0,
+            position_y: 44.0,
+            position_z: if planes > 1 { -20.0 } else { 0.0 },
+            jitter_x: 6.0,
+            jitter_y: 6.0,
+            jitter_z: 0.0,
+            seed: 3,
+            size: 7.0,
+            feather: 55.0,
+            colour: [0.8, 0.4, 0.9, 1.0],
+            max_points: 20_000,
+            mix: 100.0,
+        }
+    }
+
+    /// **The generic draw draws the CPU reference's lattice** (K-598): the
+    /// instanced quads land where the software dabs land, inside the
+    /// `moderate` class's perceptual epsilon — and they are drawing the *same*
+    /// stream, uploaded, so a disagreement here is the rasteriser's and
+    /// nothing else's.
+    #[test]
+    fn a_grids_draw_matches_the_cpu_reference() {
+        grid_draw_matches(None);
+    }
+
+    /// The same, through a camera (K-561): a lattice of planes seen in
+    /// perspective, projected in the vertex stage on one path and before the
+    /// dab on the other.
+    #[test]
+    fn a_grids_draw_matches_the_cpu_reference_through_a_camera() {
+        grid_draw_matches(Some(test_camera([64.0, 48.0], 300.0)));
+    }
+
+    fn grid_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+        let inst = grid_fixture(if projection.is_some() { 3 } else { 1 });
+        let style = inst.draw_style();
+        let stream = inst.stream(projection.unwrap_or_default());
+        assert!(
+            stream.len() > 20,
+            "the fixture made {} points",
+            stream.len()
+        );
+
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(&mut cpu, w, h, &stream, &[], &style, None);
+        // A camera that changed nothing would make the comparison pass by
+        // comparing two identical flat pictures.
+        if projection.is_some() {
+            let mut flat_stream = stream.clone();
+            flat_stream.projection = lumit_core::fx::points::Projection::FLAT;
+            let mut flat = vec![0.0f32; (w * h * 4) as usize];
+            lumit_core::fx::points::draw_stream(&mut flat, w, h, &flat_stream, &[], &style, None);
+            assert_ne!(cpu, flat, "the camera moved nothing at all");
+        }
+
+        let points = draw_points_of(&stream);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: projection.map(|proj| proj.m),
+            alpha_test: false,
+            seed: inst.seed,
+        };
+        let out = fx.points_draw(&ctx, &tex, w, h, &op);
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        let drawn: f32 = gpu.iter().sum();
+        assert!(drawn > 1.0, "the lattice drew nothing ({drawn})");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("grid draw: worst |Δ| {worst:.3e}");
+        assert!(worst < 2e-2, "worst |Δ| {worst}");
+
+        // Bit-stable against itself (docs/08 §2.4).
+        let again = fx.points_draw(&ctx, &tex, w, h, &op);
+        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        assert_eq!(gpu, twice, "the generic draw is not bit-stable");
+    }
+
+    /// **Mix at nought is the emit-only mode** (K-598): the stream is still
+    /// made, and the picture is the input untouched.
+    #[test]
+    fn a_grid_at_no_mix_leaves_the_picture_alone() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (64u32, 48u32);
+        let mut inst = grid_fixture(1);
+        inst.mix = 0.0;
+        let stream = inst.stream(Default::default());
+        assert!(!stream.is_empty(), "the stream is emitted regardless");
+        let input: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 7) as f32 * 0.1).collect();
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &input, w, h);
+        let points = draw_points_of(&stream);
+        let out = fx.points_draw(
+            &ctx,
+            &tex,
+            w,
+            h,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: inst.draw_style().feather,
+                mix: 0.0,
+                projection: None,
+                alpha_test: false,
+                seed: inst.seed,
+            },
+        );
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        // Against the *texture*, not the array it was uploaded from: the
+        // working format is fp16, so the picture has already been rounded once
+        // on its way onto the card and this is the pass-through it must equal.
+        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
+        assert_eq!(gpu, before, "Mix at nought drew something");
     }
 
     // ---------------------------------------------------------------

@@ -17988,3 +17988,60 @@ thousand of the radius, a twentieth of a pixel on the default four-hundred-pixel
 and far inside the 10⁻⁵-of-range the two render paths owe each other (K-508). A
 closed-form inversion of the incomplete elliptic integral would be exact and would be a
 second arc-length mechanism in an engine that has one.
+
+## K-598 — Grid is the first generator, and a generator draws its points from the host
+
+**DECIDED 2026-08-26**, off the owner's FP4 line ("then the family, each its own package on
+the wire: Grid, Scatter, …"). Grid is the family's simplest member and the one that settles
+what a **generator** is: an effect that declares the same `Points` output Particulate does
+(K-472, K-492) and fills it with arithmetic rather than with a history of births. Five
+things were decided in building it.
+
+**The points are worked out on the host and posted to the card.** Particulate has four GPU
+passes because there can be a million particles and each is a page of algebra that no host
+could keep up with. A lattice is a few hundred cells of a closed form, and a scatter's
+candidates are two hashes each — for both, setting up a compute pass costs more than doing
+the sums. So the generators evaluate on the CPU and hand the finished stream to a new
+`FxEngine::points_draw`, which lays it out in the **very stream layout** the compaction
+writes and runs the **very pipeline** Particulate's instanced quads run. The alternative —
+a second compute pipeline per generator — buys a compaction nothing reads yet and
+duplicates the scan, the block sum and the whole draw in a second shader module. What the
+chosen shape buys is better than the speed: the points a generator *draws* are bit for bit
+the points its CPU reference evaluated, so the §1.6 oracle and the shipped picture cannot
+describe different lattices, and the twin test is the rasteriser's alone.
+
+The named ceiling: the whole set is uploaded every frame, 68 bytes a point, under a
+megabyte at the default caps. A `ponytail:` marker in `points_draw` carries the trigger —
+give the generators a compute pass if a profile ever shows the copy costing more than the
+closed forms it saves.
+
+**The cap rule keeps the *first* cap, not the newest.** Particulate keeps the newest by
+birth index because a particle set has a birth order and the newest are what the eye is
+following. A lattice has no birth order at all, so "newest" names nothing. What survives is
+a prefix of the one fixed ordering the walk already has — deterministic, identical from any
+scrub direction, the same *shape* of rule — and it is reached by stopping rather than
+trimming, so a 1000×1000 lattice costs the cap and not the lattice.
+
+**Grid is not `seeded`.** The trait means what §1.3 says it means: the pixels are a function
+of *time* under constant parameters, which is why declaring it folds the layer's clock into
+the cache key. A lattice has no clock in it. Declaring `seeded` because there is a Seed row
+would retire every cached frame on every scrub in exchange for nothing. The jitter is still
+a stateless `hash(seed, index, axis)` with the standard reseed button (§2.4) — the seeded
+*generator* rule and the `seeded` *trait* are different claims, and this is the entry that
+says so out loud.
+
+**Emit-only is the Mix row, not a new switch.** A generator wants to be able to emit its
+stream and draw nothing — once Clone to points lands, drawing the discs as well would be
+noise. Mix at nought already means "this effect contributes no picture", it is a row every
+effect carries, and the stream is made by the parameter walk rather than by the draw, so it
+survives. A *Draw points* toggle would be a second way of saying it.
+
+**The driver walk asks the signature, not a name.** `Evaluator::stream` refused anything but
+`"particulate"` with a note that a second producer would make it a trait method. There are
+two now, and it is still not a trait method: the gate is `points::wants_schedule(signature)`
+— does this entry declare a Points output — and **which** producer decides only how the
+stream is made, at the bottom of the function. A trait method wide enough for both would
+have to carry the whole history of an Emit rate track for one implementer and nothing at all
+for the other, which is an interface shaped by its callers. The same predicate now also
+spares a generator the birth scan in `build.rs`: an effect with no `emit_rate` row gets the
+carriage — the clock and the camera — with an empty schedule in it.

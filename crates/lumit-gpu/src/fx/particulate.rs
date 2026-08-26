@@ -146,74 +146,74 @@ pub struct ParticulateOp<'a> {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct ParticulateParams {
-    em_pos: [f32; 2],
-    em_wh: [f32; 2],
-    em_angle: f32,
-    dir: f32,
-    spread: f32,
-    speed: f32,
+pub(super) struct ParticulateParams {
+    pub(super) em_pos: [f32; 2],
+    pub(super) em_wh: [f32; 2],
+    pub(super) em_angle: f32,
+    pub(super) dir: f32,
+    pub(super) spread: f32,
+    pub(super) speed: f32,
 
-    speed_jitter: f32,
-    shape: u32,
-    seed: u32,
-    cap: u32,
+    pub(super) speed_jitter: f32,
+    pub(super) shape: u32,
+    pub(super) seed: u32,
+    pub(super) cap: u32,
 
-    life: f32,
-    life_jitter: f32,
-    size: f32,
-    size_jitter: f32,
+    pub(super) life: f32,
+    pub(super) life_jitter: f32,
+    pub(super) size: f32,
+    pub(super) size_jitter: f32,
 
-    rotation: f32,
-    rotation_jitter: f32,
-    spin: f32,
-    align: u32,
+    pub(super) rotation: f32,
+    pub(super) rotation_jitter: f32,
+    pub(super) spin: f32,
+    pub(super) align: u32,
 
-    colour: [f32; 4],
-    end_colour: [f32; 4],
+    pub(super) colour: [f32; 4],
+    pub(super) end_colour: [f32; 4],
 
-    wind: [f32; 2],
-    gravity: f32,
-    drag: f32,
+    pub(super) wind: [f32; 2],
+    pub(super) gravity: f32,
+    pub(super) drag: f32,
 
-    turb: f32,
-    turb_scale: f32,
-    turb_speed: f32,
-    eps: f32,
+    pub(super) turb: f32,
+    pub(super) turb_scale: f32,
+    pub(super) turb_speed: f32,
+    pub(super) eps: f32,
 
-    dt: f32,
-    first_birth_lo: u32,
-    first_birth_hi: u32,
-    frames: u32,
+    pub(super) dt: f32,
+    pub(super) first_birth_lo: u32,
+    pub(super) first_birth_hi: u32,
+    pub(super) frames: u32,
 
-    candidates: u32,
-    path_len: u32,
-    path_total: f32,
-    tail: f32,
+    pub(super) candidates: u32,
+    pub(super) path_len: u32,
+    pub(super) path_total: f32,
+    pub(super) tail: f32,
 
-    feather: f32,
-    mix: f32,
-    mode: u32,
-    target_w: f32,
+    pub(super) feather: f32,
+    pub(super) mix: f32,
+    pub(super) mode: u32,
+    pub(super) target_w: f32,
 
-    target_h: f32,
-    sprite_w: f32,
-    sprite_h: f32,
-    wind_z: f32,
+    pub(super) target_h: f32,
+    pub(super) sprite_w: f32,
+    pub(super) sprite_h: f32,
+    pub(super) wind_z: f32,
 
-    em_z: f32,
-    em_depth: f32,
-    dir_z: f32,
-    spread_z: f32,
+    pub(super) em_z: f32,
+    pub(super) em_depth: f32,
+    pub(super) dir_z: f32,
+    pub(super) spread_z: f32,
 
-    proj0: [f32; 4],
-    proj1: [f32; 4],
-    proj2: [f32; 4],
+    pub(super) proj0: [f32; 4],
+    pub(super) proj1: [f32; 4],
+    pub(super) proj2: [f32; 4],
 
-    project: u32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
+    pub(super) project: u32,
+    pub(super) alpha_test: u32,
+    pub(super) _pad1: f32,
+    pub(super) _pad2: f32,
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -221,7 +221,7 @@ const SCAN_BLOCK: u32 = 256;
 
 /// Words of stream per particle: position 3, speed 3, age, life, size,
 /// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3 (K-561).
-const STREAM_WORDS: u64 = 17;
+pub(super) const STREAM_WORDS: u64 = 17;
 
 impl FxEngine {
     /// Draw one Particulate over a working texture, returning a new texture of
@@ -424,7 +424,9 @@ impl FxEngine {
             proj1: proj[1],
             proj2: proj[2],
             project: u32::from(op.projection.is_some()),
-            _pad0: 0.0,
+            // Particulate's points were decided by the compaction; only the
+            // generic draw's Scatter caller turns the vertex-stage test on.
+            alpha_test: 0,
             _pad1: 0.0,
             _pad2: 0.0,
         };
@@ -547,6 +549,12 @@ impl FxEngine {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(
                         &sprite.unwrap_or(src).create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(
+                        &src.create_view(&Default::default()),
                     ),
                 },
             ],
@@ -681,6 +689,19 @@ impl ParticulatePipelines {
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // The picture the points were thrown at, read in the
+                    // **vertex** stage by Scatter's rejection (K-599). Every
+                    // other caller binds its own input here and never looks.
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                             view_dimension: wgpu::TextureViewDimension::D2,
