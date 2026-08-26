@@ -40,6 +40,42 @@ to start with, so there is always something to see. The points are animatable, s
 gradient can sweep; the two colours are not, and there are two of them rather than a
 stop list.
 
+## Combine two shapes
+
+Every shape group after the first in the list carries a **Combine** row, saying how it joins
+the one **above** it: **Apart**, **Union**, **Subtract**, **Intersect** or **Exclude**. Apart
+is the default, and draws it on its own.
+
+A run of shapes all set to something other than Apart folds top to bottom, so three items
+read as the first joined to the second and that result joined to the third. The first item of
+a run has nothing in front of it and draws alone.
+
+**The run wears the first item's paint and modifiers** — it has to wear somebody's, and the
+first item is the shape you started with. The ones after it lend their path and nothing else,
+so their own fill, stroke and dash rows are left off the panel.
+
+A shape fills the same way after a combine as before it, so a five-pointed star drawn in one
+stroke keeps its hollow middle rather than filling in when you union something to it.
+
+## Animate the shape itself
+
+A shape group's **Path** row carries the shape, and its stopwatch animates it. Key one path,
+move the playhead, drag a vertex, and the shape morphs between the two.
+
+Vertices are paired by **order**, not by feature. Equal point counts run one for one; where
+one path has fewer points, it is cut into as many pieces as the denser one has first, so
+nothing bulges or flattens on the way. A triangle morphing into a square pairs point one with
+point one and the flat side grows wherever that puts it — rotating a path's start point is
+the lever for making it grow somewhere else.
+
+Whether a path is open or closed is held across the morph rather than tweened.
+
+:::note[Limitation]
+A shape row's keyframes appear as diamonds on its Timeline lane but have no curve in the
+[graph editor](/panels/graph-editor/) yet. That is true of the trim, dash and repeater rows
+as well as of the path.
+:::
+
 ## Trim paths
 
 Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**
