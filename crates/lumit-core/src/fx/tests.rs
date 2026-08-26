@@ -13895,10 +13895,20 @@ fn scatter_inverted_keeps_the_other_half() {
 /// **The density tracks the alpha, not just its edge** (rejection sampling): a
 /// field of a half keeps about half the candidates, which is what makes a soft
 /// edge come out as a thinning crowd rather than a hard cut.
+///
+/// **The seed is pinned and the crowd is large**, both on purpose. A fresh
+/// instance rolls a random seed (§2.4), and the share of a few hundred coin
+/// tosses is a *sample*: at the 240 candidates this asked for at first, the
+/// 0.05 tolerance was a shade over one and a half standard errors, so the test
+/// refused about one run in eight for no reason but the dice. Sixteen hundred
+/// candidates from one fixed seed makes it an assertion about the rule.
 #[test]
 fn scatter_thins_where_the_alpha_is_partial() {
-    let (w, h) = (200u32, 200u32);
-    let s = scatter_of(&scatter(&[("density", fixed(60.0))]));
+    let (w, h) = (400u32, 400u32);
+    let s = scatter_of(&scatter(&[
+        ("density", fixed(100.0)),
+        ("seed", EffectValue::Seed(7)),
+    ]));
     let all = s.candidates(w, h, 1.0, points::Projection::FLAT);
     let half: Vec<f32> = (0..(w * h * 4))
         .map(|i| if i % 4 == 3 { 0.5 } else { 0.0 })
@@ -14148,6 +14158,256 @@ fn a_grid_rescales_with_the_raster() {
         (full.size[0] * 0.5 - half.size[0]).abs() < 1e-3,
         "the disc did not"
     );
+}
+
+// --------------------------------------- Clone to points (K-600)
+
+/// A Clone to points instance with its declared defaults, and `edits` applied.
+fn clone_to_points(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("clone_to_points").expect("Clone to points is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("clone_to_points has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The stamps one instance lays over `stream`, through the one expression both
+/// render paths read.
+fn clone_stamps(e: &EffectInstance, stream: &PointsStream) -> PointsStream {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::clone_to_points::CloneToPoints::read(Params::new(&bag)).stamps(stream)
+}
+
+/// A small hand-made stream: two points, a known distance apart, with distinct
+/// colours so a painter's-order test can tell which one landed last.
+fn two_points() -> PointsStream {
+    PointsStream {
+        position: vec![[20.0, 20.0, 0.0], [22.0, 20.0, 0.0]],
+        speed: vec![[0.0; 3]; 2],
+        age: vec![0.0; 2],
+        life: vec![1.0; 2],
+        size: vec![10.0, 10.0],
+        rotation: vec![0.0, 0.0],
+        colour: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
+        id: vec![0, 1],
+        projection: points::Projection::FLAT,
+    }
+}
+
+/// A flat opaque sprite of `n × n` — a picture with nothing in it but coverage,
+/// so what a stamp test measures is placement and tint rather than filtering.
+fn flat_sprite(n: u32) -> Vec<f32> {
+    vec![1.0; (n * n * 4) as usize]
+}
+
+/// **One stamp per point**, with the point's own size and rotation and the
+/// effect's two dials on top (K-600).
+#[test]
+fn clone_to_points_stamps_one_copy_per_point() {
+    let stream = grid_stream(&grid(&[("columns", fixed(4.0)), ("rows", fixed(3.0))]), 0.0);
+    let stamps = clone_stamps(
+        &clone_to_points(&[("scale", fixed(50.0)), ("rotation", fixed(90.0))]),
+        &stream,
+    );
+    assert_eq!(stamps.len(), stream.len(), "a stamp per point");
+    assert_eq!(stamps.position, stream.position, "a stamp moved its point");
+    assert_eq!(stamps.id, stream.id, "and lost its identity");
+    for (from, to) in stream.size.iter().zip(stamps.size.iter()) {
+        assert!((from * 0.5 - to).abs() < 1e-5, "Scale did not halve {from}");
+    }
+    for (from, to) in stream.rotation.iter().zip(stamps.rotation.iter()) {
+        assert!(
+            (from + std::f32::consts::FRAC_PI_2 - to).abs() < 1e-5,
+            "Rotation did not turn the stamp"
+        );
+    }
+}
+
+/// **Painter's order is `id` order** (K-600), which is what makes the picture
+/// the same on every machine: the stream arrives ordered by birth index
+/// ascending, and a later stamp lands on top of an earlier one.
+#[test]
+fn clone_to_points_lays_its_stamps_in_id_order() {
+    let (w, h) = (48u32, 48u32);
+    let sprite = flat_sprite(4);
+    let style = points::DrawStyle {
+        mode: points::RenderMode::Sprite,
+        feather: 0.0,
+        streak_seconds: 0.0,
+        mix: 1.0,
+    };
+    let draw = |s: &PointsStream| {
+        let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+        points::draw_stream(
+            &mut rgba,
+            w,
+            h,
+            s,
+            &[],
+            &style,
+            Some(points::Sprite {
+                rgba: &sprite,
+                w: 4,
+                h: 4,
+            }),
+        );
+        // The pixel the two stamps share.
+        let d = ((20 * w + 21) * 4) as usize;
+        [rgba[d], rgba[d + 1], rgba[d + 2]]
+    };
+    let ascending = two_points();
+    let over = draw(&ascending);
+    assert!(
+        over[1] > over[0],
+        "the higher id did not land on top: {over:?}"
+    );
+
+    // The same two points handed over in the other order paint the other way
+    // round — which is what makes the ordering above a *fact being kept* rather
+    // than an accident of where the stamps happen to sit.
+    let mut descending = ascending.clone();
+    descending.position.reverse();
+    descending.colour.reverse();
+    descending.id.reverse();
+    let under = draw(&descending);
+    assert!(under[0] > under[1], "the order changed nothing: {under:?}");
+}
+
+/// **Nothing wired draws nothing** (K-509's calm, this effect's shape of it):
+/// an empty stream stamps nothing at all, and the picture it was handed is the
+/// picture it passes on.
+#[test]
+fn clone_to_points_with_no_stream_draws_nothing() {
+    let empty = PointsStream::default();
+    let stamps = clone_stamps(&clone_to_points(&[]), &empty);
+    assert!(stamps.is_empty(), "an empty stream made stamps");
+
+    let (w, h) = (16u32, 16u32);
+    let sprite = flat_sprite(4);
+    let before: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 5) as f32 * 0.2).collect();
+    let mut rgba = before.clone();
+    points::draw_stream(
+        &mut rgba,
+        w,
+        h,
+        &stamps,
+        &[],
+        &points::DrawStyle {
+            mode: points::RenderMode::Sprite,
+            feather: 0.0,
+            streak_seconds: 0.0,
+            mix: 1.0,
+        },
+        Some(points::Sprite {
+            rgba: &sprite,
+            w: 4,
+            h: 4,
+        }),
+    );
+    assert_eq!(rgba, before, "an empty stream touched the picture");
+}
+
+/// **The cap rule** (K-475), the family's row on a consumer: over Max clones
+/// the **newest** by birth index survive, which is what a smaller cap on the
+/// producer would have left.
+#[test]
+fn clone_to_points_over_its_cap_keeps_the_newest_by_id() {
+    let stream = grid_stream(
+        &grid(&[("columns", fixed(10.0)), ("rows", fixed(10.0))]),
+        0.0,
+    );
+    assert_eq!(stream.len(), 100);
+    let stamps = clone_stamps(&clone_to_points(&[("max_clones", fixed(12.0))]), &stream);
+    assert_eq!(stamps.len(), 12);
+    assert_eq!(
+        stamps.id,
+        (88..100).collect::<Vec<u64>>(),
+        "the cap kept the wrong end of the stream"
+    );
+}
+
+/// **Tint is a dial, not a switch**: at nought a stamp is the layer's own
+/// picture, at a hundred it is that picture times the point's colour, and the
+/// alpha travels with it — which is how a producer's Opacity over life reaches
+/// a stamped layer without a row of its own.
+#[test]
+fn clone_to_points_tint_blends_towards_the_points_own_colour() {
+    let mut stream = two_points();
+    stream.colour = vec![[0.25, 0.5, 0.75, 0.5]; 2];
+    let at = |tint: f64| clone_stamps(&clone_to_points(&[("tint", fixed(tint))]), &stream);
+    for c in &at(0.0).colour {
+        assert_eq!(*c, [1.0; 4], "Tint at nought is not the identity");
+    }
+    assert_eq!(at(100.0).colour[0], [0.25, 0.5, 0.75, 0.5]);
+    for (k, c) in at(50.0).colour[0].iter().enumerate() {
+        let want = 1.0 + (stream.colour[0][k] - 1.0) * 0.5;
+        assert!((c - want).abs() < 1e-6, "half a tint is not half way");
+    }
+}
+
+/// **Determinism** (K-031): the same stream and the same dials make the same
+/// stamps, bit for bit. There is no state and no clock in this effect at all,
+/// so this is a property of the design — and a regression would betray it
+/// silently.
+#[test]
+fn clone_to_points_makes_the_same_stamps_twice() {
+    let stream = grid_stream(&grid(&[("jitter_x", fixed(20.0))]), 0.0);
+    let e = clone_to_points(&[("scale", fixed(140.0)), ("rotation", fixed(33.0))]);
+    assert_eq!(clone_stamps(&e, &stream), clone_stamps(&e, &stream));
+}
+
+/// **The px@comp rule for a stream read off a wire** (K-419, K-385): a stream
+/// is data in composition pixels, and rearranging it into the raster a frame is
+/// drawn at is one multiplication per length. At full resolution nothing moves
+/// at all, which is what makes preview and export bit-identical (K-031).
+#[test]
+fn a_stream_rescales_into_the_raster_it_is_drawn_at() {
+    let full = grid_stream(&grid(&[("spacing_x", fixed(100.0))]), 0.0);
+    assert_eq!(full.rescaled(1.0), full, "full resolution moved something");
+
+    let half = full.rescaled(0.5);
+    assert_eq!(half.len(), full.len());
+    assert_eq!(half.id, full.id, "a point lost its identity in the rescale");
+    for (a, b) in full.position.iter().zip(half.position.iter()) {
+        for k in 0..3 {
+            assert!((a[k] * 0.5 - b[k]).abs() < 1e-4, "{a:?} against {b:?}");
+        }
+    }
+    for (a, b) in full.size.iter().zip(half.size.iter()) {
+        assert!((a * 0.5 - b).abs() < 1e-4, "the disc did not follow");
+    }
+    assert_eq!(
+        half.projection,
+        points::Projection::FLAT,
+        "a flat camera stayed flat"
+    );
+}
+
+/// **A consumer declares its socket the same way a driver does** (K-492,
+/// K-600): the signature answers for it, which is what lets the seam, the
+/// validator and the carriage all read one method.
+#[test]
+fn clone_to_points_declares_a_points_input_and_no_output() {
+    let def = BUILTIN_DEFS
+        .get("clone_to_points")
+        .expect("Clone to points is in the catalogue");
+    let sig = def.signature();
+    assert!(points::consumes_points(sig), "no Points input declared");
+    assert!(!points::wants_schedule(sig), "a consumer emits nothing");
+    assert!(points::wants_carriage(sig), "and still wants a carriage");
+    assert_eq!(sig.input("points"), Some(PortType::Points));
+    assert!(sig.outputs().is_empty());
 }
 
 // ------------------------------------------- border emission (K-597)
@@ -14882,7 +15142,7 @@ fn particulates_frame_key_follows_its_seed_and_its_controls() {
 fn the_points_producers_declare_a_data_output_beside_their_picture() {
     let mut with_extras: Vec<(&str, Vec<&str>)> = BUILTIN_DEFS
         .iter()
-        .filter(|d| matches!(d.signature(), Signature::Image { extra } if !extra.is_empty()))
+        .filter(|d| matches!(d.signature(), Signature::Image { extra, .. } if !extra.is_empty()))
         .map(|d| {
             (
                 d.schema().match_name,

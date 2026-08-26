@@ -69,14 +69,24 @@ pub struct ResolveCx<'a> {
 pub enum Signature {
     /// A picture operation — every effect until now, and the default.
     Image {
+        /// The **data** inputs this picture operation declares beside its
+        /// picture (K-492, points-stream.md §4.1) — wire-only, with no stored
+        /// value, nothing to keyframe and no panel row.
+        ///
+        /// Empty for every effect but the points **consumers**, Clone to points
+        /// and Trail (K-600, K-601), each of which reads a stream a wire brings
+        /// it. The note said this is the method that would grow when a stack
+        /// effect gained a Points input; it grew here, and every caller already
+        /// read it.
+        inputs: &'static [super::schema::Port],
         /// The **data** outputs this picture operation declares beside its
         /// picture (K-472, K-492, points-stream.md §4.1).
         ///
-        /// Empty for every effect but Particulate, which draws its particles
-        /// for the chain *and* hands them out as a points stream. Declaring
-        /// them here rather than inventing a third signature kind is what lets
-        /// the bridge, the label walk and the graph validator read one method
-        /// whichever kind an entry is.
+        /// Empty for every effect but the points **producers**, which draw
+        /// their points for the chain *and* hand them out as a stream.
+        /// Declaring them here rather than inventing a third signature kind is
+        /// what lets the bridge, the label walk and the graph validator read
+        /// one method whichever kind an entry is.
         extra: &'static [super::schema::Port],
     },
     /// A driver: no image kernel, and these named data ports.
@@ -111,18 +121,16 @@ impl Signature {
     }
 
     /// This signature's declared **data** input ports — a driver's wire-only
-    /// inputs, and empty for a picture operation.
+    /// inputs, and a picture operation's own since the points consumers landed
+    /// (K-600).
     ///
     /// A picture operation's image and matte inputs are not here: they are
     /// drawn from `INPUT_PORT` and the schema's matte row at the seam, exactly
-    /// as its image *output* is. When the points family gives a stack effect a
-    /// Points input, this is the method that grows to answer for it, and every
-    /// caller already reads it.
+    /// as its image *output* is.
     #[must_use]
     pub fn inputs(self) -> &'static [super::schema::Port] {
         match self {
-            Signature::Image { .. } => &[],
-            Signature::Data { inputs, .. } => inputs,
+            Signature::Image { inputs, .. } | Signature::Data { inputs, .. } => inputs,
         }
     }
 
@@ -135,7 +143,7 @@ impl Signature {
     #[must_use]
     pub fn outputs(self) -> &'static [super::schema::Port] {
         match self {
-            Signature::Image { extra } => extra,
+            Signature::Image { extra, .. } => extra,
             Signature::Data { outputs, .. } => outputs,
         }
     }
@@ -251,11 +259,15 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
-    /// What this entry produces (K-471 §1.3). Every effect is
-    /// [`Signature::Image`] with no extras; a driver declares its output
-    /// ports, and Particulate declares its Points output beside its picture.
+    /// What this entry produces and consumes (K-471 §1.3). Every effect is
+    /// [`Signature::Image`] with neither half filled; a driver declares its
+    /// output ports, a points producer declares its Points output beside its
+    /// picture, and a points consumer its Points input.
     fn signature(&self) -> Signature {
-        Signature::Image { extra: &[] }
+        Signature::Image {
+            inputs: &[],
+            extra: &[],
+        }
     }
 
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it

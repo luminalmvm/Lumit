@@ -8229,6 +8229,72 @@ fn a_points_wire_drawn_up_the_stack_is_refused() {
     );
 }
 
+/// **A consumer's teal socket reaches the canvas too** (K-600, §4.2), and the
+/// wire between two stack effects commits through `set_graph` like any other.
+///
+/// The socket is what the "no stream" mark reads (K-509): an unwired Points
+/// input on a box is exactly the structural question the panel already asks, so
+/// a consumer wears the mark with no consumer-specific code in Dart.
+#[test]
+fn an_effect_box_draws_the_data_inputs_its_signature_declares() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("particulate".into()).expect("particulate");
+    layer
+        .add_effect("clone_to_points".into())
+        .expect("clone to points");
+    let stack = layer.get_effects().expect("stack");
+    let (particulate, clone) = (stack[0].id(), stack[1].id());
+
+    let socket = |id: Uuid| {
+        layer
+            .get_graph()
+            .expect("graph")
+            .nodes
+            .iter()
+            .find(|n| n.node == BridgeNodeRef::Effect(id))
+            .expect("the box")
+            .inputs
+            .iter()
+            .find(|p| p.port_type == BridgePortType::Points)
+            .cloned()
+    };
+    let unwired = socket(clone).expect("the consumer declares a Points input");
+    assert_eq!(unwired.id, "points");
+    assert_eq!(
+        unwired.label, "Points",
+        "declared beside the port in the engine, so it rides the K-303 chain"
+    );
+    assert!(!unwired.wired, "nothing feeds it yet — the no-stream mark");
+    assert!(
+        socket(particulate).is_none(),
+        "a producer grows no input socket from its output declaration"
+    );
+
+    layer
+        .set_graph(
+            Vec::new(),
+            BridgeGraphWiring {
+                edges: vec![BridgeGraphEdge {
+                    from: BridgeOutputRef::EffectData {
+                        effect: particulate,
+                        port: "points".into(),
+                    },
+                    to: BridgeInputRef::Param {
+                        node: BridgeNodeRef::Effect(clone),
+                        port: "points".into(),
+                    },
+                }],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+            },
+        )
+        .expect("a producer above its consumer is the arrangement K-492 asks for");
+    assert!(
+        socket(clone).expect("still declared").wired,
+        "and the socket fills the moment a stream reaches it"
+    );
+}
+
 /// **The one new capability the drawing shows** (§1.4): the layer's own masked
 /// source alpha, wired into an effect's matte input.
 #[test]

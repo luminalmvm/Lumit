@@ -44,6 +44,7 @@ use super::effects::{
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
+    clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
     contrast::{Contrast, ContrastDef},
@@ -203,6 +204,9 @@ crate::catalogue![
     // points rather than pixels, and declare the same Points output.
     GridDef => Grid,
     ScatterDef => Scatter,
+    // The consumers (K-600), after the producers they read: the first
+    // stack effects to take a points wire rather than hand one out.
+    CloneToPointsDef => CloneToPoints,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

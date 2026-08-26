@@ -1226,6 +1226,61 @@ mod tests {
         graph.validate(&up).expect("healed, and so committable");
     }
 
+    /// **A real stack-to-stack points wire** (K-492, K-600): the arrangement
+    /// §1.2 was written for, now that there is a consumer to draw one into.
+    ///
+    /// Everything it exercises was landed by PS3 against a made-up port name;
+    /// this is the same rules against two effects that genuinely declare the
+    /// sockets — so a signature that stopped answering, on either end, would
+    /// show up here rather than in a panel.
+    #[test]
+    fn a_points_wire_between_two_stack_effects_is_accepted_down_the_stack() {
+        let producer = inst("particulate");
+        let consumer = inst("clone_to_points");
+        let down = vec![producer.clone(), consumer.clone()];
+        let graph = LayerGraph {
+            edges: vec![points_edge(&producer, onto(&consumer, "points"))],
+            ..LayerGraph::default()
+        };
+        graph
+            .validate(&down)
+            .expect("a producer above its consumer is the arrangement §1.2 asks for");
+
+        // Back up the stack: the loop sentence, because that is what such a
+        // wire is asking for.
+        let up = vec![consumer.clone(), producer.clone()];
+        assert_eq!(graph.validate(&up), Err(GraphError::Cycle));
+
+        // A generator feeds the same socket — the wire does not know which
+        // producer it came from, which is the whole point of one port type.
+        let grid = inst("grid");
+        let from_grid = LayerGraph {
+            edges: vec![points_edge(&grid, onto(&consumer, "points"))],
+            ..LayerGraph::default()
+        };
+        from_grid
+            .validate(&[grid, consumer.clone()])
+            .expect("a lattice is a points stream like any other");
+
+        // And a number is not a stream, on this end as on the driver's.
+        let wiggle = inst("wiggle");
+        let mistyped = LayerGraph {
+            nodes: vec![wiggle.clone()],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: wiggle.id,
+                    port: "value".to_owned(),
+                },
+                to: onto(&consumer, "points"),
+            }],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            mistyped.validate(&[producer, consumer]),
+            Err(GraphError::PortTypeMismatch)
+        );
+    }
+
     /// §4 and K-471's promise: an empty graph writes nothing at all, so a layer
     /// that never opened the Graph panel carries no `graph` key — which is what
     /// makes an untouched document re-save byte for byte.

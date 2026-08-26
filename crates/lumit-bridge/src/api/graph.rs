@@ -347,6 +347,27 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             NodeRef::Effect(effect.id),
             &input_wired,
         ));
+        // The signature's **data inputs** last (K-492, K-600): wire-only, with
+        // no stored value and no panel row, of which Clone to points' Points is
+        // the first on a stack effect. Read from the same method a driver box
+        // reads, so the socket that lets a consumer be wired and the one the
+        // validator accepts a wire onto cannot disagree — and so an unwired one
+        // reaches the canvas as the "no stream" mark (K-509) with no
+        // effect-specific code at the seam.
+        inputs.extend(
+            def.map(|d| d.signature().inputs())
+                .unwrap_or_default()
+                .iter()
+                .map(|port| {
+                    BridgePort::of(
+                        *port,
+                        input_wired(InputRef::Param {
+                            node: NodeRef::Effect(effect.id),
+                            port: port.id.to_owned(),
+                        }),
+                    )
+                }),
+        );
         nodes.push(BridgeGraphNode {
             node: BridgeNodeRef::Effect(effect.id),
             match_name: effect.effect.match_name.clone(),

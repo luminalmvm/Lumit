@@ -379,7 +379,10 @@ impl EffectDef for GridDef {
 
     /// The picture *and* the data (K-472), exactly as Particulate declares it.
     fn signature(&self) -> Signature {
-        Signature::Image { extra: POINTS_OUT }
+        Signature::Image {
+            inputs: &[],
+            extra: POINTS_OUT,
+        }
     }
 
     /// The raster factor, so the composition's camera reaches the pixels this

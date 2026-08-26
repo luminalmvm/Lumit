@@ -1373,6 +1373,14 @@
   "@fxClipWhite": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxCloneLayer": "Clone layer",
+  "@fxCloneLayer": {
+    "description": "Effect controls — a control on Clone to points: which layer's picture is stamped at every point of the wired stream."
+  },
+  "fxCloneToPoints": "Clone to points",
+  "@fxCloneToPoints": {
+    "description": "Effect controls — the name of the Clone to points effect, which stamps a chosen layer's picture at every point of a points stream wired into it."
+  },
   "fxClockwise": "Clockwise",
   "@fxClockwise": {
     "description": "Effect controls — a Wipe option on Radial wipe."
@@ -1747,7 +1755,7 @@
   },
   "fxEndColour": "End colour",
   "@fxEndColour": {
-    "description": "Effect controls — a control on Gradient, and the name of the Scatter effect, which throws points at the picture and keeps the ones that land on something."
+    "description": "Effect controls — a control on Gradient and on Particulate: the colour a particle dies at."
   },
   "fxEndX": "End x",
   "@fxEndX": {
@@ -2153,6 +2161,10 @@
   "@fxMaxGhosts": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxMaxClones": "Max clones",
+  "@fxMaxClones": {
+    "description": "Effect controls — a control on Clone to points: the most stamps that may be drawn at once, which is also how much of the frame's time the effect may spend."
+  },
   "fxMaxParticles": "Max particles",
   "@fxMaxParticles": {
     "description": "Effect controls — a control on Particulate: the most particles that may be alive at once, which is also how much of the frame's time the effect may spend."
@@ -2447,7 +2459,7 @@
   },
   "fxScatter": "Scatter",
   "@fxScatter": {
-    "description": "Effect controls — a control on Gradient."
+    "description": "Effect controls — a control on Gradient, and the name of the Scatter effect, which throws points at the picture and keeps the ones that land on something."
   },
   "fxScreen": "Screen",
   "@fxScreen": {

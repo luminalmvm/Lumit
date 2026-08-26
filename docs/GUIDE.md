@@ -10724,8 +10724,35 @@ a driver. A driver's sums are worked out before any picture exists, and Scatter'
 depend on the picture, so there is nothing there to read yet. Wire one up and the driver
 reads an empty crowd — deliberately, rather than being handed a guess.
 
-**What comes later** plugs into the same socket: Connect points (lines between nearby
-particles), Clone to points (a layer stamped at every particle), and Trail. Each is a named future package;
+**Clone to points: a layer stamped at every particle.** Everything above *makes* points.
+This is the first effect that **reads** them. Drag a wire from a producer's teal socket into
+it, pick a layer, and that layer's picture is stamped once per point — where the point is,
+turned the way the point is turned, at the size the point is. A hundred snowflakes from
+Particulate; a lattice of thumbnails from Grid; a logo scattered through a silhouette by
+Scatter. In other applications this is a rig you build by hand out of repeaters and
+expressions, and here it is one wire.
+
+Two things it does deliberately. The stamps are laid down **oldest particle first**, so a
+newer one lands on top of an older one — the order is the particles' own numbering rather
+than anything the machine decided, which is why the picture is the same on every computer
+and in every render. And **Tint** is a dial rather than a switch: a particle's colour
+usually carries its *fade* as well as its hue, so turning Tint down keeps the stamps solid
+while turning it up lets them fade out with the particles.
+
+With nothing wired in, it draws nothing and passes the picture through, and the box on the
+graph wears a small warning mark to say why — the same mark any box gets when something it
+needs is not plugged in. An unset Layer row does the same thing, for the plainer reason that
+there is nothing to stamp.
+
+There is one thing to know about where the points come from. When a wire is drawn, the
+application works the producer's points out on the processor — the same sums the producer
+itself uses, run once more — and hands them to the stamping. That is why a stamped point is
+in exactly the place the producer drew it, and it is also why a wire from **Scatter** hands
+over nothing: Scatter's points depend on the picture, and at the moment this hand-over
+happens there is no picture yet. Grid and Particulate both feed it in full.
+
+**What comes still later** plugs into the same socket: Connect points (lines between nearby
+particles) and Trail. Each is a named future package;
 none of them will need the plumbing rebuilt, because the socket, the wire and the
 stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
 the effect's own design — every slider, formula and budget — in

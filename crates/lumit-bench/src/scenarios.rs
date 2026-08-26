@@ -511,6 +511,7 @@ pub mod particulate {
             schedule,
             t,
             projection: None,
+            ..Default::default()
         };
 
         let tex = lumit_gpu::fx::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);

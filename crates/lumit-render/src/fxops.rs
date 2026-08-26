@@ -531,10 +531,12 @@ pub fn run_ops(
     // `EffectSchema::mask_paths`, the one enumeration both sides run, so there
     // is no second rule to keep in step.
     let mut path_i = 0usize;
-    // The birth schedule's own counter (points-stream.md §3.3), on the schema's
-    // own points-output predicate — the one `build.rs` fills by. Neither the
-    // layer's clock nor the whole Emit rate track is a number in the bag, so
-    // they ride beside the op the way a polyline does.
+    // The points carriage's own counter (points-stream.md §3.3), on the
+    // signature's own points predicate — the one `build.rs` fills by, which
+    // since K-600 answers for a **consumer** as well as a producer. Neither the
+    // layer's clock, nor the whole Emit rate track, nor a stream a wire brings
+    // in is a number in the bag, so they ride beside the op the way a polyline
+    // does.
     let mut sched_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
@@ -543,7 +545,7 @@ pub fn run_ops(
             .get(path_i..(path_i + paths_n).min(mask_paths.len()))
             .unwrap_or(&[]);
         path_i += paths_n;
-        let schedule = if lumit_core::fx::points::wants_schedule(resolved.def.signature()) {
+        let schedule = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
             let slot = points_schedules.get(sched_i);
             sched_i += 1;
             slot
@@ -819,7 +821,7 @@ fn op_keys(
             // Emit rate track, neither of which is in the bag `feed_hash`
             // walked. Without it a scrub would be answered from the cache with
             // the previous frame's particles.
-            if lumit_core::fx::points::wants_schedule(resolved.def.signature()) {
+            if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
                 if let Some(sched) = points_schedules.get(sched_i) {
                     h.update(&sched.t.to_le_bytes());
                     h.update(&sched.schedule.dt().to_le_bytes());
@@ -833,6 +835,15 @@ fn op_keys(
                     // this op's picture moves, while nothing `feed_hash`
                     // walked has changed at all.
                     h.update(&[u8::from(sched.projection.is_some())]);
+                    // **And the wire** (K-600). The stream itself is not hashed
+                    // and must not be — it is a pure function of the producer's
+                    // bag, the time and the camera, and the producer sits
+                    // strictly earlier in this stack (K-492), so it is already
+                    // inside this op's cumulative key. What is *not* is which
+                    // producer the wire names, or whether one is drawn at all:
+                    // cut the wire and nothing in the consumer's own bag moves.
+                    h.update(&sched.input_from.unwrap_or(u32::MAX).to_le_bytes());
+                    h.update(&(sched.input.len() as u32).to_le_bytes());
                     for row in sched.projection.unwrap_or_default().m {
                         for v in row {
                             h.update(&v.to_le_bytes());

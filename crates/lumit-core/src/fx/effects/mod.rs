@@ -29,6 +29,7 @@ pub mod card_wipe;
 pub mod channel_blur;
 pub mod checkbox_control;
 pub mod chromatic_aberration;
+pub mod clone_to_points;
 pub mod colour_balance;
 pub mod colour_control;
 pub mod contrast;

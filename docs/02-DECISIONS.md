@@ -18104,3 +18104,63 @@ whole programme rests on (points-stream.md §6 item 1). So a points wire from Sc
 Points sample reads the documented empty stream — nothing alive, nothing anywhere near —
 and nothing is memoised, so a future carriage that *can* answer will not find a wrong answer
 cached in front of it. Emit-from-image inherits this decision unchanged.
+
+## K-600 — Clone to points is the first stack consumer, and the family's carriage is the host's stream, not the card's
+
+**DECIDED 2026-08-26**, off the owner's FP4 line and
+[docs/impl/points-stream.md](impl/points-stream.md) §2.3's named package. Clone to points
+stamps a chosen layer's picture at every point of a wired stream — position, rotation and
+scale from the stream's own attributes, painter's order by `id`. It is the first effect in
+this engine to **read** a points wire rather than hand one out, so four things had to be
+settled with it rather than around it.
+
+**The carriage is a stream on the host, not a compacted buffer on the card.** §3.3 designed
+the family's carriage as an arena of compacted SoA sets keyed by `(layer, effect instance
+id)`, threaded as a `PointsInputDraw { producer }`. What landed instead is the shape the
+generators established one package earlier (K-598): the draw builder evaluates the
+producer's stream through **the very function the driver walk evaluates it with**
+(`fx::effect_stream`, extracted from `Evaluator::stream` and exported), in px@comp, and
+hands it beside the op on the carriage the birth schedule already rides. Three reasons, in
+order of weight. It is **one evaluation**, so what a consumer stamps, what a driver counts
+and what the producer drew cannot come apart — the invariant the whole programme rests on
+(§6 item 1), now with a third reader. It needs **no new machinery at all**: the carriage,
+the counter, the predicate and the frame-key fold already existed for the schedule, and the
+generators' `points_draw` already runs Particulate's own instanced quad. And it does not
+force the compaction K-599 deliberately deferred.
+
+The price is named rather than hidden, twice. The stream is evaluated on the CPU once per
+frame per consumer — which is exactly the cost a Points sample wire has been paying since
+PS4, so this is the shipped cost of consuming a stream and not a new one — and it is marked
+with a `ponytail:` on `PointsSchedule::input` carrying §3.3's design as the upgrade path.
+And **Scatter still cannot feed a stack consumer**, for K-599's reason unchanged: its stream
+is a function of a picture, and the draw builder holds none. A wire from Scatter reads the
+same documented empty stream a driver reads, and the GPU arena carriage is what would
+answer it — named as the trigger, in the same place.
+
+**`Signature::Image` grew its data-inputs half**, which is the growth path §4.1 recorded and
+predicted. Not a third signature kind, not an `InputRef` arm: the port is declared where a
+driver declares its own, `Signature::inputs()` answers for both, and the validator, the
+bridge seam and the carriage each read one method whichever kind an entry is. Everything
+PS3 landed against a made-up port name — the downstream-only rule, the healing reorder, the
+cycle walk through effect data sources — is now exercised against two effects that really
+declare the sockets, and needed no change to accept them.
+
+**The "no stream" mark cost nothing** (K-509). The panel's rule is structural — a box with
+an unwired `Points` input wears the `!`, and `graphNoStream` reads any node's inputs — so
+reporting the consumer's socket at the seam is the whole of it. No Dart changed.
+
+**An unset Clone layer is the identity, not a fallback.** Particulate's Sprite mode draws
+discs when its layer row is unset, and that deviation from unset-is-identity is earned by
+its being a *mode*: a render mode must always draw something. Clone to points has no mode,
+only a source, so the ordinary convention applies — nothing to stamp means the picture
+passes through. Both branches are resolved host-side, where one decision cannot come to
+mean two things in two places.
+
+**The frame key folds the wire, not the stream.** A stream is a pure function of the
+producer's bag, the time and the camera; the producer sits strictly earlier in the stack
+(K-492), so its bag is already inside the consumer's cumulative op key. What is not is
+*which* producer the wire names, or whether one is drawn at all — cut the wire and nothing
+in the consumer's own bag moves. So the carriage folds the producer's **index in the stack**
+and the sample count, and hashes not one particle. An index rather than an id, because a key
+names content and never which row it came from (docs/06 §5.2) — which is what keeps a
+duplicated layer hitting the per-effect cache (K-421).

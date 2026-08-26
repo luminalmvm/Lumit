@@ -5109,6 +5109,22 @@ surfaces:
                 l.graph = graph;
                 (doc, comp_id, 7)
             }),
+            // A **stack effect reading another's stream** (K-600): the first
+            // wire whose two ends are both ops. Both walks have to build the
+            // same carriage — the same lattice, at the same layer time, in the
+            // same units — and stamp it in the same order, or the two pictures
+            // part company here.
+            ("a layer cloned to a wired stream", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let source = doc.comp(comp_id).unwrap().layers[1].id;
+                let (effects, graph) = cloned_lattice(w, h, source);
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.effects = effects;
+                l.graph = graph;
+                (doc, comp_id, 7)
+            }),
             ("camera over a 3d layer", |w, h, red, blue| {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
                 let (_, top) = matrix_top(&mut doc, comp_id, blue);
@@ -5691,6 +5707,124 @@ surfaces:
             driven, cut,
             "an exposure driven by Nearest distance must change the picture"
         );
+    }
+
+    /// A layer stamped at every point of a lattice: the effects and the wire
+    /// (K-600). Grid rather than Particulate on purpose — a lattice has no clock
+    /// in it, so what the test below compares is the *wire* and nothing else.
+    fn cloned_lattice(
+        w: u32,
+        h: u32,
+        source: Uuid,
+    ) -> (
+        Vec<lumit_core::model::EffectInstance>,
+        lumit_core::graph::LayerGraph,
+    ) {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let mut producer = lumit_core::fx::instantiate("grid").unwrap();
+        for (id, v) in [
+            ("position_x", f64::from(w) * 0.5),
+            ("position_y", f64::from(h) * 0.5),
+            ("spacing_x", 6.0),
+            ("spacing_y", 5.0),
+            ("size", 4.0),
+        ] {
+            set(&mut producer, id, v);
+        }
+        for (id, v) in [("columns", 4.0), ("rows", 3.0), ("planes", 1.0)] {
+            set(&mut producer, id, v);
+        }
+        // The lattice emits its stream and draws nothing of its own, so what
+        // lands on the picture is the stamps and only the stamps.
+        set(&mut producer, "mix", 0.0);
+        let producer_id = producer.id;
+
+        let mut consumer = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        for p in &mut consumer.params {
+            if p.id == "clone_layer" {
+                p.value = lumit_core::model::EffectValue::Layer(Some(source));
+            }
+        }
+        set(&mut consumer, "scale", 100.0);
+        let consumer_id = consumer.id;
+
+        let graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::EffectData {
+                    effect: producer_id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(consumer_id),
+                    port: "points".into(),
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        (vec![producer, consumer], graph)
+    }
+
+    /// **A points wire reaches the picture from one stack effect to another**
+    /// (K-600) — the first wire in this engine whose two ends are both ops.
+    ///
+    /// The same comp twice, with one wire cut. Wired, a lattice of stamps lands
+    /// on the frame; cut, the consumer has no stream, draws nothing and passes
+    /// its picture on — the documented calm K-509 gave the family, here as a
+    /// picture rather than as a panel mark.
+    #[test]
+    fn a_cloned_layer_lands_at_every_point_of_a_wired_stream() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |wired: bool| {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            // The layer being stamped is the one underneath, which the base
+            // comp already carries.
+            let source = doc.comp(comp_id).unwrap().layers[1].id;
+            let (effects, mut graph) = cloned_lattice(cw, ch, source);
+            if !wired {
+                graph.edges.clear();
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = effects;
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let mut frame_of = |wired: bool| {
+            let (doc, comp_id) = build(wired);
+            r.render_rgba(&doc, comp_id, 7, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let stamped = frame_of(true);
+        let cut = frame_of(false);
+        assert_ne!(
+            stamped, cut,
+            "a wired stream must put the cloned layer on the frame"
+        );
+        // And twice is once: the whole path — the wire, the carriage, the
+        // instanced draw — is a function of the document (K-031).
+        assert_eq!(stamped, frame_of(true), "two renders of one frame differ");
     }
 
     /// **The degradation rung never engages on an export walk** (K-475, PS7;

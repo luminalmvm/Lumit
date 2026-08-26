@@ -615,7 +615,10 @@ impl EffectDef for ParticulateDef {
     /// The picture *and* the data (K-472): a stack effect that declares an
     /// output beside its image, which is the first of its kind.
     fn signature(&self) -> Signature {
-        Signature::Image { extra: POINTS_OUT }
+        Signature::Image {
+            inputs: &[],
+            extra: POINTS_OUT,
+        }
     }
 
     /// The raster factor, so a Mask path emitter's px@comp vertices reach the

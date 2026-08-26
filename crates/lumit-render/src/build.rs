@@ -268,6 +268,74 @@ pub fn points_projection(
     Some(lumit_core::fx::points::Projection { m })
 }
 
+/// **The stream a points consumer's wire brings it** (K-600,
+/// points-stream.md §3.3), in px@comp, and which effect it came from.
+///
+/// # In plain terms
+///
+/// Clone to points needs particles, and the wire says whose. This walks the
+/// layer's graph for the edge feeding the effect's Points socket, finds the
+/// producer it names, and asks the engine for that producer's stream — the very
+/// function the Points sample driver asks, so a consumer stamps the particles a
+/// driver would have counted and the producer did draw.
+///
+/// `(vec![], None)` — the documented calm — for every producer, for a consumer
+/// with nothing wired, and for a producer that cannot answer at this point in
+/// the frame (Scatter, K-599). The effect renders as a passthrough and the box
+/// wears the "no stream" mark (K-509); nothing faults, and nothing is guessed.
+#[allow(clippy::too_many_arguments)]
+fn points_input_for(
+    layer: &lumit_core::model::Layer,
+    consumer: &lumit_core::model::EffectInstance,
+    def: &'static dyn lumit_core::fx::EffectDef,
+    t: f64,
+    _dt: f64,
+    projection: lumit_core::fx::points::Projection,
+    context: &Arc<ExpressionContext>,
+    audio: &dyn lumit_core::fx::AudioTap,
+) -> (Vec<lumit_core::fx::points::PointsStream>, Option<u32>) {
+    use lumit_core::graph::{InputRef, NodeRef, OutputRef};
+    let none = (Vec::new(), None);
+    // Which socket, from the signature rather than from a name this file would
+    // have to keep in step with the effect's own declaration.
+    let Some(port) = lumit_core::fx::points::consumes_points(def.signature())
+        .then(|| {
+            def.signature()
+                .inputs()
+                .iter()
+                .find(|p| p.ty == lumit_core::fx::PortType::Points)
+        })
+        .flatten()
+    else {
+        return none;
+    };
+    let wire = layer.graph.wire_into(&InputRef::Param {
+        node: NodeRef::Effect(consumer.id),
+        port: port.id.to_owned(),
+    });
+    // A number or the source matte is not a stream; the type check refused it
+    // at commit, so this is a stale line to ignore rather than a case to guess.
+    let Some(OutputRef::EffectData { effect, .. }) = wire else {
+        return none;
+    };
+    let from = layer
+        .effects
+        .iter()
+        .position(|e| e.id == *effect)
+        .and_then(|i| u32::try_from(i).ok());
+    let Some(stream) = lumit_core::fx::effect_stream(
+        &layer.graph,
+        *effect,
+        t,
+        context.clone(),
+        Some(audio),
+        projection,
+    ) else {
+        return none;
+    };
+    (vec![stream], from)
+}
+
 /// A 3×3 inverse, or `None` when the matrix is singular — a layer scaled to
 /// nothing, or turned exactly edge-on. An engine crate answers the degenerate
 /// case rather than dividing by nought (14-ENGINEERING-RULES §4), and `None`
@@ -1055,7 +1123,7 @@ pub fn build_comp_draws_at(
             .filter_map(|e| {
                 let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 let wants =
-                    lumit_core::fx::points::wants_schedule(def.signature()) && def.is_image_op();
+                    lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
                 wants.then_some((e, def))
             })
             .map(|(e, def)| {
@@ -1063,19 +1131,6 @@ pub fn build_comp_draws_at(
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
                 let t = if e.sample_temporally { slt } else { frame_slt };
-                // **A generator has no births to schedule** (K-598): its points
-                // are arithmetic over its own parameters, and what it wants
-                // from this carriage is the camera and the clock. Asked by the
-                // schema rather than by name, so a producer that grows an Emit
-                // rate later needs no edit here.
-                if !def.schema().params.iter().any(|p| p.id == "emit_rate") {
-                    return lumit_core::fx::points::PointsSchedule {
-                        schedule: lumit_core::fx::points::Schedule::default(),
-                        t,
-                        projection,
-                    };
-                }
-                let upto = (t / dt).floor() as i64;
                 let context = Arc::new(ExpressionContext {
                     document: expr_doc.clone(),
                     comp: Some(comp.id),
@@ -1083,6 +1138,38 @@ pub fn build_comp_draws_at(
                     comp_time: t_comp,
                     current_depth: 0,
                 });
+                // **The stream a wire brings in** (K-600): nothing at all for a
+                // producer, and for a consumer the producer's own stream
+                // evaluated by the very function the driver walk reads
+                // (points-stream.md §3.3). In px@comp — the units a stream is
+                // data in (K-419) — and rescaled into the raster by whichever
+                // consumer draws it.
+                let (input, input_from) = points_input_for(
+                    layer,
+                    e,
+                    def,
+                    t,
+                    dt,
+                    projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
+                    &context,
+                    &audio,
+                );
+                // **A generator has no births to schedule** (K-598): its points
+                // are arithmetic over its own parameters, and what it wants
+                // from this carriage is the camera and the clock. A *consumer*
+                // has none either, for the plainer reason that it makes no
+                // points at all. Asked by the schema rather than by name, so a
+                // producer that grows an Emit rate later needs no edit here.
+                if !def.schema().params.iter().any(|p| p.id == "emit_rate") {
+                    return lumit_core::fx::points::PointsSchedule {
+                        schedule: lumit_core::fx::points::Schedule::default(),
+                        t,
+                        projection,
+                        input,
+                        input_from,
+                    };
+                }
+                let upto = (t / dt).floor() as i64;
                 let rate_at = |lt: f64| -> f64 {
                     e.float_at_with_context("emit_rate", lt, context.clone())
                         .unwrap_or(150.0)
@@ -1105,6 +1192,8 @@ pub fn build_comp_draws_at(
                     schedule,
                     t,
                     projection,
+                    input,
+                    input_from,
                 }
             })
             .collect()

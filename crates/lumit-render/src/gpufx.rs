@@ -393,6 +393,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Particulate,
     &Grid,
     &Scatter,
+    &CloneToPoints,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -3778,17 +3779,48 @@ impl GpuEffect for Particulate {
 /// cannot come to describe its own points differently from the CPU reference
 /// that made them.
 fn draw_points_of(s: &lumit_core::fx::points::PointsStream) -> Vec<lumit_gpu::fx::DrawPoint> {
+    draw_points_tailed(s, &[])
+}
+
+/// [`draw_points_of`], with each point's tail beside it (K-601) — where its
+/// capsule runs back to, in the same three axes and the same order. A shorter
+/// list than the stream, or an empty one, leaves the tail at the head, which is
+/// the plain dot.
+fn draw_points_tailed(
+    s: &lumit_core::fx::points::PointsStream,
+    tails: &[[f32; 3]],
+) -> Vec<lumit_gpu::fx::DrawPoint> {
     (0..s.len())
-        .map(|i| lumit_gpu::fx::DrawPoint {
-            position: s.position.get(i).copied().unwrap_or([0.0; 3]),
-            size: s.size.get(i).copied().unwrap_or(0.0),
-            rotation: s.rotation.get(i).copied().unwrap_or(0.0),
-            colour: s.colour.get(i).copied().unwrap_or([0.0; 4]),
-            // The stream's `id` is the generator's own index, and it fits a
-            // word: a lattice and a candidate set are both bounded by the cap.
-            id: u32::try_from(s.id.get(i).copied().unwrap_or(0)).unwrap_or(u32::MAX),
+        .map(|i| {
+            let position = s.position.get(i).copied().unwrap_or([0.0; 3]);
+            lumit_gpu::fx::DrawPoint {
+                position,
+                size: s.size.get(i).copied().unwrap_or(0.0),
+                rotation: s.rotation.get(i).copied().unwrap_or(0.0),
+                colour: s.colour.get(i).copied().unwrap_or([0.0; 4]),
+                // The stream's `id` is the generator's own index, and it fits a
+                // word: a lattice and a candidate set are both bounded by the
+                // cap.
+                id: u32::try_from(s.id.get(i).copied().unwrap_or(0)).unwrap_or(u32::MAX),
+                tail: tails.get(i).copied().unwrap_or(position),
+            }
         })
         .collect()
+}
+
+/// The stream a points **consumer** is drawing this frame (K-600): the wire's
+/// own, sample `k` back, rearranged into the raster the frame is being drawn at.
+///
+/// Empty for a consumer with nothing wired — which every consumer renders as a
+/// passthrough, the documented calm (K-509).
+fn points_input_at(
+    aux: AuxSlot<'_>,
+    k: usize,
+    px_scale: f32,
+) -> Option<lumit_core::fx::points::PointsStream> {
+    aux.schedule()
+        .and_then(|c| c.input.get(k))
+        .map(|s| s.rescaled(px_scale))
 }
 
 /// Grid (docs/08 §3.88, K-598): a lattice worked out on the host and drawn
@@ -3838,6 +3870,8 @@ impl GpuEffect for Grid {
                 alpha_test: false,
                 alpha_invert: false,
                 seed: inst.seed,
+                mode: 0,
+                sprite: None,
             },
         )
     }
@@ -3895,6 +3929,75 @@ impl GpuEffect for Scatter {
                 alpha_test: true,
                 alpha_invert: invert,
                 seed: inst.seed,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
+/// Clone to points (docs/08 §3.90, K-600): a layer's picture stamped at every
+/// point of a wired stream.
+///
+/// Nothing here decides anything — `CloneToPoints::stamps` did the reducing, in
+/// the one expression the CPU reference also reads. What this settles is the two
+/// things the bag cannot carry: the stream, which arrives on the carriage in
+/// px@comp and is rearranged into this raster, and the camera beside it.
+///
+/// **An unset Layer row renders the input unchanged**, decided here rather than
+/// in the kernel for Particulate's reason inverted: a source, unlike a mode, is
+/// allowed to be absent, and one branch resolved host-side cannot come to mean
+/// two things in two places.
+struct CloneToPoints;
+impl GpuEffect for CloneToPoints {
+    fn match_name(&self) -> &'static str {
+        "clone_to_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::clone_to_points::CloneToPoints as C;
+        let inst = C::read(p);
+        let px_scale = C::px_scale_of(p);
+        let style = inst.draw_style();
+        // Nothing to stamp, or nothing to stamp it at: the picture passes
+        // through, which is what an unset row and an unwired socket both mean.
+        let (Some(sprite), Some(stream)) = (aux.layer_input(), points_input_at(aux, 0, px_scale))
+        else {
+            return tex.clone();
+        };
+        let stamps = inst.stamps(&stream);
+        let points = draw_points_of(&stamps);
+        // The camera, in the raster this frame is drawn at (K-561, K-266) —
+        // `None` on a 2D layer, where it is not the identity matrix but no
+        // matrix at all, so the positions' bits are left alone (K-258).
+        let projection = aux
+            .schedule()
+            .and_then(|c| c.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                alpha_test: false,
+                alpha_invert: false,
+                seed: 0,
+                mode: 1,
+                sprite: Some(sprite),
             },
         )
     }
@@ -4036,6 +4139,7 @@ mod tests {
             schedule: sched.clone(),
             t,
             projection,
+            ..Default::default()
         };
         (inst, sched, carriage)
     }
@@ -4441,6 +4545,8 @@ mod tests {
             alpha_test: false,
             alpha_invert: false,
             seed: inst.seed,
+            mode: 0,
+            sprite: None,
         };
         let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -4491,6 +4597,8 @@ mod tests {
                 alpha_test: false,
                 alpha_invert: false,
                 seed: inst.seed,
+                mode: 0,
+                sprite: None,
             },
         );
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -4564,6 +4672,8 @@ mod tests {
                     alpha_test: true,
                     alpha_invert: invert,
                     seed: inst.seed,
+                    mode: 0,
+                    sprite: None,
                 },
             );
             let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
@@ -4575,6 +4685,120 @@ mod tests {
             eprintln!("scatter draw (invert {invert}): worst |Δ| {worst:.3e}");
             assert!(worst < 2e-2, "invert {invert}: worst |Δ| {worst}");
         }
+    }
+
+    // ---------------------------------------- Clone to points (K-600)
+
+    /// **A stamp laid by a consumer is a stamp Particulate lays** (K-600): the
+    /// instanced draw and the CPU reference put the same layer in the same
+    /// squares, inside the `moderate` class's perceptual epsilon — and they are
+    /// handed the *same* stream, so a disagreement here is the rasteriser's and
+    /// nothing else's.
+    #[test]
+    fn a_clone_to_points_draw_matches_the_cpu_reference() {
+        clone_draw_matches(None);
+    }
+
+    /// The same, through a camera (K-561): the stamps foreshorten with depth,
+    /// projected in the vertex stage on one path and before the stamp on the
+    /// other.
+    #[test]
+    fn a_clone_to_points_draw_matches_the_cpu_reference_through_a_camera() {
+        clone_draw_matches(Some(test_camera([64.0, 48.0], 300.0)));
+    }
+
+    fn clone_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+        // A flat sprite, so what is compared is *placement* rather than two
+        // bilinear filters: a solid square samples identically either side.
+        let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
+        let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
+
+        // The wire's own stream, made by a producer that is already tested.
+        let stream = grid_fixture(if projection.is_some() { 3 } else { 1 })
+            .stream(projection.unwrap_or_default());
+        let inst = lumit_core::fx::effects::clone_to_points::CloneToPoints {
+            clone_layer: true,
+            scale: 160.0,
+            rotation: 25.0,
+            tint: 100.0,
+            max_clones: 20_000,
+            mix: 100.0,
+        };
+        let stamps = inst.stamps(&stream);
+        assert!(stamps.len() > 20, "the fixture stamped {}", stamps.len());
+        let style = inst.draw_style();
+
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(
+            &mut cpu,
+            w,
+            h,
+            &stamps,
+            &[],
+            &style,
+            Some(lumit_core::fx::points::Sprite {
+                rgba: &sprite_px,
+                w: 8,
+                h: 8,
+            }),
+        );
+        // A camera that changed nothing would make the comparison pass by
+        // comparing two identical flat pictures.
+        if projection.is_some() {
+            let mut flat_stamps = stamps.clone();
+            flat_stamps.projection = lumit_core::fx::points::Projection::FLAT;
+            let mut flat = vec![0.0f32; (w * h * 4) as usize];
+            lumit_core::fx::points::draw_stream(
+                &mut flat,
+                w,
+                h,
+                &flat_stamps,
+                &[],
+                &style,
+                Some(lumit_core::fx::points::Sprite {
+                    rgba: &sprite_px,
+                    w: 8,
+                    h: 8,
+                }),
+            );
+            assert_ne!(cpu, flat, "the camera moved nothing at all");
+        }
+
+        let points = draw_points_of(&stamps);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: projection.map(|proj| proj.m),
+            alpha_test: false,
+            alpha_invert: false,
+            seed: 0,
+            mode: 1,
+            sprite: Some(&sprite_tex),
+        };
+        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        let drawn: f32 = gpu.iter().sum();
+        assert!(drawn > 1.0, "the stamps drew nothing ({drawn})");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("clone to points draw: worst |Δ| {worst:.3e}");
+        assert!(worst < 2e-2, "worst |Δ| {worst}");
+
+        // Bit-stable against itself (docs/08 §2.4).
+        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
     }
 
     // ---------------------------------------------------------------
@@ -4631,6 +4855,7 @@ mod tests {
             schedule: sched.clone(),
             t,
             projection: None,
+            ..Default::default()
         };
         (inst.points(), inst.draw_style(), sched, carriage)
     }
@@ -4984,6 +5209,7 @@ mod tests {
                 schedule,
                 t,
                 projection: None,
+                ..Default::default()
             };
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
             let op = particulate_op(
@@ -5075,6 +5301,7 @@ mod tests {
             ),
             t,
             projection: None,
+            ..Default::default()
         };
 
         let source = vec![0.0f32; (w * h * 4) as usize];

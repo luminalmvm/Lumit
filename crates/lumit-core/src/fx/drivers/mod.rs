@@ -195,6 +195,51 @@ pub fn resolve_drivers_projected(
     out
 }
 
+/// **One stack effect's points stream**, at layer time `t` and in px@comp
+/// (K-600, points-stream.md §3.3).
+///
+/// # In plain terms
+///
+/// A wire from Particulate's teal socket into Clone to points has to hand the
+/// consumer some particles, and this is where they come from: the very function
+/// that answers the same question for a driver, exported so the draw builder can
+/// ask it too. Nothing is duplicated, so the particles a consumer stamps, the
+/// particles a driver counts and the particles the producer draws are one set.
+///
+/// `None` means *no stream*, which is always the documented calm rather than a
+/// fault: the effect is not a producer, it is bypassed, it is Scatter (whose
+/// stream is a function of a picture that does not exist at this point in the
+/// frame — K-599), or the document names an effect this layer does not carry.
+///
+/// `context` must name the producer's own comp and layer; `projection` is where
+/// the composition's camera puts a particle off the layer's plane, which the
+/// caller works out because nothing in this crate derives a camera (K-561).
+#[must_use]
+pub fn effect_stream(
+    graph: &LayerGraph,
+    effect: Uuid,
+    t: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+) -> Option<PointsStream> {
+    // The `Eval` is dropped before the stream is unwrapped, so its own memo is
+    // not a second owner and the common case moves rather than copies eight
+    // vectors of up to the cap.
+    let stream = {
+        let ev = Eval {
+            graph,
+            context,
+            audio,
+            projection,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+        };
+        ev.stream(effect, t, 0)
+    }?;
+    Some(Rc::try_unwrap(stream).unwrap_or_else(|shared| (*shared).clone()))
+}
+
 /// The largest distance either side of the frame any driver in this graph reads
 /// (K-471 §2.3) — the **temporal declaration**, folded into the frame key so a
 /// cached frame cannot outlive the range it was averaged or measured from.

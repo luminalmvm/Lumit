@@ -336,7 +336,10 @@ impl EffectDef for ScatterDef {
     /// declare it — and see this file's header on why a **driver** may not
     /// sample it.
     fn signature(&self) -> Signature {
-        Signature::Image { extra: POINTS_OUT }
+        Signature::Image {
+            inputs: &[],
+            extra: POINTS_OUT,
+        }
     }
 
     /// The raster factor: the camera, and the count Density means per

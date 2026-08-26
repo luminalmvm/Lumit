@@ -81,6 +81,8 @@ Clip black
 Clip rollback
 Clip white
 Clockwise
+Clone layer
+Clone to points
 Coating
 Colour
 Colour 1
@@ -373,6 +375,7 @@ Master
 Math
 Matte
 Matte key
+Max clones
 Max ghosts
 Max particles
 Max points

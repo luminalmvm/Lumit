@@ -544,6 +544,58 @@ impl PointsStream {
         self.id.is_empty()
     }
 
+    /// The same stream in a raster `px_scale` times the size it was evaluated
+    /// at (K-266, K-385, K-600).
+    ///
+    /// **Why a consumer needs this and a producer does not.** A producer's
+    /// distances arrive already rescaled, because they are rows in its bag and
+    /// the resolve step scales a `Px` row generically (docs/08 §2.3). A stream
+    /// read off a *wire* is not in anybody's bag: it is evaluated once, in
+    /// px@comp, because that is the unit a consumer reads it as data in
+    /// (K-419). Turning it into the pixels a frame is being drawn at is
+    /// therefore one multiplication per length — the three position axes, the
+    /// three speed axes, the diameter — and the camera taking the same factor
+    /// it takes for Particulate ([`Projection::rescaled`]). At full resolution
+    /// `px_scale` is 1 and every number is the bits it already was, which is
+    /// what makes preview and export identical by construction (K-031).
+    #[must_use]
+    pub fn rescaled(&self, px_scale: f32) -> PointsStream {
+        let s = px_scale.max(1e-6);
+        if s == 1.0 {
+            return self.clone();
+        }
+        let scale3 = |v: &Vec<[f32; 3]>| -> Vec<[f32; 3]> {
+            v.iter().map(|p| [p[0] * s, p[1] * s, p[2] * s]).collect()
+        };
+        PointsStream {
+            position: scale3(&self.position),
+            speed: scale3(&self.speed),
+            age: self.age.clone(),
+            life: self.life.clone(),
+            size: self.size.iter().map(|d| d * s).collect(),
+            rotation: self.rotation.clone(),
+            colour: self.colour.clone(),
+            id: self.id.clone(),
+            projection: self.projection.rescaled(s),
+        }
+    }
+
+    /// Where particle `id` was in `past`, or `None` if it was not alive then.
+    ///
+    /// **A merge, not a search** (K-601): both streams are ordered by birth
+    /// index ascending — a fact of the evaluation rather than a scheduling
+    /// artefact (particulate.md §5) — so a walk that only ever moves forwards
+    /// answers every particle of one stream against another in one pass.
+    /// `cursor` is that walk's place in `past`, carried by the caller from one
+    /// particle to the next.
+    #[must_use]
+    pub fn seek_id(past: &PointsStream, id: u64, cursor: &mut usize) -> Option<usize> {
+        while past.id.get(*cursor).is_some_and(|got| *got < id) {
+            *cursor += 1;
+        }
+        (past.id.get(*cursor) == Some(&id)).then_some(*cursor)
+    }
+
     /// Keep the **newest `n`** particles by birth index, dropping the rest.
     ///
     /// The degradation rung (K-475): under governor pressure the effect draws
@@ -780,6 +832,34 @@ pub struct PointsSchedule {
     /// placement are not controls on this effect. `None` is a 2D layer, and is
     /// what every project saved before the axis existed answers.
     pub projection: Option<Projection>,
+    /// **The stream a wire brings in** (K-600, points-stream.md §3.3), in
+    /// px@comp, newest first: entry 0 is this frame, and entry *k* is the same
+    /// producer evaluated `k` steps into the past — which is how Trail looks
+    /// backwards without remembering anything (K-601). Empty for a producer,
+    /// and empty for a consumer with **nothing wired**, which is the documented
+    /// calm: the effect draws nothing and passes its picture on.
+    ///
+    /// It is filled on the host rather than on the card because that is the
+    /// shape the generators already established (K-598): the points a consumer
+    /// stamps are bit for bit the ones the closed forms evaluated, and the
+    /// driver walk reads the very same function. (ponytail: one host evaluation
+    /// per sample per frame, memoised per producer. points-stream.md §3.3
+    /// designs a GPU arena carriage for when a profile shows a real comp
+    /// spending it — and that carriage is also what would let **Scatter** feed
+    /// a stack consumer, which for now reads the same empty stream a driver
+    /// does, K-599.)
+    pub input: Vec<PointsStream>,
+    /// Which effect in the layer's stack the wire came from, by index — folded
+    /// into the frame key, and read for nothing else.
+    ///
+    /// The stream is a pure function of the producer's parameters, the time and
+    /// the camera; the producer sits strictly earlier in the stack (the
+    /// downstream-only rule, K-492), so its bag is already inside this op's
+    /// cumulative key. What is *not* in that key is which of two producers the
+    /// wire names, or whether it is drawn at all. An index rather than an id,
+    /// so a duplicated layer still hits the per-effect cache (K-421): a key
+    /// names content, never which row it came from.
+    pub input_from: Option<u32>,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,
@@ -1236,6 +1316,28 @@ pub fn wants_schedule(sig: crate::fx::Signature) -> bool {
     sig.outputs()
         .iter()
         .any(|p| p.ty == crate::fx::PortType::Points)
+}
+
+/// Whether an entry **reads** a points stream off a wire (K-600): the other
+/// half of the family, and the other reason to want a carriage.
+#[must_use]
+pub fn consumes_points(sig: crate::fx::Signature) -> bool {
+    sig.inputs()
+        .iter()
+        .any(|p| p.ty == crate::fx::PortType::Points)
+}
+
+/// Whether an entry wants a [`PointsSchedule`] threaded beside its op at all —
+/// because it produces points, consumes them, or both.
+///
+/// **One predicate, so one order**, which is why this exists as a function
+/// rather than as an `||` written out at each site: the draw builder fills a
+/// carriage per op that answers yes and the render walk consumes one per op
+/// that answers yes, and two rules spelled two ways would hand a carriage to
+/// whichever effect happened to sit above.
+#[must_use]
+pub fn wants_carriage(sig: crate::fx::Signature) -> bool {
+    wants_schedule(sig) || consumes_points(sig)
 }
 
 /// A mask path in the raster the frame is being drawn at.

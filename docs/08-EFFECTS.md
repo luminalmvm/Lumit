@@ -5478,7 +5478,8 @@ Eight notes:
   Rectangle. Uniform by arc length rather than by angle is the whole point of the walk — on
   a 2:1 ellipse, parameterising by angle crowds the ends of the long axis by a factor of
   two.
-- **The particles live in three axes, and the composition's camera sees them** (K-561,
+- **The particles live in three axes, and the composition's camera sees them** (K-561,
+
   K-596). A
   particle carries a depth, the closed forms integrate it under the same drag and wind
   algebra (gravity excepted — down stays down), the emitter reaches through the layer's
@@ -5709,6 +5710,67 @@ Mix 0, Density 0 and a wholly transparent field are all the bit-exact identity.
 AE's nearest equivalent is CC Pixel Polly and the various "shatter into particles" plugins,
 none of which hands the points out as data; what this exists for is the wire, once Clone to
 points and Connect points land.
+
+---
+
+### 3.90 Clone to points — a layer stamped at every point of a stream
+
+A **Generate** effect (K-600), and the first thing in this engine that **reads** a points
+wire rather than handing one out. Wire a producer's teal Points socket into it, pick a
+layer, and that layer's picture is stamped once per point: at the point's place, turned by
+the point's own rotation, sized by the point's own size, tinted by its colour. A hundred
+snowflakes from Particulate, a lattice of thumbnails from Grid, a logo scattered inside a
+silhouette — the rig people build by hand out of repeaters and expressions, as one wire.
+
+**Parameters.** Clone layer (the picture stamped — **unset draws nothing**), Scale (per
+cent, 0–1000, default 100 — multiplies each point's own size), Rotation (degrees, added to
+each point's own), Tint (per cent, default 100 — how much of the point's colour and alpha
+the stamp takes), **Max clones** (1–200 000, hard 1 000 000, default 2 000 — the budget
+dial, not animatable). Plus the host Mix with its Blend (K-425). No panel row for the
+stream: it is a **wire-only** input, declared on the signature, because a points stream has
+no stored value to fall back on (impl/points-stream.md §4.1).
+
+**Algorithm sketch.** There is nothing in it but a stamp:
+
+```
+stream = the wire's producer, evaluated at this frame in px@comp   # one evaluation
+keep the newest `Max clones` by id                                 # the cap rule
+size_i     = stream.size_i · Scale ; rot_i = stream.rotation_i + Rotation
+colour_i   = 1 + (stream.colour_i − 1) · Tint      # towards opaque white
+draw, in id order: the layer's picture in a square of size_i, turned by rot_i
+```
+
+Five notes:
+
+- **Painter's order is `id` order**, and that is the determinism claim. A stream arrives
+  ordered by birth index ascending — a fact of the evaluation rather than an artefact of how
+  it was scheduled (impl/particulate.md §5) — and the stamps are laid down in that order, so
+  a later point covers an earlier one on every machine and in every render (K-031).
+- **It is Particulate's Sprite mode, pointed at somebody else's particles.** Not a second
+  implementation: literally the same instanced quad, the same bilinear tap, the same
+  premultiplied tint, through the shared points draw K-598 built. What changes is only where
+  the points came from.
+- **Nothing wired draws nothing**, and the box says so: an unwired Points input wears the
+  `!` mark and the tooltip K-509 gave the family. So does an unset Clone layer — the
+  ordinary unset-is-identity reading, deliberately unlike Particulate's Sprite mode, which
+  falls back to discs because a *render mode* must always draw something. This has no mode,
+  only a source.
+- **Tint is a dial rather than a switch**, because a producer's colour usually carries the
+  *fade* as well as the hue — Particulate's Opacity over life lives in that alpha. At 0 the
+  stamp is the layer's own picture; at 100 it is that picture times the point's colour and
+  alpha; between, both.
+- **A wire from Scatter reads the empty stream** (K-599, K-600), which is that producer's
+  recorded refusal rather than this effect's: a stream that is a function of the input
+  picture cannot be answered where the stack's carriages are built. Grid and Particulate
+  both feed this effect in full.
+
+`moderate` cost, `FullFrame` ROI (a point may be anywhere, and a stamp reaches half its own
+size past it), premultiplied, temporal window `{0}`, not seeded in the §1.3 sense. Mix 0, an
+unset Clone layer, an unwired stream and Scale 0 are all the bit-exact identity.
+
+AE's nearest equivalents are the Repeater on a shape layer and the third-party "clone to
+particles" plugins; neither reads a particle system's own points, which is what the wire
+here is for.
 
 ---
 

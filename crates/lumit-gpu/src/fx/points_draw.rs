@@ -34,6 +34,10 @@ pub struct DrawPoint {
     /// The point's index in its generator's own ordering — the stream's `id`,
     /// and what Scatter's acceptance die is drawn against in the vertex stage.
     pub id: u32,
+    /// Where the capsule runs back to, px in the same three axes (K-601). The
+    /// **head** for a plain dot, which is what makes a disc a streak of no
+    /// length and lets one kernel serve both without a branch.
+    pub tail: [f32; 3],
 }
 
 /// One generic points draw.
@@ -58,6 +62,19 @@ pub struct PointsDrawOp<'a> {
     /// The seed the acceptance die is drawn from; unread without
     /// [`alpha_test`](Self::alpha_test).
     pub seed: u32,
+    /// Which coverage the quad is filled with — the kernel's own mode codes,
+    /// matching `lumit_core::fx::points::RenderMode`: 0 a feathered disc (or a
+    /// capsule, when a point's tail is not its head), 1 a **sprite**.
+    ///
+    /// Sprite mode is Clone to points' (K-600), and it is the same mode
+    /// Particulate's own draw runs — one rasteriser for the whole family, so a
+    /// stamp laid by a consumer is the stamp Particulate lays.
+    pub mode: u32,
+    /// The picture Sprite mode stamps. `None` in every other mode, and an unset
+    /// one leaves the mode as the caller declared it: the *host* decides what an
+    /// absent source means, because one branch resolved there cannot come to
+    /// mean two things in two places.
+    pub sprite: Option<&'a wgpu::Texture>,
 }
 
 impl FxEngine {
@@ -115,9 +132,7 @@ impl FxEngine {
         for (i, pt) in op.points.iter().enumerate() {
             for c in 0..3 {
                 words[region(0) + i * 3 + c] = pt.position[c].to_bits();
-                // The tail is the head: a disc is a streak of no length, which
-                // is what lets one kernel serve both.
-                words[region(14) + i * 3 + c] = pt.position[c].to_bits();
+                words[region(14) + i * 3 + c] = pt.tail[c].to_bits();
             }
             words[region(8) + i] = pt.size.to_bits();
             words[region(9) + i] = pt.rotation.to_bits();
@@ -133,11 +148,11 @@ impl FxEngine {
         u.seed = op.seed;
         u.feather = op.feather;
         u.mix = op.mix;
-        u.mode = 0;
+        u.mode = op.mode;
         u.target_w = w as f32;
         u.target_h = h as f32;
-        u.sprite_w = 1.0;
-        u.sprite_h = 1.0;
+        u.sprite_w = op.sprite.map_or(1.0, |s| s.width() as f32);
+        u.sprite_h = op.sprite.map_or(1.0, |s| s.height() as f32);
         u.proj0 = proj[0];
         u.proj1 = proj[1];
         u.proj2 = proj[2];
@@ -158,10 +173,11 @@ impl FxEngine {
                 contents: bytemuck::cast_slice(&words),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        // The input picture in the sprite slot, which Disc mode never samples;
-        // the rejection's own field beside it — a bound matte's picture, or
-        // this effect's input when the row is unset.
-        let view = src.create_view(&Default::default());
+        // The sprite Clone to points stamps, or the input picture in that slot
+        // when nothing stamps at all — Disc mode never samples it. Beside it,
+        // the rejection's own field: a bound matte's picture, or this effect's
+        // input when the row is unset.
+        let view = op.sprite.unwrap_or(src).create_view(&Default::default());
         let alpha_view = alpha.unwrap_or(src).create_view(&Default::default());
         let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-points-draw-bind"),
