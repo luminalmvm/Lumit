@@ -8,15 +8,15 @@ sidebar:
 ## From composition to frame
 
 A composition can be viewed as a document, with each layer explaining how 
-to render something specific. Before rendering, Lumit compiles it into an
+to render something specific. Before rendering, Lumit compiles it into a
 **DAG**, or **evaluation graph**, which calculates everything required to 
 render that particular frame.
 
-For instance, indentical layers or duplicates (such as duplicating a 
+For instance, identical layers or duplicates (such as duplicating a 
 precomp) only need to be rendered once, and the output is reused. This 
 helps reduce the work required when rendering expensive frames.
 
-The DAG is completely internal. As a user you never interact or see it.
+The DAG is completely internal. As a user you never interact with it or see it.
 
 ## Content hashing
 
@@ -41,7 +41,7 @@ composite into the existing frame.
 The effects and masks are composited from the top item to the bottom as 
 they appear in the effects column or in the mask layer row. For instance
 if you apply a glow effect above (meaning before) an exposure effect, it
-will have a very different affect on the output, than if you reverse the
+will have a very different effect on the output, than if you reverse the
 order.
 
 ## Related

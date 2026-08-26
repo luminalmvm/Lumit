@@ -6,7 +6,7 @@ sidebar:
 ---
 
 When trying to explain functionality, these are the terms used to refer to specific
-area's and components of Lumit.
+areas and components of Lumit.
 
 ## Structure
 
@@ -24,18 +24,18 @@ area's and components of Lumit.
 | --- | --- |
 | **Layer** | One entry in a composition. |
 | **Clip** | One item within a Sequence layer. |
-| **Property** | A named value that a layers transform, effect, etc. has. |
+| **Property** | A named value that a layer's transform, effect, etc. has. |
 | **Keyframe** | A property value linked to a specific frame, used to animate properties. |
 | **Retime** | The adjusting of the default layer/clip time. |
-| **Speed** | The keyframed property values rate the change. |
+| **Speed** | The rate a keyframed property's value changes at. |
 | **Freeze** | A region of speed 0. |
 
 ## Picture
 
 | Term | Meaning |
 | --- | --- |
-| **Mask** | A path on a layer that gates the layers alpha. |
-| **Matte** | Another layer used to gate the source layers one. |
+| **Mask** | A path on a layer that gates the layer's alpha. |
+| **Matte** | Another layer used to gate the source layer's one. |
 | **Blend mode** | How a layer composites over what is below. |
 | **Effect** | One item in a layer's effect stack. |
 | **Preview** | Playback inside Lumit. |

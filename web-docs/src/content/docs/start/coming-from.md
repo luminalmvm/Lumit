@@ -6,8 +6,8 @@ sidebar:
 ---
 
 Lumit is layer-based, in the manner of After Effects, with a few additions to help those 
-coming from vegas. Such as the Sequence layer, which is where Vegas-style cutting and 
-velocity can happen. Most of what you already know can be transferred.
+coming from Vegas, such as the Sequence layer, which is where Vegas-style cutting and 
+speed ramping can happen. Most of what you already know can be transferred.
 
 ## After Effects to Lumit
 
@@ -24,11 +24,11 @@ Keyframes use the same maths as After Effects. Hold and linear are both there, a
 bezier with speed and influence. 
 
 If you aren't used to all of Lumit's keybinds, an After Effects keymap 
-preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Keybinds**.
+preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
 
 Whole projects come across too. **File ▸ Import ▸ After Effects project**, and a 
 report will appear telling you what was carried across with or without adjustments. 
-This cannot port across 3rd party effects at this time, but it will still import the rest of 
+This cannot port across third-party effects at this time, but it will still import the rest of 
 a project which uses these.
 
 ## Vegas to Lumit
@@ -37,7 +37,7 @@ a project which uses these.
 | --- | --- |
 | Event | **Clip**, inside a [Sequence layer](/use/sequence-layers/) |
 | Track | **Layer**; the Sequence layer is the Vegas-style row you can cut on |
-| Velocity envelope | **Retime**, edited through the Speed lens of the graph editor, or within a sequence layer |
+| Velocity envelope | **Retime**, edited through the Speed lens of the graph editor, or within a Sequence layer |
 | Cursor | **Playhead** |
 | Split | The **razor** tool, on the [toolbar](/panels/toolbar/) |
 

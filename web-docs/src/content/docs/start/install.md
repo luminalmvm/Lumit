@@ -9,12 +9,12 @@ Lumit is free.
 
 Download the build for your platform from
 [lumitlab.com/download](https://lumitlab.com/download) to install.
-If you would prefer to build the project from scratch, find it at [github.com/luminalmvm/Lumit](https://github.com/luminalmvm/Lumit)
+If you would prefer to build the project from scratch, find it at [github.com/luminalmvm/Lumit](https://github.com/luminalmvm/Lumit).
 
 ## What you need
 
 A GPU which has support for **Vulkan**, **Direct3D 12**, or **Metal** is required to run
-Lumit. This can be either graphics card, or intergrated graphics.
+Lumit. This can be either a graphics card or integrated graphics.
 
 ## Windows
 
@@ -38,7 +38,7 @@ commands.
 
 File associations for `.lum` and `.lumfx` are not created after installing the flatpak.
 If you would like to be able to click on project files to open them directly, then clone
-the repository from Github, and run `packaging/linux/install.sh`.
+the repository from GitHub, and run `packaging/linux/install.sh`.
 
 ## macOS
 
@@ -56,7 +56,7 @@ git clone https://github.com/luminalmvm/Lumit.git
 ## Updating
 
 Updates are installed automatically by default. If disabled Lumit can be updated from 
-within the application via **Help → Check for updates**, or in **Edit → Settings → 
+within the application via **Help ▸ Check for updates**, or in **Edit ▸ Settings ▸ 
 General**. If these options don't work, you can manually update by downloading the 
 [latest build](https://lumitlab.com/download).
 
