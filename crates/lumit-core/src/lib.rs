@@ -26,6 +26,8 @@ pub mod retime;
 pub mod sequence;
 pub mod shape;
 pub mod store;
+/// Text animators: a Text layer's words moved a letter at a time (K-609).
+pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer (K-417).
 pub mod track;

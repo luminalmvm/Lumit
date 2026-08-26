@@ -1614,6 +1614,12 @@ pub struct TextDocument {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub path_offset: Property,
+    /// **The letters can move separately** (K-609): each animator names a set
+    /// of per-letter offsets and the stretch of the words they apply to. Empty
+    /// — the ordinary case — is absent from the file, and the layer draws the
+    /// bytes it always drew (K-258).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub animators: Vec<crate::text::TextAnimator>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -3037,6 +3043,7 @@ mod tests {
             fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
             path: None,
             path_offset: crate::anim::Property::zero(),
+            animators: Vec::new(),
             extra: serde_json::Map::new(),
         };
 
@@ -3060,6 +3067,41 @@ mod tests {
         // The offset writes as a bare number while it is still, the way every
         // other still property in the document does.
         assert!(json.contains("\"path_offset\":37.5"), "{json}");
+    }
+
+    /// **A layer with no animators writes no animators key** (K-609, K-258):
+    /// the whole per-letter model is absent from the file until somebody adds
+    /// one, so every `.lum` saved before it existed opens byte-identical and
+    /// every frame those projects have banked keeps its name.
+    #[test]
+    fn text_animators_are_absent_until_there_are_some() {
+        let mut document = TextDocument {
+            text: "Lumit".into(),
+            expression: None,
+            size: 48.0,
+            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            path: None,
+            path_offset: crate::anim::Property::zero(),
+            animators: Vec::new(),
+            extra: serde_json::Map::new(),
+        };
+        let plain = serde_json::to_string(&document).unwrap();
+        assert!(!plain.contains("animators"), "{plain}");
+
+        let mut animator = crate::text::TextAnimator::new("Cascade");
+        animator.selector.end = crate::anim::Property::fixed(30.0);
+        animator.selector.basis = crate::text::SelectorBasis::Words;
+        animator.position_y = crate::anim::Property::fixed(-60.0);
+        document.animators.push(animator);
+        let json = serde_json::to_string(&document).unwrap();
+        assert_eq!(
+            serde_json::from_str::<TextDocument>(&json).unwrap(),
+            document
+        );
+        // The numbers write as bare numbers while they are still, and the
+        // untouched ones are simply not there.
+        assert!(json.contains("\"position_y\":-60.0"), "{json}");
+        assert!(!json.contains("scale_x"), "{json}");
     }
 
     /// **The adjustment switch survives a save/load, and an old file is
@@ -3278,6 +3320,7 @@ mod tests {
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,
                 path_offset: crate::anim::Property::zero(),
+                animators: Vec::new(),
                 extra: serde_json::Map::new(),
             },
         };

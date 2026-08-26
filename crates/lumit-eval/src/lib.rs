@@ -1150,7 +1150,8 @@ fn feed_source(
                 comp_time,
                 current_depth: 0,
             };
-            h.update(document.resolved_text(Arc::new(context)).as_bytes());
+            let line = document.resolved_text(Arc::new(context));
+            h.update(line.as_bytes());
             h.update(&[0]); // length delimiter: text then size never collide
             feed_f64(h, document.size);
             for c in document.fill.0 {
@@ -1164,6 +1165,28 @@ fn feed_source(
                 h.update(b"onpath/");
                 h.update(path.as_bytes());
                 feed_f64(h, document.path_offset.value_at(lt));
+            }
+            // Text animators (K-609). What is fed is what actually reaches the
+            // picture — each letter's resolved push, turn, size, opacity and
+            // tint — rather than the animators' settings: two different
+            // selectors that happen to move the same letters the same way draw
+            // the same frame and may share it, and a swept range keys per frame
+            // because its weights change per frame. A layer with no animators
+            // feeds nothing at all and keeps the key it has always had.
+            for x in lumit_core::text::glyph_xforms(&document.animators, &line, lt) {
+                for v in [
+                    x.position[0],
+                    x.position[1],
+                    x.rotation,
+                    x.scale[0],
+                    x.scale[1],
+                    x.opacity,
+                    x.fill[0],
+                    x.fill[1],
+                    x.fill[2],
+                ] {
+                    h.update(&v.to_le_bytes());
+                }
             }
         }
         LayerKind::Precomp { comp } => {
@@ -1485,6 +1508,7 @@ mod tests {
                     fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
+                    animators: Vec::new(),
                     extra: serde_json::Map::new(),
                 },
             },

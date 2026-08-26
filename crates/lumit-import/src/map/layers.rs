@@ -290,6 +290,7 @@ fn text(props: &[Property]) -> TextDocument {
         // which the importer does not read yet: an imported title lays straight.
         path: None,
         path_offset: lumit_core::anim::Property::zero(),
+        animators: Vec::new(),
         extra: serde_json::Map::new(),
     }
 }

@@ -18632,3 +18632,89 @@ rasterised as coverage and as vector art, measured against each other),
 `converting_a_text_layer_leaves_the_original_where_it_was`; in Flutter, `Layer ▸ Create turns a
 text layer into shapes and into points` and `Layer ▸ Create is dead on a layer that is not type`.
 New strings: `menuCreateShapesFromText`, `menuCreatePointsFromText`.
+
+## K-609 — Text animators are one selector, two shapes and five property groups
+
+**Status: DECIDED (2026-08-26).** The last of K-564's text-as-data package, building on K-607
+and K-608. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §9.1.
+
+**The model is After Effects', sized honestly.** A Text layer carries a list of **animators**;
+each animator carries a set of per-letter offsets and one **range selector** saying which letters
+they apply to. The selector hands every letter a **weight** in 0–1 and the offsets are applied
+*times* that weight, so a letter half inside the range is moved half as far. Sweeping the range
+over time is the cascade every title sequence is made of, and it falls out of the selector's
+`offset` being an ordinary keyframeable number rather than out of any machinery of its own.
+
+**What v1 has, pinned.** One selector per animator. `start`, `end` and `offset`, all **per cent
+of the run** — per cent rather than a letter count so the same keyframes read the same on a word
+and on a sentence, and so an expression-driven line whose length changes every frame does not
+need them rewritten. `basis`: **Characters** or **Words**. `shape`: **Square** (in or out) or
+**Ramp** (rising evenly across the range and holding past its end). Five property groups on every
+animator — position (px@comp), rotation (degrees), scale (per cent), opacity (per cent), and a
+**fill offset** added to the layer's fill in scene-linear.
+
+**What v1 deliberately refuses.** AE's other four selector shapes (triangle, round, smooth, and
+the two-sided variants), Randomize Order, the wiggly selector, the expression selector, more than
+one selector per animator, the selector's own Amount / Smoothness / Mode, Anchor Point Grouping
+and Grouping Alignment; and, among properties, skew, tracking, line spacing and anchor, character
+offset and value, per-character 3D, blur, and the stroke pair. Each is a knob on a model that is
+already the right shape, and none of them is what makes a cascade title. They bolt on without
+moving anything here.
+
+**Every animator carries all five property groups, rather than a menu.** AE adds properties to an
+animator one at a time from a list of about thirty, which is a second interaction to learn before
+the first letter moves. Here **Add animator** gives the five rows, defaulted to values that
+change nothing — no push, no turn, 100 % size, 100 % opacity, no tint — and four of them are left
+alone. The defaults are also what keeps the file small: each is left out of the file entirely, so
+a fresh animator writes its name and nothing else.
+
+**A fill *offset*, not a second colour.** Two animators reaching the same letter compose — pushes,
+turns and tints add, scales and opacities multiply — which is the only combination that reads as
+"and also" rather than "instead of", and is what lets a fade animator and a drop animator be
+written separately. A replacement colour cannot compose; an offset can. It is added in
+scene-linear and encoded per letter through `pixels::solid_rgba`, the same encoder every other
+solid colour in the engine goes through.
+
+**A letter turns about its own middle on the baseline**, not about the pen point: pivoting about
+the pen swings tall letters out of the line, which is not what anybody means by rotating a
+letter. Everything an animator does happens **inside the letter's own frame**, so a letter on a
+K-607 curve is pushed along and away from the curve rather than across the picture — one rule,
+both layouts.
+
+**An animated line is given one text size of room a side, and it is a constant.** A letter has to
+be able to drop in from above, and the layer's box is the layer's picture, so the box grows.
+The margin is a constant of the text size rather than a fit to where the letters actually are,
+because a box that breathed frame by frame would move the picture inside it. A letter thrown
+further than that is clipped at the layer's edge, exactly as a mask point dragged off the layer
+is. The bridge's `set_text_animators` moves the anchor by the same amount when the list crosses
+empty ↔ not-empty, in the same `Op`, so adding the first animator does not shift the words —
+the same "document and anchor together" rule K-230 set for typing. A line on a **path** neither
+grows nor moves: `path_box` already hands out a text size of room and its corner is the layer's
+own origin (K-607).
+
+**No animators means the bytes that were always drawn.** `rasterise_line_animated` with an empty
+transform list *calls* `rasterise_line` rather than taking a second path that happens to agree,
+`animators` is absent from the file until there is one, and the frame key feeds nothing. So no
+`.lum` changes, no cached frame is retired, and the K-258 gate is a call rather than a promise.
+What the key feeds when there *are* animators is each letter's **resolved** push, turn, size,
+opacity and tint rather than the animators' settings: two different selectors that move the same
+letters the same way draw the same frame and may share it, and a swept range keys per frame
+because its weights change per frame.
+
+**Spaces go with the word before them.** Counting words, a run of whitespace takes the index of
+the word it follows (leading whitespace takes the first word's), so a range sweeping a sentence
+does not pause on each gap as though it were a word of its own.
+
+Tests: in `lumit-core`, `a_square_selector_moves_the_letters_inside_it_and_no_others`,
+`a_ramp_rises_across_the_range_and_holds_past_it`, `a_zero_width_ramp_is_a_step`,
+`an_inside_out_range_still_names_the_stretch_between_its_ends`,
+`words_are_counted_whole_and_the_spaces_go_with_them`,
+`a_word_selector_moves_a_whole_word_at_once`, `a_half_weighted_letter_is_moved_half_as_far`,
+`two_animators_compose_rather_than_replace`, `a_layer_with_no_animators_asks_for_nothing`,
+`a_default_animator_writes_only_its_name`, `text_animators_are_absent_until_there_are_some`; in
+`lumit-text`, `a_line_with_no_animators_is_byte_identical`,
+`an_opacity_animator_takes_away_the_letters_the_selector_names`,
+`a_push_moves_the_letters_and_the_box_has_room_for_them`, `an_animated_line_is_deterministic`,
+`a_letter_scaled_or_faded_to_nothing_draws_nothing`; in the bridge,
+`adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step`; in Flutter,
+`the animators section adds, edits and removes an animator`.

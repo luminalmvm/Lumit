@@ -783,7 +783,6 @@ pub fn build_comp_draws_at(
                 )
             }),
             LayerKind::Text { document } => in_span(layer).then(|| {
-                let fill = solid_rgba(document.fill);
                 // The words at *this* layer time — a plain document hands back
                 // what was typed; an expression-driven one is evaluated here,
                 // which is what makes a caption able to print a live value.
@@ -801,20 +800,29 @@ pub fn build_comp_draws_at(
                     .path
                     .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
                     .filter(|p| !p.is_empty());
+                // **The letters move separately** (K-609). What each one is
+                // asked to do is worked out here, from the animators' own
+                // keyframed numbers at this layer time; a layer with none hands
+                // back an empty list and the rasteriser takes the path it
+                // always took, byte for byte (K-258).
+                let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
                 let r = match &spine {
                     Some(path) => {
                         let (w, h) = lumit_text::path_box(path, size);
-                        lumit_text::rasterise_on_path(
+                        lumit_text::rasterise_on_path_animated(
                             &line,
                             size,
-                            [fill[0], fill[1], fill[2]],
+                            document.fill,
                             path,
                             document.path_offset.value_at(lt) as f32,
                             w,
                             h,
+                            &xforms,
                         )
                     }
-                    None => lumit_text::rasterise_line(&line, size, [fill[0], fill[1], fill[2]]),
+                    None => {
+                        lumit_text::rasterise_line_animated(&line, size, document.fill, &xforms)
+                    }
                 };
                 (r.rgba, r.width, r.height, (r.width as f32, r.height as f32))
             }),
@@ -2636,6 +2644,7 @@ mod render_below_at_tests {
                     fill: LinearColour([1.0, 0.5, 0.2, 1.0]),
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
+                    animators: Vec::new(),
                     extra: serde_json::Map::new(),
                 },
             },

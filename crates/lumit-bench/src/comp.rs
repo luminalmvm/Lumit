@@ -83,6 +83,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
                 fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
                 path: None,
                 path_offset: lumit_core::anim::Property::zero(),
+                animators: Vec::new(),
                 extra: serde_json::Map::new(),
             },
         },

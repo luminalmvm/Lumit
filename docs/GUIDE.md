@@ -12148,3 +12148,72 @@ so it shows the key moving rather than a shape that appears frozen.
 **Everything else reads the morph.** The trim, the offset, the repeater and the boolean combines
 all work on the shape *as it is at that moment*, not on the drawing stored underneath. So a cutter
 path can slide across the shape it is subtracted from, and the hole travels with it.
+
+## 34. Moving letters one at a time, in plain terms
+
+Every title sequence you have ever watched does the same thing: the letters do not all arrive
+together. One drops in, then the next, then the next, and by the time the last one lands the first
+has been sitting still for a second. In After Effects that is built out of **text animators**, and
+Lumit's are the same idea.
+
+A Text layer normally moves as **one picture**. Fade it and the whole line fades; turn it and the
+whole line turns. An animator is the switch that lets the letters be moved *separately*.
+
+### The three pieces
+
+**The properties.** How far a moved letter is pushed, how far it is turned, how much bigger or
+smaller it is, how faded, and how tinted. Five ordinary numbers — the same kind of keyframeable
+number as anything else in Lumit, so they get the stopwatch and the graph editor for free. All
+five start at values that change nothing: no push, no turn, full size, full opacity, no tint. An
+animator you have added but not touched does exactly nothing, which is the honest starting point.
+
+**The selector.** Which letters this animator applies to. Three numbers — a **start**, an **end**
+and an **offset** — all in per cent of the words. Start 0, end 100 is "all of them". Start 0, end
+25 is "the first quarter". The offset slides that window along without changing how wide it is.
+
+**The weight.** This is the piece that is easy to miss and is where all the behaviour lives. The
+selector does not just say yes or no; it hands every letter a **number between 0 and 1**, and the
+properties are applied *multiplied by that number*. A letter fully inside the window gets 1 and is
+moved the whole way. A letter outside gets 0 and is not moved at all. A letter the shape says is
+halfway gets 0.5 and is moved half as far.
+
+### Where the cascade comes from
+
+Nothing in the list above is a cascade. The cascade comes from **keyframing the offset**. Set a
+narrow window — say start 0, end 20 — give the animator a push of 60 pixels upward, and then
+animate the offset from 0 to 100 across a second. At any given frame only a fifth of the letters
+are inside the window and lifted; as the window slides, each letter is lifted, then set down as
+the window passes. That is the whole trick, and it is why the offset is a plain animatable number
+rather than a mechanism of its own.
+
+### The two shapes, and the two things it can count
+
+**Square** means in or out: everything inside the window is moved the whole way and everything
+outside is left alone. **Ramp** means the weight rises evenly from nothing at the window's start
+to the whole way at its end — and stays up past the end. Square gives you a hard cascade, letters
+snapping into place; ramp gives you a sweep, the letters easing in across the window.
+
+The selector can count **characters** or **words**. Counting characters, every letter is its own
+unit and moves in its own turn. Counting words, all the letters of one word share a weight and
+arrive together. (Spaces go with the word before them, so a sweep does not pause on the gaps as
+though they were words of their own.)
+
+### Two animators are better than one
+
+Animators stack, and they combine in the way you would want: pushes and turns **add**, scales and
+opacities **multiply**. So "drop in from above" and "fade up" can be two separate animators with
+two separate selectors — one sweeping fast, one slow — rather than one animator you have to get
+right in a single pass. That is also why the colour control is an **offset added to the fill**
+rather than a second colour to replace it: two colours cannot combine, two offsets can.
+
+### The one thing that is a real limit
+
+A Lumit layer *is* its picture, and a picture has edges. A letter pushed far enough leaves the
+layer and is cut off, exactly the way a mask point dragged off the layer is. So the moment a Text
+layer has any animator on it, Lumit gives it **one text size of extra room on every side** — far
+enough for a drop-in from above or a doubled letter, and no further. Two consequences worth
+knowing. The room is a fixed amount rather than a fit to where the letters actually happen to be
+at each frame, because a layer whose box grew and shrank frame by frame would drag its own picture
+about. And because the room is added on the left and top too, the words would jump the first time
+you add an animator — so the command that adds one also moves the layer's anchor point by the
+same amount, in the same undo step, and nothing moves.

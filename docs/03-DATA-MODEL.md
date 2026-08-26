@@ -1058,10 +1058,10 @@ K-472. [impl/node-graph.md](impl/node-graph.md) is the authority on all of it.
 ### 9.1 Text
 
 v1 `TextDocument` is a **single run**: `{ text, expression, size, fill }` — one font (embedded
-Inter), one size, one fill, single line. The styled-runs model — font family/weight, stroke,
-tracking, leading, point vs paragraph text, alignment, and per-character animators — is
-**future**; the document stays structured (never rasterised into the project) so runs and
-animators bolt on later.
+Inter), one size, one fill, single line — plus the path fields (K-607) and the animator list
+(K-609). The styled-runs model — font family/weight, stroke, tracking, leading, point vs
+paragraph text, alignment — is **future**; the document stays structured (never rasterised into
+the project) so runs bolt on later.
 
 **The words can come from an expression (K-210).** `expression` is optional and absent from the file
 when unset. When it is set, the layer's line at layer time *t* is that expression evaluated at
@@ -1092,11 +1092,29 @@ than walked round the outlines, because that is the shape the points family cons
 argues it). Both are one op, both leave the original Type layer exactly as it was, and a line
 with no ink refuses rather than making an empty layer.
 
+**The letters can move separately (K-609).** `animators` is a list of animator groups, empty and
+absent from the file until one is added. Each carries a **range selector** — `start`, `end` and
+`offset` in per cent of the run, a `basis` of `Characters` or `Words`, and a `shape` of `Square`
+or `Ramp` — and five property groups: position (px@comp), rotation (degrees), scale (per cent),
+opacity (per cent), and a fill offset added to the layer's fill in scene-linear. All of them are
+ordinary keyframeable `Property`s. The selector hands every letter a **weight** in 0–1 and the
+properties are applied *times* that weight, so sweeping the selector's `offset` over time is the
+classic cascade. Two animators reaching the same letter compose: pushes, turns and tints add,
+scales and opacities multiply. A letter turns and scales about its own middle on the baseline,
+and is pushed **in its own frame**, so a line on a path is pushed along and away from the curve.
+An animated straight line is drawn into a box one text size larger a side (a constant, so the box
+does not breathe frame by frame) with the words that far in, and the command that adds the first
+animator moves the anchor by the same amount in the same `Op` so the words do not shift; a line
+on a path keeps the box §9.1's path rule already gives it. A layer with no animators renders byte
+for byte what it always rendered (K-258). The rest of After Effects' selector zoo — the other
+shapes, randomised order, wiggly and expression selectors, more than one selector per animator —
+is **refused for v1** and argued in K-609.
+
 The rasteriser and the frame cache key both read the line through one resolver, so they can
 never disagree about what the layer says — a disagreement would serve a cached frame of the
 previous line. A frame-varying expression therefore keys per frame by construction, and a
-constant one keys once. Per-character animation of an expression-driven line is **future**,
-with the styled-runs model.
+constant one keys once. The animators walk that same resolved line, so an expression-driven
+caption cascades like any other — and the key feeds each letter's resolved offsets beside it.
 
 ### 9.2 Shape — how the shipped flat list grows
 
