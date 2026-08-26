@@ -17393,3 +17393,111 @@ runs on that path, so a plugin that allocated in the begin gets its chance to fr
 sizing), `half`, `parking_lot` and `rayon`. The edge still runs one way — **no engine crate
 depends on `lumit-ofx`**, and none does yet — so nothing outside the host can render
 through a plugin, which is deliberate until the process boundary exists.
+
+## K-592 — The plugin runs in another program, and a plugin that dies costs one frame
+
+**DECIDED 2026-08-26.** The fourth package of the OFX host (K-589, K-590, K-591, K-061).
+`lumit-ofx` no longer has to load a plugin at all: `lumit-ofx-broker` is a small
+executable that opens one bundle, and the host talks to it through a pipe and a block of
+shared memory. docs/12 §2.3 and docs/impl/ofx-host.md §4 say what this must be; both hold.
+What is decided here is every number and every crate they left open.
+
+**The deadline is docs/12's, not the note's.** The spec says ten seconds for a render and
+two for a control action; docs/impl/ofx-host.md §4 sketches thirty for a render. The
+spec's numbers ship, as the two named constants `DEFAULT_RENDER_TIMEOUT` and
+`DEFAULT_CONTROL_TIMEOUT` in `quirks.rs`, and the quirks table's `render_timeout_ms` is
+where a plugin that genuinely needs longer says so — as data, per plugin, which is the
+whole point of the table (docs/12 §2.5). This entry exists so the question is closed
+rather than carried: if the owner wants the note's thirty seconds instead, it is one
+constant and a superseding entry, and nothing else in the code knows the number.
+
+**Three consecutive failures, and the plugin is put away for the session.** A missed
+deadline, a dead process and a plugin that answers "no" are the same kind of event: a
+strike. The first two cost that frame and buy a restart; the third stops trying, and the
+effect renders as an errored placeholder from then on with a badge and no modal. Any
+successful action puts the count back to nought — *consecutive*, as docs/12 §2.3 says.
+**A restart is a replay, not a recovery**: the broker keeps nothing worth keeping, so a
+new one is told to describe the bundle again and to make every live instance again with
+the parameter values the host holds. That is the payoff of "the host owns all parameters"
+(docs/12 §1) being a rule rather than a preference. The render that died comes back as its
+own input — identity — with `errored` set, because a comp that stops compositing is worse
+than a comp with a badge on one layer.
+
+**The control plane is a pipe of its own, not the child's standard output.** Standard
+input and output would have been free and would have needed no crate at all. They are not
+used, for one reason: the child loads somebody else's compiled code, and third-party
+plugins print. A single `printf` into standard output would land in the middle of a
+length-prefixed message and desynchronise the protocol permanently. So the transport is
+`interprocess` — a named pipe on Windows, a Unix socket elsewhere — carrying
+length-prefixed `bincode`, with a cap checked before a byte is allocated for a claimed
+length. The child's own standard output is redirected to nowhere, where a plugin may print
+all it likes.
+
+**The broker's first word is a version number.** A host and a broker that disagree about
+the shape of a message must find out before either acts on the other's bytes, so
+`PROTOCOL_VERSION` is announced and checked, and a mismatch refuses the broker with a
+sentence rather than deserialising whatever the bytes happen to mean.
+
+**The frame plane is one shared mapping per bundle, sized once.** `memmap2` is
+`CreateFileMapping` + `MapViewOfFile` on Windows and `mmap` on Unix — the two calls the
+note names, spelled once rather than twice — over a file in the temporary directory that
+both processes map. The ring is cut into equal slots and **sized from a byte budget, not a
+slot count**: 512 MiB per bundle, at least three slots (the note's triple buffering, as
+the floor it is) and at most sixty-four. A small comp gets slots rather than space:
+fifteen at 1080p, and at 4K the floor of three — where a `t ± 5` prefetch does not fit and
+is refused, which wants a bigger budget rather than a different design. Every
+slot begins with a sixty-four-byte header — bounds, row bytes, premultiplication, payload
+length, and an FNV-1a hash of exactly those bytes — and the reader checks the hash,
+because shared memory is the one place a wrong answer arrives silently. Row bytes in that
+header describe the ring's own tightly packed top-down block; OFX's bottom-up convention
+and its negative row bytes are applied at the plugin boundary inside the broker, where
+`image::Image` already knows how.
+
+**`getFramesNeeded` drives one shipment.** A retimer asking for `t ± 5` would otherwise
+make eleven round trips per frame. The render driver gains one hook, between
+`getFramesNeeded` and `isIdentity` — the only place in the ordered conversation where a
+frame at another time can be asked for — and the broker turns the declared ranges into one
+`NeedFrames`, which the host answers with one `Frames`. The test asserts the shipment
+count, not only the pixels. A prefetch larger than the ring is refused rather than growing
+the ring mid-render, and a declaration wider than 256 frames is truncated: a plugin that
+asks for more than the ring can hold has asked for something it cannot have either way.
+
+**Messages go out between actions, never from inside a suite call.** The message suite is
+called with the host state's lock held, and writing to a pipe with a lock held is what
+docs/14 §1 forbids. So a plugin's messages queue in the host state's own capped log inside
+the broker and are drained just before the answer they belong to. Both sides cap at
+sixty-four: an unbounded queue fed by somebody else's code is a memory leak with a plugin
+attached.
+
+**The tests live in `lumit-ofx-broker`, not `lumit-ofx`.** `CARGO_BIN_EXE_…` exists only
+for tests in the package that owns the binary, and Cargo does not build a dependency's
+binaries — so a test in `lumit-ofx` could not be sure the broker had been built. The test
+plugin gains four environment flags (crash on a frame, hang for ever, spam the message
+suite, and declare `t ± R` like a retimer), read in the broker's environment because a
+plugin in another process cannot be reached any other way. The crash is `abort`: no
+unwinding, no destructors, dead the way a bad pointer leaves a process — a host that only
+survives a tidy failure has not been tested.
+
+**Packaging.** The broker executable ships beside the runner on all three desktops: a
+CMake target in the Flutter Windows and Linux builds, a build-and-copy into
+`Contents/MacOS` in `make-dmg.sh` before the signing loop. The Inno Setup script needed
+nothing — it already copies the runner directory recursively.
+
+**Ceilings, named rather than implied.** A frame is copied into the ring and out of it
+again rather than rendered in place; the mapping is there for the zero-copy step, which is
+the slot being handed to the plugin as its image buffer. Cancellation does not cross the
+pipe: the host drops a frame it no longer wants and the watchdog covers the case that
+matters, so an epoch token is work for the package that needs it. The ring is sized from
+the comp's frame size at spawn, so a comp that changes size wants a new broker. And
+nothing in the engine spawns one yet — the edge still runs one way, no engine crate
+depends on `lumit-ofx`, and wiring the proxy node into the evaluation graph is the next
+package's job.
+
+The sentences a failed render carries are English text in the engine, as K-590's rejection
+reasons are, and for the same reason they gain no `app_en.arb` key yet: nothing in the
+frontend can reach them. They get their keys and their `engine_labels.dart` entries in the
+package that puts a badge in front of a person (K-303).
+
+`lumit-ofx` gains three dependencies for this — `interprocess`, `bincode` and `memmap2` —
+and the workspace gains one crate, `lumit-ofx-broker`, which depends on `lumit-ofx` and
+`lumit-eval` and on nothing else.

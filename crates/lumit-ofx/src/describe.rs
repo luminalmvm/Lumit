@@ -32,6 +32,7 @@
 //! re-enters the suites from inside every action, and a held lock would
 //! deadlock on the first property it read (docs/14 §7).
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::bundle::{Bundle, PluginRef};
@@ -110,7 +111,7 @@ pub struct EffectDescriptor {
 }
 
 /// The context this host drives a plugin in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub enum Context {
     /// One input, one output: the shape of nearly every effect.
     Filter,
@@ -150,7 +151,7 @@ const PREFERRED_CONTEXTS: [Context; 2] = [Context::Filter, Context::General];
 /// OFX puts everything in the bag, the bag is already the right shape, and a
 /// struct of thirty optional fields would only be the bag with the names
 /// spelled twice.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ParamDescription {
     /// The plugin's name for it, which becomes the schema id.
     pub name: String,
@@ -161,7 +162,7 @@ pub struct ParamDescription {
 }
 
 /// One clip, as an owned copy.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ClipDescription {
     /// `Source`, `Output`, `Mask`, or whatever the plugin called it.
     pub name: String,
@@ -171,7 +172,7 @@ pub struct ClipDescription {
 
 /// Everything one plugin said about itself, owned, with no handle in it: the
 /// describe conversation is over and the plugin may be unloaded.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluginDescriptor {
     /// The reverse-domain identifier, e.g. `net.sf.openfx.invertPlugin`.
     pub identifier: String,

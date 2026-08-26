@@ -35,6 +35,7 @@
 //! could not have freed itself, and a leak is a number a test can read.
 
 use half::f16;
+use serde::{Deserialize, Serialize};
 
 use crate::status::Status;
 use crate::suites::memory::Block;
@@ -45,7 +46,7 @@ pub const CHANNELS: usize = 4;
 
 /// A rectangle in pixels, OFX's way round: `y` increases **upwards**, `x2`/`y2`
 /// are exclusive.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub struct RectI {
     pub x1: i32,
     pub y1: i32,
@@ -86,7 +87,7 @@ impl RectI {
 
 /// Which way the rows run through the block — which is the same thing as the
 /// **sign of `kOfxImagePropRowBytes`**, and is why the sign exists.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub enum RowOrder {
     /// The first row in memory is the **bottom** row of the picture, which is
     /// OFX's own order, so row bytes is positive and the data pointer is the

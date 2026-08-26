@@ -19,9 +19,12 @@ use std::time::Duration;
 use serde::Deserialize;
 
 /// Watchdog defaults, from docs/12 §2.3: ten seconds for a render, two for a
-/// control action. (docs/impl/ofx-host.md §4 sketches thirty for render; the
-/// spec is the canonical number and the quirks table is where a plugin that
-/// genuinely needs longer says so.)
+/// control action. docs/impl/ofx-host.md §4 sketches thirty for a render; the
+/// spec's number is the one that ships and K-592 records why. Nothing else in
+/// the code knows either number — the broker reads them from here — so changing
+/// the shipped answer is this line and a superseding decision entry, and a
+/// single plugin that needs longer needs no code change at all: its
+/// `render_timeout_ms` in `quirks.json` is the exception mechanism.
 const DEFAULT_RENDER_TIMEOUT: Duration = Duration::from_secs(10);
 /// See [`DEFAULT_RENDER_TIMEOUT`].
 const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);

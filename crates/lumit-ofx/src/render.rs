@@ -210,6 +210,18 @@ pub fn render_is_cancelled() -> bool {
     token.cancelled()
 }
 
+/// What fetches the frames a plugin asked for beyond the one being rendered.
+///
+/// It is handed `getFramesNeeded`'s answer — per clip, the first and last frame
+/// wanted — and answers with the pictures, keyed by clip and
+/// [`crate::instance::time_key`]. In process there is nothing to fetch from and
+/// the answer is empty; in the broker it is one round trip for the lot, which
+/// is the whole reason `getFramesNeeded` is dispatched before the render rather
+/// than after (docs/impl/ofx-host.md §4).
+pub type Prefetch<'a> = &'a mut dyn FnMut(
+    &BTreeMap<String, (f64, f64)>,
+) -> Result<BTreeMap<(String, i64), Frame16>, RenderError>;
+
 /// Render one frame through one instance of one plugin.
 ///
 /// # Errors
@@ -220,6 +232,23 @@ pub fn render(
     instance: &Instance,
     request: &RenderRequest,
     token: &EpochToken,
+) -> Result<Rendered, RenderError> {
+    render_with_prefetch(plugin, instance, request, token, &mut |_| {
+        Ok(BTreeMap::new())
+    })
+}
+
+/// Render one frame, fetching the other frames the plugin declares it needs.
+///
+/// # Errors
+///
+/// [`RenderError`] — cancelled, the plugin's own failure, or the host's.
+pub fn render_with_prefetch(
+    plugin: &PluginRef,
+    instance: &Instance,
+    request: &RenderRequest,
+    token: &EpochToken,
+    prefetch: Prefetch<'_>,
 ) -> Result<Rendered, RenderError> {
     let handle = instance.handle();
     token.check()?;
@@ -253,6 +282,13 @@ pub fn render(
     let frames_needed = get_frames_needed(plugin, handle, request)?;
     token.check()?;
 
+    // The one place a frame at another time can be asked for: after the plugin
+    // has said which frames it wants and before it is asked for anything else.
+    // One call, however many frames — a retimer's per-frame fetches are the
+    // thing this exists to keep off the wire.
+    let temporal = prefetch(&frames_needed)?;
+    token.check()?;
+
     if let Some(clip) = is_identity(plugin, handle, request)? {
         // The honest short-circuit: the plugin says this frame is its input, so
         // the input is the frame. No begin, no render, no end, no buffer.
@@ -270,7 +306,7 @@ pub fn render(
     }
     token.check()?;
 
-    let frame = render_sequence(plugin, instance, request, token)?;
+    let frame = render_sequence(plugin, instance, request, &temporal, token)?;
     Ok(Rendered {
         frame,
         region_of_definition,
@@ -285,6 +321,7 @@ fn render_sequence(
     plugin: &PluginRef,
     instance: &Instance,
     request: &RenderRequest,
+    temporal: &BTreeMap<(String, i64), Frame16>,
     token: &EpochToken,
 ) -> Result<Frame16, RenderError> {
     let handle = instance.handle();
@@ -299,6 +336,10 @@ fn render_sequence(
         OUTPUT_CLIP.to_owned(),
         Image::black(request.bounds, request.order)?,
     );
+    let mut images_at = BTreeMap::new();
+    for (key, frame) in temporal {
+        images_at.insert(key.clone(), Image::from_frame(frame, request.order)?);
+    }
 
     // Chosen before the lock is taken, and taken with no host lock held: the
     // render behind it calls into a plugin, which re-enters the suites
@@ -306,7 +347,7 @@ fn render_sequence(
     let guard = instance.render_lock();
     let _held = guard.as_ref().map(crate::instance::RenderGuard::hold);
 
-    let previous = set_images(handle, images)?;
+    let previous = set_images(handle, images, images_at)?;
     drop(previous);
 
     let outcome = (|| -> Result<(), RenderError> {

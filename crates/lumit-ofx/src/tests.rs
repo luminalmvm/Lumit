@@ -1790,7 +1790,10 @@ fn releasing_an_image_twice_is_a_status() {
         "Source".to_owned(),
         Image::from_frame(&a_test_frame(4, 4), RowOrder::TopDown).expect("an image"),
     );
-    drop(crate::instance::set_images(instance.handle(), images).expect("set"));
+    drop(
+        crate::instance::set_images(instance.handle(), images, std::collections::BTreeMap::new())
+            .expect("set"),
+    );
 
     let suite = &crate::suites::image_effect::SUITE;
     let mut clip: *mut c_void = std::ptr::null_mut();

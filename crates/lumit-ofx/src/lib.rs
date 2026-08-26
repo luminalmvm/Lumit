@@ -52,6 +52,7 @@ pub mod handles;
 pub mod host;
 pub mod image;
 pub mod instance;
+pub mod ipc;
 pub mod props;
 pub mod quirks;
 pub mod render;
@@ -68,6 +69,7 @@ pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejecti
 pub use handles::{Handle, HandleKind, HandleRegistry};
 pub use image::{Frame16, Image, RectI, RowOrder};
 pub use instance::{Instance, ParamSnapshot, ThreadSafety};
+pub use ipc::broker::{Broker, BrokerConfig, BrokerError, BrokerRender};
 pub use props::{Element, PropValue, PropertySet};
 pub use quirks::{Quirks, QuirksTable};
 pub use render::{render, RenderError, RenderRequest, Rendered};

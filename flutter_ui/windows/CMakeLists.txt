@@ -106,3 +106,37 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# === The OFX plugin broker ===
+# Third-party OFX plugins never load into Lumit's own process (docs/12 §2.3):
+# they load into `lumit-ofx-broker`, one process per bundle, which the host
+# spawns from beside its own executable. cargokit builds the bridge's cdylib and
+# has no notion of a second binary, so the one command that builds this one lives
+# here — and the executable is installed next to the runner, which is where
+# `lumit_ofx::ipc::broker::broker_exe` looks for it and where the Inno Setup
+# script's recursive copy of the runner directory picks it up.
+set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+#
+# `--profile` rather than a conditional `--release`: the argument is always
+# present and always non-empty, which a generator expression that sometimes
+# expands to nothing is not. `dev` and `release` are Cargo's own names for the
+# two profiles, and they are what `target/debug` and `target/release` below are.
+add_custom_target(lumit_ofx_broker ALL
+  COMMAND cargo build -p lumit-ofx-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
+  WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
+  VERBATIM
+  COMMENT "Building the OFX plugin broker")
+add_dependencies(${BINARY_NAME} lumit_ofx_broker)
+
+# Two rules rather than a generator expression: `install` chooses by
+# configuration, and Cargo's own output directory is `debug` or `release` with
+# nothing in between (Flutter's Profile maps to Cargo's release, as it does for
+# the bridge).
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-ofx-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Debug
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-ofx-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)

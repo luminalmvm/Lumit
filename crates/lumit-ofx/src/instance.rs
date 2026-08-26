@@ -36,6 +36,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 
 use crate::bundle::PluginRef;
 use crate::describe::{
@@ -144,7 +145,7 @@ pub(crate) enum HeldGuard<'a> {
 /// for them in — an array of ints, doubles or one string — and inventing a
 /// second spelling of the same four cases would only be the first one with the
 /// names changed.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ParamSnapshot {
     values: BTreeMap<String, PropValue>,
 }
@@ -197,6 +198,15 @@ pub struct InstanceState {
     /// an image outside a render gets `kOfxStatFailed`, which is the truth:
     /// there is no frame to give it.
     pub images: BTreeMap<String, Image>,
+    /// The pictures for **other times** than the one being rendered, keyed by
+    /// clip and by [`time_key`].
+    ///
+    /// This is what a retimer asks for: `getFramesNeeded` says which frames it
+    /// wants and `clipGetImage(clip, t)` fetches them one at a time. They are
+    /// prefetched in one shipment by the broker (docs/impl/ofx-host.md §4);
+    /// in-process there is nothing to prefetch from, so the map is empty and
+    /// every time answers with the frame in hand.
+    pub images_at: BTreeMap<(String, i64), Image>,
     /// This instance's own render lock, for a `kOfxImageEffectRenderInstanceSafe`
     /// plugin.
     pub lock: Arc<Mutex<()>>,
@@ -287,6 +297,28 @@ impl Instance {
     /// The lock a render of this instance queues behind, if any.
     pub(crate) fn render_lock(&self) -> Option<RenderGuard> {
         render_lock(self.thread_safety, &self.lock)
+    }
+
+    /// Replace every control's value **without** telling the plugin.
+    ///
+    /// This is a scrub, an undo, or a keyframe moving under a playhead: the
+    /// values are the host's and the plugin reads them at its next
+    /// `paramGetValue` (docs/12 §2.2). `kOfxActionInstanceChanged` is for a
+    /// person turning a knob, which is [`Instance::changed`].
+    ///
+    /// # Errors
+    ///
+    /// [`Status::ErrBadHandle`] if the instance is gone.
+    pub fn set_params(&self, params: ParamSnapshot) -> Result<(), Status> {
+        let mut state = state();
+        let instance = state
+            .effects
+            .get_mut(self.handle)?
+            .instance
+            .as_mut()
+            .ok_or(Status::ErrBadHandle)?;
+        instance.params = params;
+        Ok(())
     }
 
     /// Replace one control's value and tell the plugin, wrapped as the spec
@@ -441,6 +473,7 @@ fn build(
         params,
         thread_safety,
         images: BTreeMap::new(),
+        images_at: BTreeMap::new(),
         lock: Arc::clone(&lock),
     });
     Ok(lock)
@@ -507,11 +540,31 @@ fn seed_clip_instance_properties(props: &mut PropertySet) {
     );
 }
 
+/// A time as a key that can be compared exactly.
+///
+/// Frame times are decimals, and two decimals that ought to be the same frame
+/// are not always the same `f64`. A thousandth of a frame is finer than any
+/// plugin asks for and coarser than the error, so it is the grain the prefetch
+/// map is keyed at. The rounding is one line and it is deterministic, which is
+/// the property that matters (docs/14 §10).
+#[must_use]
+pub fn time_key(time: f64) -> i64 {
+    let scaled = (time * 1000.0).round();
+    if scaled.is_nan() {
+        return 0;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    {
+        scaled.clamp(i64::MIN as f64, i64::MAX as f64) as i64
+    }
+}
+
 /// Put the pictures for one render in place, and answer with what was there
 /// before — which is nothing, unless a render is already in flight.
 pub(crate) fn set_images(
     handle: Handle,
     images: BTreeMap<String, Image>,
+    images_at: BTreeMap<(String, i64), Image>,
 ) -> Result<BTreeMap<String, Image>, Status> {
     let mut state = state();
     let instance = state
@@ -520,11 +573,12 @@ pub(crate) fn set_images(
         .instance
         .as_mut()
         .ok_or(Status::ErrBadHandle)?;
+    instance.images_at = images_at;
     Ok(std::mem::replace(&mut instance.images, images))
 }
 
 /// Take the pictures back off the instance at the end of a render. The caller
 /// owns them from here, which is how the output frame gets read out.
 pub(crate) fn take_images(handle: Handle) -> Result<BTreeMap<String, Image>, Status> {
-    set_images(handle, BTreeMap::new())
+    set_images(handle, BTreeMap::new(), BTreeMap::new())
 }

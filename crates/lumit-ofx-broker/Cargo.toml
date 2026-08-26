@@ -1,0 +1,38 @@
+[package]
+name = "lumit-ofx-broker"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[[bin]]
+# The name the host looks for beside its own executable. It is spelled here
+# rather than left to Cargo's default so that renaming the crate cannot quietly
+# rename the file the host spawns.
+name = "lumit-ofx-broker"
+path = "src/main.rs"
+
+[dependencies]
+# Everything the broker does — open a bundle, describe it, drive a render — is
+# the host crate's own code. The broker is that code with a pipe in front of it.
+lumit-ofx = { path = "../lumit-ofx" }
+lumit-eval = { path = "../lumit-eval" }
+
+[dev-dependencies]
+# The plugin the broker is tested against, and the bundle staging the tests do.
+# The tests live here rather than in `lumit-ofx` for one flat Cargo reason:
+# `CARGO_BIN_EXE_lumit-ofx-broker` exists only for tests in the package that
+# owns the binary, and Cargo does not build a dependency's binaries.
+lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
+tempfile = "3"
+
+# A broker is the host, in another process: same C ABI, same override.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

@@ -95,6 +95,30 @@ static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
 /// rather than hang the test suite.
 const RENDEZVOUS_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Render this frame and then die, without warning and without unwinding —
+/// which is what a plugin with a bad pointer does. Set in the **broker's**
+/// environment, because that is the only way to reach a plugin that is not in
+/// the test's own process any more.
+pub const CRASH_ON_FRAME_ENV: &str = "LUMIT_TESTPLUG_CRASH_ON_FRAME";
+
+/// Never come back from a render. The host's deadline is what ends it.
+pub const HANG_ENV: &str = "LUMIT_TESTPLUG_HANG";
+
+/// Say this many things through the message suite during a render. A plugin in
+/// a loop is a plugin the host must not let fill its memory.
+pub const MESSAGE_SPAM_ENV: &str = "LUMIT_TESTPLUG_MESSAGE_SPAM";
+
+/// Declare, and fetch, the source frames from `t − R` to `t + R`: a retimer,
+/// in the smallest form that still is one. The output is the mean of all
+/// `2R + 1` of them, so a frame that never arrived shows up in the pixels.
+pub const TEMPORAL_ENV: &str = "LUMIT_TESTPLUG_TEMPORAL";
+
+/// One of the environment flags, as a number. Absent, empty and unparseable all
+/// read as "off", because a flag nobody set must never change behaviour.
+fn flag(name: &str) -> Option<f64> {
+    std::env::var(name).ok()?.trim().parse::<f64>().ok()
+}
+
 /// What each of the eight plugins is for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
@@ -297,6 +321,7 @@ unsafe fn dispatch(
         actions::CREATE_INSTANCE | actions::DESTROY_INSTANCE => Status::Ok.code(),
         actions::BEGIN_SEQUENCE_RENDER | actions::END_SEQUENCE_RENDER => Status::Ok.code(),
         actions::IS_IDENTITY => is_identity(variant, out_args),
+        actions::GET_FRAMES_NEEDED => frames_needed(in_args, out_args),
         actions::RENDER => render(variant, handle.cast_mut(), in_args),
         // An action a plugin does not implement is not an error.
         _ => Status::ReplyDefault.code(),
@@ -776,6 +801,39 @@ fn is_identity(variant: Variant, out_args: *mut c_void) -> OfxStatus {
     Status::Ok.code()
 }
 
+/// `kOfxImageEffectActionGetFramesNeeded`. With [`TEMPORAL_ENV`] unset this is
+/// an action the plugin does not implement, which is not an error; with it set
+/// the plugin declares `t ± R` on its Source, which is what a retimer does and
+/// what the host's prefetch is driven by.
+fn frames_needed(in_args: *mut c_void, out_args: *mut c_void) -> OfxStatus {
+    let Some(radius) = flag(TEMPORAL_ENV).filter(|radius| *radius >= 1.0) else {
+        return Status::ReplyDefault.code();
+    };
+    let Some(props_suite) = properties() else {
+        return Status::ErrMissingHostFeature.code();
+    };
+    let mut time = 0.0;
+    // SAFETY: the host's own function, given the `inArgs` it passed us.
+    unsafe {
+        (props_suite.prop_get_double)(in_args, c"OfxPropTime".as_ptr(), 0, &raw mut time);
+    }
+    set_double(
+        props_suite,
+        out_args,
+        c"OfxImageClipPropFrameRange_Source",
+        0,
+        time - radius,
+    );
+    set_double(
+        props_suite,
+        out_args,
+        c"OfxImageClipPropFrameRange_Source",
+        1,
+        time + radius,
+    );
+    Status::Ok.code()
+}
+
 /// One image, as the four numbers that describe it.
 struct ImageView {
     /// The pixel at the bottom-left, which for a top-down image is inside the
@@ -957,6 +1015,44 @@ fn render(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> OfxSta
     status
 }
 
+/// Crash, hang, or shout — whichever a test asked this process to do.
+///
+/// The crash is a real one: `abort` does not unwind, does not run destructors,
+/// and leaves the process dead the way a bad pointer does. That is the point —
+/// a host that only survives a tidy failure has not been tested.
+fn misbehave(props_suite: &OfxPropertySuiteV1, time: f64) {
+    let _ = props_suite;
+    if let Some(frame) = flag(CRASH_ON_FRAME_ENV) {
+        if (time - frame).abs() < 0.5 {
+            std::process::abort();
+        }
+    }
+    if flag(HANG_ENV).is_some_and(|value| value != 0.0) {
+        loop {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    if let Some(count) = flag(MESSAGE_SPAM_ENV) {
+        // SAFETY: `OfxMessageSuiteV1` is what the host declares for this name.
+        let Some(suite) = (unsafe { suite::<OfxMessageSuiteV1>(c"OfxMessageSuite") }) else {
+            return;
+        };
+        let mut sent = 0.0;
+        while sent < count {
+            // SAFETY: the host's own function, given strings that outlive it.
+            unsafe {
+                (suite.message)(
+                    std::ptr::null_mut(),
+                    c"OfxMessageLog".as_ptr(),
+                    c"".as_ptr(),
+                    c"lumit-ofx-testplug says this rather a lot".as_ptr(),
+                );
+            }
+            sent += 1.0;
+        }
+    }
+}
+
 /// Fill and scale: every pixel of the output is the matching pixel of the
 /// Source multiplied by the `gain` control, and where there is no Source at all
 /// the output is filled with a flat colour instead.
@@ -980,6 +1076,10 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
         (props_suite.prop_get_double)(in_args, c"OfxPropTime".as_ptr(), 0, &raw mut time);
     }
 
+    // The three ways a plugin goes wrong, on purpose. None of them can happen
+    // unless a test asked for it in this process's environment.
+    misbehave(props_suite, time);
+
     let output = clip_handle(effect_suite, effect, c"Output");
     let Some(destination) = fetch_image(effect_suite, props_suite, output, time) else {
         return Status::Failed.code();
@@ -990,6 +1090,32 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
         clip_handle(effect_suite, effect, c"Source"),
         time,
     );
+
+    // The retimer's fetch: every other frame it declared in `getFramesNeeded`,
+    // asked for one at a time exactly as a real one asks. The host is expected
+    // to have them all in hand already.
+    let mut others = Vec::new();
+    let radius = flag(TEMPORAL_ENV).filter(|radius| *radius >= 1.0);
+    let divisor = match radius {
+        Some(radius) => {
+            let steps = radius as i32;
+            for step in -steps..=steps {
+                if step == 0 {
+                    continue;
+                }
+                if let Some(view) = fetch_image(
+                    effect_suite,
+                    props_suite,
+                    clip_handle(effect_suite, effect, c"Source"),
+                    time + f64::from(step),
+                ) {
+                    others.push(view);
+                }
+            }
+            (steps * 2 + 1) as f32
+        }
+        None => 1.0,
+    };
 
     // A passthrough scales by one, whatever anybody's control says.
     let gain = if variant == Variant::Full || variant == Variant::Slim {
@@ -1023,7 +1149,21 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
                         let from = unsafe { source.row(y) };
                         // SAFETY: `index` is inside one row of four-channel
                         // pixels, which is what both rows hold.
-                        unsafe { *from.add(index) * (gain as f32) }
+                        let mut sum = unsafe { *from.add(index) };
+                        for other in &others {
+                            if other.width() != width || other.height() != height {
+                                continue;
+                            }
+                            // SAFETY: as above, for a frame at another time.
+                            let row = unsafe { other.row(y) };
+                            // SAFETY: as above.
+                            sum += unsafe { *row.add(index) };
+                        }
+                        // Divided by how many frames were *asked* for, not by
+                        // how many arrived: a frame the host failed to prefetch
+                        // has to show in the picture, or the test that counts
+                        // them is testing nothing.
+                        (sum / divisor) * (gain as f32)
                     }
                     _ => *flat,
                 };
@@ -1039,6 +1179,10 @@ fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> O
         // SAFETY: the host's own function, given a handle it minted and this
         // plugin has not released.
         unsafe { (effect_suite.clip_release_image)(source.handle) };
+    }
+    for other in others {
+        // SAFETY: as above.
+        unsafe { (effect_suite.clip_release_image)(other.handle) };
     }
     // SAFETY: as above.
     unsafe { (effect_suite.clip_release_image)(destination.handle) };

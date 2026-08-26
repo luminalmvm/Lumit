@@ -31,10 +31,19 @@ rayon = "1"
 # portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
 libloading = "0.8"
 # The quirks table is data, not code (docs/12 §2.5), so it is a JSON file the
-# crate embeds and parses.
+# crate embeds and parses. The same derives put the control protocol's messages
+# on the wire (`ipc::proto`).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# The control plane: length-prefixed `bincode` over a duplex local socket —
+# a named pipe on Windows, a Unix socket elsewhere (docs/impl/ofx-host.md §4).
+bincode = "1"
+interprocess = "2"
+# The frame plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
+# `MapViewOfFile` on Windows and `mmap` on Unix — the two calls the note names,
+# spelled once instead of twice.
+memmap2 = "0.9"
 
 [dev-dependencies]
 # The minimal OFX plugin the host is tested against. It is declared here so a

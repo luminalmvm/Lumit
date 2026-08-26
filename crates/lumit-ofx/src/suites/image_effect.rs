@@ -233,9 +233,16 @@ unsafe extern "C" fn clip_get_image(
                 .instance
                 .as_ref()
                 .ok_or(Status::ErrBadHandle)?;
-            // No render in flight means no picture. `kOfxStatFailed` is the
-            // spec's "there is no image", which is different from an error.
-            let image = instance.images.get(&name).ok_or(Status::Failed)?;
+            // A frame at another time first — a retimer asking for one of the
+            // frames it declared in `getFramesNeeded`, prefetched into
+            // `images_at` — and the frame in hand otherwise. No render in
+            // flight means no picture at all: `kOfxStatFailed` is the spec's
+            // "there is no image", which is different from an error.
+            let image = instance
+                .images_at
+                .get(&(name.clone(), crate::instance::time_key(time)))
+                .or_else(|| instance.images.get(&name))
+                .ok_or(Status::Failed)?;
             image_property_set(image, time)
         };
         let handle = state().props.insert(props)?;

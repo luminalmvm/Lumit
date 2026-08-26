@@ -17,10 +17,17 @@
 use std::collections::BTreeMap;
 use std::ffi::CString;
 
+use serde::{Deserialize, Serialize};
+
 use crate::status::Status;
 
 /// One property's value. Always an array; a scalar is an array of one.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// It serialises, because a property set is most of what crosses to the broker
+/// process ([`crate::ipc::proto`]). The pointer case crosses as the number it
+/// already is: an address means nothing in the other process, and a descriptor
+/// has none in it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum PropValue {
     /// `int`.
     Int(Vec<i32>),
@@ -98,7 +105,7 @@ impl PropValue {
 }
 
 /// One entry: what it is now, and what `propReset` should put back.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct Prop {
     value: PropValue,
     default: Option<PropValue>,
@@ -109,7 +116,7 @@ struct Prop {
 /// Keys are ordered rather than hashed, so a dump of a set is the same on
 /// every run and on every machine — which is what makes the host table
 /// golden-testable (docs/14 §10.7).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PropertySet {
     props: BTreeMap<String, Prop>,
 }

@@ -88,9 +88,31 @@ the broker resolves what it can locally (memory suite, threading) and forwards t
 per-frame fetches will drown in round-trips: `GetFramesNeeded` tells us exactly what to
 ship ahead).
 
-Watchdog: per-action deadline (render: 30 s default), three strikes → plugin disabled for
-the session with a calm badge. Broker crash = restart + replay describe/instance from our
-cached descriptor state; the render that died returns identity + badge.
+Watchdog: per-action deadline, three strikes → plugin disabled for the session with a calm
+badge. Broker crash = restart + replay describe/instance from our cached descriptor state;
+the render that died returns identity + badge. **The shipped deadline is
+[12-PLUGINS.md](../12-PLUGINS.md) §2.3's — 10 s for a render, 2 s for a control action —
+not the 30 s this note first sketched** (K-592); both live as named constants in
+`quirks.rs` and the quirks table's `render_timeout_ms` is the per-plugin exception.
+
+What the built transport pins, beyond the sketch above (K-592):
+
+- **The pipe is its own, not the child's stdout.** A third-party plugin's `printf` would
+  otherwise land in the middle of a length-prefixed message and desynchronise the protocol
+  for good; the child's standard output goes nowhere.
+- **The broker's first word is the protocol version.** A mismatch refuses the broker with
+  a sentence rather than deserialising bytes of another shape.
+- **The ring is sized by a byte budget, once per bundle**: 512 MiB, clamped to between
+  three slots (this note's triple buffering, as the floor) and sixty-four. Slot header:
+  bounds, row bytes, premultiplication, payload length, FNV-1a hash — checked on read,
+  because a stale slot is the one failure shared memory has and it is silent. At 1080p
+  that is fifteen slots; at 4K it is the floor of three, so a `t ± 5` prefetch at that
+  size does not fit and is refused — a bigger budget, not a different design.
+- Frames cross the ring as fp32 RGBA, tightly packed top-down. The header's row bytes
+  describe *the ring*; OFX's negative row bytes are applied at the plugin boundary inside
+  the broker.
+- The prefetch hook sits between `getFramesNeeded` and `isIdentity` — the only point in
+  §3's order where a frame at another time may be asked for.
 
 ## 5. Test plan
 
@@ -100,8 +122,11 @@ cached descriptor state; the render that died returns identity + badge.
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI).
 3. Temporal: a test plugin requesting frames t±5 — prefetch batching delivers all frames
-   in one shipment.
+   in one shipment. **Landed** as `crates/lumit-ofx-broker/tests/broker.rs`, asserting the
+   shipment count and not only the pixels.
 4. Crash isolation: plugin that segfaults on frame 100 → broker restarts, session
    continues, layer shows badge (the Gate-4 demo, [16-ROADMAP.md](../16-ROADMAP.md)).
+   **Landed** in the same file. The broker tests live in the broker's own crate because
+   `CARGO_BIN_EXE_…` exists only for tests in the package that owns the binary.
 5. Real targets: Twixtor and RSMB demo builds render inside Lumit matching their Vegas
    output on the same input within codec tolerance.

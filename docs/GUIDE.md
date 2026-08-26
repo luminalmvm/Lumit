@@ -11409,6 +11409,70 @@ right shipping state: no plugin has yet earned an entry. The point of having it 
 the first workaround goes into a data file rather than being sprinkled through the code as
 a special case nobody can find later.
 
+### Why the plugin lives in another program, and what happens when it dies
+
+A plugin is somebody else's compiled code, and compiled code that goes wrong does not
+politely return an error — it corrupts memory, or stops answering, or vanishes, and it
+takes down whatever program it was running inside. So Lumit does not run it inside itself.
+It starts a second, tiny program called **the broker**, one per plugin bundle, hands it the
+bundle and a private channel, and never loads the plugin at all. When the plugin dies, the
+broker dies; Lumit notices, loses one frame, and starts another broker. The layer shows a
+small badge and the edit carries on. That is the entire idea, and everything below is in
+service of it.
+
+**Two channels, because sentences and pictures want different things.** The first is a
+**pipe**: a private connection between the two programs down which short messages travel —
+describe yourself, make an instance, here are the values, render this frame. Each message
+goes out with its length in front of it, so the reader always knows where one ends and the
+next begins. It is a pipe of its own rather than the program's ordinary output, for a
+practical reason: third-party plugins print things, and one stray line of printed text
+landing in the middle of a message would scramble the conversation permanently.
+
+The second is **shared memory**: one block that both programs can see, which is the same
+memory in both of them rather than a copy. A 4K frame is a hundred megabytes; sending that
+down a pipe twice per render would cost more than the effect. Instead the frame is written
+into the block and the pipe carries only *which part of the block it is in*. The block is
+divided into slots and used in rotation, so nobody is writing the slot somebody else is
+reading. Its size is decided once, when the broker starts, from the composition's frame
+size and a fixed memory budget — a small composition gets many slots, a huge one gets
+fewer, and the number never changes underneath a render.
+
+Every slot begins with a short header saying what the pixels are: how big, how far apart
+the rows sit, whether the alpha is premultiplied, and a **hash** of the bytes. The hash is
+there because shared memory has exactly one failure and it is silent: read the wrong slot,
+or a slot nobody has written yet, and you get plausible-looking pixels with no error at
+all. Checking the hash turns that into a fault somebody notices.
+
+**A deadline on every call, and three strikes.** Every message the host sends carries a
+time limit — ten seconds for a render, two for everything else — and the host waits on a
+timer, never on the plugin. Miss the deadline, or die, or answer "no", and that is a
+strike. The first two cost that frame and buy a fresh broker; the third gives up on the
+plugin for the rest of the session, with a quiet notice rather than an alarm. Any call that
+works puts the count back to zero, so a plugin that occasionally has a bad frame is not
+slowly condemned for it.
+
+**Starting again is a replay, not a rescue.** Nothing valuable lives in the broker. Lumit
+owns every parameter value — that is a rule, not a convenience — so a new broker is simply
+told to describe the bundle again and to build each instance again with the numbers Lumit
+already holds. The plugin wakes up in a second process with no idea it has ever died. This
+is the reason "the host owns the parameters" is written down as a non-negotiable and not
+merely as good manners.
+
+**Fetching eleven frames without eleven conversations.** Some plugins — retimers
+especially — need other frames than the one being rendered: five before and five after, say.
+Asked for one at a time, that is eleven round trips between two programs for every single
+output frame, and the effect would crawl. So the plugin is asked up front which frames it
+wants (`getFramesNeeded`, one of the questions in the ordered conversation above), and the
+whole list is fetched in **one** shipment before the render begins. The test for this
+counts the shipments, not just the pixels: getting the right picture by eleven slow trips
+would be the wrong answer.
+
+**Messages wait their turn.** When a plugin asks to tell the user something, the broker
+does not immediately write it down the pipe — that call arrives with an internal lock held,
+and writing to a pipe while holding a lock is how programs deadlock. They queue in a short
+list instead, capped, and go out between calls. Both sides cap: a plugin in a loop can
+shout as fast as it likes and neither program grows because of it.
+
 ### What exists so far
 
 The ground floor: finding and opening a bundle, handing the plugin the host in the right
@@ -11426,13 +11490,19 @@ when the frame was scheduled, with every curve and expression already worked out
 plugin has no store of its own to be asked for, and a render is reproducible from the
 document alone.
 
-What is not there yet is the part that makes it safe to run somebody else's code:
-everything still happens **inside Lumit's own process**, so a plugin that crashes still
-takes the application with it. That is what the broker package is for, and until it lands
-nothing outside the plugin host depends on any of this. Beside it, three smaller gaps that
-are written down rather than papered over: writing a value back and keyframing from a
-plugin, reading a control at a time other than the snapshot's, and overlays, which
-gracefully turn into no overlay.
+And on top of *that*, the process boundary described above: `lumit-ofx-broker`, the second
+program a plugin actually lives in, with the pipe, the shared block of memory, the
+deadlines and the three strikes. A plugin that crashes on frame 100 loses frame 100, and a
+test proves it — the session carries on into a broker that did not exist a moment earlier,
+with the same instance and the same values, and the next frame renders for real.
+
+What is not there yet is the wiring at the other end: nothing in the engine starts a broker,
+because no engine crate depends on the plugin host at all. Effects & Presets cannot list a
+discovered plugin and a composition cannot contain one; that is the next package, and the
+edge is deliberately still one-way until it lands. Beside it, three smaller gaps that are
+written down rather than papered over: writing a value back and keyframing from a plugin,
+overlays (which gracefully turn into no overlay), and the copy in and out of the shared
+block, which the block exists to make unnecessary one day.
 
 There is also a small set of plugins of Lumit's own, `lumit-ofx-testplug`, which exist only
 so the host has something honest to be tested against — a commercial plugin cannot live in
@@ -11443,4 +11513,7 @@ a shape Lumit cannot drive, one that refuses to describe itself, one whose contr
 collide, one that hands its picture back untouched, one that says it is a no-op, and one
 that says two of its renders may never overlap. They also keep a count of what they were
 told and when — including the exact list of actions they were sent — so a test can prove
-the host said the right things in the right order.
+the host said the right things in the right order. Four switches make them misbehave on
+purpose — crash on a named frame, never come back, shout endlessly, or ask for eleven
+frames like a retimer — because the only honest way to test what happens when a plugin dies
+is to have one die.
