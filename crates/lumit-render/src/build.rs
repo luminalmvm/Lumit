@@ -279,6 +279,13 @@ pub fn points_projection(
 /// function the Points sample driver asks, so a consumer stamps the particles a
 /// driver would have counted and the producer did draw.
 ///
+/// **The back-samples** (K-601): a consumer that declares Trail's two rows —
+/// `back_samples` and `back_step` — is asking for the same producer at
+/// `t − k·step` as well, newest first. Named by their parameter ids rather than
+/// by an effect's name, the way a producer's birth scan is found by its
+/// `emit_rate` row (K-598), so a second consumer that wants a history declares
+/// the same two ids and needs no edit here.
+///
 /// `(vec![], None)` — the documented calm — for every producer, for a consumer
 /// with nothing wired, and for a producer that cannot answer at this point in
 /// the frame (Scatter, K-599). The effect renders as a passthrough and the box
@@ -323,17 +330,50 @@ fn points_input_for(
         .iter()
         .position(|e| e.id == *effect)
         .and_then(|i| u32::try_from(i).ok());
-    let Some(stream) = lumit_core::fx::effect_stream(
-        &layer.graph,
-        *effect,
-        t,
-        context.clone(),
-        Some(audio),
-        projection,
-    ) else {
+    let at = |when: f64| {
+        lumit_core::fx::effect_stream(
+            &layer.graph,
+            *effect,
+            when,
+            context.clone(),
+            Some(audio),
+            projection,
+        )
+    };
+    let Some(stream) = at(t) else {
         return none;
     };
-    (vec![stream], from)
+    let mut out = vec![stream];
+
+    // The history, if this consumer asks for one. `Samples` counts the present
+    // moment as the first of them, so the walk starts at 1.
+    use lumit_core::fx::effects::trail::Trail;
+    let declares = |id: &str| def.schema().params.iter().any(|p| p.id == id);
+    if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
+        let read = |id: &str, fallback: f64| {
+            consumer
+                .float_at_with_context(id, t, context.clone())
+                .unwrap_or(fallback)
+        };
+        // Clamped to the row's own hard ceiling here as well as at the socket:
+        // every sample is another whole evaluation of the producer, so this is
+        // the one number that decides what this op costs.
+        let samples = read(Trail::SAMPLES_PARAM, 1.0).clamp(1.0, 256.0) as usize;
+        let step = read(Trail::STEP_PARAM, 0.0).max(0.0);
+        // ponytail: one host evaluation per sample. A GPU carriage
+        // (points-stream.md §3.3) would make this one dispatch per sample
+        // instead; the trigger is a profile showing a real comp spending it.
+        for k in 1..samples {
+            // Before the layer's own clock started there is nothing to ask for,
+            // and a tail that stops there is the honest picture.
+            let when = t - k as f64 * step;
+            match (when >= 0.0).then(|| at(when)).flatten() {
+                Some(past) => out.push(past),
+                None => break,
+            }
+        }
+    }
+    (out, from)
 }
 
 /// A 3×3 inverse, or `None` when the matrix is singular — a layer scaled to

@@ -100,6 +100,7 @@ pub mod texturize;
 pub mod threshold;
 pub mod tile;
 pub mod tint;
+pub mod trail;
 pub mod transform;
 pub mod tritone;
 pub mod turbulent_displace;

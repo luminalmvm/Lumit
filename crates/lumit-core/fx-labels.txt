@@ -157,6 +157,7 @@ Distortion
 Distribution
 Divide
 Dominant motion
+Dots
 Draft
 Drag
 Drivers
@@ -379,6 +380,7 @@ Max clones
 Max ghosts
 Max particles
 Max points
+Max trails
 Maximum
 Maximum signal
 Median
@@ -535,6 +537,7 @@ Screen softness
 Scribble
 Seed
 Segment length
+Segments
 Sepia
 Set matte
 Shadow amount
@@ -635,6 +638,7 @@ Top left tangent y
 Top right tangent x
 Top right tangent y
 Top to bottom
+Trail
 Transform
 Transition
 Transition width

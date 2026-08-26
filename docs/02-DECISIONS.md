@@ -18164,3 +18164,52 @@ in the consumer's own bag moves. So the carriage folds the producer's **index in
 and the sample count, and hashes not one particle. An index rather than an id, because a key
 names content and never which row it came from (docs/06 §5.2) — which is what keeps a
 duplicated layer hitting the per-effect cache (K-421).
+
+## K-601 — Trail draws a history it never keeps, by asking the producer again
+
+**DECIDED 2026-08-26**, closing [docs/impl/points-stream.md](impl/points-stream.md) §2.3's
+last named consumer. Trail draws where every point of a wired stream has been: dots or one
+connected ribbon, fading with age. It is the effect most obviously tempted to keep a frame
+of history, and the one where not keeping it matters most — so the temptation is refused
+here, in writing.
+
+**No stored history, ever, and the alternative is not close.** A trail that remembered the
+last N frames would make frame 500 depend on frame 499: unscrubbable, un-renderable out of
+order, and unable to promise two renders agree (K-474, K-031). So Trail does what Streak
+does and does it further — it evaluates the producer's stream **again**, at `t − k·Spacing`,
+once per sample, and reads each point's older self out of the answer. The head test is a
+render of one frame from a cold start with nothing before it ever rendered, and there is a
+tail on it.
+
+**Points are matched by `id`, in a merge.** Both streams are ordered by birth index
+ascending — a fact of the evaluation, not of scheduling (particulate.md §5) — so
+`PointsStream::seek_id` walks forwards and never back, with a cursor the caller carries from
+one point to the next. No map, no sort, no allocation per point. A point with no older self
+has a **shorter tail** rather than an extrapolated one: it was not born yet, which is the
+honest picture and is what the blocks being unequal lengths means.
+
+**The samples are the budget, and they are declared where the builder can read them.** Each
+sample is another whole evaluation of the producer on the host, so Samples is the dial that
+decides what this op costs; the default is 8 and the cost class is `heavy`, which is the
+honest label. The builder needs the number **before any bag exists**, so it reads the two
+stored rows `back_samples` and `back_step` by their parameter ids — the same shape a
+producer's birth scan is found by its `emit_rate` row (K-598), so a later consumer that
+wants a history declares the same two ids and needs no edit to `build.rs`. A `ponytail:`
+marker carries the trigger: points-stream.md §3.3's GPU carriage would make each sample one
+dispatch instead of one host pass.
+
+**Painter's order is oldest sample first, `id` inside it.** Both halves are needed and
+neither is free: the near end of a tail must land on top of the far end, and one point's
+tail must land on the next point's in a fixed order, or two machines would draw two
+pictures where the tails cross.
+
+**Dots and Segments are one kernel.** A capsule whose tail is its head is a disc — the
+identity Particulate's three render modes already rest on — so Segments fills the shared
+draw's per-point tail with the previous sample's position and Dots leaves it at the head.
+The shared points draw grew a `tail` per point and a `mode` beside it for this, which is
+also what let Clone to points reach Sprite mode: one rasteriser, three effects, no fork.
+
+**Fade is over the tail, not over the frame.** A dab takes its own point's colour at its own
+sample — so a producer's Opacity over life still reads correctly along the tail — dimmed by
+how far back that sample is. At Fade nought a dab is exactly the point's own colour, which
+is what makes the row about the tail and nothing else.

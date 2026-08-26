@@ -14410,6 +14410,316 @@ fn clone_to_points_declares_a_points_input_and_no_output() {
     assert!(sig.outputs().is_empty());
 }
 
+// -------------------------------------------------- Trail (K-601)
+
+/// A Trail instance with its declared defaults, and `edits` applied.
+fn trail(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("trail").expect("Trail is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("trail has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The tail one instance draws over `samples`, through the one expression both
+/// render paths read.
+fn trail_tail(e: &EffectInstance, samples: &[PointsStream]) -> (PointsStream, Vec<[f32; 3]>) {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::trail::Trail::read(Params::new(&bag)).tail(samples)
+}
+
+/// A moving emitter's stream at `t`, and the same producer at `t − k·step` —
+/// the carriage a wired Trail is handed, newest first.
+fn moving_samples(n: usize, step: f64) -> Vec<PointsStream> {
+    let e = particulate(&[
+        ("emit_rate", fixed(30.0)),
+        ("life", fixed(4.0)),
+        ("life_jitter", fixed(0.0)),
+        ("initial_speed", fixed(200.0)),
+        ("speed_jitter", fixed(0.0)),
+        ("spread", fixed(0.0)),
+        ("turbulence_amount", fixed(0.0)),
+        ("drag", fixed(0.0)),
+        ("gravity", fixed(0.0)),
+    ]);
+    (0..n)
+        .map(|k| particulate_stream(&e, 2.0 - k as f64 * step))
+        .collect()
+}
+
+/// **The tail is the closed form looked backwards** (K-601): a point's older
+/// self comes out of the producer evaluated at an earlier moment, matched by
+/// `id` — so a still point has a tail of no length and a moving one has a tail
+/// that runs back the way it came.
+#[test]
+fn a_trail_reads_each_points_older_self_out_of_an_earlier_evaluation() {
+    let samples = moving_samples(4, 0.1);
+    assert!(!samples[0].is_empty(), "the fixture emitted nothing");
+    let (drawn, _) = trail_tail(&trail(&[("back_samples", fixed(4.0))]), &samples);
+
+    // Every dab is a point that was alive in the sample it came from, and the
+    // dabs of one point really are in different places.
+    let id = samples[0].id[samples[0].len() / 2];
+    let places: Vec<[f32; 3]> = drawn
+        .id
+        .iter()
+        .zip(drawn.position.iter())
+        .filter(|(got, _)| **got == id)
+        .map(|(_, at)| *at)
+        .collect();
+    assert_eq!(
+        places.len(),
+        4,
+        "one dab per sample for a point alive in all"
+    );
+    for pair in places.windows(2) {
+        assert_ne!(pair[0], pair[1], "the point did not move between samples");
+    }
+
+    // And they are the producer's own answers, not an interpolation: the dab
+    // for sample 2 is exactly where the stream at t − 0.2 put that point.
+    let mut cursor = 0;
+    let j = PointsStream::seek_id(&samples[2], id, &mut cursor).expect("alive two samples back");
+    assert!(
+        places.contains(&samples[2].position[j]),
+        "a dab was somewhere the producer never put the point"
+    );
+}
+
+/// Where every dab a tail should carry comes from — `(sample index, index into
+/// that sample)`, **oldest sample first and ascending `id` inside it**, which is
+/// the whole of the painter's order.
+///
+/// Written out rather than assumed, because the blocks are **not** the same
+/// length: a point born between two samples is not in the earlier one, so a
+/// test that chunked the answer by the head count would be asserting something
+/// the design never promised.
+fn expected_dabs(
+    samples: &[PointsStream],
+    heads: &PointsStream,
+    wanted: usize,
+) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for k in (0..wanted).rev() {
+        let mut cursor = 0;
+        for id in &heads.id {
+            if let Some(j) = PointsStream::seek_id(&samples[k], *id, &mut cursor) {
+                out.push((k, j));
+            }
+        }
+    }
+    out
+}
+
+/// **Oldest sample first, `id` inside it** — the painter's order that makes the
+/// picture the same on every machine, and puts the near end of a tail on top of
+/// the far end.
+#[test]
+fn a_trail_lays_its_dabs_oldest_sample_first() {
+    let samples = moving_samples(3, 0.1);
+    let (drawn, _) = trail_tail(&trail(&[("back_samples", fixed(3.0))]), &samples);
+    let want = expected_dabs(&samples, &samples[0], 3);
+    assert_eq!(drawn.len(), want.len(), "the wrong number of dabs");
+    for (i, (k, j)) in want.iter().enumerate() {
+        assert_eq!(drawn.id[i], samples[*k].id[*j], "dab {i} is out of order");
+        assert_eq!(
+            drawn.position[i], samples[*k].position[*j],
+            "dab {i} is somewhere the producer never put the point"
+        );
+    }
+    // And the order is not the trivial one: the sample the dab came from only
+    // ever runs from the far end towards the near one.
+    assert!(
+        want.windows(2).all(|w| w[0].0 >= w[1].0),
+        "the samples are not laid down oldest first"
+    );
+}
+
+/// **Fade is over the tail, not over the frame**: a dab takes its own point's
+/// colour at its own sample, dimmed by how far back that sample is. At Fade
+/// nought a dab is exactly the point's own colour — which is what makes this an
+/// assertion about the dimming rather than about the producer's own fade.
+#[test]
+fn a_trails_fade_dims_the_far_end_and_leaves_the_near_one() {
+    let samples = moving_samples(3, 0.1);
+    let want = expected_dabs(&samples, &samples[0], 3);
+    let drawn_at = |fade: f64| {
+        trail_tail(
+            &trail(&[("back_samples", fixed(3.0)), ("fade", fixed(fade))]),
+            &samples,
+        )
+        .0
+    };
+
+    // Fade at nought: every dab is its point's own colour, untouched.
+    let flat = drawn_at(0.0);
+    for (i, (k, j)) in want.iter().enumerate() {
+        assert_eq!(
+            flat.colour[i], samples[*k].colour[*j],
+            "Fade at nought is not the flat tail"
+        );
+    }
+
+    // Fade at a hundred: the far sample is dimmed to nothing, the near one is
+    // not dimmed at all, and both are that same colour times a factor.
+    let faded = drawn_at(100.0);
+    for (i, (k, j)) in want.iter().enumerate() {
+        let dim = 1.0 - *k as f32 / 2.0;
+        for c in 0..4 {
+            let expect = samples[*k].colour[*j][c] * dim;
+            assert!(
+                (faded.colour[i][c] - expect).abs() < 1e-6,
+                "dab {i} of sample {k} was not dimmed by {dim}"
+            );
+        }
+    }
+    assert!(
+        faded.colour.iter().any(|c| c[3] > 0.0),
+        "the whole tail faded away"
+    );
+}
+
+/// **Segments join the samples**: each dab's capsule runs back to where the
+/// point was one step further into the past, and a dab with nothing older to
+/// reach runs back to itself — a capsule of no length, which is the dab. Dots
+/// leave no tails at all, so the same kernel draws both.
+#[test]
+fn a_trails_segments_run_back_to_the_previous_sample() {
+    let samples = moving_samples(3, 0.1);
+    let (dots, no_tails) = trail_tail(&trail(&[("back_samples", fixed(3.0))]), &samples);
+    assert!(no_tails.is_empty(), "Dots asked for capsules");
+
+    let (drawn, tails) = trail_tail(
+        &trail(&[
+            ("back_samples", fixed(3.0)),
+            ("style", EffectValue::Choice(1)),
+        ]),
+        &samples,
+    );
+    assert_eq!(drawn.position, dots.position, "the style moved a dab");
+    assert_eq!(tails.len(), drawn.len(), "a capsule per dab");
+
+    let want = expected_dabs(&samples, &samples[0], 3);
+    let mut joined = 0;
+    for (i, (k, j)) in want.iter().enumerate() {
+        let id = samples[*k].id[*j];
+        let mut cursor = 0;
+        let older = samples
+            .get(k + 1)
+            .and_then(|o| PointsStream::seek_id(o, id, &mut cursor).map(|m| o.position[m]));
+        match older {
+            Some(back) => {
+                assert_eq!(tails[i], back, "dab {i} did not join its older self");
+                assert_ne!(tails[i], drawn.position[i], "a moving point stood still");
+                joined += 1;
+            }
+            None => assert_eq!(
+                tails[i], drawn.position[i],
+                "a dab with nothing older grew a capsule out of nothing"
+            ),
+        }
+    }
+    assert!(joined > 0, "nothing in the fixture was ever joined up");
+}
+
+/// **Nothing wired draws nothing** (K-509's calm): no samples at all is an
+/// empty tail, and one sample is the point itself with no tail behind it.
+#[test]
+fn a_trail_with_no_stream_draws_nothing() {
+    let (drawn, tails) = trail_tail(&trail(&[]), &[]);
+    assert!(drawn.is_empty() && tails.is_empty());
+
+    let samples = moving_samples(1, 0.1);
+    let (drawn, _) = trail_tail(&trail(&[("back_samples", fixed(1.0))]), &samples);
+    assert_eq!(drawn.len(), samples[0].len(), "one sample is the point");
+    assert_eq!(drawn.position, samples[0].position);
+}
+
+/// **A point with no older self has a shorter tail**, which is the honest
+/// picture rather than an extrapolation: a particle born between two samples is
+/// simply not in the earlier one.
+#[test]
+fn a_trail_stops_where_a_point_was_not_yet_born() {
+    // Half a second apart, so plenty of particles are born inside the gap.
+    let samples = moving_samples(2, 0.5);
+    let (drawn, _) = trail_tail(&trail(&[("back_samples", fixed(2.0))]), &samples);
+    let young = samples[0].len() - samples[1].len();
+    assert!(young > 0, "the fixture had nothing born inside the gap");
+    assert!(
+        drawn.len() < samples[0].len() * 2,
+        "an unborn point was given a place it never had"
+    );
+    for (id, at) in drawn.id.iter().zip(drawn.position.iter()) {
+        let mut cursor = 0;
+        let alive_now = PointsStream::seek_id(&samples[0], *id, &mut cursor).is_some();
+        assert!(alive_now, "a dab for a point that is not in the stream");
+        assert!(at[0].is_finite() && at[1].is_finite());
+    }
+}
+
+/// **The cap rule** (K-475): over Max trails the newest by birth index grow
+/// tails, and the rest do not.
+#[test]
+fn a_trail_over_its_cap_tails_the_newest_points() {
+    let samples = moving_samples(2, 0.1);
+    let (drawn, _) = trail_tail(
+        &trail(&[("back_samples", fixed(2.0)), ("max_trails", fixed(5.0))]),
+        &samples,
+    );
+    let ids: Vec<u64> = drawn.id.to_vec();
+    let newest: Vec<u64> = samples[0].id[samples[0].len() - 5..].to_vec();
+    for id in &ids {
+        assert!(newest.contains(id), "point {id} was past the cap");
+    }
+    assert!(drawn.len() <= 10, "more dabs than cap × samples");
+}
+
+/// **Determinism** (K-031): the same samples and the same dials make the same
+/// tail, bit for bit. There is no state in this effect at all — the history is
+/// evaluated, never remembered — so this is a property of the design.
+#[test]
+fn a_trail_draws_the_same_tail_twice() {
+    let samples = moving_samples(4, 0.05);
+    let e = trail(&[
+        ("back_samples", fixed(4.0)),
+        ("style", EffectValue::Choice(1)),
+        ("scale", fixed(140.0)),
+    ]);
+    assert_eq!(trail_tail(&e, &samples), trail_tail(&e, &samples));
+}
+
+/// **A consumer declares its socket the same way a driver does** (K-492,
+/// K-601), and the two rows the carriage reads before any bag exists.
+#[test]
+fn trail_declares_a_points_input_and_its_back_sample_rows() {
+    use crate::fx::effects::trail::Trail as T;
+    let def = BUILTIN_DEFS
+        .get("trail")
+        .expect("Trail is in the catalogue");
+    let sig = def.signature();
+    assert!(points::consumes_points(sig), "no Points input declared");
+    assert!(!points::wants_schedule(sig), "a consumer emits nothing");
+    assert!(points::wants_carriage(sig), "and still wants a carriage");
+    assert_eq!(sig.input("points"), Some(PortType::Points));
+    for id in [T::SAMPLES_PARAM, T::STEP_PARAM] {
+        assert!(
+            def.schema().params.iter().any(|p| p.id == id),
+            "the draw builder looks for {id} and would find nothing"
+        );
+    }
+}
+
 // ------------------------------------------- border emission (K-597)
 
 /// A still emitter of the given shape: nothing carries a particle off the

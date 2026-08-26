@@ -1251,6 +1251,20 @@ mod tests {
         let up = vec![consumer.clone(), producer.clone()];
         assert_eq!(graph.validate(&up), Err(GraphError::Cycle));
 
+        // Two consumers off one producer, both down the stack: a stream is not
+        // spent by being read, and the one-wire-per-*input* rule is about the
+        // socket rather than about the source.
+        let trail = inst("trail");
+        let both = LayerGraph {
+            edges: vec![
+                points_edge(&producer, onto(&consumer, "points")),
+                points_edge(&producer, onto(&trail, "points")),
+            ],
+            ..LayerGraph::default()
+        };
+        both.validate(&[producer.clone(), consumer.clone(), trail])
+            .expect("one producer may feed two consumers");
+
         // A generator feeds the same socket — the wire does not know which
         // producer it came from, which is the whole point of one port type.
         let grid = inst("grid");

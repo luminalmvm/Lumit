@@ -5827,6 +5827,116 @@ surfaces:
         assert_eq!(stamped, frame_of(true), "two renders of one frame differ");
     }
 
+    /// **A trail is drawn without a frame of history being kept** (K-601).
+    ///
+    /// The strong claim, and the one the whole design rests on: the same frame,
+    /// rendered from a cold start, with no frame before it ever having been
+    /// rendered. A Trail that remembered anything would draw nothing here — and
+    /// would draw something different on the second pass, which the last
+    /// assertion catches too.
+    #[test]
+    fn a_trail_is_drawn_from_a_cold_start_and_needs_no_frame_before_it() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |wired: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+
+            let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
+            for (id, v) in [
+                ("position_x", f64::from(cw) * 0.5),
+                ("position_y", f64::from(ch) * 0.5),
+                ("width", 0.0),
+                ("height", 0.0),
+                ("emit_rate", 120.0),
+                ("life", 2.0),
+                ("life_jitter", 0.0),
+                ("initial_speed", 20.0),
+                ("speed_jitter", 0.0),
+                ("turbulence_amount", 0.0),
+                ("size", 2.0),
+                // Emit the stream and draw nothing, so what lands on the frame
+                // is the tail and only the tail.
+                ("mix", 0.0),
+            ] {
+                set(&mut producer, id, v);
+            }
+            let producer_id = producer.id;
+
+            let mut consumer = lumit_core::fx::instantiate("trail").unwrap();
+            for (id, v) in [
+                ("back_samples", 6.0),
+                ("back_step", 0.05),
+                ("scale", 100.0),
+                ("fade", 100.0),
+            ] {
+                set(&mut consumer, id, v);
+            }
+            let consumer_id = consumer.id;
+
+            let graph = LayerGraph {
+                edges: if wired {
+                    vec![Edge {
+                        from: OutputRef::EffectData {
+                            effect: producer_id,
+                            port: "points".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(consumer_id),
+                            port: "points".into(),
+                        },
+                    }]
+                } else {
+                    Vec::new()
+                },
+                ..LayerGraph::default()
+            };
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![producer, consumer];
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        // One document per arm, rendered from it twice: a fresh instance rolls
+        // a fresh seed (§2.4), so two *builds* are two different particle
+        // fields and would say nothing about determinism.
+        let wired = build(true);
+        let cut_built = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 20, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        // Frame 20 asked for first and alone: nothing before it has ever been
+        // rendered, and there is a tail on it anyway.
+        let tailed = frame_of(&wired);
+        let cut = frame_of(&cut_built);
+        assert_ne!(
+            tailed, cut,
+            "a wired stream must put a tail on the frame, from a cold start"
+        );
+        assert_eq!(tailed, frame_of(&wired), "two renders of one frame differ");
+    }
+
     /// **The degradation rung never engages on an export walk** (K-475, PS7;
     /// docs/13 §2's note under B12–B14).
     ///

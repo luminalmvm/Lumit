@@ -115,6 +115,7 @@ use super::effects::{
     threshold::{Threshold, ThresholdDef},
     tile::{Tile, TileDef},
     tint::{Tint, TintDef},
+    trail::{Trail, TrailDef},
     transform::{Transform, TransformDef},
     tritone::{Tritone, TritoneDef},
     turbulent_displace::{TurbulentDisplace, TurbulentDisplaceDef},
@@ -204,9 +205,10 @@ crate::catalogue![
     // points rather than pixels, and declare the same Points output.
     GridDef => Grid,
     ScatterDef => Scatter,
-    // The consumers (K-600), after the producers they read: the first
+    // The consumers (K-600, K-601), after the producers they read: the first
     // stack effects to take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
+    TrailDef => Trail,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

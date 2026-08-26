@@ -5774,6 +5774,73 @@ here is for.
 
 ---
 
+### 3.91 Trail — where every point has been, drawn without remembering it
+
+A **Generate** effect (K-601), the second points **consumer** and the family's last named
+one. Each point of a wired stream grows a tail: a line of dots, or one connected ribbon,
+running back through the places it was a moment ago and fading as it goes.
+
+**Nothing is stored, ever.** A trail is the obvious place to keep a history, and keeping one
+would cost this engine everything it has — a frame that depended on the frame before it
+cannot be scrubbed to, cannot be exported out of order, and cannot promise two renders agree
+(K-474, K-031). So Trail does what Streak does and does it further: it evaluates the
+producer's stream **again**, at `t − k·Spacing`, once per sample, and reads each point's
+older self out of the answer. Frame 500's tail costs what frame 3's costs, from a cold start,
+from either scrub direction.
+
+**Parameters.** **Samples** (1–64, hard 256, default 8 — how many places back, *including*
+where the point is now, so 1 is no tail at all), **Spacing** (seconds, default 0.033 — how
+far apart in time those places are), Style (Dots · Segments), Scale (per cent, default 60 —
+multiplies each point's own size), Feather (per cent), Fade (per cent, default 100 — how far
+the far end fades away), **Max trails** (1–200 000, hard 1 000 000, default 2 000 — the
+budget dial, not animatable). Plus the host Mix with its Blend (K-425). No panel row for the
+stream: it is a wire-only input (impl/points-stream.md §4.1).
+
+**Algorithm sketch.** One evaluation per sample, then a merge:
+
+```
+for k in 0..Samples:  s_k = the wire's producer, evaluated at t − k·Spacing   # px@comp
+for k from the oldest sample to the newest, and by id inside each:
+    where was this point then?  a forward walk of s_k by id; absent → no dab
+    dim   = 1 − Fade · k/(Samples−1)
+    dab at s_k.position, size · Scale, colour · dim
+    Segments: run its capsule back to the same point in s_(k+1), else to itself
+```
+
+Five notes:
+
+- **Samples is the budget as much as it is a look.** Every sample is another whole
+  evaluation of the producer's stream, so this is the one row that decides what the effect
+  costs — which is why it is `heavy` where its siblings are `moderate`, and why the default
+  is short. The engine reads it, and Spacing, off the stored rows before the frame's
+  parameters are resolved at all, because the samples have to be evaluated before there is
+  anything to hand the kernel.
+- **Points are matched by `id`, in a forward walk.** Both streams are ordered by birth index
+  ascending — a fact of the evaluation rather than an artefact of scheduling — so "where was
+  point 4 172 a moment ago?" never searches and never allocates.
+- **A point with no older self has a shorter tail**, not an extrapolated one: it was not born
+  yet. The tail simply stops there, which is the honest picture and is why the samples do not
+  all carry the same number of dabs.
+- **Painter's order is oldest sample first, `id` inside it**, so the near end of a tail lands
+  on top of the far end and one point's tail lands on the next point's in a fixed order
+  (K-031).
+- **Dots and Segments are one kernel**: a capsule whose tail is its head is a disc, the same
+  identity the three Particulate render modes rest on. Segments fills each dab's tail with
+  the previous sample's place; Dots leaves it at the head. **Fade is over the tail, not over
+  the frame** — a dab takes its own point's colour at its own sample, so a producer's Opacity
+  over life still reads correctly along it, dimmed by how far back the sample is.
+
+`heavy` cost, `FullFrame` ROI, premultiplied, temporal window `{0}` (it reads the producer at
+other times through its own evaluation, never the *picture* at other times), not seeded in
+the §1.3 sense. Mix 0, an unwired stream, Scale 0 and Samples 1 with Mix 0 are the bit-exact
+identity; an unwired stream also wears the `!` mark K-509 gave the family. A wire from
+Scatter reads the empty stream, for K-599's recorded reason.
+
+AE's nearest equivalent is Echo, which repeats whole *frames* and therefore does keep them;
+this repeats a point's own arithmetic instead, which is why it costs nothing to scrub.
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

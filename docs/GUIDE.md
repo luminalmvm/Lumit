@@ -10751,9 +10751,33 @@ in exactly the place the producer drew it, and it is also why a wire from **Scat
 over nothing: Scatter's points depend on the picture, and at the moment this hand-over
 happens there is no picture yet. Grid and Particulate both feed it in full.
 
-**What comes still later** plugs into the same socket: Connect points (lines between nearby
-particles) and Trail. Each is a named future package;
-none of them will need the plumbing rebuilt, because the socket, the wire and the
+**Trail: where every point has been, without anything being remembered.** The second thing
+that reads a wire, and the one worth understanding, because it looks impossible. A trail is a
+history — where the particle was a moment ago, and the moment before that — and this
+application has no history to draw it from. Every frame here is worked out on its own, from
+nothing, which is what makes scrubbing instant and export match the preview.
+
+So Trail does not remember. It **asks again**. To draw the place a point was a tenth of a
+second ago, it works the whole producer out a second time *at that earlier moment* and reads
+the point's older self out of the answer — then a third time, a fourth, once per **Sample**.
+Points are matched by their number, which never changes, so "where was point 4 172?" always
+means the same particle. A particle that was not born yet simply has a shorter tail, which is
+the truth rather than a guess.
+
+That is why **Samples** is the dial that decides what the effect costs, not just how it
+looks: each one is another whole evaluation. The default is eight and the effect is marked
+heavy, honestly. **Spacing** is how far apart in time those places are, and a comp frame is
+the natural setting.
+
+**Style** is dots or one joined-up ribbon, and both come out of the same drawing code — a
+capsule with both ends in the same place *is* a dot, which is a small trick the particle
+system already leaned on. **Fade** dims the far end of the tail; at nought the whole tail is
+as solid as the point. And the dabs go down oldest first, so the near end of a tail covers
+the far end, in the same order on every computer.
+
+**What comes still later** plugs into the same socket: Connect points, lines between nearby
+particles. It is a named future package;
+it will not need the plumbing rebuilt, because the socket, the wire and the
 stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
 the effect's own design — every slider, formula and budget — in
 docs/impl/particulate.md.

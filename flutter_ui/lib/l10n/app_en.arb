@@ -1713,6 +1713,10 @@
   "@fxDominantMotion": {
     "description": "Effect controls — an option in the View dropdown on Fast motion blur. Shows the neighbourhood's strongest motion, which uncertain pixels borrow their blur direction from."
   },
+  "fxDots": "Dots",
+  "@fxDots": {
+    "description": "Effect controls — a Style option on Trail: the tail is drawn as one dab per remembered place, rather than as a joined-up ribbon."
+  },
   "fxDraft": "Draft",
   "@fxDraft": {
     "description": "Effect controls — a control on Lens flare."
@@ -2156,6 +2160,10 @@
   "fxMatteLayer": "Matte layer",
   "@fxMatteLayer": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxMaxTrails": "Max trails",
+  "@fxMaxTrails": {
+    "description": "Effect controls — a control on Trail: the most points that may grow a tail, which is also how much of the frame's time the effect may spend."
   },
   "fxMaxGhosts": "Max ghosts",
   "@fxMaxGhosts": {
@@ -2800,6 +2808,10 @@
   "fxTopAndBottom": "Top and bottom",
   "@fxTopAndBottom": {
     "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxTrail": "Trail",
+  "@fxTrail": {
+    "description": "Effect controls — the name of the Trail effect, which draws where every point of a points stream has been, fading with age."
   },
   "fxTransform": "Transform",
   "@fxTransform": {
@@ -7191,6 +7203,10 @@
   "fxPreserveLuminosity": "Preserve luminosity",
   "@fxPreserveLuminosity": {
     "description": "Effect controls — a control on Photo filter: keep the exposure and change only the colour."
+  },
+  "fxSegments": "Segments",
+  "@fxSegments": {
+    "description": "Effect controls — a Style option on Trail: the tail is drawn as a joined-up ribbon through the remembered places, rather than as separate dabs."
   },
   "fxSepia": "Sepia",
   "@fxSepia": {

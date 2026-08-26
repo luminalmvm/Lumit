@@ -394,6 +394,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Grid,
     &Scatter,
     &CloneToPoints,
+    &Trail,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -4003,6 +4004,69 @@ impl GpuEffect for CloneToPoints {
     }
 }
 
+/// Trail (docs/08 §3.91, K-601): where every point of a wired stream has been,
+/// drawn from the producer evaluated again rather than from a history.
+///
+/// Nothing here decides anything — `Trail::tail` did the reducing, in the one
+/// expression the CPU reference also reads. The samples arrive on the carriage,
+/// newest first, each in px@comp and each rearranged into this raster; what this
+/// settles is only that rearrangement and the camera.
+struct Trail;
+impl GpuEffect for Trail {
+    fn match_name(&self) -> &'static str {
+        "trail"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::trail::Trail as T;
+        let inst = T::read(p);
+        let px_scale = T::px_scale_of(p);
+        let style = inst.draw_style();
+        let samples: Vec<lumit_core::fx::points::PointsStream> = aux
+            .schedule()
+            .map(|c| c.input.iter().map(|s| s.rescaled(px_scale)).collect())
+            .unwrap_or_default();
+        // Nothing wired: the picture passes through, the documented calm.
+        if samples.is_empty() {
+            return tex.clone();
+        }
+        let (stream, tails) = inst.tail(&samples);
+        let points = draw_points_tailed(&stream, &tails);
+        // The camera, in the raster this frame is drawn at (K-561, K-266) —
+        // `None` on a 2D layer, where it is no matrix at all (K-258).
+        let projection = aux
+            .schedule()
+            .and_then(|c| c.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                alpha_test: false,
+                alpha_invert: false,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -4799,6 +4863,114 @@ mod tests {
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
+    }
+
+    // ---------------------------------------------------- Trail (K-601)
+
+    /// **The tail the card draws is the tail the reference drew** (K-601): the
+    /// instanced quads land where the software dabs land, inside the `moderate`
+    /// class's perceptual epsilon — and both are handed the *same* dabs and the
+    /// *same* capsules, so a disagreement here is the rasteriser's alone.
+    ///
+    /// Segments rather than Dots, because a capsule exercises the geometry a
+    /// dab does not: the quad is swept along the segment, and the coverage is a
+    /// distance to a line rather than to a point.
+    #[test]
+    fn a_trails_draw_matches_the_cpu_reference() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+
+        // Four samples of a moving lattice — a Grid does not move, so the
+        // producer here is a Particulate fixture read at four moments.
+        let (inst, _, carriage) = particulate_fixture(0, 4_000);
+        let samples: Vec<lumit_core::fx::points::PointsStream> = (0..4)
+            .map(|k| {
+                let t = carriage.t - f64::from(k) * 0.05;
+                let dt = carriage.schedule.dt();
+                let rate = f64::from(inst.emit_rate);
+                let sched = lumit_core::fx::points::Schedule::scan(
+                    dt,
+                    (t / dt).floor() as i64,
+                    inst.window_frames(dt),
+                    &|_| rate,
+                );
+                lumit_core::fx::points::evaluate(
+                    &inst.points(),
+                    &sched,
+                    t,
+                    &lumit_core::mask::MaskPolyline::default(),
+                )
+            })
+            .collect();
+        assert!(!samples[0].is_empty(), "the fixture emitted nothing");
+
+        let trail = lumit_core::fx::effects::trail::Trail {
+            back_samples: 4,
+            back_step: 0.05,
+            style: 1,
+            scale: 80.0,
+            feather: 60.0,
+            fade: 100.0,
+            max_trails: 400,
+            mix: 100.0,
+        };
+        let (stream, tails) = trail.tail(&samples);
+        assert!(stream.len() > 20, "the fixture drew {} dabs", stream.len());
+        let style = trail.draw_style();
+
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(&mut cpu, w, h, &stream, &tails, &style, None);
+
+        let points = draw_points_tailed(&stream, &tails);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let op = lumit_gpu::fx::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: None,
+            alpha_test: false,
+            alpha_invert: false,
+            seed: 0,
+            mode: 0,
+            sprite: None,
+        };
+        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        let drawn: f32 = gpu.iter().sum();
+        assert!(drawn > 1.0, "the tail drew nothing ({drawn})");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("trail draw: worst |Δ| {worst:.3e}");
+        assert!(worst < 2e-2, "worst |Δ| {worst}");
+
+        // A capsule that was really a dab would make the comparison pass by
+        // comparing two pictures of dots.
+        let dots = draw_points_tailed(&stream, &[]);
+        let flat = fx.points_draw(
+            &ctx,
+            &tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &dots,
+                ..op
+            },
+        );
+        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
+        assert_ne!(gpu, flat, "the capsules joined nothing up");
+
+        // Bit-stable against itself (docs/08 §2.4).
+        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+        assert_eq!(gpu, twice, "the tail draw is not bit-stable");
     }
 
     // ---------------------------------------------------------------
