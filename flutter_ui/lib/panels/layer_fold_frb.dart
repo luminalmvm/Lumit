@@ -146,6 +146,9 @@ final class FoldShapeRow extends LayerFoldRow {
 /// original is, and the step every copy is one more of. [offsetPath] (K-554) is
 /// first because it applies first: it makes the outline the rest work on.
 enum ShapeValue {
+  /// The **shape itself** (K-606). It has no number, so its row carries the
+  /// stopwatch and its diamonds and nothing else; its keys are whole paths.
+  path,
   gradientStartX,
   gradientStartY,
   gradientEndX,
@@ -196,6 +199,7 @@ bool isGradientValue(ShapeValue value) => switch (value) {
 /// (K-553) — everything but the count itself, which is the row that turns the
 /// repeater on and so is always there to find.
 bool isRepeatStepValue(ShapeValue value) => switch (value) {
+      ShapeValue.path ||
       ShapeValue.gradientStartX ||
       ShapeValue.gradientStartY ||
       ShapeValue.gradientEndX ||
@@ -389,6 +393,16 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
+      // A shape item's numbers key like any other scalar; its **shape** keys as
+      // whole paths, and those keys carry their own eases and a counted-up
+      // value (K-344, K-606), so the lane draws their diamonds and the graph
+      // can draw the rate the shape is changing at.
+      FoldShapeValueRow(:final item, :final value) => value == ShapeValue.path
+          ? item.pathKeys
+          : switch (shapeScalarOf(item, value)) {
+              BridgeScalar_Keyframed(:final field0) => field0,
+              _ => const [],
+            },
       _ => const [],
     };
 
@@ -600,6 +614,7 @@ BridgeStroke strokeWithScalar(
 /// What a shape item's value row is called — shared by the row and the graph
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value) => switch (value) {
+      ShapeValue.path => l10n.shapePath,
       ShapeValue.gradientStartX => l10n.shapeGradientStartX,
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
@@ -633,6 +648,9 @@ BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
 /// Which of a shape item's animatable numbers [value] names (K-551).
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
     switch (value) {
+      // The shape is not a number and asks for the still zero nobody reads,
+      // exactly as a mask's path row does.
+      ShapeValue.path => const BridgeScalar.static_(0),
       ShapeValue.gradientStartX => item.gradientStartX,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
@@ -698,6 +716,7 @@ BridgeShapeItem shapeItemWith(
     gradientEndX: gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
     gradientEndY: gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
     combine: combine ?? item.combine,
+    pathKeys: item.pathKeys,
     offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
     trimStart: at(ShapeValue.trimStart, item.trimStart),
     trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
@@ -893,6 +912,41 @@ bool moveLaneKeys({
       if (next == null) return false;
       entry.layer.setMask(
         mask: maskWithScalar(mask, value, BridgeScalar.keyframed(next), vertex),
+        at: null,
+      );
+      return true;
+
+    case FoldShapeValueRow(:final item, :final value):
+      if (value == ShapeValue.path) {
+        // A path key is a whole shape, so a *single* move goes to the engine
+        // rather than the frontend rebuilding a list of them (K-340, K-606).
+        // Several at once cannot: each move is its own write, checked against
+        // the list as it stood, so the set has to be re-timed in one go.
+        if (times.length == 1) {
+          final index = times.keys.first;
+          if (index >= item.pathKeys.length) return false;
+          return entry.layer.moveShapePathKey(
+            id: item.id,
+            from: item.pathKeys[index].time,
+            to: times.values.first,
+          );
+        }
+        final next = moved(item.pathKeys);
+        if (next == null) return false;
+        return entry.layer.setShapePathKeys(id: item.id, keys: next);
+      }
+      final shapeScalar = shapeScalarOf(item, value);
+      if (shapeScalar is! BridgeScalar_Keyframed) return false;
+      final shapeNext = moved(shapeScalar.field0);
+      if (shapeNext == null) return false;
+      entry.layer.setShapeContents(
+        contents: [
+          for (final other in entry.layer.getShapeContents())
+            if (other.id == item.id)
+              shapeWithScalar(other, value, BridgeScalar.keyframed(shapeNext))
+            else
+              other,
+        ],
         at: null,
       );
       return true;

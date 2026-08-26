@@ -151,6 +151,16 @@ pub struct BridgeShapeItem {
     /// them covers. The run that makes is drawn once, with the paint and the
     /// modifiers of the item that starts it.
     pub combine: u32,
+    /// This item's **shape** keys — empty when its path does not animate
+    /// (K-606). Composition time, carried out by the layer's start offset
+    /// exactly as a mask's path keys cross (K-224).
+    ///
+    /// The shapes themselves do not cross: a key holds a whole path, which the
+    /// frontend edits through the drawing tools rather than by sending a list
+    /// of them. `value` counts the keys up, so the graph draws the *rate* the
+    /// shape is changing at, which is the one curve a path can honestly draw
+    /// (K-344).
+    pub path_keys: Vec<BridgeKeyframe>,
     /// **Offset paths** (K-554): how far the outline is pushed out of the path,
     /// in layer pixels; negative pulls it in and zero is the path itself.
     pub offset_amount: BridgeScalar,
@@ -203,6 +213,23 @@ impl BridgeShapeItem {
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
             gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
             combine: item.combine,
+            path_keys: item
+                .path_keys
+                .iter()
+                .enumerate()
+                .map(|(i, k)| {
+                    let time = k.time.checked_add(offset).unwrap_or(k.time);
+                    BridgeKeyframe {
+                        time: BridgeRational {
+                            num: time.num(),
+                            den: time.den(),
+                        },
+                        value: i as f64,
+                        interp_in: BridgeSideInterp::read(k.interp_in),
+                        interp_out: BridgeSideInterp::read(k.interp_out),
+                    }
+                })
+                .collect(),
             offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
             repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
             repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
@@ -273,6 +300,11 @@ impl BridgeShapeItem {
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },
+            // What this type does not carry. An item edited from the frontend
+            // must not LOSE its shape keys, so `write_item_over` patches them
+            // back from the item it is replacing; this bare form is only for
+            // art that did not exist a moment ago, which has none.
+            path_keys: Vec::new(),
             // Layer pixels, out or in: both directions mean something, so only
             // the far ends are held.
             offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,
@@ -329,6 +361,58 @@ impl BridgeShapeItem {
             repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
             extra: serde_json::Map::new(),
         })
+    }
+
+    /// [`Self::write_item`], but keeping what `previous` carries and this type
+    /// does not describe: the **shape keyframes** (K-606) and the
+    /// forward-compatibility `extra` a newer Lumit may have written (docs/10
+    /// §1.1 makes preserving it mandatory).
+    ///
+    /// **A shape edit on a morphing item lands on the key under the
+    /// playhead**, exactly as a mask's does (K-340). Once a path is keyed,
+    /// `path` is no longer what the item draws — `path_at` reads the keys — so
+    /// writing the dragged vertices there would move nothing at all and the art
+    /// would appear frozen under the pointer. `at` is where the playhead is;
+    /// without it — an edit that is not a shape edit, such as an opacity drag —
+    /// the keys are carried through untouched.
+    #[frb(ignore)]
+    pub(crate) fn write_item_over(
+        &self,
+        previous: &lumit_core::shape::ShapeItem,
+        offset: Rational,
+        at: Option<Rational>,
+    ) -> Result<lumit_core::shape::ShapeItem, BridgeError> {
+        let mut written = lumit_core::shape::ShapeItem {
+            path_keys: previous.path_keys.clone(),
+            extra: previous.extra.clone(),
+            ..self.write_item(offset)?
+        };
+        if let (false, Some(at)) = (written.path_keys.is_empty(), at) {
+            let at = at
+                .checked_sub(offset)
+                .map_err(|_| BridgeError::InvalidKeyframes)?;
+            let path = std::mem::replace(&mut written.path, previous.path.clone());
+            match written.path_keys.iter_mut().find(|k| k.time == at) {
+                Some(key) => key.path = path,
+                None => {
+                    let i = written
+                        .path_keys
+                        .iter()
+                        .position(|k| k.time > at)
+                        .unwrap_or(written.path_keys.len());
+                    written.path_keys.insert(
+                        i,
+                        lumit_core::mask::PathKeyframe {
+                            time: at,
+                            path,
+                            interp_in: lumit_core::anim::SideInterp::Linear,
+                            interp_out: lumit_core::anim::SideInterp::Linear,
+                        },
+                    );
+                }
+            }
+        }
+        Ok(written)
     }
 }
 
@@ -2203,8 +2287,18 @@ impl LayerReference {
     /// the left-most point left does, would slide every *other* point right by
     /// the same amount. Position follows the corner to cancel that, in the same
     /// op, so one drag is still one undo step.
+    ///
+    /// **`at` is where the playhead is**, and it matters only for an item whose
+    /// **shape** is keyed (K-606): the dragged vertices land on the key sitting
+    /// there, or plant one holding them, exactly as they do on a mask (K-340).
+    /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
+    /// rename, a colour — and the keys are carried through untouched.
     #[frb(sync)]
-    pub fn set_shape_contents(&self, contents: Vec<BridgeShapeItem>) -> Result<(), BridgeError> {
+    pub fn set_shape_contents(
+        &self,
+        contents: Vec<BridgeShapeItem>,
+        at: Option<BridgeRational>,
+    ) -> Result<(), BridgeError> {
         let layer = self.item()?;
         let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
             return Err(BridgeError::NotShape);
@@ -2213,10 +2307,38 @@ impl LayerReference {
             return Err(BridgeError::EmptyPath);
         }
         let offset = layer.start_offset.0;
+        let at = match at {
+            Some(t) => {
+                Some(Rational::new(t.num, t.den).map_err(|_| BridgeError::InvalidKeyframes)?)
+            }
+            None => None,
+        };
+        // An item the layer already had keeps what this type does not carry —
+        // its shape keys and its `extra`; one that did not exist a moment ago
+        // has neither to keep.
         let items: Vec<lumit_core::shape::ShapeItem> = contents
             .iter()
-            .map(|i| i.write_item(offset))
+            .map(|i| match before.iter().find(|p| p.id == i.id) {
+                Some(previous) => i.write_item_over(previous, offset, at),
+                None => i.write_item(offset),
+            })
             .collect::<Result<_, _>>()?;
+        self.commit_shape_items(&layer, before, items)
+    }
+
+    /// The op (or the batch) that writes a shape layer's whole contents, with
+    /// the layer's position following the art's corner (K-308).
+    ///
+    /// Shared by [`Self::set_shape_contents`] and the four shape-key edits, so
+    /// keying, re-timing and un-keying a morphing path move the layer exactly
+    /// as dragging one of its points does.
+    #[frb(ignore)]
+    fn commit_shape_items(
+        &self,
+        layer: &lumit_core::model::Layer,
+        before: &[lumit_core::shape::ShapeItem],
+        items: Vec<lumit_core::shape::ShapeItem>,
+    ) -> Result<(), BridgeError> {
         // Both boxes on the same clock — the head of the layer — so the delta
         // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
@@ -2277,7 +2399,176 @@ impl LayerReference {
             return Err(BridgeError::NotShape);
         };
         contents.push(item);
-        self.set_shape_contents(contents)
+        self.set_shape_contents(contents, None)
+    }
+
+    /// Key this item's **shape** at `time`, or take the key already there away
+    /// (K-606) — the diamond on a shape item's Path row, and the mask's own
+    /// gesture (K-339, K-340) applied to the other thing in the document that
+    /// holds a path.
+    ///
+    /// A planted key holds the shape the item is *already showing* at that
+    /// moment, so pressing it never moves anything. `time` is composition time;
+    /// the layer's own offset is taken back off inside.
+    #[frb(sync)]
+    pub fn toggle_shape_path_key(&self, id: Uuid, time: BridgeRational) -> Result<(), BridgeError> {
+        self.edit_shape_item(id, time, |item, time| {
+            if let Some(i) = item.path_keys.iter().position(|k| k.time == time) {
+                item.path_keys.remove(i);
+            } else {
+                let path = item.path_at(time.to_f64()).into_owned();
+                let at = item
+                    .path_keys
+                    .iter()
+                    .position(|k| k.time > time)
+                    .unwrap_or(item.path_keys.len());
+                item.path_keys.insert(
+                    at,
+                    lumit_core::mask::PathKeyframe {
+                        time,
+                        path,
+                        interp_in: lumit_core::anim::SideInterp::Linear,
+                        interp_out: lumit_core::anim::SideInterp::Linear,
+                    },
+                );
+            }
+        })
+    }
+
+    /// Stop this item's shape animating, keeping the shape it shows at `time`
+    /// (K-606) — the stopwatch turning off, and what it does everywhere else:
+    /// the shape that stays is the one the playhead is over, so the picture
+    /// does not jump.
+    #[frb(sync)]
+    pub fn clear_shape_path_keys(&self, id: Uuid, time: BridgeRational) -> Result<(), BridgeError> {
+        self.edit_shape_item(id, time, |item, time| {
+            item.path = item.path_at(time.to_f64()).into_owned();
+            item.path_keys.clear();
+        })
+    }
+
+    /// Drag one of this item's shape keys along the timeline (K-606) — the lane
+    /// diamond, which moves a path key exactly as it moves a scalar's.
+    ///
+    /// Refused, with `false`, when the move would land on or step over a
+    /// neighbour: keys are sorted with unique times and the evaluator walks them
+    /// assuming so.
+    #[frb(sync)]
+    pub fn move_shape_path_key(
+        &self,
+        id: Uuid,
+        from: BridgeRational,
+        to: BridgeRational,
+    ) -> Result<bool, BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
+            return Err(BridgeError::NotShape);
+        };
+        let local = |t: BridgeRational| -> Result<Rational, BridgeError> {
+            Rational::new(t.num, t.den)
+                .map_err(|_| BridgeError::InvalidKeyframes)?
+                .checked_sub(offset)
+                .map_err(|_| BridgeError::InvalidKeyframes)
+        };
+        let (from, to) = (local(from)?, local(to)?);
+        let mut items = before.clone();
+        let at = items
+            .iter()
+            .position(|i| i.id == id)
+            .ok_or(BridgeError::InvalidItem)?;
+        let item = &mut items[at];
+        let Some(i) = item.path_keys.iter().position(|k| k.time == from) else {
+            return Ok(false);
+        };
+        for (j, key) in item.path_keys.iter().enumerate() {
+            if j == i {
+                continue;
+            }
+            if (j < i && key.time >= to) || (j > i && key.time <= to) {
+                return Ok(false);
+            }
+        }
+        item.path_keys[i].time = to;
+        self.commit_shape_items(&layer, before, items)?;
+        Ok(true)
+    }
+
+    /// Re-time and re-ease this item's shape keys in one write (K-606) — what
+    /// the graph editor commits when a handle is dragged, and what a lane drag
+    /// of several keys at once needs.
+    ///
+    /// `keys` must name every key the item has, in order; their `value` is
+    /// ignored, because a path key holds a shape rather than a number. Refused
+    /// as a whole if the times are not strictly ascending.
+    #[frb(sync)]
+    pub fn set_shape_path_keys(
+        &self,
+        id: Uuid,
+        keys: Vec<BridgeKeyframe>,
+    ) -> Result<bool, BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
+            return Err(BridgeError::NotShape);
+        };
+        let mut items = before.clone();
+        let at = items
+            .iter()
+            .position(|i| i.id == id)
+            .ok_or(BridgeError::InvalidItem)?;
+        if keys.len() != items[at].path_keys.len() {
+            return Ok(false);
+        }
+        let mut written = Vec::with_capacity(keys.len());
+        for (key, existing) in keys.iter().zip(items[at].path_keys.iter()) {
+            let time = Rational::new(key.time.num, key.time.den)
+                .map_err(|_| BridgeError::InvalidKeyframes)?
+                .checked_sub(offset)
+                .map_err(|_| BridgeError::InvalidKeyframes)?;
+            if written
+                .last()
+                .is_some_and(|p: &lumit_core::mask::PathKeyframe| time <= p.time)
+            {
+                return Ok(false);
+            }
+            written.push(lumit_core::mask::PathKeyframe {
+                time,
+                path: existing.path.clone(),
+                interp_in: key.interp_in.write(),
+                interp_out: key.interp_out.write(),
+            });
+        }
+        items[at].path_keys = written;
+        self.commit_shape_items(&layer, before, items)?;
+        Ok(true)
+    }
+
+    /// Read this layer's art, change the one item `id` names at layer-local
+    /// `time`, and commit the list — the shape of every shape-key edit.
+    #[frb(ignore)]
+    fn edit_shape_item(
+        &self,
+        id: Uuid,
+        time: BridgeRational,
+        change: impl FnOnce(&mut lumit_core::shape::ShapeItem, Rational),
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let lumit_core::model::LayerKind::Shape { contents: before } = &layer.kind else {
+            return Err(BridgeError::NotShape);
+        };
+        let time = Rational::new(time.num, time.den)
+            .map_err(|_| BridgeError::InvalidKeyframes)?
+            .checked_sub(offset)
+            .map_err(|_| BridgeError::InvalidKeyframes)?;
+        let mut items = before.clone();
+        let at = items
+            .iter()
+            .position(|i| i.id == id)
+            .ok_or(BridgeError::InvalidItem)?;
+        change(&mut items[at], time);
+        self.commit_shape_items(&layer, before, items)
     }
 
     /// The clips on this Sequence layer, in the order it holds them.

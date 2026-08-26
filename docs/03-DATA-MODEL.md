@@ -868,6 +868,7 @@ struct ShapeItem {
     gradient_start_y: Property,
     gradient_end_x: Property,
     gradient_end_y: Property,
+    path_keys: Vec<PathKeyframe>,     // the shapes the path morphs between; empty is the still path
     combine: u32,                     // 0 apart, 1 union, 2 subtract, 3 intersect, 4 exclude
     offset_amount: Property,          // layer pixels; out of the path, negative is in
     repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
@@ -905,6 +906,23 @@ The op is `SetShapeContents` — the whole list, exactly invertible, like `SetLa
 `SetLayerPaint`.
 
 #### 7.2.1 The modifiers, and the order they apply in
+
+**A morphing path** (K-606): `path_keys` holds the shapes the item's path animates between, and
+is empty — and absent from the file — until somebody keys it. It is the **same** `PathKeyframe` a
+mask's shape keys with (§7.0) and the same evaluation beneath it: the two keys either side are
+blended at the eased parameter, keys with unequal point counts have the sparser path **resampled**
+first (cut into as many pieces as the denser one has, by splitting its own curve, so nothing about
+the shape moves), and whether the path is closed is *held* across a span rather than tweened. What
+morphs is the item's path; every modifier then reads the shape the keys give rather than the
+still one — a trim, an offset, a repeater and a **combine** all see the path as it is at that
+instant. The edit lands where the playhead is: dragging a point on a keyed item writes into the
+key sitting there, or plants one holding it (K-340's rule, applied to the other thing in the
+document that holds a path).
+
+The item's ops are `set_shape_contents` (which carries the keys through untouched unless it is
+handed the playhead), and `toggle_shape_path_key`, `move_shape_path_key`, `set_shape_path_keys`
+and `clear_shape_path_keys` — the mask's four, item by item, each one whole-list `SetShapeContents`
+and therefore one undo step.
 
 **A boolean combine** (K-605) is the one modifier that reaches past its own item: `combine` says
 how this item's path joins the item **before** it in the list — 0 draws it on its own, 1 unions

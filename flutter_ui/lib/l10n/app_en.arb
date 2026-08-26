@@ -5073,7 +5073,7 @@
   },
   "shapePath": "Path",
   "@shapePath": {
-    "description": "What a pen-drawn shape is called."
+    "description": "What a pen-drawn shape is called, and the Timeline row under a shape layer's art carrying the shape itself — the row whose stopwatch makes the shape animate."
   },
   "size": "Size",
   "@size": {

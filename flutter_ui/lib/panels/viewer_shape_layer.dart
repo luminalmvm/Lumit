@@ -450,6 +450,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             gradientEndY: const BridgeScalar.static_(0),
             // On the path itself, until somebody offsets it (K-554).
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             // Drawn once, until somebody repeats it (K-553).
             repeatCopies: const BridgeScalar.static_(1),

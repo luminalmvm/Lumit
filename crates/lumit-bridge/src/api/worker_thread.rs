@@ -3497,9 +3497,23 @@ fn render_comp_with_preview(
         // The preview's art is the layer's own, so its trims read on the
         // layer's clock, exactly as its masks do above.
         let offset = comp.layers[index].start_offset.0;
+        // The frame being previewed, in composition time: a point drag on an
+        // item whose **shape** is keyed lands on the key sitting there, and the
+        // preview has to show it landing there rather than on the still path
+        // nothing reads (K-606, and K-340's reason for the mask).
+        let at = comp
+            .frame_rate
+            .time_of_frame(req.frame as i64)
+            .ok()
+            .map(|t| t.0);
         if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
-            let written: Result<Vec<_>, _> =
-                items.into_iter().map(|i| i.write_item(offset)).collect();
+            let written: Result<Vec<_>, _> = items
+                .iter()
+                .map(|i| match contents.iter().find(|p| p.id == i.id) {
+                    Some(previous) => i.write_item_over(previous, offset, at),
+                    None => i.write_item(offset),
+                })
+                .collect();
             if let Ok(written) = written {
                 *contents = written;
             }

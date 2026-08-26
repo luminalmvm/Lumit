@@ -33,7 +33,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart' show iconSize;
@@ -485,30 +484,45 @@ class KeyframeControlsFrb extends StatelessWidget {
 /// which is why this one writes through the engine's own path-key ops instead
 /// of sending an animation. There is no value to plot, so the lane shows
 /// diamonds and no curve, and the row has no field.
-class MaskPathKeyframesFrb extends StatelessWidget {
-  final LayerReference layer;
-  final BridgeMask mask;
+class PathKeyframesFrb extends StatelessWidget {
+  /// This row's shape keys, as they came across with the mask (K-224) or the
+  /// shape item (K-606) they belong to.
+  final List<BridgeKeyframe> keys;
+
+  /// Plant or take away a key at this composition time — the diamond.
+  final void Function(BridgeRational time) onToggleKey;
+
+  /// Stop the shape animating, keeping the shape shown at this time — the
+  /// stopwatch turning off.
+  final void Function(BridgeRational time) onClear;
+
+  /// What the buttons' widget keys are built from, so a test can find the row
+  /// it means.
+  final String rowKey;
+
   final CompositionReference comp;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
-  const MaskPathKeyframesFrb({
+  const PathKeyframesFrb({
     super.key,
-    required this.layer,
-    required this.mask,
+    required this.keys,
+    required this.onToggleKey,
+    required this.onClear,
+    required this.rowKey,
     required this.comp,
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
   });
 
-  bool get _animated => mask.pathKeys.isNotEmpty;
+  bool get _animated => keys.isNotEmpty;
 
   /// The frames the shape is keyed on. Read once per build: the times come
-  /// across with the mask itself, so this asks the engine nothing.
+  /// across with the mask or the item itself, so this asks the engine nothing.
   List<int> get _frames =>
-      [for (final k in mask.pathKeys) comp.frameAtTime(time: k.time)];
+      [for (final k in keys) comp.frameAtTime(time: k.time)];
 
   int? _neighbour(int frame, {required bool before}) {
     int? best;
@@ -521,11 +535,10 @@ class MaskPathKeyframesFrb extends StatelessWidget {
 
   void _toggleKeyHere(int frame) {
     try {
-      layer.toggleMaskPathKey(
-          id: mask.id, time: comp.timeOfFrame(frame: frame));
+      onToggleKey(comp.timeOfFrame(frame: frame));
       onChanged();
     } catch (_) {
-      // The mask went away between the draw and the click.
+      // The mask or the item went away between the draw and the click.
     }
   }
 
@@ -535,9 +548,9 @@ class MaskPathKeyframesFrb extends StatelessWidget {
     try {
       final time = comp.timeOfFrame(frame: frame);
       if (_animated) {
-        layer.clearMaskPathKeys(id: mask.id, time: time);
+        onClear(time);
       } else {
-        layer.toggleMaskPathKey(id: mask.id, time: time);
+        onToggleKey(time);
       }
       onChanged();
     } catch (_) {
@@ -558,7 +571,6 @@ class MaskPathKeyframesFrb extends StatelessWidget {
   Widget _build(BuildContext context, int frame) {
     final t = ThemeScope.of(context).theme;
     final onKey = _frames.contains(frame);
-    final rowKey = 'tl-mask-path-${mask.id}';
     Widget button({
       required String keyName,
       required Widget child,

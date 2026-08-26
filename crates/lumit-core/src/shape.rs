@@ -159,6 +159,18 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub gradient_end_y: Property,
+    /// **A morphing path** (K-606): the shapes this item's path is keyed to,
+    /// in the layer's own time. Empty is the still [`path`](Self::path) above,
+    /// which is what every shape is until somebody keys its shape, and is
+    /// absent from the file.
+    ///
+    /// The same [`PathKeyframe`] a mask's shape keys with (K-224) and the same
+    /// interpolation beneath it: two keys with the same number of points run
+    /// point for point, and unequal ones have the sparser path **resampled**
+    /// first — cut into as many pieces as the denser one has, by splitting its
+    /// own curve, so nothing about the shape moves in the process.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path_keys: Vec<crate::mask::PathKeyframe>,
     /// **A boolean combine** (K-605): how this item joins the item **before**
     /// it in the layer's list — 0 draws it on its own, 1 unions the two, 2
     /// subtracts this one from that one, 3 keeps only what both cover and 4
@@ -323,6 +335,7 @@ impl ShapeItem {
             gradient_start_y: Property::zero(),
             gradient_end_x: Property::zero(),
             gradient_end_y: Property::zero(),
+            path_keys: Vec::new(),
             combine: 0,
             offset_amount: Property::zero(),
             repeat_copies: one(),
@@ -337,6 +350,21 @@ impl ShapeItem {
             repeat_end_opacity: crate::paint::full(),
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// The shape this item has at `t` — its still [`path`](Self::path) where
+    /// nothing has keyed it, and the blend of the two keys either side where
+    /// something has (K-606).
+    ///
+    /// `t` is the **layer's** clock, the one every other number on the item is
+    /// read on.
+    pub fn path_at(&self, t: f64) -> std::borrow::Cow<'_, BezierPath> {
+        crate::mask::path_at(&self.path_keys, &self.path, t)
+    }
+
+    /// Whether this item's shape is keyframed.
+    pub fn path_is_animated(&self) -> bool {
+        !self.path_keys.is_empty()
     }
 
     /// True when the trim at `t` would change the art — false for the whole
@@ -362,11 +390,12 @@ impl ShapeItem {
         if !self.trims_at(t) && self.offset_amount.value_at(t) == 0.0 {
             return None;
         }
-        let points = flatten_path(&self.path);
+        let path = self.path_at(t);
+        let points = flatten_path(&path);
         if points.len() < 2 {
             return None;
         }
-        Some(self.shaped(points, self.path.closed, t))
+        Some(self.shaped(points, path.closed, t))
     }
 
     /// One polyline pushed out by this item's offset and cut by its trim — the
@@ -546,7 +575,7 @@ impl ShapeItem {
     /// reason a paint stroke's bounds give (K-549).
     pub fn bounds(&self, t: f64) -> Option<(f64, f64, f64, f64)> {
         let mut out: Option<(f64, f64, f64, f64)> = None;
-        for v in &self.path.vertices {
+        for v in &self.path_at(t).vertices {
             for (x, y) in [
                 v.pos,
                 (v.pos.0 + v.tan_in.0, v.pos.1 + v.tan_in.1),
@@ -646,15 +675,15 @@ fn runs(contents: &[ShapeItem]) -> Vec<std::ops::Range<usize>> {
 /// Degenerate input is a **no-op** rather than a refusal: a member with fewer
 /// than three points has no area to combine, and dropping the whole run over it
 /// would make a half-drawn path erase the art it was being joined to.
-fn combined_at(run: &[ShapeItem]) -> Vec<Vec<(f64, f64)>> {
+fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
     use i_overlay::core::fill_rule::FillRule;
     use i_overlay::core::overlay_rule::OverlayRule;
     use i_overlay::float::single::SingleFloatOverlay;
 
     /// A polygon the boolean can be handed: closed, at least a triangle, and
     /// finite. Anything else is nothing to combine with.
-    fn polygon(item: &ShapeItem) -> Option<Vec<[f64; 2]>> {
-        let points = flatten_path(&item.path);
+    fn polygon(item: &ShapeItem, t: f64) -> Option<Vec<[f64; 2]>> {
+        let points = flatten_path(&item.path_at(t));
         let out: Vec<[f64; 2]> = points
             .iter()
             .filter(|(x, y)| x.is_finite() && y.is_finite())
@@ -666,7 +695,7 @@ fn combined_at(run: &[ShapeItem]) -> Vec<Vec<(f64, f64)>> {
     let Some((first, rest)) = run.split_first() else {
         return Vec::new();
     };
-    let Some(subject) = polygon(first) else {
+    let Some(subject) = polygon(first, t) else {
         return Vec::new();
     };
     let mut acc: Vec<Vec<[f64; 2]>> = vec![subject];
@@ -680,7 +709,9 @@ fn combined_at(run: &[ShapeItem]) -> Vec<Vec<(f64, f64)>> {
             // combine with, which is the answer that shows something.
             _ => continue,
         };
-        let Some(clip) = polygon(item) else { continue };
+        let Some(clip) = polygon(item, t) else {
+            continue;
+        };
         // **Even-odd**, because that is the one rule this crate's rasteriser
         // fills by, for masks and shapes alike. Reading the input the same way
         // the picture already reads it is what makes combining honest: a
@@ -748,7 +779,7 @@ pub fn rasterise_contents(
         // it. `None` is "nothing has changed it", which draws the bezier itself.
         let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
             Some(
-                combined_at(&contents[run.clone()])
+                combined_at(&contents[run.clone()], t)
                     .into_iter()
                     .map(|c| item.shaped(c, true, t))
                     .collect(),
@@ -756,9 +787,11 @@ pub fn rasterise_contents(
         } else {
             item.trimmed_at(t).map(|p| vec![p])
         };
+        // The shape this instant, which a keyed path moves (K-606).
+        let drawn = item.path_at(t);
         // A boolean's contours close on themselves; a trimmed piece has two
         // ends whatever the path it was cut from had.
-        let closed = ring || item.path.closed;
+        let closed = ring || drawn.closed;
         let lines = match lines {
             Some(lines) => {
                 let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
@@ -802,7 +835,7 @@ pub fn rasterise_contents(
                         )
                     })
                     .collect(),
-                None => vec![transform_path(&item.path, &to_box)],
+                None => vec![transform_path(&drawn, &to_box)],
             };
 
             if let Some(fill) = item.fill {
@@ -2400,6 +2433,107 @@ mod tests {
         let once = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
         let twice = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
         assert_eq!(once, twice);
+    }
+
+    fn shape_key(secs: i64, path: &BezierPath) -> crate::mask::PathKeyframe {
+        crate::mask::PathKeyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            path: path.clone(),
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        }
+    }
+
+    #[test]
+    fn a_shape_with_no_keys_is_its_still_path_at_every_time() {
+        let it = item(square(0.0, 0.0, 10.0));
+        for t in [-5.0, 0.0, 1.5, 900.0] {
+            assert_eq!(*it.path_at(t), it.path, "at t={t}");
+        }
+        assert!(!it.path_is_animated());
+    }
+
+    #[test]
+    fn a_keyed_shape_morphs_from_one_drawn_path_to_the_other() {
+        let (from, to) = (square(0.0, 0.0, 10.0), square(20.0, 0.0, 10.0));
+        let mut it = item(from.clone());
+        it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
+        assert!(it.path_is_animated());
+
+        // At the keys, exactly the shapes that were drawn.
+        assert_eq!(*it.path_at(0.0), from);
+        assert_eq!(*it.path_at(2.0), to);
+        // Half way, half way — and the still path is not what is drawn.
+        let mid = it.path_at(1.0);
+        assert!((mid.vertices[0].pos.0 - 10.0).abs() < 1e-9, "{mid:?}");
+        // Outside the keys the ends hold, as every other property does.
+        assert_eq!(*it.path_at(-3.0), from);
+        assert_eq!(*it.path_at(9.0), to);
+    }
+
+    #[test]
+    fn the_morph_is_what_the_picture_and_the_box_both_read() {
+        let (from, to) = (square(0.0, 0.0, 10.0), square(20.0, 0.0, 10.0));
+        let mut it = item(from.clone());
+        it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
+
+        // The box follows the shape being drawn, not the still path.
+        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 10.0, 10.0)));
+        assert_eq!(it.bounds(2.0), Some((20.0, 0.0, 30.0, 10.0)));
+        assert_eq!(it.bounds(1.0), Some((10.0, 0.0, 20.0, 10.0)));
+
+        // And so does the ink: at the far key the art is at the far end of the
+        // box, with nothing left where it started.
+        let contents = vec![it];
+        let rgba = rasterise_contents(&contents, 30, 10, 0.0, 0.0, 30.0, 10.0, 2.0);
+        assert_eq!(alpha_at(&rgba, 30, 25, 5), 255, "drawn where the key says");
+        assert_eq!(alpha_at(&rgba, 30, 5, 5), 0, "and nowhere else");
+    }
+
+    #[test]
+    fn two_paths_with_different_point_counts_still_morph() {
+        // A triangle to a square: the sparser path is cut into as many pieces
+        // as the denser one has, without moving the curve, so the shape at the
+        // first key is still the triangle that was drawn.
+        let triangle = polyline_path(&[(0.0, 0.0), (10.0, 0.0), (5.0, 10.0)], true);
+        let sq = square(0.0, 0.0, 10.0);
+        let mut it = item(triangle.clone());
+        it.path_keys = vec![shape_key(0, &triangle), shape_key(1, &sq)];
+        assert_eq!(*it.path_at(0.0), triangle, "the key holds what was drawn");
+        assert_eq!(*it.path_at(1.0), sq);
+        let mid = it.path_at(0.5);
+        assert_eq!(mid.vertices.len(), 4, "reconciled to the denser count");
+        assert!(mid.closed);
+    }
+
+    #[test]
+    fn a_morphing_path_is_combined_at_the_moment_it_is_drawn() {
+        // The cutter is keyed to slide across the base; early it takes the left
+        // half out, late it takes the right half out.
+        let (from, to) = (square(-10.0, 0.0, 10.0), square(10.0, 0.0, 10.0));
+        let mut cutter = item(from.clone());
+        cutter.combine = 2;
+        cutter.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
+        let contents = vec![item(square(0.0, 0.0, 20.0)), cutter];
+        let early = rasterise_contents(&contents, 20, 10, 0.0, 0.0, 20.0, 10.0, 0.0);
+        let late = rasterise_contents(&contents, 20, 10, 0.0, 0.0, 20.0, 10.0, 2.0);
+        assert_eq!(alpha_at(&early, 20, 5, 5), 255, "the base is whole early");
+        assert_eq!(alpha_at(&late, 20, 15, 5), 0, "and cut on the right late");
+        assert_eq!(alpha_at(&late, 20, 5, 5), 255);
+    }
+
+    #[test]
+    fn an_unkeyed_shape_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).unwrap();
+        assert!(!json.contains("path_keys"), "{json}");
+
+        let mut keyed = item(square(0.0, 0.0, 4.0));
+        keyed.path_keys = vec![shape_key(1, &square(2.0, 2.0, 4.0))];
+        let json = serde_json::to_string(&keyed).unwrap();
+        assert!(json.contains("path_keys"), "{json}");
+        let back: ShapeItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.path_keys.len(), 1);
+        assert_eq!(back, keyed);
     }
 
     #[test]

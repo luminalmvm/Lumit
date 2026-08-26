@@ -591,6 +591,12 @@ opening a second viewport. Clicking it again goes back.
 - Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
   (K-551): Trim start, Trim end and Trim offset. A row rather than another control on the item's
   own row, because a property without a row has nowhere to put the stopwatch that animates it.
+- **Path** is the first of an item's rows (K-606): the shape itself, which has no number, so the
+  row carries the stopwatch and its diamonds and no value field. The stopwatch on plants a key
+  holding the shape already showing, so nothing moves; off keeps the shape the playhead is over.
+  A shape is edited with the drawing tools, and a point drag on a keyed item lands on the key
+  under the playhead exactly as a mask's does (K-340) — and the row selects itself when it does,
+  so the key is planted on a row the author can see (K-341).
 - **Combine** heads the rows of every item **after the first** (K-605): an Apart / Union /
   Subtract / Intersect / Exclude choice saying how this piece of art joins the piece above it in
   the list. The first item has nothing in front of it to join, so it carries no such row. An item
@@ -603,7 +609,7 @@ opening a second viewport. Clicking it again goes back.
   linear, out from its middle for radial — because a ramp that read as one flat colour the moment
   it was chosen would look broken rather than unaimed. None of the three keys: a colour and a
   choice have no curve, so they carry no stopwatch.
-- **Offset path** is the first of an item's rows, because it applies first (K-554): one length in
+- **Offset path** comes before the trim's rows, because it applies first (K-554): one length in
   layer pixels, out of the path or — negative — into it.
 - **Dash, Gap and Dash offset** appear under an item that has an **outline**, and only then
   (K-552): three dead rows on a fill-only shape would be three promises the item cannot keep.

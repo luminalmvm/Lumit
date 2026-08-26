@@ -18,7 +18,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -871,12 +871,23 @@ class BridgeShapeItem {
   final BridgeScalar gradientEndX;
   final BridgeScalar gradientEndY;
 
-  /// **A boolean combine** (K-596): how this item joins the item **before**
+  /// **A boolean combine** (K-605): how this item joins the item **before**
   /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
   /// from that one, 3 keeps only what both cover, 4 keeps only what one of
   /// them covers. The run that makes is drawn once, with the paint and the
   /// modifiers of the item that starts it.
   final int combine;
+
+  /// This item's **shape** keys — empty when its path does not animate
+  /// (K-606). Composition time, carried out by the layer's start offset
+  /// exactly as a mask's path keys cross (K-224).
+  ///
+  /// The shapes themselves do not cross: a key holds a whole path, which the
+  /// frontend edits through the drawing tools rather than by sending a list
+  /// of them. `value` counts the keys up, so the graph draws the *rate* the
+  /// shape is changing at, which is the one curve a path can honestly draw
+  /// (K-344).
+  final List<BridgeKeyframe> pathKeys;
 
   /// **Offset paths** (K-554): how far the outline is pushed out of the path,
   /// in layer pixels; negative pulls it in and zero is the path itself.
@@ -923,6 +934,7 @@ class BridgeShapeItem {
     required this.gradientEndX,
     required this.gradientEndY,
     required this.combine,
+    required this.pathKeys,
     required this.offsetAmount,
     required this.repeatCopies,
     required this.repeatOffset,
@@ -958,6 +970,7 @@ class BridgeShapeItem {
       gradientEndX.hashCode ^
       gradientEndY.hashCode ^
       combine.hashCode ^
+      pathKeys.hashCode ^
       offsetAmount.hashCode ^
       repeatCopies.hashCode ^
       repeatOffset.hashCode ^
@@ -995,6 +1008,7 @@ class BridgeShapeItem {
           gradientEndX == other.gradientEndX &&
           gradientEndY == other.gradientEndY &&
           combine == other.combine &&
+          pathKeys == other.pathKeys &&
           offsetAmount == other.offsetAmount &&
           repeatCopies == other.repeatCopies &&
           repeatOffset == other.repeatOffset &&
@@ -1417,6 +1431,15 @@ class LayerReference {
   void clearMaskPathKeys(
           {required UuidValue id, required BridgeRational time}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceClearMaskPathKeys(
+          that: this, id: id, time: time);
+
+  /// Stop this item's shape animating, keeping the shape it shows at `time`
+  /// (K-606) — the stopwatch turning off, and what it does everywhere else:
+  /// the shape that stays is the one the playhead is over, so the picture
+  /// does not jump.
+  void clearShapePathKeys(
+          {required UuidValue id, required BridgeRational time}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceClearShapePathKeys(
           that: this, id: id, time: time);
 
   /// One Sequence clip's audio, summarised in `buckets` across the clip's own
@@ -1904,6 +1927,19 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceMoveMaskPathKey(
           that: this, id: id, from: from, to: to);
 
+  /// Drag one of this item's shape keys along the timeline (K-606) — the lane
+  /// diamond, which moves a path key exactly as it moves a scalar's.
+  ///
+  /// Refused, with `false`, when the move would land on or step over a
+  /// neighbour: keys are sorted with unique times and the evaluator walks them
+  /// assuming so.
+  bool moveShapePathKey(
+          {required UuidValue id,
+          required BridgeRational from,
+          required BridgeRational to}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMoveShapePathKey(
+          that: this, id: id, from: from, to: to);
+
   /// A new driver of the built-in named `name`, **uncommitted**.
   ///
   /// The mirror of [`Self::add_effect`] for the other kind of box, split in
@@ -2240,9 +2276,28 @@ class LayerReference {
   /// the left-most point left does, would slide every *other* point right by
   /// the same amount. Position follows the corner to cancel that, in the same
   /// op, so one drag is still one undo step.
-  void setShapeContents({required List<BridgeShapeItem> contents}) =>
+  ///
+  /// **`at` is where the playhead is**, and it matters only for an item whose
+  /// **shape** is keyed (K-606): the dragged vertices land on the key sitting
+  /// there, or plant one holding them, exactly as they do on a mask (K-340).
+  /// Pass `None` for an edit that is not a shape edit — an opacity drag, a
+  /// rename, a colour — and the keys are carried through untouched.
+  void setShapeContents(
+          {required List<BridgeShapeItem> contents, BridgeRational? at}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapeContents(
-          that: this, contents: contents);
+          that: this, contents: contents, at: at);
+
+  /// Re-time and re-ease this item's shape keys in one write (K-606) — what
+  /// the graph editor commits when a handle is dragged, and what a lane drag
+  /// of several keys at once needs.
+  ///
+  /// `keys` must name every key the item has, in order; their `value` is
+  /// ignored, because a path key holds a shape rather than a number. Refused
+  /// as a whole if the times are not strictly ascending.
+  bool setShapePathKeys(
+          {required UuidValue id, required List<BridgeKeyframe> keys}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
+          that: this, id: id, keys: keys);
 
   /// Move or trim the layer. One op, so a drag that changes the in point and
   /// the start offset together — a slip edit — is still one undo step.
@@ -2420,6 +2475,19 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceToggleRetimeProperty(
         that: this,
       );
+
+  /// Key this item's **shape** at `time`, or take the key already there away
+  /// (K-606) — the diamond on a shape item's Path row, and the mask's own
+  /// gesture (K-339, K-340) applied to the other thing in the document that
+  /// holds a path.
+  ///
+  /// A planted key holds the shape the item is *already showing* at that
+  /// moment, so pressing it never moves anything. `time` is composition time;
+  /// the layer's own offset is taken back off inside.
+  void toggleShapePathKey(
+          {required UuidValue id, required BridgeRational time}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceToggleShapePathKey(
+          that: this, id: id, time: time);
 
   /// Trim one edge of a clip inward (docs/04 §8.2, non-ripple).
   ///

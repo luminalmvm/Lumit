@@ -3959,6 +3959,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_end_x: BridgeScalar::Static(0.0),
         gradient_end_y: BridgeScalar::Static(0.0),
         combine: 0,
+        path_keys: Vec::new(),
         offset_amount: BridgeScalar::Static(0.0),
         repeat_copies: BridgeScalar::Static(1.0),
         repeat_offset: BridgeScalar::Static(0.0),
@@ -4019,7 +4020,7 @@ fn shape_contents_are_replaced_as_a_whole_and_undone_in_one_step() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents.push(shape_item("Second", 40.0, 40.0, 10.0));
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
     assert_eq!(shape.get_shape_contents().expect("contents").len(), 2);
 
     project.undo().expect("undone");
@@ -4059,7 +4060,7 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
             interp_out: BridgeSideInterp::Linear,
         },
     ]);
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(
@@ -4096,7 +4097,7 @@ fn a_shapes_dashes_round_trip_and_are_clamped() {
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].dashes = vec![BridgeScalar::Static(8.0), BridgeScalar::Static(-4.0)];
     contents[0].dash_offset = BridgeScalar::Static(-3.0);
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(
@@ -4129,7 +4130,7 @@ fn a_shapes_repeater_round_trips_and_is_clamped() {
     contents[0].repeat_position_x = BridgeScalar::Static(24.0);
     contents[0].repeat_rotation = BridgeScalar::Static(15.0);
     contents[0].repeat_end_opacity = BridgeScalar::Static(140.0);
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(
@@ -4166,7 +4167,7 @@ fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
         a: 1.0,
     });
     contents[0].gradient_end_x = BridgeScalar::Static(10.0);
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
 
     let got = &shape.get_shape_contents().expect("contents")[0];
     assert_eq!(got.gradient, 2);
@@ -4175,7 +4176,7 @@ fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].gradient = 7;
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
     assert_eq!(
         shape.get_shape_contents().expect("contents")[0].gradient,
         0,
@@ -4201,17 +4202,100 @@ fn a_shapes_combine_round_trips_and_an_unknown_reading_draws_alone() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[1].combine = 2;
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
     assert_eq!(shape.get_shape_contents().expect("contents")[1].combine, 2);
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[1].combine = 9;
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
     assert_eq!(
         shape.get_shape_contents().expect("contents")[1].combine,
         0,
         "a reading nobody has draws the art on its own"
     );
+}
+
+/// A shape item's path keys, end to end (K-606): the diamond plants a key
+/// holding what is already showing, a point drag lands on the key under the
+/// playhead rather than on the still path, and the stopwatch off keeps the
+/// shape the playhead is over.
+#[test]
+fn a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+    let id = shape.get_shape_contents().expect("contents")[0].id;
+    let at = |num: i64| BridgeRational { num, den: 1 };
+
+    // Unkeyed until somebody keys it, and absent from the read model.
+    assert!(shape.get_shape_contents().expect("contents")[0]
+        .path_keys
+        .is_empty());
+
+    shape.toggle_shape_path_key(id, at(0)).expect("key at 0");
+    shape.toggle_shape_path_key(id, at(2)).expect("key at 2");
+    let keys = &shape.get_shape_contents().expect("contents")[0].path_keys;
+    assert_eq!(keys.len(), 2);
+    // Counted up, so the graph draws the rate the shape changes at (K-344).
+    assert_eq!(keys[0].value, 0.0);
+    assert_eq!(keys[1].value, 1.0);
+
+    // A point drag at the second key moves that key's shape, not the first's.
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].vertices[0].x = -4.0;
+    shape
+        .set_shape_contents(contents, Some(at(2)))
+        .expect("the drag lands on the key");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0]
+            .path_keys
+            .len(),
+        2,
+        "the drag reused the key there rather than planting a third"
+    );
+
+    // Re-timing refuses to step a key over its neighbour, and allows the rest.
+    assert!(matches!(
+        shape.move_shape_path_key(id, at(2), at(-1)),
+        Ok(false)
+    ));
+    assert!(matches!(
+        shape.move_shape_path_key(id, at(2), at(3)),
+        Ok(true)
+    ));
+
+    // The stopwatch off keeps the shape the playhead is over. At the first key
+    // that is the shape as drawn — which is the proof the drag touched only the
+    // key it was on.
+    shape.clear_shape_path_keys(id, at(0)).expect("clear");
+    let after = &shape.get_shape_contents().expect("contents")[0];
+    assert!(after.path_keys.is_empty());
+    assert_eq!(after.vertices[0].x, 0.0, "the first key never moved");
+}
+
+/// An edit that is not a shape edit carries the keys through untouched — an
+/// opacity drag must not throw a morph away (K-606, K-340's rule again).
+#[test]
+fn a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+    let id = shape.get_shape_contents().expect("contents")[0].id;
+    shape
+        .toggle_shape_path_key(id, BridgeRational { num: 0, den: 1 })
+        .expect("key");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].opacity = 40.0;
+    shape.set_shape_contents(contents, None).expect("set");
+
+    let after = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(after.opacity, 40.0);
+    assert_eq!(after.path_keys.len(), 1, "the morph is still there");
 }
 
 /// The offset crosses as one length in layer pixels, out or in (K-554).
@@ -4225,7 +4309,7 @@ fn a_shapes_offset_round_trips_both_ways() {
 
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].offset_amount = BridgeScalar::Static(-2.5);
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
     assert_eq!(
         shape.get_shape_contents().expect("contents")[0].offset_amount,
         BridgeScalar::Static(-2.5),
@@ -4275,7 +4359,7 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     let mut contents = shape.get_shape_contents().expect("contents");
     contents[0].vertices[0].x -= 30.0;
     contents[0].vertices[0].y -= 20.0;
-    shape.set_shape_contents(contents).expect("set");
+    shape.set_shape_contents(contents, None).expect("set");
 
     let tf = shape.get_transform().expect("transform");
     assert_eq!(
@@ -4343,7 +4427,7 @@ fn a_shape_layer_refuses_art_that_is_not_a_shape() {
 
     // And a layer that is not a shape refuses the edit rather than growing art.
     assert!(matches!(
-        layer.set_shape_contents(vec![shape_item("Rectangle", 0.0, 0.0, 10.0)]),
+        layer.set_shape_contents(vec![shape_item("Rectangle", 0.0, 0.0, 10.0)], None),
         Err(BridgeError::NotShape)
     ));
 }

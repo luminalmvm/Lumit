@@ -364,51 +364,60 @@ impl Mask {
     /// all time; with several, the two keys either side are blended by
     /// [`lerp_paths`] at the eased parameter.
     pub fn path_at(&self, t: f64) -> Cow<'_, BezierPath> {
-        let (Some(first), Some(last)) = (self.path_keys.first(), self.path_keys.last()) else {
-            return Cow::Borrowed(&self.path);
-        };
-        if t <= first.time.to_f64() {
-            return Cow::Borrowed(&first.path);
-        }
-        if t >= last.time.to_f64() {
-            return Cow::Borrowed(&last.path);
-        }
-        let idx = self
-            .path_keys
-            .windows(2)
-            .position(|w| match w.get(1) {
-                Some(next) => t < next.time.to_f64(),
-                None => false,
-            })
-            .unwrap_or(0);
-        let (Some(a), Some(b)) = (self.path_keys.get(idx), self.path_keys.get(idx + 1)) else {
-            return Cow::Borrowed(&self.path);
-        };
-        // The eases are the scalar evaluator's, run on a 0→1 ramp: one keyframe
-        // machine, not two. Hold, linear and AE speed/influence all arrive here
-        // already correct, and the parameter is exactly 0 and 1 at the keys.
-        let ramp = [
-            Keyframe {
-                time: a.time,
-                value: 0.0,
-                interp_in: a.interp_in,
-                interp_out: a.interp_out,
-            },
-            Keyframe {
-                time: b.time,
-                value: 1.0,
-                interp_in: b.interp_in,
-                interp_out: b.interp_out,
-            },
-        ];
-        let u = crate::anim::evaluate(&ramp, t).unwrap_or(0.0);
-        Cow::Owned(lerp_paths(&a.path, &b.path, u))
+        path_at(&self.path_keys, &self.path, t)
     }
 
     /// Whether this mask's shape is keyframed.
     pub fn path_is_animated(&self) -> bool {
         !self.path_keys.is_empty()
     }
+}
+
+/// The shape `keys` describe at time `t`, or `still` where there are none.
+///
+/// One implementation for both things in the document that hold a keyed path:
+/// a mask's shape (K-224) and a shape item's (K-606). The rules are the same
+/// because the geometry is — one `BezierPath`, one set of maths — and the whole
+/// of "morphing" is this function plus [`lerp_paths`] beneath it.
+pub fn path_at<'a>(keys: &'a [PathKeyframe], still: &'a BezierPath, t: f64) -> Cow<'a, BezierPath> {
+    let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
+        return Cow::Borrowed(still);
+    };
+    if t <= first.time.to_f64() {
+        return Cow::Borrowed(&first.path);
+    }
+    if t >= last.time.to_f64() {
+        return Cow::Borrowed(&last.path);
+    }
+    let idx = keys
+        .windows(2)
+        .position(|w| match w.get(1) {
+            Some(next) => t < next.time.to_f64(),
+            None => false,
+        })
+        .unwrap_or(0);
+    let (Some(a), Some(b)) = (keys.get(idx), keys.get(idx + 1)) else {
+        return Cow::Borrowed(still);
+    };
+    // The eases are the scalar evaluator's, run on a 0→1 ramp: one keyframe
+    // machine, not two. Hold, linear and AE speed/influence all arrive here
+    // already correct, and the parameter is exactly 0 and 1 at the keys.
+    let ramp = [
+        Keyframe {
+            time: a.time,
+            value: 0.0,
+            interp_in: a.interp_in,
+            interp_out: a.interp_out,
+        },
+        Keyframe {
+            time: b.time,
+            value: 1.0,
+            interp_in: b.interp_in,
+            interp_out: b.interp_out,
+        },
+    ];
+    let u = crate::anim::evaluate(&ramp, t).unwrap_or(0.0);
+    Cow::Owned(lerp_paths(&a.path, &b.path, u))
 }
 
 /// Blend two paths, `u` = 0 giving `from` and 1 giving `to`.

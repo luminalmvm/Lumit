@@ -12001,3 +12001,56 @@ After Effects counts differently and would fill that centre. Combining does not 
 answer either way round: the star looks the same before and after it is joined to something,
 which is the property worth having. The day Lumit offers a fill-rule choice, this is the one
 line that reads it.
+
+## 33. Morphing a shape, in plain terms
+
+A shape layer's art has always been a fixed drawing: you draw a path and it stays that path for
+the whole layer. **Morphing** makes the path itself animate — the shape you drew at the start
+turns into the shape you drew at the end, smoothly, over however long you like. A blob becomes a
+letter; a rectangle grows into a speech bubble.
+
+You use it the way you use every other animation in Lumit. Each piece of art now has a **Path**
+row in its twirl-down, with a stopwatch on it. Click the stopwatch and Lumit plants a key holding
+the shape that is already there — nothing jumps. Move the playhead, drag the points around with
+the shape tools, and a second key appears where the playhead is. Between the two the shape
+travels. Clicking the stopwatch again stops it animating and keeps whichever shape you were
+looking at.
+
+The Path row is the one row with no number beside it, because a shape is not a number. It has the
+stopwatch, the arrows that jump to the next and previous key, and the diamond that plants or
+removes one — and its keys show as diamonds on its lane, which you can drag to re-time the morph
+just like any other keyframe.
+
+### The part that sounds hard and is not
+
+The obvious problem is what happens when the two shapes have a **different number of points**.
+Morph a triangle into a square and there are three corners on one side and four on the other:
+which corner goes where?
+
+Lumit answers it the way After Effects does, by **resampling**. Before blending, the sparser path
+is cut into as many pieces as the denser one has — but cut *without moving anything*. A bezier
+curve can be split at any point into two curves that, joined, are exactly the curve you started
+with; so the triangle gets a fourth point placed part-way along one of its sides, and it is still
+precisely the same triangle. Now both shapes have four points, and each point simply slides to its
+opposite number.
+
+Which is exactly why adding a point to a shape halfway through an animation does not throw the
+animation away, and it is also the feature's real ceiling. Lumit does **not** try to work out
+which corner of the triangle "means" which corner of the square. Point one goes to point one, and
+so on round. If a morph twists in a way you did not want, the fix is to change where the path
+*starts* — rotate its first point — rather than to expect the machine to guess. That is the same
+lever After Effects gives you, and for the same reason: "which parts of these two drawings look
+alike" is a question with no honest single answer.
+
+### Two smaller things, worth knowing
+
+**Editing a morphing shape edits the key you are parked on.** Once a path is keyed, the shape
+stored on the item is no longer what gets drawn — the keys are. So dragging a point writes into
+the key sitting under the playhead, or plants a new one there if none exists. This is exactly what
+a keyed mask already does, and what dragging any keyframed value does everywhere else in Lumit.
+It is also why the picture keeps up while you drag: the live preview is handed the playhead too,
+so it shows the key moving rather than a shape that appears frozen.
+
+**Everything else reads the morph.** The trim, the offset, the repeater and the boolean combines
+all work on the shape *as it is at that moment*, not on the drawing stored underneath. So a cutter
+path can slide across the shape it is subtracted from, and the hole travels with it.

@@ -18429,3 +18429,64 @@ Regression tests: in `lumit-core`, `a_union_covers_what_either_path_covered`,
 `a shape item after the first carries the Combine row`. New strings: `shapeCombine`,
 `shapeCombineApart`, `shapeCombineUnion`, `shapeCombineSubtract`, `shapeCombineIntersect`,
 `shapeCombineExclude`.
+
+## K-606 — A shape's path morphs by the mask's own keys, and the edit lands on the playhead
+
+**Status: DECIDED (2026-08-26).** The second half of K-564's shape operators. Amends
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and §7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and
+[impl/shape-layers.md](impl/shape-layers.md).
+
+**Almost none of this is new.** A mask's shape has keyed since K-224 and eased since K-344, and
+`path_at`, `lerp_paths` and `resample` between them *are* morphing — including the part that
+sounds like it needs an algorithm and does not. So `ShapeItem` gains `path_keys:
+Vec<PathKeyframe>`, the same type on the same clock, `Mask::path_at` is pulled out into a free
+`mask::path_at(keys, still, t)` the two callers share, and every read of an item's `path` in the
+rasteriser and the bounds becomes `path_at(t)`. Empty is the still path and is absent from the
+file, so every project saved before this opens byte-identical and every frame banked for an
+unkeyed shape stays valid.
+
+**The correspondence rule is After Effects', and its ceiling is named.** Equal point counts run
+vertex for vertex. Unequal ones have the sparser path **resampled** first: cut into as many pieces
+as the denser one has by splitting its own cubics at de Casteljau parameters, so the path that
+comes back is geometrically the path that went in — nothing bulges and nothing flattens — and the
+choice of which segments take the extra points is fixed arithmetic, so playback is deterministic.
+Which vertex meets which is then decided by **order**, not by feature: a triangle morphing into a
+square pairs point one with point one and the flat side grows wherever that puts it. The lever is
+rotating a path's start point, which is the lever AE gives, and for the reason it gives it — "which
+parts of these two drawings look alike" has no honest single answer, and a matcher would be a real
+algorithm defending a guess. Closedness is **held** across a span rather than tweened, as K-224
+already decided for a mask.
+
+**The playhead had to reach four more doors.** Once a path is keyed the stored `path` is not what
+draws, so vertices written there move nothing and the art appears frozen under the pointer — K-340's
+finding, now on the other thing in the document that holds a path. `set_shape_contents` therefore
+takes an `at: Option<BridgeRational>`: with it, the dragged vertices land on the key sitting there
+or plant one holding them; without it — an opacity drag, a rename, a colour — the keys are carried
+through untouched by a new `write_item_over`, which also stops a frontend edit dropping the `extra`
+docs/10 §1.1 requires preserving. The **preview** door needed the same: a drag previews through
+`renderFrameWithShapePreview`, which rebuilt items from the bridge type and so dropped their keys,
+which would have shown nothing moving until the release. It now patches over the item already there
+at the previewed frame's own time.
+
+**Four ops, not one.** `toggle_shape_path_key`, `move_shape_path_key`, `set_shape_path_keys` and
+`clear_shape_path_keys` mirror the mask's four, item by item; each commits one whole-list
+`SetShapeContents` through a shared `commit_shape_items`, so keying, re-timing and un-keying move
+the layer with the art's corner exactly as dragging a point does (K-308) and each is one undo step.
+
+**What is not here, and was not here before either.** A shape item's rows do not reach the **graph
+editor**: `graphChannelsFor` knows about transforms, effects, retime and masks and has never known
+about shape contents, so a keyed trim has had no curve to draw since K-551 and a keyed path has
+none now. The **lane** diamonds are wired, for the path and — the same three lines — for every
+other shape row that was silently missing them. Closing the graph gap is a channel kind of its own
+and is a separate piece of work.
+
+Regression tests: in `lumit-core`, `a_shape_with_no_keys_is_its_still_path_at_every_time`,
+`a_keyed_shape_morphs_from_one_drawn_path_to_the_other`,
+`the_morph_is_what_the_picture_and_the_box_both_read`,
+`two_paths_with_different_point_counts_still_morph`,
+`a_morphing_path_is_combined_at_the_moment_it_is_drawn`,
+`an_unkeyed_shape_is_absent_from_the_file`; in the bridge,
+`a_shapes_path_keys_hold_what_is_showing_and_take_the_edit_under_the_playhead`,
+`a_shapes_path_keys_survive_an_edit_that_is_not_a_shape_edit`; in Flutter,
+`a shape item carries a Path row that keys its shape`. No new strings: the row reads the
+`shapePath` key that already existed, whose description now covers both its uses.

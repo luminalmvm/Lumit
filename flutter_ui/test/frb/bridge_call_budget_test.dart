@@ -1179,6 +1179,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),

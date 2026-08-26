@@ -573,6 +573,7 @@ mod tests {
             stroke_width: 0.0,
             opacity: 100.0,
             combine: 0,
+            path_keys: Vec::new(),
             trim_start: lumit_core::anim::Property::zero(),
             trim_end: lumit_core::anim::Property::fixed(100.0),
             trim_offset: lumit_core::anim::Property::zero(),

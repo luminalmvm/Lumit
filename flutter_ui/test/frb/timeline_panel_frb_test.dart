@@ -1549,6 +1549,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1649,6 +1650,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1721,6 +1723,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1764,6 +1767,89 @@ void main() {
       expect(find.text('Gradient start x'), findsOneWidget);
     });
 
+    /// A shape item's own path keys, so a drawn shape can morph into another
+    /// one (K-606). The row is a stopwatch and its diamonds and nothing else:
+    /// a shape has no single number to show.
+    testWidgets('a shape item carries a Path row that keys its shape',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Rectangle',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Rectangle',
+            vertices: [
+              corner(0, 0),
+              corner(60, 0),
+              corner(60, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            combine: 0,
+            pathKeys: const [],
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      final id = layer.getShapeContents().single.id;
+      final rowKey = 'tl-shape-path-$id';
+      expect(find.text('Path'), findsOneWidget);
+      expect(find.byKey(ValueKey<String>(rowKey)), findsNothing,
+          reason: 'a shape has no single number, so the row has no field');
+
+      expect(layer.getShapeContents().single.pathKeys, isEmpty);
+      await tester.tap(find.byKey(ValueKey<String>('kf-stopwatch-$rowKey')));
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.pathKeys, hasLength(1),
+          reason: 'the stopwatch planted a key on the shape');
+      // The keys reach the lane, so the diamonds have somewhere to be drawn.
+      expect(
+          laneKeysOf(FoldShapeValueRow(layer.getShapeContents().single,
+              ShapeValue.path,
+              depth: 3)),
+          hasLength(1));
+
+      // And off again keeps the shape rather than dropping it.
+      final before = layer.getShapeContents().single.vertices.length;
+      await tester.tap(find.byKey(ValueKey<String>('kf-stopwatch-$rowKey')));
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.pathKeys, isEmpty);
+      expect(layer.getShapeContents().single.vertices, hasLength(before));
+    });
+
     /// The Combine row belongs to the item **above**: the first piece of art
     /// in the list has nothing in front of it to join, and an item that joins
     /// the run lends its path and nothing else (K-605).
@@ -1798,6 +1884,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1872,6 +1959,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1944,6 +2032,7 @@ void main() {
             gradientEndX: const BridgeScalar.static_(0),
             gradientEndY: const BridgeScalar.static_(0),
             combine: 0,
+            pathKeys: const [],
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),

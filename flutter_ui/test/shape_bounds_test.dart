@@ -50,6 +50,7 @@ void main() {
         gradientEndX: const BridgeScalar.static_(0),
         gradientEndY: const BridgeScalar.static_(0),
         combine: 0,
+        pathKeys: const [],
         offsetAmount: BridgeScalar.static_(offset),
         repeatCopies: BridgeScalar.static_(copies),
         repeatOffset: BridgeScalar.static_(copyOffset),

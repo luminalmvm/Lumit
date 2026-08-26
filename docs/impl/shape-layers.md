@@ -28,8 +28,9 @@ other `Property`, so it keys, undoes, previews and crosses the bridge with no ne
 machinery at all. Every modifier is left out of the file until it is used, so the
 tree §9.2 still plans re-homes these fields rather than replacing them.
 
-Not built: nested groups, wiggle paths, joins and caps other than round, and
-animated paths. Dragging a shape's points on
+Not built: nested groups, wiggle paths, and joins and caps other than round.
+Animated paths **are** built (K-606) — the mask's own keyed path, item by item.
+Dragging a shape's points on
 the picture **is** built (K-307): the gesture K-224 gave mask points serves shape
 contents too, since both hold the same `BezierPath`. Mind the coordinates: a shape
 item's vertices are in the *art's* space, and the layer's pixels start at the art's
@@ -163,6 +164,36 @@ finer than an 8-bit result can show.
 The gradient's points are in the art's own coordinates and are placed through
 the *copy's* transform, which is what makes a repeated copy carry its ramp
 rather than sample the original's.
+
+**Path morphing.** The one item on the "not built" list above that turned out to be already
+written (K-606). A mask's shape has keyed since K-224, and `path_at`, `lerp_paths` and `resample`
+between them are the *whole* of morphing — the resampling rule included, which is the part that
+looks like it needs an algorithm and does not: the sparser path is cut into as many pieces as the
+denser one has by de Casteljau, so the path that comes back is geometrically the path that went
+in. So the work was almost entirely *plumbing*: `path_keys` beside a shape item's `path`,
+`mask::path_at` pulled out of `Mask` into a free function the two callers share, and every read of
+`item.path` in the rasteriser and the bounds turned into `item.path_at(t)`.
+
+Three things worth knowing:
+
+* **The ceiling is the correspondence, and it is AE's.** Two paths run vertex for vertex after
+  resampling, with no attempt to *match* features: morph a triangle into a square and the corner
+  the flat side grows from is decided by which vertex each path starts at, not by which corners
+  look alike. Rotating a path's start point is the user's lever, which is what After Effects
+  gives too. A matcher would be a real algorithm and a real argument about what "alike" means;
+  the honest simple thing is here and the ceiling is written down.
+* **The playhead had to reach four more doors.** `set_shape_contents` grew an `at`, exactly as
+  `set_mask` has one, because once a path is keyed the stored `path` is not what draws and a
+  point drag written there moves nothing. The **preview** door needed it too: a drag previews
+  through `renderFrameWithShapePreview`, which rebuilt items from the bridge type and so dropped
+  their keys — a drag on a morphing shape would have shown nothing moving until the release,
+  which is the very bug the `at` exists to prevent.
+* **The graph draws nothing for a shape yet.** A mask's path row reaches the graph editor as a
+  channel whose value is the counted-up interpolation parameter (K-344); a shape item's rows —
+  path, trim, offset, the repeater's nine — reach it as nothing at all, because
+  `graphChannelsFor` knows about transforms, effects, retime and masks and has never known about
+  shape contents. That gap is older than morphing and is not closed here; the lane diamonds are,
+  which is what a keyed row most needs.
 
 **Boolean combines.** The first modifier that could not be written here (K-605). Every one
 before it is arithmetic on a polyline this crate already walks — cut it by length, push it

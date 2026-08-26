@@ -5104,9 +5104,13 @@ class _MaskValueRowState extends State<_MaskValueRow> {
     return Row(
       children: [
         if (_isPath)
-          MaskPathKeyframesFrb(
-            layer: widget.layer,
-            mask: widget.mask,
+          PathKeyframesFrb(
+            keys: widget.mask.pathKeys,
+            rowKey: 'tl-mask-path-${widget.mask.id}',
+            onToggleKey: (time) =>
+                widget.layer.toggleMaskPathKey(id: widget.mask.id, time: time),
+            onClear: (time) =>
+                widget.layer.clearMaskPathKeys(id: widget.mask.id, time: time),
             comp: widget.comp,
             playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
@@ -5796,7 +5800,12 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
 
   /// The trim's two ends are a per cent of the path's own length; its offset is
   /// degrees, because degrees go round; the dashes are lengths in layer pixels.
+  bool get _isPath => widget.value == ShapeValue.path;
+
   (double, double, String) get _units => switch (widget.value) {
+        // The shape has no number to drag, so no range and no unit: its row is
+        // the stopwatch and its diamonds (K-606).
+        ShapeValue.path => (0, 0, ''),
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),
         // Where the ramp starts and ends, in the art's own coordinates.
@@ -5863,13 +5872,17 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
   void _write(BridgeScalar v) {
     setState(() => _staged = null);
     try {
-      widget.layer.setShapeContents(contents: [
-        for (final i in widget.layer.getShapeContents())
-          if (i.id == widget.item.id)
-            shapeWithScalar(i, widget.value, v)
-          else
-            i,
-      ]);
+      widget.layer.setShapeContents(
+        contents: [
+          for (final i in widget.layer.getShapeContents())
+            if (i.id == widget.item.id)
+              shapeWithScalar(i, widget.value, v)
+            else
+              i,
+        ],
+        // Not a shape edit: a keyed path is carried through untouched (K-606).
+        at: null,
+      );
       widget.onChanged();
     } catch (_) {
       // The item or its layer went away mid-drag.
@@ -5886,14 +5899,28 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
     final t = ThemeScope.of(context).theme;
     return Row(
       children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          playheadFrame: widget.playheadFrame,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
+        if (_isPath)
+          PathKeyframesFrb(
+            keys: widget.item.pathKeys,
+            rowKey: _rowKey,
+            onToggleKey: (time) => widget.layer
+                .toggleShapePathKey(id: widget.item.id, time: time),
+            onClear: (time) => widget.layer
+                .clearShapePathKeys(id: widget.item.id, time: time),
+            comp: widget.comp,
+            playheadFrame: widget.playheadFrame,
+            onSeek: widget.onSeek,
+            onChanged: widget.onChanged,
+          )
+        else
+          KeyframeControlsFrb(
+            scalars: [_scalar],
+            onWrite: (s) => _write(s.first),
+            comp: widget.comp,
+            playheadFrame: widget.playheadFrame,
+            onSeek: widget.onSeek,
+            rowKey: _rowKey,
+          ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(shapeValueLabel(widget.value),
@@ -5903,7 +5930,11 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
           width: widget.valueColumn.width,
           child: Align(
             alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+            // A shape is not a number, so its row has no value field — the
+            // drawing tools are where it is edited.
+            child: _isPath
+                ? const SizedBox.shrink()
+                : SizedBox(width: 72, child: _field()),
           ),
         ),
         SizedBox(width: widget.valueColumn.rightInset),
@@ -5974,10 +6005,14 @@ class _ShapePaintRow extends StatelessWidget {
   /// written (K-283), so this is one op and one undo step.
   void _write(BridgeShapeItem Function(BridgeShapeItem) change) {
     try {
-      layer.setShapeContents(contents: [
-        for (final other in layer.getShapeContents())
-          if (other.id == item.id) change(other) else other,
-      ]);
+      layer.setShapeContents(
+        contents: [
+          for (final other in layer.getShapeContents())
+            if (other.id == item.id) change(other) else other,
+        ],
+        // Not a shape edit: a keyed path is carried through untouched (K-606).
+        at: null,
+      );
       onChanged();
     } catch (_) {
       // The item or its layer went away between the draw and the click.

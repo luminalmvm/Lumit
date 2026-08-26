@@ -1294,8 +1294,24 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       final contents = shapeContentsWithPointsMoved(box, _points, d);
       if (contents != null) {
         try {
-          box.layer.setShapeContents(contents: contents);
+          // The playhead goes with it, for the mask's reason above: on an item
+          // whose shape is keyed, the drag belongs to the key sitting there
+          // rather than to the still path (K-606).
+          box.layer.setShapeContents(
+            contents: contents,
+            at: widget.comp
+                .timeOfFrame(frame: widget.uiState.playheadFrame.value),
+          );
           landed = true;
+          // A keyed shape edit shows itself in the Timeline (K-341): the row
+          // the new key belongs to is the one the author now wants to see.
+          for (final item in contents) {
+            if (item.pathKeys.isEmpty) continue;
+            widget.uiState.requestSelectProperty(
+              '${box.id}/contents/${item.id}/${ShapeValue.path.name}',
+            );
+            break;
+          }
         } catch (_) {
           // The layer or its art went away mid-drag; the rest still move.
         }
