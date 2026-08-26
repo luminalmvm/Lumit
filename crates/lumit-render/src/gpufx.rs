@@ -392,6 +392,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Stroke,
     &Particulate,
     &Grid,
+    &Scatter,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -3828,12 +3829,71 @@ impl GpuEffect for Grid {
             tex,
             w,
             h,
+            None,
             &lumit_gpu::fx::PointsDrawOp {
                 points: &points,
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
                 alpha_test: false,
+                alpha_invert: false,
+                seed: inst.seed,
+            },
+        )
+    }
+}
+
+/// Scatter (docs/08 §3.89, K-599): candidates thrown on the host, kept on the
+/// card where the alpha under them beats their own die.
+///
+/// **The rejection is the draw's** rather than a pass of its own: the field is
+/// a picture that exists only on the card, and the candidates are a set that
+/// exists only on the host, so the vertex stage is where the two meet. What is
+/// posted is therefore the whole candidate set, and a refused point is given no
+/// size — a disc of no radius covers no pixel.
+struct Scatter;
+impl GpuEffect for Scatter {
+    fn match_name(&self) -> &'static str {
+        "scatter"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::scatter::Scatter as S;
+        let inst = S::read(p);
+        let style = inst.draw_style();
+        let px_scale = S::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|sched| sched.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        // The K-395 override: the matte is *where the points go*, so it arrives
+        // as the kernel's own input rather than as a dissolve afterwards. Unset
+        // reads this effect's own picture, which is the documented default.
+        let matte = aux.matte().cloned();
+        let invert = p.bool(lumit_core::fx::MATTE_INVERT_ID, false);
+        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
+        let points = draw_points_of(&candidates);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            matte.as_ref(),
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                alpha_test: true,
+                alpha_invert: invert,
                 seed: inst.seed,
             },
         )
@@ -4379,9 +4439,10 @@ mod tests {
             mix: style.mix,
             projection: projection.map(|proj| proj.m),
             alpha_test: false,
+            alpha_invert: false,
             seed: inst.seed,
         };
-        let out = fx.points_draw(&ctx, &tex, w, h, &op);
+        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
@@ -4395,7 +4456,7 @@ mod tests {
         assert!(worst < 2e-2, "worst |Δ| {worst}");
 
         // Bit-stable against itself (docs/08 §2.4).
-        let again = fx.points_draw(&ctx, &tex, w, h, &op);
+        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the generic draw is not bit-stable");
     }
@@ -4421,12 +4482,14 @@ mod tests {
             &tex,
             w,
             h,
+            None,
             &lumit_gpu::fx::PointsDrawOp {
                 points: &points,
                 feather: inst.draw_style().feather,
                 mix: 0.0,
                 projection: None,
                 alpha_test: false,
+                alpha_invert: false,
                 seed: inst.seed,
             },
         );
@@ -4436,6 +4499,82 @@ mod tests {
         // on its way onto the card and this is the pass-through it must equal.
         let before = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
         assert_eq!(gpu, before, "Mix at nought drew something");
+    }
+
+    // ---------------------------------------------- Scatter (K-599)
+
+    /// **The rejection agrees, path for path** (K-599): the vertex stage keeps
+    /// the candidates the CPU reference keeps, and refuses the ones it refuses.
+    ///
+    /// The field is a hard-edged half-opaque picture on purpose. A soft edge
+    /// would put candidates within a rounding of their own die, and what this
+    /// test is about is the *rule* — the alpha under the point against the
+    /// candidate's own hash — not the last bit of an fp16 texture.
+    #[test]
+    fn a_scatters_rejection_agrees_with_the_cpu_reference() {
+        for invert in [false, true] {
+            let Ok(ctx) = GpuContext::headless() else {
+                return;
+            };
+            let fx = FxEngine::new(&ctx);
+            let (w, h) = (128u32, 96u32);
+            let inst = lumit_core::fx::effects::scatter::Scatter {
+                density: 40.0,
+                seed: 11,
+                size: 5.0,
+                feather: 60.0,
+                colour: [0.9, 0.5, 0.2, 1.0],
+                max_points: 20_000,
+                mix: 100.0,
+            };
+            // Left half opaque, right half clear — the same field both paths
+            // read, uploaded once.
+            let mut field = vec![0.0f32; (w * h * 4) as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    let d = ((y * w + x) * 4) as usize;
+                    field[d + 3] = f32::from(x < w / 2);
+                }
+            }
+            let style = inst.draw_style();
+            let kept = inst.stream(w, h, 1.0, &field, invert, Default::default());
+            assert!(kept.len() > 10, "the fixture kept {}", kept.len());
+            let all = inst.candidates(w, h, 1.0, Default::default());
+            assert!(kept.len() < all.len(), "nothing was refused");
+
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &field, w, h);
+            // The reference draws over the field as the card holds it — the
+            // working format is fp16, so this is the picture the kernel is
+            // compositing onto and the comparison is of the discs alone.
+            let mut cpu = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
+            lumit_core::fx::points::draw_stream(&mut cpu, w, h, &kept, &[], &style, None);
+
+            let points = draw_points_of(&all);
+            let out = fx.points_draw(
+                &ctx,
+                &tex,
+                w,
+                h,
+                None,
+                &lumit_gpu::fx::PointsDrawOp {
+                    points: &points,
+                    feather: style.feather,
+                    mix: style.mix,
+                    projection: None,
+                    alpha_test: true,
+                    alpha_invert: invert,
+                    seed: inst.seed,
+                },
+            );
+            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let worst = cpu
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            eprintln!("scatter draw (invert {invert}): worst |Δ| {worst:.3e}");
+            assert!(worst < 2e-2, "invert {invert}: worst |Δ| {worst}");
+        }
     }
 
     // ---------------------------------------------------------------

@@ -98,6 +98,7 @@ use super::effects::{
     roughen_edges::{RoughenEdges, RoughenEdgesDef},
     saturation::{Saturation, SaturationDef},
     scanlines::{Scanlines, ScanlinesDef},
+    scatter::{Scatter, ScatterDef},
     scribble::{Scribble, ScribbleDef},
     set_matte::{SetMatte, SetMatteDef},
     shadow_highlight::{ShadowHighlight, ShadowHighlightDef},
@@ -201,6 +202,7 @@ crate::catalogue![
     // The generators (K-598), beside it and for the same reason: they make
     // points rather than pixels, and declare the same Points output.
     GridDef => Grid,
+    ScatterDef => Scatter,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

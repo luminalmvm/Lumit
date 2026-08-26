@@ -48,11 +48,13 @@ pub struct PointsDrawOp<'a> {
     /// `None` on a 2D layer — where it is not the identity matrix but no
     /// matrix at all, so the positions' bits are left alone (K-258).
     pub projection: Option<[[f32; 4]; 3]>,
-    /// **Scatter's rejection** (K-599): read the picture's own alpha under each
-    /// point and refuse the ones their die outvotes. The test happens in the
-    /// vertex stage because that is the only place a host-built point set can
-    /// meet a picture that exists only on the card.
+    /// **Scatter's rejection** (K-599): read the alpha under each point and
+    /// refuse the ones their die outvotes. The test happens in the vertex
+    /// stage because that is the only place a host-built point set can meet a
+    /// picture that exists only on the card.
     pub alpha_test: bool,
+    /// Scatter's Invert row: the points land where the alpha is *not*.
+    pub alpha_invert: bool,
     /// The seed the acceptance die is drawn from; unread without
     /// [`alpha_test`](Self::alpha_test).
     pub seed: u32,
@@ -61,6 +63,10 @@ pub struct PointsDrawOp<'a> {
 impl FxEngine {
     /// Draw a host-built set of points over a working texture, returning a new
     /// texture of the same size.
+    ///
+    /// `alpha` is the picture Scatter's rejection reads its field from — a
+    /// bound matte's, or `None` for the input itself. Unread unless
+    /// [`PointsDrawOp::alpha_test`] is set.
     ///
     /// The picture is copied first and the discs drawn over it, so this is an
     /// ordinary "picture in, picture out" pass — and an empty set, a Mix of
@@ -72,6 +78,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        alpha: Option<&wgpu::Texture>,
         op: &PointsDrawOp<'_>,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -136,6 +143,7 @@ impl FxEngine {
         u.proj2 = proj[2];
         u.project = u32::from(op.projection.is_some());
         u.alpha_test = u32::from(op.alpha_test);
+        u.alpha_invert = u32::from(op.alpha_invert);
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -150,9 +158,11 @@ impl FxEngine {
                 contents: bytemuck::cast_slice(&words),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        // The input picture twice: once in the sprite slot, which Disc mode
-        // never samples, and once as the alpha the rejection reads.
+        // The input picture in the sprite slot, which Disc mode never samples;
+        // the rejection's own field beside it — a bound matte's picture, or
+        // this effect's input when the row is unset.
         let view = src.create_view(&Default::default());
+        let alpha_view = alpha.unwrap_or(src).create_view(&Default::default());
         let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-points-draw-bind"),
             layout: &self.particulate_draw_layout,
@@ -171,7 +181,7 @@ impl FxEngine {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureView(&alpha_view),
                 },
             ],
         });

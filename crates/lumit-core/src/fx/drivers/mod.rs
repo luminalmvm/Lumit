@@ -479,6 +479,16 @@ impl Eval<'_> {
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
+        // **Scatter cannot be sampled here, and that is the recorded answer**
+        // to points-stream.md §2.2's constraint (K-599): its stream is a
+        // function of the input *picture*, and at resolve time — which is when
+        // this walk runs — no picture exists. The wire reads the documented
+        // empty stream rather than a guess at one, and nothing is memoised, so
+        // a future carriage that can answer will not find a wrong answer cached
+        // in front of it.
+        if inst.effect.match_name != "particulate" {
+            return None;
+        }
         let p = super::effects::particulate::Particulate::read(params);
 
         // The mask-path emitter's polyline, flattened at composition scale, by
@@ -1394,6 +1404,52 @@ mod tests {
         // The sampler's default Position is the comp's centre, and an odd
         // lattice has a cell sat exactly on it.
         assert_eq!(read("mix"), 0.0, "the centre cell is where the query is");
+    }
+
+    /// **Scatter's stream cannot be sampled by a driver** (K-599), which is the
+    /// recorded answer to points-stream.md §2.2's constraint: the stream is a
+    /// function of the input picture, and at resolve time there is no picture.
+    /// The wire reads the documented empty stream — nothing alive, nothing
+    /// anywhere near — rather than a guess at one.
+    #[test]
+    fn a_scatters_stream_reads_as_empty_in_the_driver_walk() {
+        let producer = inst("scatter");
+        let sampler = inst("points_sample");
+        let target = inst("blur");
+        let wired = LayerGraph {
+            nodes: vec![sampler.clone()],
+            edges: vec![
+                stream_edge(&producer, &sampler),
+                edge(
+                    &sampler,
+                    points_sample::COUNT_PORT,
+                    NodeRef::Effect(target.id),
+                    "radius",
+                ),
+                edge(
+                    &sampler,
+                    points_sample::NEAREST_PORT,
+                    NodeRef::Effect(target.id),
+                    "mix",
+                ),
+            ],
+            ..LayerGraph::default()
+        };
+        let context = staged(vec![producer.clone(), target.clone()], wired.clone());
+        let resolved = resolve_drivers(&wired, 1.0, context, None);
+        let read = |id: &str| {
+            resolved
+                .param(NodeRef::Effect(target.id), ParamId::new(id))
+                .expect("the wire carries something")
+                .as_f32()
+        };
+        assert_eq!(read("radius"), 0.0, "a picture-less stream counted points");
+        // Clamped to the parameter's own hard range at the socket (K-510), as
+        // every driven value is, so this is the far value held to Mix's top.
+        assert!(
+            read("mix") > 0.0,
+            "nearness read as 'a point is right here'"
+        );
     }
 
     /// The documented no-ops (§2.2): an unwired socket and an empty stream both

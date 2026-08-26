@@ -515,3 +515,47 @@ fn a_three_d_particulate_is_seen_through_the_comps_camera() {
         "one frame, two pictures"
     );
 }
+
+/// **The generators go through the same door** (K-598, K-599): dropping Grid or
+/// Scatter on a solid draws something, at the raster the comp asks for.
+///
+/// The unit tests build the point set themselves. What this one proves is the
+/// *application* half — the draw builder threading a carriage to an effect with
+/// no Emit rate to scan, and the GPU table finding the pass by name — which no
+/// unit test can see.
+#[test]
+fn the_generators_draw_on_a_solid_through_the_document() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (bare_doc, bare_comp) = project(Vec::new());
+    let (bare, ..) = r
+        .render_rgba(&bare_doc, bare_comp, 60, 1.0)
+        .expect("the bare solid renders");
+
+    for name in ["grid", "scatter"] {
+        let inst = lumit_core::fx::instantiate(name).expect("a built-in");
+        let (doc, comp) = project(vec![inst]);
+        let (drawn, ..) = r
+            .render_rgba(&doc, comp, 60, 1.0)
+            .expect("the solid with a generator renders");
+        let (n, worst) = diff(&bare, &drawn);
+        assert!(
+            n > 0 && worst > 4,
+            "{name} on a solid changed {n} pixels by at most {worst}/255 — that is not a field \
+             of points"
+        );
+        // Twice is once: there is no clock in either of them.
+        let (again, ..) = r
+            .render_rgba(&doc, comp, 60, 1.0)
+            .expect("the generator renders again");
+        assert_eq!(drawn, again, "{name} drew two different pictures");
+        // And no clock means the frame does not matter, which is the whole
+        // claim of a generator against a particle system.
+        let (later, ..) = r
+            .render_rgba(&doc, comp, 300, 1.0)
+            .expect("the generator renders later");
+        assert_eq!(drawn, later, "{name} moved with the playhead");
+    }
+}

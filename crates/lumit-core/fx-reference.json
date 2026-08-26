@@ -9631,6 +9631,164 @@
       "matte_role": "strength"
     },
     {
+      "slug": "scatter",
+      "match_name": "scatter",
+      "label": "Scatter",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "density",
+          "label": "Density",
+          "kind": "float",
+          "unit": "raw",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "px",
+          "default": 6.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "max_points",
+          "label": "Max points",
+          "kind": "int",
+          "unit": "raw",
+          "default": 20000,
+          "slider_min": 1.0,
+          "slider_max": 200000.0,
+          "hard_min": 1.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [
+        {
+          "label": "Scatter",
+          "params": [
+            "density",
+            "seed"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Point",
+          "params": [
+            "size",
+            "feather",
+            "colour",
+            "max_points"
+          ],
+          "collapsed": false
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "chooses which layer's alpha the points land inside, instead of this layer's own"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "echo",
       "match_name": "echo",
       "label": "Echo",

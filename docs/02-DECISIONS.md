@@ -18045,3 +18045,62 @@ have to carry the whole history of an Emit rate track for one implementer and no
 for the other, which is an interface shaped by its callers. The same predicate now also
 spares a generator the birth scan in `build.rs`: an effect with no `emit_rate` row gets the
 carriage — the clock and the camera — with an empty schedule in it.
+
+## K-599 — Scatter throws points at the picture, and answers the image-dependent-stream constraint by refusing
+
+**DECIDED 2026-08-26**, off the owner's FP4 line, building K-598's generator shape. Scatter
+keeps points where there is alpha — the layer's own, or a matte layer's. Five decisions.
+
+**Rejection sampling, not a threshold.** A candidate stands when the alpha under it beats
+its own seeded die, so a field of 1 keeps every candidate, a half keeps half, nothing keeps
+none. The alternative — accept where the alpha passes some level — makes a feathered matte
+come out with a hard cut through the middle of its ramp, which is exactly the artefact
+people notice. Rejection makes a soft edge a *thinning crowd*, which is what the eye
+expects and what the maths does for free.
+
+**The working resolution is the frame's own, and the wobble is named rather than moved.**
+The commission asked for the sampling resolution to be pinned and argued. What is pinned:
+a candidate's **place** is a function of the seed and its index alone, and Density counts
+per *composition* area, so two previews of one frame at different divisors throw the same
+candidates at the same composition pixels — changing the preview divisor never re-rolls the
+crowd. The alpha under a candidate is read from the picture at the raster being drawn, with
+one nearest tap. The consequence, stated: a candidate sitting on a **soft edge** may be
+admitted at one preview resolution and refused at another. A fixed working resolution —
+downsample the field to 512 and sample that — does not remove this: a 512 made from a
+half-resolution picture is not the 512 made from a full one. It would buy a second
+resampling pass, a second cost, and a second truth about what the field is, to move the
+same wobble somewhere less visible. At full resolution preview and export are identical by
+construction, which is where K-031 is actually made, and a hard-edged matte has no wobble
+at all.
+
+**Alpha and only alpha, so no Channel row.** Scatter joins Depth of field, Displacement map
+and the Lens flare as an effect that picks its matte's channels itself (§2.6) — it just
+answers with a constant. The Channel row's seam *prepares* a matte into a grey whose alpha
+is 1, so an effect reading alpha and an effect reading the picked channel cannot both be
+served by it; and a matte-shaped luma source becomes an alpha one through Matte key or Set
+matte, which is what those exist for. Invert still works, and is the "scatter outside the
+shape" everyone reaches for second. The Matte row is the **K-395 override**: the matte here
+is *where the points go*, which is as deep inside an effect's own maths as a matte gets, so
+the generic dissolve must not run as well.
+
+**The rejection happens in the vertex stage.** The candidate set exists only on the host
+(K-598's generator shape) and the field exists only on the card, and the draw is the one
+place the two meet. So what is posted is the **whole candidate set**, with a refused point
+given no size — a disc of no radius covers no pixel — rather than a compacted stream. The
+alternative was a compute pipeline mirroring Particulate's alive/scan/blocks/place in a
+second shader module, which would duplicate fifty lines of prefix sum to produce a compacted
+GPU buffer that **nothing reads**: points-stream.md §3.3's carriage for stack consumers is
+explicitly "designed now, built with its first consumer". It is marked in the code and in
+that note, so the compaction lands with the consumer that needs it rather than being
+discovered missing.
+
+**Driver-side sampling is refused, which is the branch points-stream.md §2.2 left open.**
+That note recorded the constraint in advance: "a stream from an image-dependent emitter
+either refuses driver-side sampling or the emit weighting is declared image-independent for
+sampling purposes — that package decides". This package decides **refuse**. At resolve time,
+when the driver walk runs, no picture exists; declaring the weighting image-independent
+would mean the sampled stream was not the drawn stream, which breaks the one invariant the
+whole programme rests on (points-stream.md §6 item 1). So a points wire from Scatter into a
+Points sample reads the documented empty stream — nothing alive, nothing anywhere near —
+and nothing is memoised, so a future carriage that *can* answer will not find a wrong answer
+cached in front of it. Emit-from-image inherits this decision unchanged.

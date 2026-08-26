@@ -1747,7 +1747,7 @@
   },
   "fxEndColour": "End colour",
   "@fxEndColour": {
-    "description": "Effect controls — a control on Gradient."
+    "description": "Effect controls — a control on Gradient, and the name of the Scatter effect, which throws points at the picture and keeps the ones that land on something."
   },
   "fxEndX": "End x",
   "@fxEndX": {
@@ -7134,7 +7134,7 @@
   },
   "fxDensity": "Density",
   "@fxDensity": {
-    "description": "Effect controls — a control on Photo filter: how strong the coloured glass is."
+    "description": "Effect controls — a control on Photo filter (how strong the coloured glass is) and on Scatter (how many points are thrown at each hundred-pixel square of the composition)."
   },
   "fxFilter": "Filter",
   "@fxFilter": {

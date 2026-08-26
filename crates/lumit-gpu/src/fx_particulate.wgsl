@@ -111,7 +111,8 @@ struct Params {
     // the ones the hash outvotes. Nought for Particulate, whose points were
     // already decided by the compaction.
     alpha_test: u32,
-    _pad1: f32,
+    // Scatter's Invert row (K-599): the points land where the alpha is *not*.
+    alpha_invert: u32,
     _pad2: f32,
 };
 
@@ -638,7 +639,10 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
             clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
             clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
         );
-        let a = textureLoad(alpha_src, px, 0).a;
+        var a = textureLoad(alpha_src, px, 0).a;
+        if (dp.alpha_invert != 0u) {
+            a = 1.0 - a;
+        }
         if (a <= nc_hash01(dp.seed, A_ACCEPT, bitcast<i32>(id), 0, 0)) {
             size = 0.0;
         }

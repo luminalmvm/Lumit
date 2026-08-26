@@ -212,7 +212,7 @@ pub(super) struct ParticulateParams {
 
     pub(super) project: u32,
     pub(super) alpha_test: u32,
-    pub(super) _pad1: f32,
+    pub(super) alpha_invert: u32,
     pub(super) _pad2: f32,
 }
 
@@ -427,7 +427,7 @@ impl FxEngine {
             // Particulate's points were decided by the compaction; only the
             // generic draw's Scatter caller turns the vertex-stage test on.
             alpha_test: 0,
-            _pad1: 0.0,
+            alpha_invert: 0,
             _pad2: 0.0,
         };
         let ubuf = ctx

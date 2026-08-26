@@ -10697,6 +10697,33 @@ for. What that buys is not speed but honesty: the points Grid *draws* are, digit
 the points its reference implementation worked out — the same numbers, through the same
 disc-drawing code Particulate's particles go through.
 
+**Scatter: points thrown at the picture.** The other generator works the opposite way round
+from Grid. Instead of placing points, it throws a great many of them at random and keeps the
+ones that land on something — "something" being the layer's own transparency, or another
+layer's if you point the Matte row at one. A silhouette, a word of text, a keyed subject
+becomes a cloud of points in the shape of itself.
+
+The keeping is done by a coin toss rather than a cut-off, and that is the part worth
+understanding. Each candidate point rolls its own die once and for ever; it stands if the
+transparency under it beats that roll. Where the shape is solid, every point stands. Where
+it is half transparent, about half stand. Where there is nothing, none do. So a soft edge
+comes out as a crowd that *thins* towards the outside, which is what your eye expects — a
+cut-off would draw a hard line through the middle of the feather instead.
+
+One honest wrinkle, because it is the kind of thing that would otherwise puzzle you at half
+resolution. Where a point *falls* never changes: it is decided by the seed and the point's
+number, in composition pixels, so switching the preview between Full and Half never
+reshuffles the crowd. What can change is whether a point sitting exactly **on a soft edge**
+gets kept, because the transparency it reads is the picture at whatever resolution is being
+drawn, and a half-size picture is a slightly different picture. At Full — and therefore on
+export — there is no difference at all, and with a hard-edged matte there is none at any
+resolution.
+
+And one thing Scatter cannot do, for a reason worth knowing: you cannot wire its points into
+a driver. A driver's sums are worked out before any picture exists, and Scatter's points
+depend on the picture, so there is nothing there to read yet. Wire one up and the driver
+reads an empty crowd — deliberately, rather than being handed a guess.
+
 **What comes later** plugs into the same socket: Connect points (lines between nearby
 particles), Clone to points (a layer stamped at every particle), and Trail. Each is a named future package;
 none of them will need the plumbing rebuilt, because the socket, the wire and the

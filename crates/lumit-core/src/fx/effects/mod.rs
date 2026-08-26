@@ -83,6 +83,7 @@ pub mod ripple;
 pub mod roughen_edges;
 pub mod saturation;
 pub mod scanlines;
+pub mod scatter;
 pub mod scribble;
 pub mod set_matte;
 pub mod shadow_highlight;

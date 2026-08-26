@@ -5644,6 +5644,74 @@ points lands ([impl/points-stream.md](impl/points-stream.md) §2.3).
 
 ---
 
+### 3.89 Scatter — points thrown at the picture, kept where there is alpha
+
+A **Generate** effect (K-599), the second points **generator** and the first thing in the
+family whose stream depends on the *picture*. Grid puts points where the arithmetic says;
+Scatter throws them at random and keeps the ones that land on something. "Something" is the
+layer's own alpha — or a matte layer's, if one is bound — so a silhouette, a piece of text
+or a keyed subject becomes a cloud of points in the shape of itself.
+
+**Parameters**, in two groups. *Scatter*: Density (0–100, default 20 — candidate points per
+hundred-pixel square **of the composition**), Seed. *Point*: Size (px@comp, default 6),
+Feather (per cent), Colour (scene-linear), **Max points** (1–200 000, hard 1 000 000,
+default 20 000 — the budget dial, not animatable). Plus the host Mix with its Blend (K-425),
+and the Matte row, which this effect **claims inside its own maths** (§2.6, K-395).
+
+**Algorithm sketch.** Rejection sampling, and nothing else:
+
+```
+n     = round(Density · comp area / 100²)   , capped at Max points   # the candidates
+p_i   = ( hash(Seed, i, u)·w , hash(Seed, i, v)·h )                  # where i falls
+a_i   = alpha under p_i    (of the matte if bound, else of the input; Invert flips it)
+stands if a_i > hash(Seed, i, accept)                                # the acceptance die
+```
+
+Six notes:
+
+- **Rejection, not thresholding**, and that is the whole design. A field of 1 keeps every
+  candidate, a field of a half keeps half of them, a field of nothing keeps none — so a
+  **soft edge comes out as a thinning crowd** rather than as a hard cut, which is what a
+  threshold would give and what would look wrong over a feathered matte.
+- **A point's place is raster-independent; its acceptance is not, and that is stated
+  rather than hidden.** Density is counted against the *composition's* area, so a
+  half-resolution preview throws the same candidates at the same places in composition
+  pixels — changing the preview divisor never re-rolls the crowd. What it can change is
+  whether a candidate sitting **on a soft edge** is admitted, because the alpha it reads is
+  the picture at the raster being drawn and a half-resolution picture is a different
+  picture. At full resolution preview and export are identical by construction (K-031),
+  which is where that guarantee is actually made. Any fixed "working resolution" would have
+  been a second resampling of the picture, a second cost and a second truth, to move the
+  same wobble somewhere else.
+- **Alpha, and only alpha** — which is why this effect carries no Channel row (§2.6): it
+  owns the answer and answers it with a constant. A luma source becomes an alpha one
+  through Matte key or Set matte, which is what those exist for. **Invert** works, and
+  scatters the points *outside* the shape.
+- **The rejection happens in the draw**, not in a pass of its own (K-599). The candidates
+  are a set that exists only on the host and the field is a picture that exists only on the
+  card, so the vertex stage is where the two can meet: what is posted is the whole candidate
+  set, and a refused point is given no size — a disc of no radius covers no pixel. The
+  compacted GPU stream lands with the first stack consumer that needs one, which is where
+  points-stream.md §3.3 always said the family's carriage would be built.
+- **Its stream cannot be sampled by a driver**, and this is the recorded answer to
+  points-stream.md §2.2's constraint: the stream is a function of the input picture, and at
+  resolve time — when the driver walk runs — no picture exists. A points wire from Scatter
+  into a Points sample reads the documented empty stream rather than a guess at one, tested
+  as such. Emit-from-image inherits the same answer.
+- **Max points is a ceiling on the work, not on the look**: it bounds the *candidates*, and
+  what stands is a subset of them. Mix at nought emits the stream and draws nothing, the
+  emit-only mode §3.88 documents.
+
+`moderate` cost, `FullFrame` ROI, premultiplied, temporal window `{0}`, not seeded in the
+§1.3 sense (its pixels are a function of its input, which the frame key already covers).
+Mix 0, Density 0 and a wholly transparent field are all the bit-exact identity.
+
+AE's nearest equivalent is CC Pixel Polly and the various "shatter into particles" plugins,
+none of which hands the points out as data; what this exists for is the wire, once Clone to
+points and Connect points land.
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

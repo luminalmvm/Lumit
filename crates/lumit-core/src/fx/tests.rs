@@ -10531,6 +10531,10 @@ fn every_parameter_declares_a_unit() {
             ("grid", "jitter_y"),
             ("grid", "jitter_z"),
             ("grid", "size"),
+            // Scatter (K-599): the disc a point is drawn as. Density is a count
+            // per composition area and rescales nowhere — it is measured
+            // against the comp, not against the raster.
+            ("scatter", "size"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement (K-429).
             ("motion_blur", "vector_scale"),
@@ -11567,6 +11571,10 @@ fn every_effect_carries_a_matte_row() {
                 | "venetian_blinds"
                 | "iris_wipe"
                 | "card_wipe"
+                // Scatter (K-599): the matte is *where the points go*, which is
+                // as deep inside an effect's own maths as a matte gets — it
+                // decides the set rather than fading the picture that set drew.
+                | "scatter"
         );
         assert_eq!(
             !s.matte.generic(),
@@ -11635,12 +11643,16 @@ fn every_effect_carries_a_matte_row() {
             s.match_name
         );
         // The Channel choice (K-425) rides beside the injected pair on every
-        // effect that does not pick its matte's channels itself. The three that
+        // effect that does not pick its matte's channels itself. The four that
         // do — Depth of field (`depth_channel`), Displacement map (its two
-        // channel choices) and the Lens flare (source detection) — carry none,
-        // and the seam leaves their matte raw. Set matte used to be a fourth,
-        // and carries no Matte row at all now (K-429).
-        let owns_channel = matches!(s.match_name, "dof" | "displacement_map" | "lens_flare");
+        // channel choices), the Lens flare (source detection) and Scatter,
+        // which reads **alpha and only alpha** (K-599) — carry none, and the
+        // seam leaves their matte raw. Set matte used to be a fifth, and
+        // carries no Matte row at all now (K-429).
+        let owns_channel = matches!(
+            s.match_name,
+            "dof" | "displacement_map" | "lens_flare" | "scatter"
+        );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(
             channel.is_some(),
@@ -13790,6 +13802,173 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
+// --------------------------------------------------- Scatter (K-599)
+
+/// A Scatter instance with its declared defaults, and `edits` applied.
+fn scatter(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("scatter").expect("Scatter is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("scatter has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The instance's reduced controls, resolved at full raster.
+fn scatter_of(e: &EffectInstance) -> crate::fx::effects::scatter::Scatter {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::scatter::Scatter::read(Params::new(&bag))
+}
+
+/// A picture whose left half is opaque and whose right half is transparent —
+/// a hard edge, so nothing in the assertions below turns on a rounding.
+fn half_alpha(w: u32, h: u32) -> Vec<f32> {
+    let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            rgba[d + 3] = if x < w / 2 { 1.0 } else { 0.0 };
+        }
+    }
+    rgba
+}
+
+/// **Points land inside the alpha and nowhere else** — the whole of what this
+/// effect claims. A hard-edged field admits every candidate on the opaque side
+/// and refuses every one on the other.
+#[test]
+fn scatter_keeps_the_points_that_land_on_alpha() {
+    let (w, h) = (200u32, 100u32);
+    let rgba = half_alpha(w, h);
+    let s = scatter_of(&scatter(&[]));
+    let all = s.candidates(w, h, 1.0, points::Projection::FLAT);
+    let kept = s.stream(w, h, 1.0, &rgba, false, points::Projection::FLAT);
+    assert!(!kept.is_empty(), "nothing survived a half-opaque picture");
+    assert!(
+        kept.len() < all.len(),
+        "everything survived — nothing was refused"
+    );
+    for at in &kept.position {
+        assert!(
+            at[0] < w as f32 / 2.0,
+            "a point stood on the transparent half at {at:?}"
+        );
+    }
+    // Half the frame is opaque and the field there is 1, so every candidate on
+    // that side stands: the count is the candidates that fell on the left.
+    let left = all
+        .position
+        .iter()
+        .filter(|at| at[0] < w as f32 / 2.0)
+        .count();
+    assert_eq!(kept.len(), left, "the opaque half refused somebody");
+}
+
+/// **Invert scatters outside the shape** — the row the K-395 override carries,
+/// honoured by the effect rather than by the seam (there is no Channel row to
+/// prepare through).
+#[test]
+fn scatter_inverted_keeps_the_other_half() {
+    let (w, h) = (200u32, 100u32);
+    let rgba = half_alpha(w, h);
+    let s = scatter_of(&scatter(&[]));
+    let out = s.stream(w, h, 1.0, &rgba, true, points::Projection::FLAT);
+    assert!(!out.is_empty(), "Invert refused everything");
+    for at in &out.position {
+        assert!(
+            at[0] >= w as f32 / 2.0,
+            "an inverted point stood on the opaque half at {at:?}"
+        );
+    }
+}
+
+/// **The density tracks the alpha, not just its edge** (rejection sampling): a
+/// field of a half keeps about half the candidates, which is what makes a soft
+/// edge come out as a thinning crowd rather than a hard cut.
+#[test]
+fn scatter_thins_where_the_alpha_is_partial() {
+    let (w, h) = (200u32, 200u32);
+    let s = scatter_of(&scatter(&[("density", fixed(60.0))]));
+    let all = s.candidates(w, h, 1.0, points::Projection::FLAT);
+    let half: Vec<f32> = (0..(w * h * 4))
+        .map(|i| if i % 4 == 3 { 0.5 } else { 0.0 })
+        .collect();
+    let kept = s.stream(w, h, 1.0, &half, false, points::Projection::FLAT);
+    let share = kept.len() as f64 / all.len() as f64;
+    assert!(
+        (share - 0.5).abs() < 0.05,
+        "a field of a half kept {share:.3} of the candidates"
+    );
+}
+
+/// **Determinism and scrub safety**: the same candidates and the same survivors
+/// twice, and a different seed is a different crowd. There is no clock in it,
+/// so the layer time never enters.
+#[test]
+fn scatter_is_the_same_crowd_twice_and_a_different_one_reseeded() {
+    let (w, h) = (120u32, 90u32);
+    let rgba = half_alpha(w, h);
+    let s = scatter_of(&scatter(&[]));
+    let a = s.stream(w, h, 1.0, &rgba, false, points::Projection::FLAT);
+    assert_eq!(
+        a,
+        s.stream(w, h, 1.0, &rgba, false, points::Projection::FLAT)
+    );
+    let reseeded = scatter_of(&scatter(&[("seed", EffectValue::Seed(41))]));
+    assert_ne!(
+        a.position,
+        reseeded
+            .stream(w, h, 1.0, &rgba, false, points::Projection::FLAT)
+            .position,
+        "the seed did nothing"
+    );
+}
+
+/// **The preview divisor never re-rolls the crowd** (K-031's neighbourhood):
+/// Density is a count per *composition* area, so a half-resolution raster
+/// throws the same candidates at the same places in comp pixels. What may
+/// differ is which of them a **soft** edge admits, which is why this fixture
+/// has a hard one.
+#[test]
+fn scatter_throws_the_same_candidates_at_every_raster() {
+    let s = scatter_of(&scatter(&[]));
+    let full = s.candidates(400, 300, 1.0, points::Projection::FLAT);
+    let half = s.candidates(200, 150, 0.5, points::Projection::FLAT);
+    assert_eq!(full.len(), half.len(), "a different number of candidates");
+    for (a, b) in full.position.iter().zip(half.position.iter()) {
+        assert!(
+            (a[0] * 0.5 - b[0]).abs() < 1e-3 && (a[1] * 0.5 - b[1]).abs() < 1e-3,
+            "a candidate moved between rasters: {a:?} against {b:?}"
+        );
+    }
+}
+
+/// **The cap is a ceiling on the work** (K-475's rule, a generator's shape of
+/// it): Max points bounds the *candidates*, and what stands is a subset.
+#[test]
+fn scatter_throws_no_more_candidates_than_its_cap() {
+    let s = scatter_of(&scatter(&[
+        ("density", fixed(100.0)),
+        ("max_points", fixed(500.0)),
+    ]));
+    let all = s.candidates(1920, 1080, 1.0, points::Projection::FLAT);
+    assert_eq!(all.len(), 500);
+    assert_eq!(all.id, (0..500).collect::<Vec<u64>>());
+    // And under the cap the count is the density's own arithmetic.
+    let plenty = scatter_of(&scatter(&[("density", fixed(10.0))]));
+    assert_eq!(plenty.candidate_count(1000, 1000, 1.0), 1000);
+}
+
 // ------------------------------------------------------ Grid (K-598)
 
 /// A Grid instance with its declared defaults, and `edits` applied.
@@ -14714,9 +14893,13 @@ fn the_points_producers_declare_a_data_output_beside_their_picture() {
     with_extras.sort_unstable();
     assert_eq!(
         with_extras,
-        vec![("grid", vec!["points"]), ("particulate", vec!["points"])]
+        vec![
+            ("grid", vec!["points"]),
+            ("particulate", vec!["points"]),
+            ("scatter", vec!["points"])
+        ]
     );
-    for name in ["particulate", "grid"] {
+    for name in ["particulate", "grid", "scatter"] {
         let port = BUILTIN_DEFS
             .get(name)
             .expect("declared")
