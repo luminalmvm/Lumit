@@ -43,46 +43,24 @@ behaviour yet; swatches carry a name and alpha in the model with no controls; th
 numbered workspace.switch.N labels share the numbered-marker translation limit;
 settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
 
-**Owner's test findings after FP2 (2026-08-25) - in flight:**
-- CRASH (fixed, watch for a recurrence): dropper-drag on the Viewer, then a DOF
-  focus-point change on a timeline row of "Comp 2" / "World.avi" froze and crashed the
-  application. The idle measure held the project's read guard across a GPU-fenced
-  composite, so the drag's commit - and every reader behind it - queued behind the
-  render. K-565 was cleared: that path builds neighbours only for adjustment and
-  Precomp layers, and the layer is neither. The stack renders clean headlessly at every
-  prefix cut, every solo and sixty drag ticks (a stand-in clip stood in for the 4K
-  original), so if it recurs the next place to look is the Dart side.
-- The graph pane's grid step now refuses a non-finite range instead of spinning on it
-  (`gridValues`). The seam that could let an infinity into a value or a tangent speed
-  in the first place is still open: `parseNumberField` accepts "Infinity" and "NaN",
-  and only the callers' clamps stand between that and the document.
-- Work-area end handles: thicker, darker, capped a little below the time labels,
-  near-rectangles with a tiny corner radius (owner overrules the drawing here).
-
-**FP3 - engine features.**
-- The three Settings pages, engine first (K-465's omitted nav entries): audio output
-  device enumeration + selection; the autosave mechanism plus interval/keep-count;
-  the export defaults store (preset + filename template) the queue reads.
-- B5 whole: `video_memory_bytes` on Metal (`recommendedMaxWorkingSetSize`) and Vulkan
-  (device-local heap), and real GPU OOM/device-loss recovery instead of the eprintln.
-- B6 track-once-then-nudge: corrections as keyframes over a baked solve, the
-  "edited since track" dot.
-- B7 planar tracker + corner-pin auto-setup.
-- Camera track finishing: warm/clear wired to project open/close; analysing a Precomp
-  (render frames rather than decode); the train-POV forward-motion zoom loss (the
-  focal curve tracking.md owes plus a detector that judges a pair against its
-  neighbours); the 2D track exports.
-- L 7.2: OS drag-and-drop of files onto the Project panel.
-- M remainder: 7.6 Retime Stretch dialog + AE-level popup options; 7.11 pressure/tilt
-  (3.47's pointer data) and the rest of paint's owed list; 7.5's last two single-layer
-  add paths follow the K-523 multi-selection rule.
-- OFX hosting (7.8, docs/impl/ofx-host.md) as its own programme, with 7.23's OFX/LFX
-  presets-panel groups landing with it.
+**FP3 - engine features: LANDED 2026-08-26**, all eleven packages (K-577..K-588: the
+three Settings pages - Audio, Autosave with its revision-gated timer thread, Export
+defaults; VRAM read on all three platforms and device-loss recovery; track-then-nudge
+on a correction base; the planar tracker as its own effect with corner-pin auto-setup;
+the neighbour-judged zoom detector and focal knots that close K-540's train-POV loss;
+camera-track warm/clear on project life, precomp analysis, keyframed masks; OS
+drag-and-drop onto the Project panel (desktop_drop, K-581); pen pressure on paint
+strokes; Stretch and freeze-at-playhead; panel adds landing on the whole selection).
+Owed remainders, recorded in their notes: on-canvas quad handles for the planar
+tracker (wants a generic effect-point overlay); planar on a Precomp; the 2D
+point-track exports; SolveNote surfaced across the bridge; an audio device-change
+stream rebuild during playback; docs/13 B9's five-second measurement on real loss.
 
 **FP3.5 - lock hardening (after FP3 lands; found by the 9d96a24f investigation).**
 Three more locks held across slow work in the bridge, same class as the freeze that was
-fixed: FootageReference::thumbnail holds the WRITE lock across an FFmpeg decode; save and
-autosave hold locks across serialize + fsync. Each wants the 9d96a24f shape - take what
+fixed: FootageReference::thumbnail holds the WRITE lock across an FFmpeg decode, and save
+holds locks across serialize + fsync (the autosave half was fixed with the K-587
+scheduler). Each wants the 9d96a24f shape - take what
 the slow work needs under the lock, release, then do the work. Runs after FP3 because the
 autosave scheduler agent is building in that exact code. Also from the same hunt, landed
 already: the idle measure's guard (9d96a24f) and the graph grid's non-finite spin
