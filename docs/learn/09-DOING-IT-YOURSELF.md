@@ -30,6 +30,14 @@ Every script accepts `-?` for its own help:
 .\scripts\codegen.ps1 -?
 ```
 
+Three more in the same folder are not PowerShell. `scripts\gen-icons.py` and
+`scripts\check-icon.py` are Python, because they are picture work — the first
+re-renders every raster icon from the SVG sources, the second guards the macOS
+icon document; both have their own section further down.
+`scripts\discord-release.mjs` is Node, and you do not run it: the `announce` job
+in `.github/workflows/release.yml` runs it on a release tag, reading the very
+release note the website serves so the two cannot disagree.
+
 ## First: the environment
 
 **When you need it.** Once per terminal window, before anything that compiles
@@ -85,6 +93,13 @@ cargo build --workspace --release
 **Success looks like** `Finished ... target(s) in 14.28s` and a file at
 `target\debug\lumit_bridge.dll`.
 
+**The workspace has two products, not one.** `lumit_bridge.dll` is the engine the
+app loads; `target\debug\lumit-ofx-broker.exe` is a small separate program that
+opens one OFX plugin bundle in a process of its own, so a third-party plugin that
+crashes takes nothing with it (K-592). `cargo build --workspace` makes both.
+`-BridgeOnly` stops at the library, which is all `flutter test` needs and not
+enough to open an OFX plugin.
+
 **A debug build here is not an unoptimised build.** The root `Cargo.toml` gives
 `lumit-core`, `lumit-eval`, `lumit-gpu` and `lumit-render` full optimisation in
 both profiles, because that is where the hot loops live and a genuinely
@@ -109,11 +124,17 @@ cd flutter_ui
 flutter run -d windows
 ```
 
-The first run is slow — it compiles the Rust bridge and the C++ runner from
-nothing, several minutes — and every run afterwards is quick. While it is
-running, `r` hot-reloads the Dart side, `R` restarts it, and `q` quits. Changes
-to Rust need a full restart of the command, because the compiled library is
-loaded once.
+The first run is slow — it compiles the Rust bridge, the OFX broker and the C++
+runner from nothing, several minutes — and every run afterwards is quick. While
+it is running, `r` hot-reloads the Dart side, `R` restarts it, and `q` quits.
+Changes to Rust need a full restart of the command, because the compiled library
+is loaded once.
+
+`flutter run` builds more of the workspace than it looks like it does.
+`flutter_ui/windows/CMakeLists.txt` builds `lumit_bridge` **and**
+`lumit-ofx-broker`, and installs the broker's executable beside the app's own,
+because that is where the host looks for it. The Linux CMake file does the same.
+So a change to the broker needs a fresh `flutter run`, not a hot reload.
 
 **Success looks like** the editor window opening with an empty project.
 
@@ -234,11 +255,12 @@ flutter test test/frb/timeline_panel_frb_test.dart
 **Never run the whole Flutter suite on this machine.** `flutter test` with no
 file argument starts a test process per file, in parallel, and each of the `frb`
 ones loads the engine and a graphics device. It has frozen this machine hard
-enough to need the power button. CI runs the full suite with `--concurrency=1` on
-its own hardware; that is what it is for. Locally, name the files you changed.
+enough to need the power button. CI runs the full suite on its own hardware; that
+is what it is for. Locally, name the files you changed.
 
 **Success looks like** `All tests passed!` for Flutter, or
-`test result: ok. 551 passed` for cargo.
+`test result: ok. ... passed; 0 failed` for cargo — one such line per crate, and
+`.\scripts\check.ps1` prints `All green.` after the last of them.
 
 **When it goes wrong.**
 
@@ -260,8 +282,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cd flutter_ui; flutter analyze
 ```
 
-Or `.\scripts\check.ps1 -SkipTests` for the first three, and `-Fix` to let the
-formatter rewrite rather than complain.
+Or `.\scripts\check.ps1 -SkipTests` for the Rust pair, and `-Fix` to let the
+formatter rewrite rather than complain. `flutter analyze` is not in that script:
+it is the Flutter side's own gate and needs no Rust environment, so it stays a
+one-liner you run from `flutter_ui/`.
 
 **Success looks like** silence from `fmt --check`, and `Finished` with no
 warnings from clippy. `-D warnings` means a warning ends the run, which is the
@@ -386,6 +410,65 @@ recorded clip; panning the committed stills instead`, and that is fine.
   running from somewhere the committed stills are missing. Check you are on a
   full checkout rather than a sparse one.
 
+## Plugins other people wrote
+
+**When you need it.** After touching anything under `crates/lumit-ofx/` or
+`crates/lumit-ofx-broker/`. Lumit hosts OFX plugins — the format Resolve, Nuke
+and Natron all speak — and the risk in that is other people's C code running
+inside ours, which is why it runs in the broker's process instead.
+
+The ordinary suites cover it and need nothing special:
+
+```powershell
+cargo test -p lumit-ofx
+cargo test -p lumit-ofx-broker
+```
+
+Those use `lumit-ofx-testplug`, a plugin written here on purpose, so they need
+no download. Two heavier checks exist and both live in CI rather than in the
+routine:
+
+```powershell
+cargo run --release -p lumit-bench --bin ofx-bench
+cargo test -p lumit-ofx --test conformance -- --nocapture
+```
+
+The first fetches and builds two real plugin suites, openfx-misc and ntsc-rs,
+into `target/ofx-bench/`; the second describes, instances and renders every
+plugin in it and writes a pass/fail table to `target/ofx-conformance.md`. It is
+about eighty plugins and a C++ toolchain — an afternoon the first time, cached
+after that — so run it when you have changed how the host answers a plugin, not
+before every commit.
+
+**`handle_fuzz` is a nightly job**, not a local one. CI runs it under
+AddressSanitizer, which needs an unstable compiler flag; `cargo test -p lumit-ofx
+--test handle_fuzz` on stable runs the same target unsanitised, which is a fast
+check that a forged handle is refused, and not the check that refusing it also
+reads nothing it should not.
+
+## The application's icons
+
+**When you need it.** Only after editing an SVG in `assets/brand/`. The drawings
+are the only artwork anyone touches; the operating systems want pixels.
+
+```powershell
+pip install resvg-py pillow      # first time only
+python scripts\gen-icons.py
+python scripts\check-icon.py     # the macOS icon document, guarded
+```
+
+`gen-icons.py` renders each SVG at every size an `.ico` or `.icns` needs — each
+size straight from the drawing rather than scaled down from a big render, which
+is what keeps the small ones crisp — and writes the results, all of which are
+committed. Its own header lists exactly which files it produces.
+
+The macOS **application** icon is not made there. It is the layered Icon
+Composer document `assets/brand/lumit-icon.icon`, which Xcode compiles during
+`flutter build macos`, and `check-icon.py` exists because Icon Composer can
+write two settings into it that make Apple's `actool` crash part-way through
+with a message that says nothing about the cause (K-312). CI runs that check;
+run it yourself after opening the document in Icon Composer.
+
 ## The app's screenshots
 
 **When you need it.** When a panel's design changes and the manual's picture of
@@ -412,8 +495,10 @@ the manual shows is therefore the program, not a harness impersonating it. (The
 obvious approach, an integration test, was tried and abandoned: on this version
 of Flutter the test-driven window photographs as a plain white rectangle.)
 
-There are seven numbered sweeps plus `retakes` and `round_v2`; what each one
-covers is written at the top of its own file in `flutter_ui/tool/shots/`.
+There are seven numbered sweeps and five named ones — `graph`, `modes`,
+`retakes`, `round_v2` and `welcome`. What each one covers is written at the top
+of its own file in `flutter_ui/tool/shots/`, and a name the folder does not have
+is refused by the script with the full list.
 Finished pictures land in `web-docs/src/assets/shots/`, and `-Out` sends them
 somewhere else so a pass can be reviewed before it overwrites anything. The
 script creates that folder; a sweep does not, and writes its first picture the
@@ -454,8 +539,13 @@ npm run build     # writes ./dist, and fails on broken links or bad frontmatter
 npm run preview   # serves what build wrote
 ```
 
-**Success looks like** `6 page(s) built` for `web/`, or `138 page(s) built` for
-`web-docs/`, and `Complete!`.
+**Success looks like** `7 page(s) built` for `web/`, or `145 page(s) built` for
+`web-docs/`, and `Complete!`. Both numbers grow with the content; what matters is
+that the build finishes rather than what it counts.
+
+`web-docs/` has one more command, `npm test`, which runs the generators' own
+unit tests (`node --test scripts/*.test.mjs`). Run it if you change anything
+under `web-docs/scripts/`.
 
 Deployment is not something you run. Cloudflare watches the repository and builds
 each site on push; other branches get preview URLs. There is no `wrangler deploy`
@@ -525,9 +615,17 @@ engine test suite, plus the GPU tests on a software Vulkan driver with
 `LUMIT_REQUIRE_GPU=1` — meaning a skipped GPU test counts as a failure there —
 plus a build of the bridge with its media feature switched off.
 `flutter-linux` runs `flutter analyze`, builds the bridge, runs the **whole**
-Flutter suite with `--concurrency=1`, and finishes with
-`flutter build linux --release`. So the Linux application is compiled and its
-tests pass on every commit. The shipped artefact is a single-file Flatpak.
+Flutter suite, and finishes with `flutter build linux --release`. So the Linux
+application is compiled and its tests pass on every commit. The shipped artefact
+is a single-file Flatpak.
+
+That suite runs at Flutter's ordinary parallelism now. `--concurrency=1` used to
+be there, because every test process leaked an engine worker and a GPU device
+and the runner ran out; closing the project reference ended that, and the files
+run together. It also runs with `LUMIT_NO_ZERO_COPY_VIEWER=1`, because the
+runner has no GPU and the software Vulkan driver refuses the shared allocation
+the Viewer's zero-copy path needs — so the handful of tests that wait for a
+picture skip there and nowhere else.
 
 **macOS is compiled, not exercised.** The `check` job runs the engine's tests
 there, so the Rust side is genuinely tested on macOS. The application is another
