@@ -1,0 +1,41 @@
+[package]
+name = "lumit-ofx"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The bundle binary is a plain DLL/dylib opened at run time; libloading is the
+# portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
+libloading = "0.8"
+# The quirks table is data, not code (docs/12 §2.5), so it is a JSON file the
+# crate embeds and parses.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# The minimal OFX plugin the host is tested against. It is declared here so a
+# plain `cargo test -p lumit-ofx` builds the cdylib the tests dlopen; the
+# dependency edge is dev-only, so the cycle (the plugin depends on this crate
+# for the C declarations) is the one Cargo permits.
+lumit-ofx-testplug = { path = "../lumit-ofx-testplug" }
+tempfile = "3"
+
+# The plugin hosts cannot inherit the workspace's `unsafe_code = "deny"`:
+# the OFX API is a C ABI of raw pointers and function tables, which is unsafe
+# by construction (docs/14 §7 permits it here and requires the SAFETY comments
+# and layout tests that go with it). The clippy denies from the workspace are
+# kept, so no-panic/no-unwrap discipline still holds.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

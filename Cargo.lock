@@ -1639,6 +1639,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-ofx"
+version = "0.2.0"
+dependencies = [
+ "libloading",
+ "lumit-ofx-testplug",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "lumit-ofx-testplug"
+version = "0.2.0"
+dependencies = [
+ "lumit-ofx",
+]
+
+[[package]]
 name = "lumit-project"
 version = "0.2.0"
 dependencies = [

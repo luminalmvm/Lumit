@@ -1,0 +1,27 @@
+[package]
+name = "lumit-ofx-testplug"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+# `cdylib` is what the host loads; `rlib` exists only so `lumit-ofx` can name
+# this package as a dev-dependency and have Cargo build the cdylib before its
+# tests run.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The C declarations, so the plugin side and the host side cannot drift.
+lumit-ofx = { path = "../lumit-ofx" }
+
+# A plugin is the other side of the same C ABI; same override as the host.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

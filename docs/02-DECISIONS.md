@@ -17175,3 +17175,56 @@ folder to be beside, and a policy that cannot be honoured is not a licence to in
 folder. The same is true of a fixed folder that has not been picked yet, which is the state
 the Settings row is in between the two clicks — the dropdown keeps the choice and the row
 reports that no folder has been chosen.
+
+## K-589 — Lumit is an OFX host, and the host's own ground floor is built: honest properties, minted handles, quirks as data
+
+**DECIDED 2026-08-26.** K-061 proposed that Lumit host OpenFX; this builds the first
+package of it and turns the proposal into the thing. `crates/lumit-ofx` opens a bundle,
+hands the plugin a host, and answers the three simplest suites — property, memory, message.
+docs/12 §2 says what the host must do and `docs/impl/ofx-host.md` says how; neither
+changes here. What is decided is the shape the rest of the host is built on.
+
+**No handle Lumit mints is an address.** Every `OfxPropertySetHandle` and everything that
+follows it is a number carrying a fixed pattern, a kind, and a position in a registry the
+host keeps, and all three are checked on every lookup. Forged, stale and wrong-kind handles
+answer `kOfxStatErrBadHandle` and touch nothing. **Positions are never reused**: a stale
+handle must not come back as a live one, so a destroyed object leaves its slot empty for
+the session rather than yielding it to the next object. The index field is forty bits,
+which bounds that decision at a scale no session reaches. The same instinct governs the
+memory suite — the host records the addresses it hands out and rejects a `memoryFree` of
+anything else *without reading it*, which is the only safe answer to a pointer a plugin
+invented.
+
+**The host property table says only true things.** Tiles are 0, because the render
+pipeline is full-frame (docs/06); temporal clip access is 1, because retimer-class plugins
+cannot work without it; components are RGBA and depths are `kOfxBitDepthFloat`, and nothing
+else. Overlays are 0 and `fetchSuite` returns **null** for the interact suite, so overlays
+degrade to no overlay rather than to a plugin drawing into a viewer that will never ask it
+to. Every unbuilt suite answers null the same way. The table is golden-tested field by
+field, so flipping one of those answers is a decision somebody has to take deliberately.
+
+**The quirks table is a file from the first day.** `crates/lumit-ofx/quirks.json` maps
+plugin identifier and version to timeout overrides and suite-version pins (docs/12 §2.5),
+and ships empty: an empty table that parses is the correct default, because no plugin has
+yet earned an entry. The watchdog defaults it fills in are docs/12 §2.3's — ten seconds for
+a render, two for a control action. `docs/impl/ofx-host.md` §4 sketches thirty seconds for
+a render; the spec's number is canonical and the quirks table is where a plugin that
+genuinely needs longer says so, which is exactly what the table is for.
+
+**The C declarations are written by hand, and `lumit-ofx` carries the bridge's lints
+override.** The OFX headers are a handful of structs; a generator would cost more than
+typing them and could not carry the notes that matter, so `ffi.rs` is transcribed with
+`#[repr(C)]` and pinned by layout assertions (docs/14 §7). Like `lumit-bridge`, the crate
+cannot inherit the workspace's `unsafe_code = "deny"` — a C ABI of raw pointers is unsafe
+by construction — and keeps every panic and unwrap deny. Nothing unwinds across the
+boundary: each entry point a plugin can enter runs inside a catch and answers
+`kOfxStatErrFatal` rather than crossing back into C.
+
+**A test plugin of our own ships in the workspace.** `crates/lumit-ofx-testplug` is a real
+OFX plugin — a commercial one cannot live in a public repository and a free one changes
+underneath the tests — carrying a few extra exports that report what it was told and when,
+so `setHost`-before-load is provable rather than assumed. It is a dev-dependency of
+`lumit-ofx`, which is what makes `cargo test` build it before the tests that load it, in CI
+as locally, with no extra job step. Its describe and render answer
+`kOfxStatErrMissingHostFeature` until the image effect and parameter suites exist, because
+there is nothing to describe a parameter *to* before then.

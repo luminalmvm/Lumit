@@ -11194,3 +11194,92 @@ does not, it reads as "nothing has been said" — which is precisely the behavio
 before the file existed. Losing it costs you three clicks, not an export. And an answer
 this version does not recognise reads as *ask every time*, which is the one answer that
 cannot put a file somewhere you were not looking.
+
+## 31. OFX plugins and handles, in plain terms
+
+Twixtor, ReelSmart Motion Blur, Sapphire, and about eighty free ones: the effects the
+audience already owns are shipped as **OFX plugins**. OFX is an open standard for exactly
+this — somebody else writes an effect, compiles it, and any host that speaks the standard
+can load it and use it. Lumit is going to be one of those hosts, and `crates/lumit-ofx` is
+the part of Lumit that does the speaking.
+
+### What a plugin actually is
+
+A plugin is a folder called something like `RSMB.ofx.bundle`, and buried inside it at a
+fixed path is a compiled file. Lumit loads that file while it is already running and asks
+it two questions, which are the only two questions the standard says every plugin must
+answer: *how many effects are in here?* and *tell me about effect number three*. From then
+on the conversation goes through a single function the plugin hands over, and every request
+is a named "action": load yourself, describe yourself, make me an instance, render this
+frame, throw the instance away, unload yourself.
+
+Two things make this harder than it sounds. The plugin is somebody else's compiled code —
+it cannot be read, checked, or fixed, and it was written and tested against other hosts
+with their own habits. And the standard is from 2004, so it is built out of C: raw
+addresses, integer error codes, and bags of named values rather than the typed structures
+the rest of Lumit is written in.
+
+### Saying true things
+
+Before a plugin runs at all it is handed a description of the host: a list of named
+answers. Do you support tiled rendering? Several pixel depths? Can effects draw their own
+overlays on the viewer? A host that flatters itself here breaks plugins that had no
+reason to doubt it — the plugin believes the answer, asks for the thing, and the crash
+lands in the host. So Lumit's table says **no** to everything this version does not
+genuinely do, including its own overlays, and yes to temporal clip access, because a
+retimer that cannot ask for other frames is not a retimer. A plugin that finds a "no" it
+needs simply declines to run and says so, which is a bad afternoon rather than a crash.
+
+### What a handle is, and why ours are not addresses
+
+When the plugin says "give me the label of *this* effect", it has to name the effect. The
+standard's answer is a **handle**: a value the host invented and gave the plugin earlier,
+which the plugin passes back to say which one it means. On paper a handle is an address in
+memory.
+
+That is the trap. Plugins hold on to handles after the thing has gone; they occasionally
+invent one; and they mix up which sort of thing a handle names. A host that treats a
+handle as a real address will follow one of those into nothing, and the editor closes.
+
+So none of Lumit's handles is an address. Each is a number in three parts: a fixed
+pattern, a mark saying what sort of object it names, and a position in a list the host
+keeps. Every use checks all three. An invented number fails the pattern. A handle kept too
+long fails the list check, because a position is never handed out twice — once a property
+set is gone, its place is left empty for the rest of the session rather than being reused
+by the next one, which is what stops a stale handle quietly naming somebody else's object.
+A handle for the wrong sort of thing fails the mark. In every one of those cases the plugin
+gets back the number OFX defines for "that is not a valid handle", which is an answer it is
+already required to handle, and nothing in Lumit moves.
+
+The same instinct runs through the rest of it. When a plugin asks the host to allocate
+memory, the host writes the address down; when the plugin later asks to free something, the
+address is looked up in that list rather than trusted. When a plugin asks for a decimal
+value as a whole number, it gets an error rather than a silently converted answer. And no
+Rust error is ever allowed to travel back into the plugin's own code: every function a
+plugin can call is wrapped so that even a bug in Lumit comes back as an error code.
+
+### Quirks are a file, not code
+
+Every OFX host in the world implements the standard slightly differently, and every
+commercial plugin ships a table of workarounds for the hosts it knows about. Lumit needs
+the mirror image, so `quirks.json` exists from the first day: plugin identifier and version
+on one side, what to do differently on the other — a longer deadline for a plugin that is
+genuinely slow, an older version of a suite for a plugin that asks for the new one and then
+uses it wrongly. Today the file is empty, and an empty file that parses correctly is the
+right shipping state: no plugin has yet earned an entry. The point of having it now is that
+the first workaround goes into a data file rather than being sprinkled through the code as
+a special case nobody can find later.
+
+### What exists so far
+
+The ground floor: finding and opening a bundle, handing the plugin the host in the right
+order (the host first, always, before any action — a plugin's load handler immediately
+asks the host for things), and answering three of its simplest needs: read and write named
+values, allocate memory, say something to the user. Effects, parameters, clips and actual
+rendering come next, and they all stand on the handle rule above.
+
+There is also a small plugin of Lumit's own, `lumit-ofx-testplug`, which exists only so the
+host has something honest to be tested against — a commercial plugin cannot live in the
+repository and a free one would change underneath the tests. It is a real OFX plugin, and
+it keeps a count of what it was told and when, so a test can prove the host said the right
+things in the right order.
