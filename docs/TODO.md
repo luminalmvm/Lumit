@@ -66,13 +66,17 @@ and a conformance bench that runs openfx-misc and ntsc-rs - which found and fixe
 host faults the day it ran. 7.23's LFX half stays waiting on the LFX C ABI
 (docs/12, roadmap phase 4 - not commissioned).
 
-**FP4 - the points family and shapes (K-561, K-564).**
-- Particulate to 3D with camera interaction (K-561), then the family, each its own
-  package on the wire: Grid, Scatter, Clone to points, Connect points, Trail, Emit
-  from image, the cross-layer points tap (points-stream.md 2.3).
-- 4.1's border emission for Ellipse/Rectangle emitters (outline mode, as MaskPath has).
-- Shape booleans and path morphing; text as data (per-glyph animation, text on a
-  path, text to shapes/points) - K-564.
+**FP4 - the points family and shapes: LANDED 2026-08-26** (K-596..K-609): Particulate
+in 3D through the composition camera with the flat path bit-identical; border
+emission; Grid, Scatter, Emit from image as producers; Clone to points, Trail,
+Connect points as consumers on the wire; the cross-layer Layer points tap; shape
+booleans on i_overlay with subtract holes; path morphing by vertex order; text on a
+path by arc length; text to shapes and to points; per-glyph and per-word animators
+with range selectors. Owed remainders recorded in their K entries: shape rows in the
+graph editor want a channel kind of their own (K-606); Source rows are not keyable
+from the Timeline (K-607's path offset waits with Camera zoom); Emit from image and
+Scatter cannot feed a driver until points-stream.md par.3.3's GPU carriage; morph has
+no feature matching; animators have no rename/reorder.
 
 **FP5 - the ponytail ledger, resolved.** Each `ponytail:` marker either gets its
 upgrade built or its comment rewritten with a concrete trigger a profile can hit;
