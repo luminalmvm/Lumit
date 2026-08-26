@@ -396,6 +396,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &CloneToPoints,
     &Trail,
     &ConnectPoints,
+    &EmitFromImage,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -3869,8 +3870,7 @@ impl GpuEffect for Grid {
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                alpha_test: false,
-                alpha_invert: false,
+                field: lumit_gpu::fx::FieldTest::None,
                 seed: inst.seed,
                 mode: 0,
                 sprite: None,
@@ -3928,8 +3928,67 @@ impl GpuEffect for Scatter {
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                alpha_test: true,
-                alpha_invert: invert,
+                field: lumit_gpu::fx::FieldTest::Alpha { invert },
+                seed: inst.seed,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
+/// Emit from image (docs/08 §3.93, K-603): candidates thrown on the host, kept
+/// on the card where the picture under them is bright enough to outvote their
+/// own die.
+///
+/// The rejection is the draw's, for Scatter's reason exactly (K-599): the field
+/// is a picture that exists only on the card, and the candidates are a set that
+/// exists only on the host, so the vertex stage is where the two meet. What
+/// changes is only *which* field — the Source layer's, arriving on the carriage
+/// already fitted to this raster, and read as brightness rather than coverage.
+struct EmitFromImage;
+impl GpuEffect for EmitFromImage {
+    fn match_name(&self) -> &'static str {
+        "emit_from_image"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::emit_from_image::EmitFromImage as E;
+        let inst = E::read(p);
+        let style = inst.draw_style();
+        let px_scale = E::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|sched| sched.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        // The Source layer, or this effect's own picture when the row is unset
+        // — which is what `None` means to the generic draw, and is the
+        // documented default.
+        let source = aux.layer_input().cloned();
+        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
+        let points = draw_points_of(&candidates);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            source.as_ref(),
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::Luma {
+                    threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
+                },
                 seed: inst.seed,
                 mode: 0,
                 sprite: None,
@@ -3995,8 +4054,7 @@ impl GpuEffect for CloneToPoints {
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                alpha_test: false,
-                alpha_invert: false,
+                field: lumit_gpu::fx::FieldTest::None,
                 seed: 0,
                 mode: 1,
                 sprite: Some(sprite),
@@ -4058,8 +4116,7 @@ impl GpuEffect for Trail {
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                alpha_test: false,
-                alpha_invert: false,
+                field: lumit_gpu::fx::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -4117,8 +4174,7 @@ impl GpuEffect for ConnectPoints {
                 feather: style.feather,
                 mix: style.mix,
                 projection: projection.map(|proj| proj.m),
-                alpha_test: false,
-                alpha_invert: false,
+                field: lumit_gpu::fx::FieldTest::None,
                 seed: 0,
                 mode: 0,
                 sprite: None,
@@ -4666,8 +4722,7 @@ mod tests {
             feather: style.feather,
             mix: style.mix,
             projection: projection.map(|proj| proj.m),
-            alpha_test: false,
-            alpha_invert: false,
+            field: lumit_gpu::fx::FieldTest::None,
             seed: inst.seed,
             mode: 0,
             sprite: None,
@@ -4718,8 +4773,7 @@ mod tests {
                 feather: inst.draw_style().feather,
                 mix: 0.0,
                 projection: None,
-                alpha_test: false,
-                alpha_invert: false,
+                field: lumit_gpu::fx::FieldTest::None,
                 seed: inst.seed,
                 mode: 0,
                 sprite: None,
@@ -4793,8 +4847,7 @@ mod tests {
                     feather: style.feather,
                     mix: style.mix,
                     projection: None,
-                    alpha_test: true,
-                    alpha_invert: invert,
+                    field: lumit_gpu::fx::FieldTest::Alpha { invert },
                     seed: inst.seed,
                     mode: 0,
                     sprite: None,
@@ -4809,6 +4862,98 @@ mod tests {
             eprintln!("scatter draw (invert {invert}): worst |Δ| {worst:.3e}");
             assert!(worst < 2e-2, "invert {invert}: worst |Δ| {worst}");
         }
+    }
+
+    // ---------------------------------------- Emit from image (K-603)
+
+    /// **The brightness rejection agrees, path for path** (K-603): the vertex
+    /// stage keeps the candidates the CPU reference keeps, and refuses the ones
+    /// it refuses — including the unpremultiply, which is the half of the rule
+    /// a plain `.rgb` read would silently get wrong.
+    ///
+    /// Three bands, hard-edged: opaque white, **half-covered** white — which
+    /// must read as white — and opaque black. A soft gradient would put
+    /// candidates within a rounding of their own die, and what this is about is
+    /// the rule rather than the last bit of an fp16 texture.
+    #[test]
+    fn an_emit_from_images_rejection_agrees_with_the_cpu_reference() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+        let inst = lumit_core::fx::effects::emit_from_image::EmitFromImage {
+            source: true,
+            threshold: 50.0,
+            density: 40.0,
+            seed: 11,
+            size: 5.0,
+            feather: 60.0,
+            colour: [0.9, 0.5, 0.2, 1.0],
+            max_points: 20_000,
+            mix: 100.0,
+        };
+        let mut field = vec![0.0f32; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let d = ((y * w + x) * 4) as usize;
+                let (v, a) = match x * 3 / w {
+                    0 => (1.0, 1.0),
+                    // Premultiplied half-covered white: the light is full, the
+                    // coverage is half, and only an unpremultiplied read says
+                    // so.
+                    1 => (0.5, 0.5),
+                    _ => (0.0, 1.0),
+                };
+                field[d] = v;
+                field[d + 1] = v;
+                field[d + 2] = v;
+                field[d + 3] = a;
+            }
+        }
+        let style = inst.draw_style();
+        let kept = inst.stream(w, h, 1.0, &field, Default::default());
+        assert!(kept.len() > 10, "the fixture kept {}", kept.len());
+        let all = inst.candidates(w, h, 1.0, Default::default());
+        assert!(kept.len() < all.len(), "nothing was refused");
+        // Two thirds of the frame are above the threshold, so the survivors
+        // must be about that share — the guard against a rule that happened to
+        // keep everything or nothing.
+        assert!(
+            kept.len() * 2 > all.len(),
+            "too few survived the two bright bands"
+        );
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &field, w, h);
+        let mut cpu = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
+        lumit_core::fx::points::draw_stream(&mut cpu, w, h, &kept, &[], &style, None);
+
+        let points = draw_points_of(&all);
+        let out = fx.points_draw(
+            &ctx,
+            &tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: None,
+                field: lumit_gpu::fx::FieldTest::Luma { threshold: 0.5 },
+                seed: inst.seed,
+                mode: 0,
+                sprite: None,
+            },
+        );
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("emit from image draw: worst |Δ| {worst:.3e}");
+        assert!(worst < 2e-2, "worst |Δ| {worst}");
     }
 
     // ---------------------------------------- Clone to points (K-600)
@@ -4900,8 +5045,7 @@ mod tests {
             feather: style.feather,
             mix: style.mix,
             projection: projection.map(|proj| proj.m),
-            alpha_test: false,
-            alpha_invert: false,
+            field: lumit_gpu::fx::FieldTest::None,
             seed: 0,
             mode: 1,
             sprite: Some(&sprite_tex),
@@ -4991,8 +5135,7 @@ mod tests {
             feather: style.feather,
             mix: style.mix,
             projection: None,
-            alpha_test: false,
-            alpha_invert: false,
+            field: lumit_gpu::fx::FieldTest::None,
             seed: 0,
             mode: 0,
             sprite: None,
@@ -5095,8 +5238,7 @@ mod tests {
             feather: style.feather,
             mix: style.mix,
             projection: None,
-            alpha_test: false,
-            alpha_invert: false,
+            field: lumit_gpu::fx::FieldTest::None,
             seed: 0,
             mode: 0,
             sprite: None,

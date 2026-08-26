@@ -43,6 +43,7 @@ pub mod dof;
 pub mod drop_shadow;
 pub mod echo;
 pub mod emboss;
+pub mod emit_from_image;
 pub mod exposure;
 pub mod fill;
 pub mod find_edges;

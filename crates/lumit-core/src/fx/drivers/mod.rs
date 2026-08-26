@@ -524,13 +524,15 @@ impl Eval<'_> {
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
-        // **Scatter cannot be sampled here, and that is the recorded answer**
-        // to points-stream.md §2.2's constraint (K-599): its stream is a
-        // function of the input *picture*, and at resolve time — which is when
-        // this walk runs — no picture exists. The wire reads the documented
-        // empty stream rather than a guess at one, and nothing is memoised, so
-        // a future carriage that can answer will not find a wrong answer cached
-        // in front of it.
+        // **The picture-dependent producers cannot be sampled here, and that is
+        // the recorded answer** to points-stream.md §2.2's constraint (K-599,
+        // K-603): Scatter's stream is a function of the input picture and Emit
+        // from image's is a function of a Source layer's, and at resolve time —
+        // which is when this walk runs — no picture exists. The wire reads the
+        // documented empty stream rather than a guess at one, and nothing is
+        // memoised, so a future carriage that can answer will not find a wrong
+        // answer cached in front of it. Anything else this build does not know
+        // how to evaluate falls out here too, which is the same calm.
         if inst.effect.match_name != "particulate" {
             return None;
         }

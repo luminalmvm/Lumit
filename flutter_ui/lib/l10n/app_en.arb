@@ -1753,6 +1753,10 @@
   "@fxEllipseOutline": {
     "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of an ellipse rather than anywhere inside it."
   },
+  "fxEmitFromImage": "Emit from image",
+  "@fxEmitFromImage": {
+    "description": "Effect controls — the name of the Emit from image effect, which puts points where a layer's pixels are bright."
+  },
   "fxEmitRate": "Emit rate",
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
@@ -2604,6 +2608,10 @@
   "fxSourceHeight": "Source height",
   "@fxSourceHeight": {
     "description": "Effect controls — a control on Lens flare. Half the height of the light itself, in pixels: 0 is a point of light, larger makes it a panel or a strip whose flare takes that shape."
+  },
+  "fxSourceLayer": "Source layer",
+  "@fxSourceLayer": {
+    "description": "Effect controls — a control on Emit from image: the layer whose brightness decides where the points land. Unset reads the effect's own input picture."
   },
   "fxSourceWidth": "Source width",
   "@fxSourceWidth": {

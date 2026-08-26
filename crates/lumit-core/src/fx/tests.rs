@@ -10535,6 +10535,10 @@ fn every_parameter_declares_a_unit() {
             // per composition area and rescales nowhere — it is measured
             // against the comp, not against the raster.
             ("scatter", "size"),
+            // Emit from image (K-603): the disc a point is drawn as, Scatter's
+            // row exactly. Threshold is a share of full white and Density a
+            // count per composition area, so neither rescales.
+            ("emit_from_image", "size"),
             // Connect points (K-602): how far apart two points may be and
             // still be joined, and how thick the line between them is. Both
             // are distances in the picture and must travel with the stream —
@@ -13986,6 +13990,214 @@ fn scatter_throws_no_more_candidates_than_its_cap() {
     assert_eq!(plenty.candidate_count(1000, 1000, 1.0), 1000);
 }
 
+// -------------------------------------------- Emit from image (K-603)
+
+/// An Emit from image instance with its declared defaults, and `edits` applied.
+fn emit_from_image(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("emit_from_image").expect("Emit from image is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("emit_from_image has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+/// The instance's reduced controls, resolved at full raster.
+fn emit_of(e: &EffectInstance) -> crate::fx::effects::emit_from_image::EmitFromImage {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    crate::fx::effects::emit_from_image::EmitFromImage::read(Params::new(&bag))
+}
+
+/// A picture whose left half is opaque white and whose right half is opaque
+/// black — a hard *brightness* edge at full coverage everywhere, so nothing in
+/// the assertions below turns on the alpha or on a rounding.
+fn half_bright(w: u32, h: u32) -> Vec<f32> {
+    let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((y * w + x) * 4) as usize;
+            let v = if x < w / 2 { 1.0 } else { 0.0 };
+            rgba[d] = v;
+            rgba[d + 1] = v;
+            rgba[d + 2] = v;
+            rgba[d + 3] = 1.0;
+        }
+    }
+    rgba
+}
+
+/// **Points land where the picture is bright and nowhere else** — the whole of
+/// what this effect claims. A hard-edged field admits every candidate on the
+/// white side and refuses every one on the black.
+#[test]
+fn emit_from_image_keeps_the_points_that_land_on_light() {
+    let (w, h) = (200u32, 100u32);
+    let rgba = half_bright(w, h);
+    let e = emit_of(&emit_from_image(&[]));
+    let all = e.candidates(w, h, 1.0, points::Projection::FLAT);
+    let kept = e.stream(w, h, 1.0, &rgba, points::Projection::FLAT);
+    assert!(!kept.is_empty(), "nothing survived a half-white picture");
+    assert!(
+        kept.len() < all.len(),
+        "everything survived — nothing was refused"
+    );
+    for at in &kept.position {
+        assert!(
+            at[0] < w as f32 / 2.0,
+            "a point stood on the dark half at {at:?}"
+        );
+    }
+    // The white half's field is 1 at any threshold below full, so every
+    // candidate there stands: the count is the candidates that fell left.
+    let left = all
+        .position
+        .iter()
+        .filter(|at| at[0] < w as f32 / 2.0)
+        .count();
+    assert_eq!(kept.len(), left, "the bright half refused somebody");
+}
+
+/// **Threshold is the floor, and the field above it is a chance** (K-603): a
+/// flat grey picture keeps the share of candidates its remapped brightness
+/// comes to, so a gradient thins the crowd rather than cutting it.
+///
+/// The seed is pinned and the crowd is large, for the reason Scatter's own
+/// share test records: the share of a few hundred coin tosses is a sample, and
+/// this must be an assertion about the rule.
+#[test]
+fn emit_from_image_thins_by_how_far_above_the_threshold_a_pixel_is() {
+    let (w, h) = (400u32, 400u32);
+    // A flat, fully covered mid-grey. Its Rec.709 luminance is the channel
+    // value itself, because the three weights sum to one.
+    let grey = |v: f32| -> Vec<f32> {
+        (0..(w * h * 4))
+            .map(|i| if i % 4 == 3 { 1.0 } else { v })
+            .collect()
+    };
+    for (value, threshold, expected) in [(0.6f32, 20.0f64, 0.5f64), (0.5, 0.0, 0.5)] {
+        let e = emit_of(&emit_from_image(&[
+            ("density", fixed(100.0)),
+            ("threshold", fixed(threshold)),
+            ("seed", EffectValue::Seed(7)),
+        ]));
+        let all = e.candidates(w, h, 1.0, points::Projection::FLAT);
+        let kept = e.stream(w, h, 1.0, &grey(value), points::Projection::FLAT);
+        let share = kept.len() as f64 / all.len() as f64;
+        assert!(
+            (share - expected).abs() < 0.05,
+            "a grey of {value} over a threshold of {threshold} kept {share:.3}"
+        );
+    }
+    // And above the threshold is where it starts: a grey under it keeps none.
+    let dim = emit_of(&emit_from_image(&[
+        ("density", fixed(100.0)),
+        ("threshold", fixed(80.0)),
+        ("seed", EffectValue::Seed(7)),
+    ]));
+    assert!(dim
+        .stream(w, h, 1.0, &grey(0.5), points::Projection::FLAT)
+        .is_empty());
+}
+
+/// **Brightness is measured on the light, not on the coverage** (K-603): the
+/// picture is premultiplied, so a half-covered white pixel must read as white
+/// rather than as grey. Otherwise a soft-edged title would emit from its own
+/// antialiasing as if it were a shadow.
+#[test]
+fn emit_from_image_unpremultiplies_before_it_measures() {
+    let (w, h) = (64u32, 64u32);
+    let e = emit_of(&emit_from_image(&[("threshold", fixed(50.0))]));
+    // Half-covered white: every channel is 0.5, and so is the alpha.
+    let soft: Vec<f32> = vec![0.5; (w * h * 4) as usize];
+    assert!(
+        (e.field_at([1.0, 1.0, 0.0], w, h, &soft) - 1.0).abs() < 1e-5,
+        "half-covered white did not read as white"
+    );
+    // Nothing at all is nothing, rather than a division by nought.
+    let empty = vec![0.0f32; (w * h * 4) as usize];
+    assert_eq!(e.field_at([1.0, 1.0, 0.0], w, h, &empty), 0.0);
+    // And off the picture is nothing too.
+    assert_eq!(e.field_at([-1.0, 0.0, 0.0], w, h, &soft), 0.0);
+}
+
+/// **Determinism and scrub safety**: the same candidates and the same survivors
+/// twice, and a different seed is a different crowd. There is no clock in it,
+/// so the layer time never enters.
+#[test]
+fn emit_from_image_is_the_same_crowd_twice_and_a_different_one_reseeded() {
+    let (w, h) = (120u32, 90u32);
+    let rgba = half_bright(w, h);
+    let e = emit_of(&emit_from_image(&[]));
+    let a = e.stream(w, h, 1.0, &rgba, points::Projection::FLAT);
+    assert_eq!(a, e.stream(w, h, 1.0, &rgba, points::Projection::FLAT));
+    let reseeded = emit_of(&emit_from_image(&[("seed", EffectValue::Seed(41))]));
+    assert_ne!(
+        a.position,
+        reseeded
+            .stream(w, h, 1.0, &rgba, points::Projection::FLAT)
+            .position,
+        "the seed did nothing"
+    );
+}
+
+/// **The preview divisor never re-rolls the crowd** (K-031's neighbourhood):
+/// Density is a count per *composition* area, so a half-resolution raster
+/// throws the same candidates at the same places in comp pixels.
+#[test]
+fn emit_from_image_throws_the_same_candidates_at_every_raster() {
+    let e = emit_of(&emit_from_image(&[]));
+    let full = e.candidates(400, 300, 1.0, points::Projection::FLAT);
+    let half = e.candidates(200, 150, 0.5, points::Projection::FLAT);
+    assert_eq!(full.len(), half.len(), "a different number of candidates");
+    for (a, b) in full.position.iter().zip(half.position.iter()) {
+        assert!(
+            (a[0] * 0.5 - b[0]).abs() < 1e-3 && (a[1] * 0.5 - b[1]).abs() < 1e-3,
+            "a candidate moved between rasters: {a:?} against {b:?}"
+        );
+    }
+}
+
+/// **The cap is a ceiling on the work** (K-475's rule, a generator's shape of
+/// it): Max points bounds the *candidates*, and what stands is a subset.
+#[test]
+fn emit_from_image_throws_no_more_candidates_than_its_cap() {
+    let e = emit_of(&emit_from_image(&[
+        ("density", fixed(100.0)),
+        ("max_points", fixed(500.0)),
+    ]));
+    let all = e.candidates(1920, 1080, 1.0, points::Projection::FLAT);
+    assert_eq!(all.len(), 500);
+    assert_eq!(all.id, (0..500).collect::<Vec<u64>>());
+}
+
+/// **A producer declares a Points output the same way its three siblings do**
+/// (K-472, K-492, K-603), and a Source layer row the carriage fills.
+#[test]
+fn emit_from_image_declares_a_points_output_and_a_source_layer() {
+    let def = BUILTIN_DEFS
+        .get("emit_from_image")
+        .expect("Emit from image is in the catalogue");
+    let sig = def.signature();
+    assert!(points::wants_schedule(sig), "no Points output declared");
+    assert!(!points::consumes_points(sig), "a producer reads no wire");
+    assert_eq!(sig.output("points"), Some(PortType::Points));
+    assert_eq!(
+        def.schema().layer_input(),
+        Some("source"),
+        "the draw builder fills a layer input by this predicate"
+    );
+}
+
 // ------------------------------------------------------ Grid (K-598)
 
 /// A Grid instance with its declared defaults, and `edits` applied.
@@ -15767,12 +15979,13 @@ fn the_points_producers_declare_a_data_output_beside_their_picture() {
     assert_eq!(
         with_extras,
         vec![
+            ("emit_from_image", vec!["points"]),
             ("grid", vec!["points"]),
             ("particulate", vec!["points"]),
             ("scatter", vec!["points"])
         ]
     );
-    for name in ["particulate", "grid", "scatter"] {
+    for name in ["particulate", "grid", "scatter", "emit_from_image"] {
         let port = BUILTIN_DEFS
             .get(name)
             .expect("declared")

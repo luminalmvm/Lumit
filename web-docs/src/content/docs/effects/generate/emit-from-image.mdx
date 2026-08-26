@@ -1,0 +1,63 @@
+---
+title: Emit from image
+description: What Emit from image does, and what each of its controls means.
+---
+
+Emit from image is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source layer** | Layer | Any layer in the composition | None | - |
+| **Threshold** | Slider | 0 to 100 | 50 | Per cent |
+| **Density** | Slider | 0 to 100; higher | 20 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Size** | Slider | 0 to 200; higher | 6 | Pixels at composition size |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Max points** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Source** groups **Source layer**, **Threshold**, **Density**, **Seed**.
+- **Point** groups **Size**, **Feather**, **Colour**, **Max points**.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source layer**
+- **Threshold**
+- **Density**
+- **Seed**
+- **Size**
+- **Feather**
+- **Colour**
+- **Max points**
+- **Mix**
+- **Blend**
+- **Matte**
+- **Invert**
+- **Channel**
+
+## Related
+
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

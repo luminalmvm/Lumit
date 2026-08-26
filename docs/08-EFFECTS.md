@@ -5904,6 +5904,65 @@ AE has no equivalent; the look is bought as a plugin there.
 
 ---
 
+### 3.93 Emit from image — points thrown at a picture, kept where it is bright
+
+A **Generate** effect (K-603), the family's fourth **producer** and the last of it. Grid
+puts points where the arithmetic says and Scatter keeps the ones that land on something
+*opaque*; this one keeps the ones that land on something *bright*. Point it at a layer — a
+title, a logo, a noise pattern, a luma matte somebody painted — and its highlights become a
+cloud of points in the shape of themselves.
+
+**Parameters.** **Source layer** (K-123 — the layer whose brightness is read; **unset reads
+this effect's own input picture**), **Threshold** (per cent of full white, default 50 — how
+bright a pixel must be before a candidate on it stands any chance at all), Density (candidate
+points per hundred-pixel square of the *composition*, default 20), Seed, Size (px@comp,
+default 6), Feather (per cent), Colour, **Max points** (1–200 000, hard 1 000 000, default
+20 000 — the budget dial, bounding the **candidates**, not animatable). Plus the host Mix
+with its Blend (K-425). Beside the stream it draws its own points as feathered discs; **Mix
+at nought emits the stream and draws nothing**, the emit-only mode Grid documents.
+
+**Algorithm sketch.** Scatter's, with a different question asked of the pixel:
+
+```
+n = round(Density · comp area / 100²), capped at Max points
+candidate i falls at (hash(seed, i, 0)·w, hash(seed, i, 1)·h)     # its place, for ever
+light  = luma(pixel.rgb / pixel.a)                                 # unpremultiplied
+field  = clamp((light − Threshold) / (1 − Threshold), 0, 1)
+candidate i stands if field > hash(seed, i, 16)
+```
+
+Three notes:
+
+- **The acceptance is rejection sampling**, exactly as Scatter's is. Where the field is 1
+  every candidate stands; where it is a half, half of them do; where it is nothing, none. A
+  gradient therefore comes out as a *thinning* of the crowd rather than as a hard cut, which
+  is why the dial is a threshold rather than a switch.
+- **Brightness is measured on the light, not on the coverage.** The picture is premultiplied,
+  so a half-covered white pixel carries half the light of a covered one and would read as
+  grey; the honest answer to "how bright is what is *there*" divides the coverage back out
+  first. Without it a soft-edged title would emit from its own antialiasing as if it were a
+  shadow. Both render paths do it, and a test holds them together over a half-covered band.
+- **The rejection happens in the vertex stage**, for K-599's reason unchanged: the field is a
+  picture that exists only on the card and the candidates are a set that exists only on the
+  host, so that is where the two meet. What the card holds is the *candidate* set with the
+  refused ones given no size. The kernel's field test grew a second mode for this rather than
+  a second kernel — Scatter asks for coverage, this asks for light.
+
+**Its stream cannot be read by a driver or by a stack consumer**, which is
+impl/points-stream.md §2.2's constraint answered the same way K-599 answered it: the stream
+is a function of a picture, and at resolve time — when the driver walk runs, and when the
+draw builder fills a consumer's carriage — no picture exists. Both read the documented empty
+stream rather than a guess.
+
+`moderate` cost, `FullFrame` ROI, premultiplied, temporal window `{0}`, not seeded in the
+§1.3 sense (its pixels are a function of a picture, which the frame key already covers).
+Threshold 100, Density 0, Size 0 and Mix 0 are all the identity.
+
+AE's nearest equivalent is CC Ball Action's brightness sampling or a Particular emitter set
+to a layer's luminance; both are simulations, and this is arithmetic.
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order

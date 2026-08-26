@@ -194,6 +194,7 @@ Element 9
 Ellipse
 Ellipse outline
 Emboss
+Emit from image
 Emit rate
 Emitter
 Emitter angle
@@ -575,6 +576,7 @@ Soft light
 Softness
 Source
 Source height
+Source layer
 Source width
 Spacing
 Spacing x

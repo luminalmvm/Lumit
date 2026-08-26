@@ -106,15 +106,27 @@ struct Params {
     proj2: vec4<f32>,
 
     project: u32,
-    // Set by the generic points draw when the consumer is Scatter (K-599): the
-    // vertex stage reads the picture's own alpha under each point and refuses
-    // the ones the hash outvotes. Nought for Particulate, whose points were
-    // already decided by the compaction.
-    alpha_test: u32,
+    // **Which field the vertex stage rejects against**, set by the generic
+    // points draw: FIELD_NONE for Particulate, whose points were already
+    // decided by the compaction, and for every generator whose set is its set;
+    // FIELD_ALPHA for Scatter (K-599); FIELD_LUMA for Emit from image (K-603).
+    field_mode: u32,
     // Scatter's Invert row (K-599): the points land where the alpha is *not*.
-    alpha_invert: u32,
-    _pad2: f32,
+    field_invert: u32,
+    // Emit from image's Threshold (K-603), 0..1: how bright a pixel must be
+    // before it stands any chance at all. Unread in the other two modes.
+    field_threshold: f32,
 };
+
+// The field-rejection modes, matching `lumit_gpu::fx::FieldTest`.
+const FIELD_NONE: u32 = 0u;
+const FIELD_ALPHA: u32 = 1u;
+const FIELD_LUMA: u32 = 2u;
+
+// Rec.709 luminance weights, the same three numbers `lumit_core::fx::cpu::LUMA`
+// holds. Spelled here rather than pulled in from `colour.wgsl`, which this
+// module does not include (K-603).
+const LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 
 // The mode codes, matching `lumit_core::fx::points::RenderMode::from_code`. An
 // unset Sprite arrives as DISC: the host resolves the fallback, so the kernel
@@ -592,7 +604,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
 @group(1) @binding(2) var sprite: texture_2d<f32>;
 // The picture the points were thrown at, for the alpha test above (K-599).
 // Particulate binds its own input here and never reads it.
-@group(1) @binding(3) var alpha_src: texture_2d<f32>;
+@group(1) @binding(3) var field_src: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -628,9 +640,9 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     let head = ph.xy;
     let tail = pt.xy;
     var size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
-    if (dp.alpha_test != 0u) {
-        // **Rejection over the raster** (K-599): the point stands where the
-        // alpha under it outvotes its own die. A refused point is given no
+    if (dp.field_mode != FIELD_NONE) {
+        // **Rejection over the raster** (K-599, K-603): the point stands where
+        // the field under it outvotes its own die. A refused point is given no
         // size, which draws nothing at all — a disc of no radius covers no
         // pixel — rather than being compacted away, because the picture is the
         // only thing this pass makes.
@@ -639,8 +651,22 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
             clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
             clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
         );
-        var a = textureLoad(alpha_src, px, 0).a;
-        if (dp.alpha_invert != 0u) {
+        let texel = textureLoad(field_src, px, 0);
+        var a = texel.a;
+        if (dp.field_mode == FIELD_LUMA) {
+            // **Brightness, unpremultiplied and then thresholded** (K-603).
+            // The picture is premultiplied, so a half-covered white pixel
+            // carries half the light of a covered one and would read as grey —
+            // the honest reading of "how bright is what is *there*" divides the
+            // coverage back out. Threshold is then the floor and full white the
+            // ceiling, so the field is a proper 0..1 chance again.
+            let rgb = select(texel.rgb / texel.a, vec3<f32>(0.0), texel.a <= 0.0);
+            a = clamp(
+                (dot(rgb, LUMA) - dp.field_threshold) / max(1.0 - dp.field_threshold, 1e-3),
+                0.0,
+                1.0,
+            );
+        } else if (dp.field_invert != 0u) {
             a = 1.0 - a;
         }
         if (a <= nc_hash01(dp.seed, A_ACCEPT, bitcast<i32>(id), 0, 0)) {

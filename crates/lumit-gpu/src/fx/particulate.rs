@@ -211,9 +211,9 @@ pub(super) struct ParticulateParams {
     pub(super) proj2: [f32; 4],
 
     pub(super) project: u32,
-    pub(super) alpha_test: u32,
-    pub(super) alpha_invert: u32,
-    pub(super) _pad2: f32,
+    pub(super) field_mode: u32,
+    pub(super) field_invert: u32,
+    pub(super) field_threshold: f32,
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -425,10 +425,11 @@ impl FxEngine {
             proj2: proj[2],
             project: u32::from(op.projection.is_some()),
             // Particulate's points were decided by the compaction; only the
-            // generic draw's Scatter caller turns the vertex-stage test on.
-            alpha_test: 0,
-            alpha_invert: 0,
-            _pad2: 0.0,
+            // generic draw's two field-testing callers turn the vertex-stage
+            // rejection on (K-599, K-603).
+            field_mode: 0,
+            field_invert: 0,
+            field_threshold: 0.0,
         };
         let ubuf = ctx
             .device

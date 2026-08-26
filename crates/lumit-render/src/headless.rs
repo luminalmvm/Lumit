@@ -6041,6 +6041,91 @@ surfaces:
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
     }
 
+    /// **The Source layer reaches the rejection, and its brightness decides**
+    /// (K-603) — the whole path, through the export walk: the layer reference
+    /// is resolved, the referenced layer's picture rides the carriage to the
+    /// pass, and the candidates on it stand or fall by how bright it is.
+    ///
+    /// The two arms differ **only** in whether the Source row names the white
+    /// layer. The white layer is in both documents and covered by the base in
+    /// both, so nothing else about the frame can move: with the row unset the
+    /// field is the effect's own dark blue input, which is under Threshold and
+    /// emits nothing at all.
+    #[test]
+    fn an_emit_from_image_reads_the_layer_its_source_row_names() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (64u32, 48u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |bound: bool| {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            // A white layer at the very bottom of the stack, covered by the
+            // base: it is what the Source row names, and it never reaches the
+            // picture.
+            let white = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: white,
+                name: "White".into(),
+                colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                width: cw,
+                height: ch,
+                extra: serde_json::Map::new(),
+            }));
+            let white_layer = matrix_layer("White", LayerKind::Solid { def: white }, cw, ch);
+            let white_id = white_layer.id;
+            if let Some(comp) = doc.comp_mut(comp_id) {
+                comp.layers.push(white_layer);
+            }
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+
+            let mut fx = lumit_core::fx::instantiate("emit_from_image").unwrap();
+            for p in &mut fx.params {
+                match p.id.as_str() {
+                    // The layer is 12 × 10, so the density has to be typed well
+                    // past its soft ceiling to put any candidates on it at all.
+                    "density" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(5_000.0));
+                    }
+                    "threshold" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(50.0));
+                    }
+                    "size" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(2.0));
+                    }
+                    "source" if bound => {
+                        p.value = lumit_core::model::EffectValue::Layer(Some(white_id));
+                    }
+                    _ => {}
+                }
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![fx];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let bound = build(true);
+        let unbound = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 6, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let lit = frame_of(&bound);
+        let dark = frame_of(&unbound);
+        assert_ne!(
+            lit, dark,
+            "a bright Source layer must emit where a dark input does not"
+        );
+        assert_eq!(lit, frame_of(&bound), "two renders of one frame differ");
+    }
+
     /// **The degradation rung never engages on an export walk** (K-475, PS7;
     /// docs/13 §2's note under B12–B14).
     ///

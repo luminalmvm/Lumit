@@ -19,6 +19,42 @@ use crate::GpuContext;
 
 use super::{particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine};
 
+/// **Which picture-derived field a point is put to a vote against**, in the
+/// vertex stage (K-599, K-603).
+///
+/// One rejection, two rules, because the two effects that want one differ only
+/// in what they read off the pixel under a point: Scatter asks how covered it
+/// is, Emit from image asks how bright it is. A refused point is given no size,
+/// which draws nothing at all — a disc of no radius covers no pixel — rather
+/// than being compacted away, because the picture is the only thing the pass
+/// makes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FieldTest {
+    /// Every point stands. Particulate's were decided by the compaction, and a
+    /// generator's set is its set.
+    None,
+    /// **Scatter's** (K-599): the alpha under the point, optionally inverted so
+    /// the points land where the alpha is *not*.
+    Alpha { invert: bool },
+    /// **Emit from image's** (K-603): the unpremultiplied luminance under the
+    /// point, remapped so `threshold` is no chance at all and full white is
+    /// every chance.
+    Luma { threshold: f32 },
+}
+
+impl FieldTest {
+    /// The kernel's own mode code — the `FIELD_*` constants of
+    /// `fx_particulate.wgsl`, which this enum is the twin of.
+    #[must_use]
+    pub fn mode(self) -> u32 {
+        match self {
+            FieldTest::None => 0,
+            FieldTest::Alpha { .. } => 1,
+            FieldTest::Luma { .. } => 2,
+        }
+    }
+}
+
 /// One point, as the generic draw reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawPoint {
@@ -52,15 +88,13 @@ pub struct PointsDrawOp<'a> {
     /// `None` on a 2D layer — where it is not the identity matrix but no
     /// matrix at all, so the positions' bits are left alone (K-258).
     pub projection: Option<[[f32; 4]; 3]>,
-    /// **Scatter's rejection** (K-599): read the alpha under each point and
-    /// refuse the ones their die outvotes. The test happens in the vertex
-    /// stage because that is the only place a host-built point set can meet a
-    /// picture that exists only on the card.
-    pub alpha_test: bool,
-    /// Scatter's Invert row: the points land where the alpha is *not*.
-    pub alpha_invert: bool,
-    /// The seed the acceptance die is drawn from; unread without
-    /// [`alpha_test`](Self::alpha_test).
+    /// **The rejection** (K-599, K-603): which picture-derived field each point
+    /// is put to a vote against, and by what rule. The test happens in the
+    /// vertex stage because that is the only place a host-built point set can
+    /// meet a picture that exists only on the card.
+    pub field: FieldTest,
+    /// The seed the acceptance die is drawn from; unread under
+    /// [`FieldTest::None`].
     pub seed: u32,
     /// Which coverage the quad is filled with — the kernel's own mode codes,
     /// matching `lumit_core::fx::points::RenderMode`: 0 a feathered disc (or a
@@ -81,9 +115,9 @@ impl FxEngine {
     /// Draw a host-built set of points over a working texture, returning a new
     /// texture of the same size.
     ///
-    /// `alpha` is the picture Scatter's rejection reads its field from — a
-    /// bound matte's, or `None` for the input itself. Unread unless
-    /// [`PointsDrawOp::alpha_test`] is set.
+    /// `field` is the picture the rejection reads from — a bound matte's for
+    /// Scatter, the Source layer's for Emit from image, or `None` for the
+    /// input itself. Unread under [`FieldTest::None`].
     ///
     /// The picture is copied first and the discs drawn over it, so this is an
     /// ordinary "picture in, picture out" pass — and an empty set, a Mix of
@@ -95,7 +129,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         w: u32,
         h: u32,
-        alpha: Option<&wgpu::Texture>,
+        field: Option<&wgpu::Texture>,
         op: &PointsDrawOp<'_>,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -157,8 +191,12 @@ impl FxEngine {
         u.proj1 = proj[1];
         u.proj2 = proj[2];
         u.project = u32::from(op.projection.is_some());
-        u.alpha_test = u32::from(op.alpha_test);
-        u.alpha_invert = u32::from(op.alpha_invert);
+        u.field_mode = op.field.mode();
+        u.field_invert = u32::from(matches!(op.field, FieldTest::Alpha { invert: true }));
+        u.field_threshold = match op.field {
+            FieldTest::Luma { threshold } => threshold.clamp(0.0, 1.0),
+            _ => 0.0,
+        };
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -175,10 +213,10 @@ impl FxEngine {
             });
         // The sprite Clone to points stamps, or the input picture in that slot
         // when nothing stamps at all — Disc mode never samples it. Beside it,
-        // the rejection's own field: a bound matte's picture, or this effect's
-        // input when the row is unset.
+        // the rejection's own field: a bound matte's or a Source layer's
+        // picture, or this effect's input when the row is unset.
         let view = op.sprite.unwrap_or(src).create_view(&Default::default());
-        let alpha_view = alpha.unwrap_or(src).create_view(&Default::default());
+        let field_view = field.unwrap_or(src).create_view(&Default::default());
         let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-points-draw-bind"),
             layout: &self.particulate_draw_layout,
@@ -197,7 +235,7 @@ impl FxEngine {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&alpha_view),
+                    resource: wgpu::BindingResource::TextureView(&field_view),
                 },
             ],
         });

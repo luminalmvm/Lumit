@@ -58,6 +58,7 @@ use super::effects::{
     drop_shadow::{DropShadow, DropShadowDef},
     echo::{Echo, EchoDef},
     emboss::{Emboss, EmbossDef},
+    emit_from_image::{EmitFromImage, EmitFromImageDef},
     exposure::{Exposure, ExposureDef},
     fill::{Fill, FillDef},
     find_edges::{FindEdges, FindEdgesDef},
@@ -202,10 +203,11 @@ crate::catalogue![
     // K-398 opened this category for, and it is the first entry to declare a
     // data output beside its picture (K-472).
     ParticulateDef => Particulate,
-    // The generators (K-598), beside it and for the same reason: they make
-    // points rather than pixels, and declare the same Points output.
+    // The generators (K-598, K-599, K-603), beside it and for the same reason:
+    // they make points rather than pixels, and declare the same Points output.
     GridDef => Grid,
     ScatterDef => Scatter,
+    EmitFromImageDef => EmitFromImage,
     // The consumers (K-600, K-601, K-602), after the producers they read: the
     // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,

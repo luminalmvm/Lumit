@@ -18257,3 +18257,51 @@ which is white by default. A producer's Colour over life therefore still reads a
 and the row is a tint rather than a replacement. **Fade** defaults to 100 for one reason: a
 plexus whose lines switch on at exactly Max distance pops, and popping is the first thing
 anybody has to go and fix.
+
+## K-603 — Emit from image is Scatter asking the pixel a different question, and the kernel grew a second field mode rather than a second kernel
+
+**DECIDED 2026-08-26**, taking the last of [docs/impl/points-stream.md](impl/points-stream.md)
+§2.3's producers. Emit from image throws candidates at a picture and keeps the ones that land
+somewhere **bright** — a title, a logo, a painted grey card becomes a cloud of points in the
+shape of its own highlights, with Threshold saying where bright starts.
+
+**It is deliberately Scatter's shape and not a variation on it** (K-599): the same
+per-candidate placement dice, the same acceptance die (`A_ACCEPT`), the same Density-per-
+composition-area rule reading Scatter's own `DENSITY_CELL`, the same candidate cap. What
+differs is the field the acceptance is weighed against — coverage there, light here — and
+that is one branch, not one effect. Scatter's own entry recorded that it reads alpha and only
+alpha on purpose, and a Channel row on it would have been the wrong answer to this: the two
+are different effects because they mean different things, and they share everything that is
+the same.
+
+**The kernel therefore grew a *mode*, not a twin.** `PointsDrawOp`'s two booleans
+(`alpha_test`, `alpha_invert`) became one `FieldTest` — `None`, `Alpha { invert }`,
+`Luma { threshold }` — with the matching `field_mode`/`field_invert`/`field_threshold` in the
+uniform, and the WGSL's `alpha_src` binding renamed `field_src` for what it now carries. The
+enum also removes a lie the booleans told: two flags where one mode was meant, and an
+`alpha_invert` that only ever applied to one of them.
+
+**Brightness is measured on the light, not on the coverage.** The picture is premultiplied,
+so a half-covered white pixel carries half the light of a covered one and would read as grey.
+Unpremultiplying first is what stops a soft-edged title emitting from its own antialiasing as
+if that were shadow, and it is asserted in both paths — the CPU reference against a
+half-covered pixel, and the twin test against a half-covered band the card and the reference
+must agree on.
+
+**The field is remapped, not gated.** `(light − Threshold) / (1 − Threshold)`, clamped, so
+Threshold is the floor and full white the ceiling and the result is a proper chance again.
+Rejection sampling then makes a gradient come out as a *thinning* of the crowd rather than as
+a hard cut — which is why the row is a threshold and not a switch, and why Threshold 0 is
+"brightness itself" rather than "everything".
+
+**Its stream cannot be read by a driver or by a stack consumer**, which is §2.2's constraint
+answered exactly as K-599 answered it for Scatter and needs no new reasoning: the stream is a
+function of a picture, and at resolve time no picture exists. Both read the documented empty
+stream. The GPU carriage points-stream.md §3.3 designs is what would change that, for both
+producers at once, and nothing here forces it.
+
+**The Source layer rides the ordinary layer-input carriage** (K-123, layer-input.md) — the
+row Clone to points takes its stamp from, fitted to the op's own raster on the way in, so the
+kernel's `textureLoad` at a point's own pixel is the arithmetic the CPU reference does.
+**Unset reads this effect's own input picture**, which is the same reading an unset Matte
+gives Scatter.

@@ -10751,6 +10751,25 @@ in exactly the place the producer drew it, and it is also why a wire from **Scat
 over nothing: Scatter's points depend on the picture, and at the moment this hand-over
 happens there is no picture yet. Grid and Particulate both feed it in full.
 
+**Emit from image: points where a picture is bright.** A fourth producer, and Scatter's twin
+in every way but one. Scatter keeps the candidates that land on something *solid*; this one
+keeps the ones that land on something *bright*, in a layer you point it at. A title, a logo,
+a painted grey card: its highlights become a cloud of points in the shape of themselves.
+**Threshold** is where "bright" starts.
+
+The keeping is a coin toss weighted by the picture, exactly as Scatter's is, which is what
+makes a gradient come out as a crowd that thins rather than a shape with a hard edge. And
+there is one thing about brightness worth knowing, because it is the sort of detail that goes
+wrong silently. Pictures here are stored with their transparency already multiplied in, so a
+half-transparent white pixel is stored as half-grey. Asked plainly "how bright is this?", it
+would answer grey — and a title with soft edges would start emitting from its own smoothing
+as if that were shadow. So the transparency is divided back out before the brightness is
+measured: the question is how bright the light *is*, not how much of the pixel it covers.
+
+Emit from image shares Scatter's other limit too, and for the same reason: its points depend
+on a picture, so nothing that runs before there is a picture — a driver, or another effect
+reading its wire — can be handed them.
+
 **Trail: where every point has been, without anything being remembered.** The second thing
 that reads a wire, and the one worth understanding, because it looks impossible. A trail is a
 history — where the particle was a moment ago, and the moment before that — and this
