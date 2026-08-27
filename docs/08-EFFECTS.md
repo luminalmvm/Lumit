@@ -1805,8 +1805,16 @@ owner's "adjust close/far blur separately"; then three collapsed twirls:
   Remove edge leak (0–1, default 0) and Detect edge threshold (0–1, default 0.1).
 
 Then Repeat edge pixels (bool, default on), Display (choice, default Rendered — a diagnostic
-view: **Rendered** the normal blurred output, **Depth map** the post-invert, post-channel-pick
-depth as greyscale, **Focus map** the smooth in-focus mask, white where sharp), Mix.
+view: **Rendered** the normal blurred output, **Depth map** the post-invert, post-channel-pick,
+**post-Gamma** depth as greyscale, **Focus map** the smooth in-focus mask, white where sharp),
+Mix.
+
+**Both views answer to Gamma, and answer the same way** (K-614). Gamma scales the depth's
+distance from focus, so the Focus map has always moved with it; the Depth map drew the raw
+depth and sat still, which is the wrong half of a pair that is read together. The Depth map
+now draws the axis the ramp reads — `focus + (d − focus)·2^gamma` — so a pass whose content
+is squeezed into a fifth of the range can be seen being spread out. At Gamma 0 the multiplier
+is 1 and the map is the depth itself, to the bit.
 
 **Algorithm sketch.** Per output pixel, read the depth from the **Depth channel** of the
 referenced layer (0..1; by convention 0 = near, 1 = far, though the effect is symmetric about

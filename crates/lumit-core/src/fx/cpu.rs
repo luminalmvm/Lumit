@@ -4917,11 +4917,14 @@ pub fn dof(rgba: &mut [f32], depth: Option<&[f32]>, w: u32, h: u32, p: &DofParam
             // with a real depth pass behind them.
             if p.display == 1 {
                 // Depth map: what the effect is actually reading, after the
-                // channel pick and the invert — the view that says whether the
-                // pass is aligned, upside down, or crushed to its two ends.
-                rgba[oi] = d_centre;
-                rgba[oi + 1] = d_centre;
-                rgba[oi + 2] = d_centre;
+                // channel pick, the invert and Gamma — the view that says
+                // whether the pass is aligned, upside down, or crushed to its
+                // two ends. Gamma rescales the axis here exactly as it rescales
+                // it for the Focus map below (K-614).
+                let m = dof_depth_view(d_centre, focus, p.gamma);
+                rgba[oi] = m;
+                rgba[oi + 1] = m;
+                rgba[oi + 2] = m;
                 rgba[oi + 3] = 1.0;
                 continue;
             }
@@ -5130,6 +5133,31 @@ pub fn dof_falloff(d: f32, focus: f32, range: f32, falloff: f32) -> f32 {
     let denom = (1.0 - range).max(1e-4);
     let e = (((dist - range) / denom) * falloff).clamp(0.0, 1.0);
     e * e * (3.0 - 2.0 * e)
+}
+
+/// The grey the Depth-map view draws (K-614): the depth axis **as the ramp reads
+/// it**, which is the depth distance from focus scaled by Gamma and put back
+/// on the axis.
+///
+/// The Focus map has always answered to Gamma, because [`dof_falloff`] scales
+/// the distance before the ramp; the Depth map drew the raw depth and so sat
+/// still however the control was dragged. That is the wrong half of the pair to
+/// leave behind: the two views are read together — the depth map says whether
+/// the pass is aligned and how its content is spread, the focus map says where
+/// the blur lands — and on a pass whose content is squeezed into a fifth of the
+/// range, the useful question is what the *rescaled* axis looks like. Both views
+/// now show the same axis.
+///
+/// **The neutral takes the plain branch.** The multiplier is exactly 1 there,
+/// but `(d − focus) + focus` is not `d` in IEEE 754, and a Gamma of 0 must
+/// leave the map it always drew.
+#[must_use]
+pub fn dof_depth_view(d: f32, focus: f32, falloff: f32) -> f32 {
+    if falloff == 1.0 {
+        d
+    } else {
+        (d - focus) * falloff + focus
+    }
 }
 
 /// Whether a tap at offset `(dx, dy)` falls inside the aperture — the bool half

@@ -453,7 +453,10 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   switch to **Depth map** to see the depth pass itself as a greyscale picture (handy for checking
   it is the right way round), or **Focus map** to see a white-where-sharp mask that shows exactly
   which parts of the frame are in focus. The two diagnostic views ignore the blur so you get a
-  clean look. As always, the graphics-card program and its plain-Rust twin were checked to agree
+  clean look, and both of them answer to **Gamma** — the control that stretches the depth axis
+  about the focus depth — so the depth map shows the axis the blur is actually reading rather
+  than the one the file arrived with. That matters on a real depth pass, where nearly all the
+  content is squeezed into a fraction of the range: turn Gamma up and you watch it spread out. As always, the graphics-card program and its plain-Rust twin were checked to agree
   to the last bit across every one of these — invert on and off, lopsided near/far, and each
   display mode.
 - **What an iris is, and why a blur is not a lens.** Blur a picture and bright points smear

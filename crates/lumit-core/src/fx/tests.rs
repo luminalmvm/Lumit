@@ -9206,6 +9206,94 @@ fn a_legacy_dof_resolves_to_the_neutral_aperture() {
     );
 }
 
+/// **Both diagnostic views answer to Gamma, and answer the same way** (K-614,
+/// docs/08 §3.22). The Focus map always did — the control scales the depth
+/// distance before the ramp — while the Depth map drew the raw depth and sat
+/// still however far the control was dragged, which is the bug this holds shut.
+///
+/// The depth here is a left-to-right ramp and focus is the middle of it, so a
+/// Gamma above 1 must push the two halves of the map apart: darker below the
+/// focus depth, brighter above it, and unmoved exactly where the depth *is* the
+/// focus depth. At the neutral the map is the depth itself, to the bit.
+#[test]
+fn the_dof_depth_map_answers_to_gamma_as_the_focus_map_does() {
+    let (w, h) = (16u32, 4u32);
+    let n = (w * h) as usize;
+    let mut depth = vec![0.0f32; n * 4];
+    for i in 0..n {
+        // Red, and read as red below: a luminance read would weigh three
+        // channels and land a ULP off the ramp, which is not what is being
+        // measured here.
+        depth[i * 4] = (i % w as usize) as f32 / (w - 1) as f32;
+        depth[i * 4 + 3] = 1.0;
+    }
+    let img = vec![0.5f32; n * 4];
+    let grey = |p: &cpu::DofParams| {
+        let mut out = img.clone();
+        cpu::dof(&mut out, Some(&depth), w, h, p);
+        (0..w as usize).map(|x| out[x * 4]).collect::<Vec<f32>>()
+    };
+
+    let depth_map = cpu::DofParams {
+        display: 1,
+        depth_channel: 2,
+        ..neutral_dof(8.0, 8.0, [0.0, 0.0])
+    };
+    let plain = grey(&depth_map);
+    let expected: Vec<f32> = (0..w).map(|x| x as f32 / (w - 1) as f32).collect();
+    assert_eq!(
+        plain, expected,
+        "at the neutral Gamma the depth map is the depth itself"
+    );
+
+    // Gamma 4×, about the default focus depth of 0.5.
+    let squeezed = grey(&cpu::DofParams {
+        gamma: 4.0,
+        ..depth_map
+    });
+    assert_ne!(
+        squeezed, plain,
+        "the depth map must answer to Gamma at all — the bug was that it did not"
+    );
+    for (x, (was, now)) in plain.iter().zip(&squeezed).enumerate() {
+        let want = cpu::dof_depth_view(*was, 0.5, 4.0);
+        assert!(
+            (now - want).abs() < 1e-6,
+            "column {x}: the map must be the depth axis the ramp reads, {now} vs {want}"
+        );
+        // Pushed apart about the focus depth, and each side its own way.
+        if *was < 0.5 - 1e-6 {
+            assert!(
+                now < was,
+                "column {x}: below focus must darken, {now} vs {was}"
+            );
+        } else if *was > 0.5 + 1e-6 {
+            assert!(
+                now > was,
+                "column {x}: above focus must brighten, {now} vs {was}"
+            );
+        }
+    }
+
+    // And the Focus map is untouched by all of this: it read Gamma before and
+    // reads exactly the same Gamma now.
+    let focus_map = cpu::DofParams {
+        display: 2,
+        gamma: 4.0,
+        depth_channel: 2,
+        ..neutral_dof(8.0, 8.0, [0.0, 0.0])
+    };
+    let got = grey(&focus_map);
+    for (x, m) in got.iter().enumerate() {
+        let d = x as f32 / (w - 1) as f32;
+        assert_eq!(
+            *m,
+            1.0 - cpu::dof_falloff(d, 0.5, 0.1, 4.0),
+            "column {x}: the focus map's own reading of Gamma must not have moved"
+        );
+    }
+}
+
 // **The fold's load-bearing promise** (K-313): at the shipped defaults the
 // gather computes exactly the box-weighted disc average this effect computed
 // before it grew an aperture, a tonal mean or a weighting — to the bit, not to a

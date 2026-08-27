@@ -59,7 +59,7 @@ struct Params {
     bokeh_power: f32,    // 2^(Exposure/12); 1 = the plain arithmetic mean
     focus_x: f32,        // where to read focus depth, raster px
     focus_y: f32,
-    gamma: f32,  // multiplier on the depth distance before the ramp
+    gamma: f32,  // multiplier on the depth distance, before the ramp and in both views
     remove_edge_leak: f32,
     detect_edge_threshold: f32,
     depth_invert: u32,   // 1 = d' = 1 - d before the CoC
@@ -129,6 +129,18 @@ fn coc_falloff(d: f32, focus: f32) -> f32 {
     let denom = max(1.0 - p.range, 1e-4);
     let e = min(max(((dist - p.range) / denom) * p.gamma, 0.0), 1.0);
     return e * e * (3.0 - 2.0 * e); // smoothstep ramp
+}
+
+// The Depth-map view's grey (K-614): the depth axis as the ramp reads it — the
+// distance from focus scaled by the same Gamma multiplier and put back on the
+// axis, so the two diagnostic views show the same axis. == cpu::dof_depth_view,
+// branch for branch: the neutral multiplier is exactly 1, but `(d - focus) +
+// focus` is not `d`, so Gamma 0 takes the plain depth.
+fn depth_view(d: f32, focus: f32) -> f32 {
+    if (p.gamma == 1.0) {
+        return d;
+    }
+    return (d - focus) * p.gamma + focus;
 }
 
 // Focus is either the number or whatever depth sits under the point — the reason
@@ -218,8 +230,10 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     // that occupies the depth slot.
     if (p.display == 1u) {
         // Depth map: the post-invert depth as opaque greyscale — after the
-        // channel pick, so it is what the effect is actually reading.
-        textureStore(dst, xy, vec4<f32>(d, d, d, 1.0));
+        // channel pick and after Gamma, so it is what the effect is actually
+        // reading (K-614). == cpu::dof_depth_view.
+        let m = depth_view(d, focus);
+        textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
         return;
     }
     if (p.display == 2u) {

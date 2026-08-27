@@ -18951,3 +18951,33 @@ title and its Window-menu tick all stand.
 Tests: in Flutter, `dock_test.dart` — Hierarchy is in none of the shipped workspaces, asserted
 over `WorkspacePreset.values` so a preset added by copying an old one cannot bring it back
 quietly.
+
+## K-614 — The Depth map answers to Gamma, the way the Focus map does
+
+**Status: DECIDED (2026-08-27).** Amends [08-EFFECTS.md](08-EFFECTS.md) §3.22's Display row;
+K-395's twirl, K-313's neutral branches and the ±10 Gamma range all stand.
+
+**What was wrong.** Depth of field's Gamma scales the depth's *distance from focus* before
+the ramp (`dof_falloff`), which is what makes a real depth pass — content squeezed into a
+fifth of the range — focusable at all. The Focus map is drawn from that ramp, so it moved
+with the control. The Depth map was drawn from the raw depth, so it did not: the one view
+whose whole job is to say how the pass is spread ignored the one control that spreads it,
+and dragging Gamma with the Depth map up looked like a control that did nothing.
+
+**The rule now.** The Depth map draws the depth axis as the ramp reads it —
+`focus + (d − focus)·2^gamma`, the same multiplier about the same focus depth. The two
+views then describe the same axis, which is how they are read: the depth map says whether
+the pass is aligned and how far apart its content is, the focus map says where the blur
+lands on it.
+
+**The neutral is the historical map, to the bit.** The multiplier is exactly 1 at Gamma 0,
+but `(d − focus) + focus` is not `d` in IEEE 754, so the neutral takes a plain branch and
+returns the depth itself — the same shape K-313's aperture branches take, and for the same
+reason. No clamp: a map pushed past black or white by a large Gamma *is* the reading, and
+clamping it would hide the crushing it is there to show.
+
+Regression tests: `the_dof_depth_map_answers_to_gamma_as_the_focus_map_does` (`lumit-core`)
+— the map moving with Gamma about the focus depth, unmoved at the focus depth itself, exact
+at the neutral, with the Focus map's own reading pinned unchanged beside it; and a
+`depth map squeezed` case in `wgsl_dof_matches_the_cpu_oracle` (`lumit-gpu`), so the WGSL
+twin rescales where the oracle does.
