@@ -20,6 +20,8 @@
 // only the release commits. An animated property is not draggable at all —
 // writing a static value over a curve would delete it — and says so instead.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
@@ -511,7 +513,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           Expanded(child: label),
           if (widget.valueColumn case final col?) ...[
             SizedBox(
-              width: col.width,
+              width: _valueAreaWidth(col, cells.length),
               child: Row(
                 children: [
                   for (var i = 0; i < cells.length; i++) ...[
@@ -523,7 +525,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                 ],
               ),
             ),
-            SizedBox(width: col.rightInset),
+            SizedBox(
+                width: col.width + col.rightInset -
+                    _valueAreaWidth(col, cells.length)),
           ] else
             for (final axis in cells) ...[
               const SizedBox(width: 6),
@@ -534,6 +538,27 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     );
     final height = widget.rowHeight;
     return height == null ? row : SizedBox(height: height, child: row);
+  }
+
+  /// How much room the row's value boxes take in the Timeline's fold-out.
+  ///
+  /// **The Modes column is a minimum, not a cage** (owner, desk test). One box
+  /// fills the column exactly, as it always has. Two — an unlinked Scale, a
+  /// Position — were being squeezed into half of it each, which is narrower
+  /// than a value well can hold `100.0%`: the unit dropped to a second line
+  /// inside a lane one line tall. A row of more than one box therefore asks
+  /// for the width those same boxes are drawn at in the Effect controls panel,
+  /// [transformCellWidth] each, and **runs on to the right** rather than
+  /// squeezing — into room a property row has going spare anyway, since it
+  /// draws no matte, no blend and no parent under those columns.
+  ///
+  /// Capped at what the outline actually holds ([ValueColumn.rightInset] is
+  /// everything to the right of the Modes column), so a narrow outline gives
+  /// back the squeeze rather than pushing the boxes off the panel.
+  double _valueAreaWidth(ValueColumn col, int cells) {
+    final wanted = cells * transformCellWidth + (cells - 1) * 4;
+    if (wanted <= col.width) return col.width;
+    return math.min(wanted, col.width + col.rightInset);
   }
 
   Widget _cell(BridgeTransform transform, TransformAxis axis, int frame,

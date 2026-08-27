@@ -3649,6 +3649,48 @@ void main() {
           reason: 'and so did the value cells under the fixed Modes column');
     });
 
+    /// **The Modes column is a minimum, not a cage** (owner, desk test). An
+    /// unlinked Scale draws two boxes, and half the Modes column each is
+    /// narrower than a well holding `100.0%` — so the per-cent sign dropped to
+    /// a second line inside a lane that is one line tall. The pair runs on to
+    /// the right instead, into room the property row has going spare.
+    testWidgets('an unlinked Scale keeps its per-cent sign on the line',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      // Unlinked, not separated: Scale ships linked and draws one box for
+      // both axes (K-571); unlinking it puts x and y in the same row.
+      layer.setAxisMode(
+          pair: BridgeTransformPair.scale, mode: BridgeAxisMode.combined);
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId, group: 'Transform');
+
+      final x = tester.getRect(find.byKey(const ValueKey('tl-tf-scaleX')));
+      final y = tester.getRect(find.byKey(const ValueKey('tl-tf-scaleY')));
+      expect(x.width, greaterThanOrEqualTo(transformCellWidth),
+          reason: 'each box is the width it is drawn at in Effect controls — '
+              'half the Modes column each was 53, and a reading does not fit');
+      expect(y.width, greaterThanOrEqualTo(transformCellWidth));
+      expect(y.right - x.left, greaterThan(renderGroupWidth),
+          reason: 'so the pair is wider than the Modes column, and allowed '
+              'to be: it runs on to the right rather than squeezing');
+
+      // And it still lands on the panel rather than off its right edge.
+      expect(
+          y.right,
+          lessThanOrEqualTo(
+              tester.getRect(find.byType(TimelinePanelFrb)).right));
+
+      // Each reading is one line, which is what the room was for.
+      final readings = find.text('100.0%');
+      expect(readings, findsNWidgets(2), reason: 'a box per axis');
+      for (var i = 0; i < 2; i++) {
+        expect(tester.getRect(readings.at(i)).height, lessThan(24),
+            reason: 'one line of 11px mono, not the % wrapped under the '
+                'digits inside a lane one line tall');
+      }
+    });
+
     /// The bottom bar takes a column group away and gives it back (K-448,
     /// §12A.1), so the outline pares down to names and bars. What lines up
     /// with a hidden group has to go somewhere sensible: the fold-out's value
