@@ -50,14 +50,21 @@ Future<T?> showLumitModal<T>({
   }
 
   entry = OverlayEntry(
-    builder: (_) => Stack(
+    // The entry's **own** context, not the caller's. The window outlives
+    // whatever opened it — a menu item, another dialogue closing as this one
+    // opens — and reading the theme off the opener's context left the scrim
+    // depending on an element that had since been taken down. The next rebuild
+    // then filled the screen with "looking up a deactivated widget's ancestor
+    // is unsafe". The overlay's own context is alive for exactly as long as
+    // the entry is.
+    builder: (overlayContext) => Stack(
       children: [
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => close(null),
             child: ColoredBox(
-              color: ThemeScope.of(context).theme.scrim,
+              color: ThemeScope.of(overlayContext).theme.scrim,
             ),
           ),
         ),

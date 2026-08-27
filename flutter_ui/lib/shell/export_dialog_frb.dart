@@ -2206,9 +2206,11 @@ class _ExportDialogState extends State<_ExportDialog> {
     }
     // Wake the status line, which polls only while an export is live.
     if (start) statusLineExportStarted.value++;
-    final context = this.context;
-    widget.onClose();
+    // The queue goes up **before** this dialogue comes down. Closing first
+    // deactivates this element, and looking the Overlay up off a deactivated
+    // context is the error that filled the screen after an export.
     showExportQueueFrb(context: context);
+    widget.onClose();
   }
 
   String _timecode(int frames, double rate) =>

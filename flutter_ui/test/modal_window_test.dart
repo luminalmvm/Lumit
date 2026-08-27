@@ -175,6 +175,70 @@ void main() {
         reason: 'and so did the tree going away under it');
   });
 
+  /// A window outlives whatever raised it — a menu item that closed as it
+  /// opened, a dialogue that put another one up on its way out. The window's
+  /// own furniture must therefore not be reading anything off the opener's
+  /// context: the scrim did, and the first rebuild after the opener went
+  /// filled the screen with "looking up a deactivated widget's ancestor is
+  /// unsafe" (the error seen after an export).
+  testWidgets('a window outlives the widget that opened it', (tester) async {
+    var opener = true;
+    final tick = ValueNotifier<int>(0);
+    addTearDown(tick.dispose);
+
+    await tester.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: ThemeScope(
+        theme: LumitTheme.dark(),
+        animationLevel: AnimationLevel.none,
+        showTooltips: false,
+        child: ValueListenableBuilder<int>(
+          valueListenable: tick,
+          builder: (_, __, ___) => Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (_) => opener
+                    ? Builder(
+                        builder: (context) => Center(
+                          child: GestureDetector(
+                            key: const ValueKey('open'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => showLumitModal<void>(
+                              context: context,
+                              builder: (_) => const FloatSurface(
+                                child: SizedBox.expand(
+                                  child: Text('body', key: ValueKey('body')),
+                                ),
+                              ),
+                            ),
+                            child: const SizedBox(width: 40, height: 20),
+                          ),
+                        ),
+                      )
+                    : const SizedBox(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('open')));
+    await tester.pump();
+    expect(body, findsOneWidget);
+
+    // The opener goes, and the overlay draws another frame or two after it.
+    opener = false;
+    tick.value++;
+    await tester.pump();
+    tick.value++;
+    await tester.pump();
+
+    expect(tester.takeException(), isNull,
+        reason: 'the window draws off its own context, not the opener\'s');
+    expect(body, findsOneWidget, reason: 'and it is still there');
+  });
+
   testWidgets('a placement survives a save and load of the store',
       (tester) async {
     await tester.pumpWidget(
