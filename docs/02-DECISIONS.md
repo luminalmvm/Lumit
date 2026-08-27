@@ -18927,3 +18927,27 @@ cursor over a handle, which is the affordance a hover brightening was standing i
 Tests: in Flutter, `timeline_alignment_test.dart` — the drawn tab's colour is `animated` at
 full alpha and stronger than the band's edge; and `timeline_panel_frb_test.dart` — a press
 on a work-area handle leaves the playhead where it was while the edge itself still moves.
+
+
+## K-614 — No shipped workspace carries the Hierarchy panel
+
+**Status: DECIDED (2026-08-27).** The **Hierarchy** panel is in **no** shipped arrangement:
+not the default *Edit* workspace and not one of the five presets. It stays in the panel
+inventory and one tick away in the Window menu, exactly as Easing, Graph and Node are.
+
+**Why.** The owner has asked for this repeatedly, and the panel kept coming back because
+every preset was written by copying the one before it — Edit tabbed it third behind Project,
+and Effects, Colour, Audio and Retiming each inherited that tab. The reason is the same one
+K-349 and K-471 give for Easing and the graph panels: a panel nobody asked for should not
+appear in an arrangement they already know. The parenting tree is a thing you go and look at
+when a rig has gone wrong, not a thing you work beside, and a tab nobody opens is a tab in
+front of the ones they do — on the left column, that was Project and Effect controls paying
+for it.
+
+**What this amends.** [07-UI-SPEC.md](07-UI-SPEC.md) §1.6, which listed Hierarchy tabbed
+behind Project in *Edit* and in *Retiming*. Nothing else changes: the panel, its rows, its
+title and its Window-menu tick all stand.
+
+Tests: in Flutter, `dock_test.dart` — Hierarchy is in none of the shipped workspaces, asserted
+over `WorkspacePreset.values` so a preset added by copying an old one cannot bring it back
+quietly.

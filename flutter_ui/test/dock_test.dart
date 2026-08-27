@@ -25,7 +25,6 @@ void main() {
       [
         Panel.project,
         Panel.effectControls,
-        Panel.hierarchy,
       ],
     );
     expect(left.active, 0, reason: 'the left group opens on Project');
@@ -53,10 +52,11 @@ void main() {
   /// the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
   /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
-  /// K-471). All three are one tick away in the Window menu.
+  /// K-471); and **Hierarchy** belongs to no shipped arrangement at all
+  /// (K-614). All four are one tick away in the Window menu.
   test(
       'no panel appears twice in the default workspace, and only Easing, '
-      'Graph and Node are absent', () {
+      'Graph, Node and Hierarchy are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
     expect(
@@ -66,7 +66,20 @@ void main() {
             Panel.easing,
             Panel.graph,
             Panel.node,
+            Panel.hierarchy,
           ]));
+  });
+
+  /// **No shipped arrangement carries the Hierarchy panel** (K-614) — not the
+  /// default and not one preset, which is the owner's standing instruction
+  /// and the thing a new preset is most likely to reintroduce by copying an
+  /// old one.
+  test('Hierarchy is in none of the shipped workspaces', () {
+    expect(panelsIn(defaultLayout()), isNot(contains(Panel.hierarchy)));
+    for (final preset in WorkspacePreset.values) {
+      expect(panelsIn(presetLayout(preset)), isNot(contains(Panel.hierarchy)),
+          reason: '${preset.name} must not open with Hierarchy in it');
+    }
   });
 
   /// The Effects workspace's right-hand column, now that the Node preview is
@@ -138,17 +151,17 @@ void main() {
   test('serialisation round-trips the tree', () {
     final root = defaultLayout();
     (root.children[0] as DockSplit).shares[0] = 0.3;
-    ((root.children[0] as DockSplit).children[0] as DockTabs).active = 2;
+    ((root.children[0] as DockSplit).children[0] as DockTabs).active = 1;
     final json = root.toJson();
     final back = DockNode.fromJson(json) as DockSplit;
     expect(back.toJson(), json);
-    expect(((back.children[0] as DockSplit).children[0] as DockTabs).active, 2);
+    expect(((back.children[0] as DockSplit).children[0] as DockTabs).active, 1);
   });
 
   test('activatePanelTab fronts the tab that holds the panel', () {
     final root = defaultLayout();
     final left = (root.children[0] as DockSplit).children[0] as DockTabs;
-    left.active = 2;
+    left.active = 1;
     activatePanelTab(root, Panel.project);
     expect(left.active, 0);
     // A panel not in any tab group is a no-op.

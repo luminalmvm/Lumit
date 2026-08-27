@@ -110,7 +110,12 @@ Structure only, with three exceptions: **Retiming**'s panel inventory differs be
 Easing panel is in no other arrangement (K-349) and **Nodes**' (K-445, K-471) because the
 Graph and Node panels are in no other.
 
-- **Edit** (default): Project panel left, fronted, with Effect Controls and Hierarchy tabbed
+**No shipped arrangement carries the Hierarchy panel** (K-614) — not the default, and not
+one preset. The parenting tree is a thing you go and look at, not a thing you work beside,
+and a tab nobody opens is a tab in the way of the ones they do. It is one tick away in the
+Window menu, exactly as Easing, Graph and Node are.
+
+- **Edit** (default): Project panel left, fronted, with Effect Controls tabbed
   behind it; Viewer centre; **right column Effects & Presets, fronted**, with Scopes and the
   Debug view tabbed behind (K-322 — the panel used to be a fourth tab on the *left*, buried
   behind Project, with Debug fronting the right column instead); Timeline across the full
@@ -133,7 +138,7 @@ Graph and Node panels are in no other.
 - **Retiming** (K-349): the arrangement for shaping how things move. The **Easing** panel
   takes the right-hand column outright — a bare pane, not tabbed, because the point of the
   panel over the popup is that it stays on screen while the selection changes underneath
-  it; Project fronted left with Effect Controls, Effects & Presets and Hierarchy tabbed
+  it; Project fronted left with Effect Controls and Effects & Presets tabbed
   behind; Viewer centre; Timeline as tall as Audio's, retiming being timeline work. Shares:
   0.55/0.45 vertically, 0.20/0.58/0.22 across the upper band.
 - **Nodes** (K-445, K-471): the graph as the main surface. The Graph panel takes the

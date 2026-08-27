@@ -159,11 +159,16 @@ class DockSplit extends DockNode {
 /// The default workspace (docs/07 §1.6 "Edit"): a vertical root (upper band
 /// 0.68, Timeline 0.32 across the full width); the upper band horizontal
 /// (left tab group 0.22, Viewer 0.58, right tab group 0.20). The left group
-/// tabs Project (fronted), Effect controls, Hierarchy; the right group tabs
+/// tabs Project (fronted) and Effect controls; the right group tabs
 /// Effects & presets (fronted), Scopes, Debug — the spec's right-hand
 /// Effects & presets column, which this layout used to bury as a left tab
 /// behind Project while fronting Debug on the right. Viewer and Timeline sit
 /// alone and render bare.
+///
+/// **The Hierarchy panel is in no shipped arrangement** (K-614): it is the
+/// parenting tree, which is a thing you go and look at rather than a thing
+/// you work beside, and a tab nobody opens is a tab in everybody's way. It
+/// is one tick away in the Window menu, like Easing, Graph and Node.
 DockSplit defaultLayout() => DockSplit(
       DockAxis.vertical,
       [
@@ -173,7 +178,6 @@ DockSplit defaultLayout() => DockSplit(
             DockTabs([
               DockPane(Panel.project),
               DockPane(Panel.effectControls),
-              DockPane(Panel.hierarchy),
             ]),
             DockPane(Panel.viewer),
             DockTabs([
@@ -198,6 +202,7 @@ DockSplit defaultLayout() => DockSplit(
 /// than only the arrangement (K-349, K-471): the Easing panel is in no other
 /// arrangement, and neither are the Graph and Node panels, because a panel
 /// nobody asked for should not appear in an arrangement they already know.
+/// Hierarchy is in none of them at all (K-614), for the same reason.
 ///
 /// The order is the strip's order, which is the drawing's: Nodes sits third,
 /// beside Effects, because both are about what an effect does rather than
@@ -234,10 +239,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockSplit(
               DockAxis.horizontal,
               [
-                DockTabs([
-                  DockPane(Panel.project),
-                  DockPane(Panel.hierarchy),
-                ]),
+                DockPane(Panel.project),
                 DockPane(Panel.effectControls),
                 DockPane(Panel.viewer),
                 DockTabs([
@@ -287,7 +289,6 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                   DockPane(Panel.effectControls),
                   DockPane(Panel.project),
                   DockPane(Panel.effectsAndPresets),
-                  DockPane(Panel.hierarchy),
                 ]),
                 DockPane(Panel.viewer),
                 DockTabs([
@@ -313,7 +314,6 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                   DockPane(Panel.project),
                   DockPane(Panel.effectControls),
                   DockPane(Panel.effectsAndPresets),
-                  DockPane(Panel.hierarchy),
                 ]),
                 DockPane(Panel.viewer),
                 DockTabs([
@@ -344,7 +344,6 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                   DockPane(Panel.project),
                   DockPane(Panel.effectControls),
                   DockPane(Panel.effectsAndPresets),
-                  DockPane(Panel.hierarchy),
                 ]),
                 DockPane(Panel.viewer),
                 DockPane(Panel.easing),
