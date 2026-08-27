@@ -19131,3 +19131,33 @@ writes; the only thing a pick decides is the number.
 Tests: in Flutter, `effect_controls_frb_test.dart` — picking a focus distance on a keyed Focus
 leaves both existing keys and plants a third under the playhead, and picking a position keys
 both axes of an animated point instead of flattening either.
+
+
+## K-622 — The first U stops at the keys
+
+**Status: DECIDED (2026-08-27).** A single `U` reveals the keyframed **rows**, keeping each
+heading over one so the row is placed and drawing nothing else under it: effect name →
+effect → keyed row, Transform → keyed property. `UU` is where a heading opens whole, and
+`UUU` still shuts the layer — the cycle keeps its three steps and its window (K-199).
+
+**Why.** `U` opened the qualifying *groups*, and a group opens whole. One keyed Intensity
+therefore unrolled every other parameter of that effect, and one keyed Position unrolled
+Scale, Rotation, Anchor and Opacity beside it — so "reveal animated properties" reliably
+filled the panel with rows carrying nothing, which is the opposite of what it is for.
+`reveal_groups` is group-level by design and stays so; the finer answer was already in Dart,
+in the read model every row is built from.
+
+**Built out of the Animated filter, not beside it.** `animatedFoldRows` (K-441) is exactly
+"keep the keyed rows and the headings above them", and `layerRows` already knew how to build
+a layer as though every twirl were down and then filter it. Its `animatedOnly` flag becomes
+the **set of layers** to filter: the strip passes every layer, a `U` passes the ones it just
+revealed. One arithmetic, two askers, no second notion of "has keyframes" to drift.
+
+**A layer lets go of the reveal when a hand touches it.** Any twirl under the layer — a
+caret, another reveal key — drops it from the filtered set, because a filtered layer whose
+caret appears to do nothing reads as a broken caret rather than as a mode.
+
+Tests: in Flutter, `keymap_frb_test.dart` — with Opacity keyed and Rotation merely changed,
+`U` draws Transform and Opacity and neither Rotation nor Position, `UU` draws all of them,
+`UUU` shuts the layer, and twirling the heading by hand after a `U` brings the unkeyed rows
+back.

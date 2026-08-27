@@ -221,6 +221,7 @@ Path keyMarkPath((KeyShape, KeyShape) pair, double x, double mid, double half) {
   }
   return path..close();
 }
+
 /// How much one step of the zoom is worth — a press of `=` / `-`, or a click
 /// on one of the landscapes flanking the slider (§6.5). A doubling, which is
 /// what After Effects' own keys do: the wheel's gentler notch is for a hand
@@ -233,6 +234,7 @@ double zoomNudged(double zoom,
         {required bool inward, required double maxZoom}) =>
     (inward ? zoom * zoomKeyStep : zoom / zoomKeyStep)
         .clamp(1.0, maxZoom < 1 ? 1.0 : maxZoom);
+
 /// A layer drag in flight: the index lifted, and the index it would land on.
 ///
 /// **Held by the panel and read by both halves of the table**, which is the
@@ -357,11 +359,16 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 /// `volumeDb` are the panel's once-per-revision reads, riding down onto the
 /// fold rows (K-184).
 ///
-/// [animatedOnly] is the **Animated filter** (K-441, 6.43): every layer builds
-/// its fold-out as though every twirl in it were down, and then keeps only what
-/// is keyed ([animatedFoldRows]). A layer with nothing keyed comes back shut,
-/// which is also a layer with no summary diamonds to draw — it has no keys
-/// anywhere, so the two answers cannot disagree.
+/// [animatedOnly] names the layers drawn **keyed rows only**: each builds its
+/// fold-out as though every twirl in it were down, and then keeps only what is
+/// keyed ([animatedFoldRows]). A layer with nothing keyed comes back shut, which
+/// is also a layer with no summary diamonds to draw — it has no keys anywhere,
+/// so the two answers cannot disagree.
+///
+/// Two things ask for it. The **Animated filter** (K-441, 6.43) asks for the
+/// whole comp, and passes [everyLayerId]. A single **`U`** asks for the layers
+/// it just revealed and no others (K-622), so that opening one layer's keyed
+/// rows does not quietly filter every other layer on the panel.
 List<LayerRow> layerRows({
   required List<BridgeLayerEntry> layers,
   required Set<String> open,
@@ -371,19 +378,20 @@ List<LayerRow> layerRows({
   Map<String, double> sequenceExtra = const {},
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
-  bool animatedOnly = false,
+  Set<String> animatedOnly = const {},
 }) {
   final out = <LayerRow>[];
   for (final entry in layers) {
     final id = entry.layer.internallayerId.toString();
+    final keyedOnly = animatedOnly.contains(id);
     final built = layerFoldRows(
         entry: entry,
-        open: animatedOnly ? everyFoldPath : open,
+        open: keyedOnly ? everyFoldPath : open,
         hasAudio: hasAudio[id] ?? false,
         flowParams: flowParams[id],
         volumeDb: volumeDb[id]);
-    final fold = animatedOnly ? animatedFoldRows(built) : built;
-    final isOpen = animatedOnly ? fold.isNotEmpty : open.contains(id);
+    final fold = keyedOnly ? animatedFoldRows(built) : built;
+    final isOpen = keyedOnly ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(
       entry: entry,
       id: id,
@@ -549,6 +557,7 @@ class LayerDragSlide extends StatelessWidget {
     );
   }
 }
+
 /// A controller's scroll position, or null when there is not exactly one
 /// view attached.
 ///
@@ -558,6 +567,7 @@ class LayerDragSlide extends StatelessWidget {
 /// the panel was enough to hit it.
 ScrollPosition? positionOf(ScrollController controller) =>
     controller.positions.length == 1 ? controller.positions.first : null;
+
 /// The Timeline's two views (K-529, §12A.1), in the order their tabs sit.
 ///
 /// Both share the ruler, the cache bar, the work area, the markers, the

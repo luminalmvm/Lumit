@@ -128,6 +128,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Exactly this path: shutting a group leaves what was open *inside* it
   /// remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
+    // Whatever this path belongs to is being twirled by hand or by another
+    // reveal, so it stops answering the last single `U` (K-622).
+    _revealedKeyed.remove(path.split('/').first);
     if (open) {
       _open.add(path);
     } else {
@@ -139,6 +142,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// before it opens the rows it names, so a reveal shows what it says rather
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
+    _revealedKeyed.remove(id);
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
 
@@ -1115,7 +1119,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     };
     if (axis != null) {
       return [
-        for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes))
+        for (final group in transformGroups(
+            threeD: entry.info.switches.threeD, modes: entry.info.axisModes))
           if (group.axes.first.prop.name.startsWith(axis))
             transformGroupPath(id, group),
       ];
@@ -1228,12 +1233,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// lists come back exactly as they were.
   ///
   /// Off by default, because Layers mode is the layer stack first and a filter
-  /// on at rest is a panel that appears to be missing rows. The `U` family
-  /// stays what it has always been — the reveal cycle, which twirls a layer
-  /// open onto what is animated — so the two answers to "show me the
-  /// animation" are the keyboard's and the strip's, and neither moves the
-  /// other.
+  /// on at rest is a panel that appears to be missing rows. The strip's answer
+  /// covers the whole comp and stays on until it is switched off; a single `U`
+  /// asks the same question of the layers it revealed and lets go of them the
+  /// moment anything else touches their twirls ([_revealedKeyed]).
   bool _animatedOnly = false;
+
+  /// Layers a single `U` opened onto their **keyed rows alone** (K-622).
+  ///
+  /// The reveal cycle used to open a layer's *groups* — Transform, the effects,
+  /// Audio — and a group opens whole, so revealing one keyed Intensity also
+  /// unrolled every other parameter on that effect and every transform property
+  /// beside a keyed one. `U` names the property, not the heading, so it filters
+  /// the rows the way the Animated strip does and stops at the keys.
+  ///
+  /// Dropped per layer by [_setOpen] and [_shutLayerDeep], which is every twirl
+  /// a hand or another reveal key can turn: a layer someone has started opening
+  /// by hand is no longer showing the answer to a `U`, and going on filtering it
+  /// would make the caret look broken.
+  final Set<String> _revealedKeyed = {};
 
   bool _syncingScroll = false;
 
@@ -1998,13 +2016,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// starts again rather than collapsing what you just opened.
   static const Duration _revealWindow = Duration(milliseconds: 500);
 
-  /// One press of the reveal key: `U` opens what is animated, `UU` what has
-  /// been modified, `UUU` shuts the layer again.
+  /// One press of the reveal key: `U` opens the **keyed rows**, `UU` opens
+  /// every modified property whole, `UUU` shuts the layer again.
   ///
   /// The *counting* is ours, because a multi-tap is a gesture like a
   /// double-click and gestures are the frontend's. Which groups qualify is the
   /// engine's, and it is asked afresh on each tap — the answer depends on the
   /// document, and the document may have changed between taps.
+  ///
+  /// **The first tap stops at the keys** (K-622). It used to open the *groups*
+  /// holding animation, and a group opens whole: one keyed Intensity unrolled
+  /// the whole of Glow, and one keyed Position unrolled every transform
+  /// property beside it, so "reveal animated properties" reliably showed rows
+  /// with nothing on them. It now filters to the keyed rows themselves, keeping
+  /// the headings above them — the Animated strip's own arithmetic
+  /// ([animatedFoldRows]), asked of these layers rather than of the comp.
+  /// `UU` is where everything still opens.
   bool _revealTap() {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // With nothing selected the reveal is the whole composition's (K-203):
@@ -2049,6 +2076,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
         _setOpen(id, true);
+        // `U`: the keyed rows and the headings over them, and nothing else.
+        // The group paths below are what `UU` opens — a heading opened by path
+        // shows everything under it, which is exactly what the first tap is
+        // not for.
+        if (_revealTaps == 1) {
+          _revealedKeyed.add(id);
+          continue;
+        }
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
           _open.add(effectsPath(id));
@@ -2425,7 +2460,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         sequenceExtra: _sequenceExtra,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
-        animatedOnly: _animatedOnly);
+        // The strip filters the whole comp; a single `U` filters only the
+        // layers it revealed (K-622).
+        animatedOnly: _animatedOnly ? everyLayerId : _revealedKeyed);
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,

@@ -1358,6 +1358,16 @@ measurement — the panel shows the numbers, it does not turn them on.
   exactly what it says rather than adding to what was already open, and a layer with
   nothing to show stays shut rather than opening onto empty headings.
 
+  **The first tap stops at the keys** (K-622). `U` opens down to the keyframed *rows* —
+  each heading over one is kept so the row is placed, and nothing else under that heading
+  is drawn: effect name → effect → keyed row, Transform → keyed property. It used to open
+  the qualifying *groups*, and a group opens whole, so one keyed Intensity unrolled every
+  other parameter of that effect and one keyed Position unrolled every transform property
+  beside it. `UU` is where a heading still opens whole. The filtering is the Animated
+  strip's own (§6.43) asked of the revealed layers rather than of the comp, and a layer
+  stops answering the reveal the moment any caret under it is turned by hand — otherwise
+  the caret would look broken.
+
   **Shipped (partial):** the caret on each layer row opens onto the **section headings**, each
   with its own caret, and nothing under them until one is opened — the tidy-list behaviour
   above. Three groups exist, plus the Retime row above them:
@@ -2842,7 +2852,7 @@ app-wide, so a list, a field or a canvas is free to use them for moving within i
 | Tools | `Shift+C` | Camera tool cycle (AE's `C` is the razor here, §1.7) |
 | Timeline | `P` `S` `R` `T` `A` | Reveal position / scale / rotation / opacity / anchor |
 | Timeline | `E` / `M` | Reveal effects / masks |
-| Timeline | `U` / `UU` | Reveal animated / modified properties |
+| Timeline | `U` / `UU` | Reveal the keyed rows / every modified property (K-622) |
 | Timeline | `L` / `LL` / `LLL` | Reveal Audio / and its waveform / shut again (K-281; `Shift+L` does the same). Inside the Timeline this takes `L` from the shuttle transport, which keeps it everywhere else |
 | Timeline | `[` / `]` | Move layer in / out to playhead — the whole bar, keyframes sliding with it (A8, §4.7) |
 | Timeline | `Alt+[` / `Alt+]` | Trim layer in / out at playhead — one edge only, keyframes staying where they are |

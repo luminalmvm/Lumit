@@ -432,6 +432,149 @@ void main() {
       expect(find.text('Transform'), findsNothing,
           reason: 'the cycle restarted rather than continuing to UUU');
     });
+
+    /// **`U` stops at the keys; `UU` opens the headings whole** (K-622).
+    ///
+    /// The first tap used to open the *groups* holding animation, and a group
+    /// opens whole — so one keyed Opacity unrolled Position, Scale, Rotation and
+    /// Anchor beside it, and "reveal animated properties" showed a screenful of
+    /// properties with nothing on them. It now keeps the keyed rows and the
+    /// headings above them, which is the same arithmetic the Animated strip
+    /// does; everything is still one more tap away.
+    testWidgets('U reveals only the keyed rows, and UU reveals them all',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      p.uiState
+        ..setSelectedComp(comp)
+        ..selectedLayer.value = layer;
+
+      // Opacity is keyed; Rotation is merely changed. Both live under the same
+      // Transform heading, which is what makes the two taps tell apart.
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 0),
+              value: 100,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 12),
+              value: 0,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+        ]),
+      );
+      layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: const BridgeScalar.static_(45),
+      );
+      p.state.notifyDocumentChanged();
+
+      await tester.pumpWidget(hostPanel(
+        child: const TimelinePanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      Future<void> pressU() async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.keyU);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyU);
+        await tester.pump();
+      }
+
+      // U: the heading, the keyed row under it, and nothing else.
+      await pressU();
+      expect(find.text('Transform'), findsOneWidget,
+          reason: 'the heading over a keyed row is kept, so the row is placed');
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'the keyed property is what U was asked for');
+      expect(find.text('Rotation'), findsNothing,
+          reason: 'a changed but unkeyed property is not animated, and U opens '
+              'down to the keys rather than opening the heading whole');
+      expect(find.text('Position'), findsNothing,
+          reason: 'nor is an untouched sibling dragged along by the heading');
+
+      // UU, inside the window: the modified reveal, and a heading opens whole.
+      await pressU();
+      expect(find.text('Rotation'), findsOneWidget,
+          reason: 'the second tap opens everything under the heading');
+      expect(find.text('Position'), findsOneWidget);
+      expect(find.text('Opacity'), findsOneWidget,
+          reason:
+              'the keyed row is still there — UU is a superset, not a swap');
+
+      // UUU: shut, exactly as before.
+      await pressU();
+      expect(find.text('Transform'), findsNothing,
+          reason: 'the third tap collapses the layer, cycle unchanged');
+    });
+
+    /// A `U` filters the layers it revealed and **no others**: the reveal is a
+    /// question about the selection, and answering it must not quietly hide
+    /// rows on a layer nobody asked about.
+    testWidgets('a keyed reveal lets go of a layer twirled open by hand',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      p.uiState
+        ..setSelectedComp(comp)
+        ..selectedLayer.value = layer;
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 0),
+              value: 100,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 12),
+              value: 0,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+        ]),
+      );
+      layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: const BridgeScalar.static_(45),
+      );
+      p.state.notifyDocumentChanged();
+
+      await tester.pumpWidget(hostPanel(
+        child: const TimelinePanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyU);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyU);
+      await tester.pump();
+      expect(find.text('Rotation'), findsNothing);
+
+      // The Transform heading, twirled by hand: the layer stops answering the
+      // reveal and behaves like any other open layer again.
+      await tester.tap(find.text('Transform'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rotation'), findsOneWidget,
+          reason:
+              'a hand on the caret ends the filter rather than fighting it');
+    });
   });
 
   /// The Viewer's own commands name keymap actions rather than carrying chords

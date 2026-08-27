@@ -403,13 +403,13 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
                 BridgeScalar_Keyframed(:final field0) => field0,
                 _ => const [],
               },
-      FoldStrokeValueRow(:final stroke, :final value) =>
-        switch (strokeScalarOf(stroke, value)) {
+      FoldStrokeValueRow(:final stroke, :final value) => switch (
+            strokeScalarOf(stroke, value)) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
-      FoldAnimatorValueRow(:final animator, :final value) =>
-        switch (textAnimatorScalarOf(animator, value)) {
+      FoldAnimatorValueRow(:final animator, :final value) => switch (
+            textAnimatorScalarOf(animator, value)) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
@@ -501,6 +501,13 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
 /// A set that answers yes to every path: [layerFoldRows] handed this builds a
 /// layer's rows as though every twirl in it were down.
 const Set<String> everyFoldPath = _EveryPath();
+
+/// The same set under the name the **Animated filter** wants it by: every layer
+/// id, so the filter is on for the whole comp rather than for the handful of
+/// layers a `U` revealed (K-622). Two names for one object because the two
+/// readers key it differently — one by fold path, one by layer id — and a set
+/// that says yes to everything is honest about both.
+const Set<String> everyLayerId = _EveryPath();
 
 /// What a mask's value row is called — shared by the row, the graph channel
 /// and anything else that has to name one.
@@ -737,8 +744,10 @@ BridgeShapeItem shapeItemWith(
         gradientStartX ?? at(ShapeValue.gradientStartX, item.gradientStartX),
     gradientStartY:
         gradientStartY ?? at(ShapeValue.gradientStartY, item.gradientStartY),
-    gradientEndX: gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
-    gradientEndY: gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
+    gradientEndX:
+        gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
+    gradientEndY:
+        gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
     combine: combine ?? item.combine,
     pathKeys: item.pathKeys,
     offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
@@ -1141,7 +1150,8 @@ List<LayerFoldRow> layerFoldRows({
   // than passed in because the lanes build their rows from this same list and
   // must leave room for the same ones (docs/07 §4.3).
   final transformOpen = open.contains(transformPath(id));
-  final groups = transformGroups(threeD: info.switches.threeD, modes: info.axisModes);
+  final groups =
+      transformGroups(threeD: info.switches.threeD, modes: info.axisModes);
   final soloed = !transformOpen &&
       groups.any((g) => open.contains(transformGroupPath(id, g)));
 
