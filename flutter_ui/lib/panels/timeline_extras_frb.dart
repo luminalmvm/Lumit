@@ -1501,7 +1501,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   child: MouseRegion(
                     // The cursor is the whole of what the pointer changes
                     // here: the tab itself is solid and does not brighten
-                    // (K-613), so there is no hover state to hold.
+                    // (K-616), so there is no hover state to hold.
                     cursor: SystemMouseCursors.resizeLeftRight,
                     child: GestureDetector(
                       key: ValueKey('tl-work-${isStart ? 'start' : 'end'}'),
@@ -2209,7 +2209,7 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
 /// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
-/// A work-area **handle**'s tab (K-529, the owner's reference image; K-613).
+/// A work-area **handle**'s tab (K-529, the owner's reference image; K-616).
 ///
 /// The band's own colour at full strength, never a second hex and never an
 /// alpha: a tab drawn through is a tab whose colour changes with whatever it

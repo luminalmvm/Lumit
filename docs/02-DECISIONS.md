@@ -18900,35 +18900,6 @@ sized to hold both ends; and an `off-centre` case added to
 the oracle does.
 
 
-## K-613 — The work-area handles are solid, and grabbing one does not scrub
-
-**Status: DECIDED (2026-08-27).** Two amendments to the drawn work-area handles, both from
-the owner's own word after desktop testing.
-
-1. **The tab is `animated` solid** — no alpha at rest and no step under the pointer. This
-   supersedes the strength half of K-576 (`animated` at 0.6, 0.8 hovered) and the "a step
-   stronger than its edge, another step under the pointer" ladder of K-529. Everything else K-576 settled stands: 4px wide, a 1px
-   corner, topping out 18px down the ruler, and the ten pixels either side of an edge still
-   grabbing across the ruler's whole height.
-2. **A press within a handle's reach does not move the playhead.** The ruler scrubs on
-   `onTapDown`, and `HitTestBehavior.opaque` on a handle stops the widgets *behind* it, not
-   the ruler it sits inside: the ruler's tap recogniser joins the arena from the same press
-   and fires on the press deadline whether or not it goes on to win. Taking hold of an edge
-   therefore threw the playhead to the pointer before the resize began. Only the scrub stands
-   down — the pair of clicks that gives the whole comp back is still counted, so a band too
-   narrow to have a middle can still be cleared.
-
-**Why solid.** A tab drawn through takes its colour from whatever it happens to be standing
-over — the clock, a tick, the band, the ground — so the two handles read as smudges of
-varying strength rather than as the two things you take hold of. There is nowhere above
-solid for a hover step to go, and none is wanted: the pointer already turns into the resize
-cursor over a handle, which is the affordance a hover brightening was standing in for.
-
-Tests: in Flutter, `timeline_alignment_test.dart` — the drawn tab's colour is `animated` at
-full alpha and stronger than the band's edge; and `timeline_panel_frb_test.dart` — a press
-on a work-area handle leaves the playhead where it was while the edge itself still moves.
-
-
 ## K-614 — No shipped workspace carries the Hierarchy panel
 
 **Status: DECIDED (2026-08-27).** The **Hierarchy** panel is in **no** shipped arrangement:
@@ -18985,3 +18956,31 @@ Regression tests: `the_dof_depth_map_answers_to_gamma_as_the_focus_map_does` (`l
 at the neutral, with the Focus map's own reading pinned unchanged beside it; and a
 `depth map squeezed` case in `wgsl_dof_matches_the_cpu_oracle` (`lumit-gpu`), so the WGSL
 twin rescales where the oracle does.
+
+## K-616 — The work-area handles are solid, and grabbing one does not scrub
+
+**Status: DECIDED (2026-08-27).** Two amendments to the drawn work-area handles, both from
+the owner's own word after desktop testing.
+
+1. **The tab is `animated` solid** — no alpha at rest and no step under the pointer. This
+   supersedes the strength half of K-576 (`animated` at 0.6, 0.8 hovered) and the "a step
+   stronger than its edge, another step under the pointer" ladder of K-529. Everything else K-576 settled stands: 4px wide, a 1px
+   corner, topping out 18px down the ruler, and the ten pixels either side of an edge still
+   grabbing across the ruler's whole height.
+2. **A press within a handle's reach does not move the playhead.** The ruler scrubs on
+   `onTapDown`, and `HitTestBehavior.opaque` on a handle stops the widgets *behind* it, not
+   the ruler it sits inside: the ruler's tap recogniser joins the arena from the same press
+   and fires on the press deadline whether or not it goes on to win. Taking hold of an edge
+   therefore threw the playhead to the pointer before the resize began. Only the scrub stands
+   down — the pair of clicks that gives the whole comp back is still counted, so a band too
+   narrow to have a middle can still be cleared.
+
+**Why solid.** A tab drawn through takes its colour from whatever it happens to be standing
+over — the clock, a tick, the band, the ground — so the two handles read as smudges of
+varying strength rather than as the two things you take hold of. There is nowhere above
+solid for a hover step to go, and none is wanted: the pointer already turns into the resize
+cursor over a handle, which is the affordance a hover brightening was standing in for.
+
+Tests: in Flutter, `timeline_alignment_test.dart` — the drawn tab's colour is `animated` at
+full alpha and stronger than the band's edge; and `timeline_panel_frb_test.dart` — a press
+on a work-area handle leaves the playhead where it was while the edge itself still moves.

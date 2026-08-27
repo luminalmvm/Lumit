@@ -417,7 +417,7 @@ void main() {
 
       // The tab is drawn, and it is the band's own colour **solid** —
       // derived, never a second hex (K-529, the owner's reference image;
-      // K-613, which took the alpha off).
+      // K-616, which took the alpha off).
       final tabFinder = find.descendant(
           of: find.byKey(const ValueKey('tl-work-start')),
           matching: find.byType(DecoratedBox));
@@ -444,7 +444,7 @@ void main() {
       expect(workAreaHandleRadius, lessThan(workAreaHandleTabWidth / 2),
           reason: 'a corner taken off, not a pill');
       expect(workAreaHandleColour(t).a, 1.0,
-          reason: 'solid (K-613): a tab drawn through takes its colour from '
+          reason: 'solid (K-616): a tab drawn through takes its colour from '
               'whatever it happens to be standing over');
       expect(workAreaHandleColour(t).a, greaterThan(workAreaEdgeColour(t).a),
           reason: 'stronger than the band\'s edge, in the same hue');
