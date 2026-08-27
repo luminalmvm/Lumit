@@ -483,13 +483,38 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // `Ctrl+A` here means every box on this canvas (K-522), which it can only
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
+    // **Delete means the picked boxes while this panel is the focused one**
+    // (K-234's mechanism). Claimed rather than left to the canvas's own focus
+    // handler: the shell answers Delete on the hardware keyboard, which runs
+    // *before* the focus tree and swallows the key, so a picked node had its
+    // layer deleted out from under it instead. The shell asks this claim first
+    // and stands down when it says yes.
+    //
+    // Chained onto whatever held the claim before — the Timeline, for its mask
+    // rows — because there is one claim and more than one panel that wants it.
+    if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
+    ui.deleteClaim = _deleteClaim;
     _reload();
+  }
+
+  /// The claim this panel had to displace to take Delete.
+  bool Function()? _priorDeleteClaim;
+
+  bool _deleteClaim() {
+    final ui = _ui;
+    if (!mounted || ui == null || ui.activePanel.value != Panel.graph) {
+      return _priorDeleteClaim?.call() ?? false;
+    }
+    return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
   }
 
   void _unbind() {
     _ui?.selectedLayer.removeListener(_reload);
     _ui?.model.removeListener(_reload);
     _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
+    if (_ui?.deleteClaim == _deleteClaim) {
+      _ui!.deleteClaim = _priorDeleteClaim;
+    }
   }
 
   /// Pick every box the canvas is drawing — Source and Layer out included,
@@ -840,9 +865,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// what keeps a plural delete one undo step rather than a cascade: the
   /// drivers leave in a single `setGraph` carrying those edges, and where
   /// effects go too the whole thing is wrapped in one undo group.
-  void _deleteSelected() {
+  ///
+  /// Answers whether it took anything. A pick of nothing but the picture's own
+  /// ends is not this panel's Delete, and the claim has to say so.
+  bool _deleteSelected() {
     final layer = _layer;
-    if (layer == null || _graph == null || _selection.isEmpty) return;
+    if (layer == null || _graph == null || _selection.isEmpty) return false;
 
     // Source and Layer out are the picture's own ends, not boxes anyone put
     // there: they are picked like any other and deleted like none.
@@ -852,7 +880,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           if (_heal || !_graph!.wiring.edges.any((e) => _touches(e, node)))
             node,
     ];
-    if (victims.isEmpty) return;
+    if (victims.isEmpty) return false;
 
     final kept = [
       for (final e in _graph!.wiring.edges)
@@ -908,6 +936,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _publishPick();
     _ui?.model.refresh();
     _reload();
+    return true;
   }
 
   bool _touches(BridgeGraphEdge edge, BridgeNodeRef node) {

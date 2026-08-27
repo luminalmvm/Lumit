@@ -193,6 +193,36 @@ void main() {
       expect(edges.single.from, const BridgeOutputRef.sourceMatte());
     });
 
+    /// **P0 — Delete with a node picked deleted the layer** (owner, desk
+    /// test). The canvas answered the key through the focus tree, but the
+    /// shell answers Delete on the hardware keyboard, which runs *before* the
+    /// focus tree and swallows the key: the picked box was never asked about,
+    /// and the layer under it went instead. The panel claims Delete now
+    /// (K-234's mechanism) and the shell stands down when the claim says yes.
+    testWidgets('a picked box claims Delete rather than leaving it to the shell',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.graph;
+
+      expect(p.uiState.deleteClaim, isNotNull,
+          reason: 'the panel claims Delete while it is mounted');
+      expect(p.uiState.deleteClaim!(), isFalse,
+          reason: 'with nothing picked the key is not this panel\'s, and the '
+              'shell goes on to the selected layer as it always did');
+
+      final key = effectKey(p.layer);
+      await tester
+          .tapAt(tester.getCenter(find.byKey(ValueKey<String>('graph-node-$key'))));
+      await tester.pump();
+
+      expect(p.uiState.deleteClaim!(), isTrue,
+          reason: 'a picked box is what Delete is about here');
+      await tester.pump();
+      expect(p.layer.getEffects(), isEmpty, reason: 'and the box is the thing '
+          'that went — not the layer it was drawn for');
+    });
+
     testWidgets('deleting a wired driver takes its wire with it, in one step',
         (tester) async {
       final p = withBlur();

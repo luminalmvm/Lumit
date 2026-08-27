@@ -923,6 +923,25 @@ void main() {
       expect(frames, hasLength(3));
     });
 
+    /// Delete is claimed the same way, and for the same reason: it was
+    /// answered on the hardware keyboard here, which claims nothing — every
+    /// handler runs on every key, so deleting a graph key also let the shell
+    /// delete the layer the key belonged to.
+    testWidgets('a picked graph key claims Delete', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 20, 40]);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+
+      expect(p.uiState.deleteClaim!(), isTrue,
+          reason: 'the picked key is what Delete is about, and a claim is what '
+              'makes the shell stand down from the layer');
+      await tester.pumpAndSettle();
+      expect(opacityKeys(p.layer), hasLength(2), reason: 'the key went');
+    });
+
     /// **A row with no keyframes still has a value, and Copy takes it**
     /// (K-301). With the row selected and no individual key picked, `Ctrl+C`
     /// used to find nothing to copy, give up, and quietly copy the whole layer

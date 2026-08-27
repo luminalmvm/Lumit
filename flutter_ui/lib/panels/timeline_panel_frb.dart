@@ -1487,11 +1487,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// below it, which is what makes the order the only sane one: picking a
   /// keyframe and pressing Delete must not cost the layer it sits on.
   ///
-  /// Graph mode's own keys are not on this ladder: they are claimed by the
-  /// `edit.delete.selection` handler, which the graph reaches first.
+  /// **Graph mode's own keys are the top rung.** They were answered on the
+  /// hardware keyboard instead, which does not claim anything: every handler
+  /// runs on every key, so deleting a graph key also let the shell delete the
+  /// layer it belonged to.
   bool _deleteClaim() =>
+      (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
       (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
       _deleteSelectedMasks();
+
+  /// Delete the keys picked in the graph pane, if it is there to ask.
+  bool _deleteGraphKeys() {
+    final pane = _graphPane.currentState;
+    if (pane == null) return false;
+    pane.deleteSelectedKeys();
+    return true;
+  }
 
   /// The right-click menu on a lane keyframe (K-500 §2.1): the graph key's own
   /// menu — Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens
@@ -1860,7 +1871,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // handlers runs, in registration order, so a `true` from this one would not
     // stop the shell's Delete removing the layer as well. The Timeline claims
     // the key through [LumitUiState.deleteClaim] instead, which the shell asks
-    // *before* it deletes anything (K-234). Copy and paste are claimed the same
+    // *before* it deletes anything (K-234) — and the graph pane's own keys are
+    // on that claim for the same reason. Copy and paste are claimed the same
     // way (K-300): they used to be compared against `Ctrl+C`/`Ctrl+V` here,
     // which was fine while the shell had no copy of its own and became a
     // double action the moment it did.
@@ -1869,10 +1881,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
     if (action == 'graph.fit') {
       _graphPane.currentState?.fitNow();
-      return true;
-    }
-    if (action == 'edit.delete.selection' && _graphKeySelection.isNotEmpty) {
-      _graphPane.currentState?.deleteSelectedKeys();
       return true;
     }
     return false;
