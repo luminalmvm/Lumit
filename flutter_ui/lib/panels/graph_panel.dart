@@ -319,8 +319,16 @@ bool graphNoStream(BridgeGraphNode node) =>
 /// A wire being dragged: where it left, and where the pointer is now.
 class _InFlight {
   final _Socket from;
+
+  /// The stored wire this drag took hold of, when the press landed on an input
+  /// that already had one. A wire is grabbed by its **far** end — the drag
+  /// leaves the producer's socket and follows the pointer — so letting go
+  /// somewhere else re-routes it and letting go of nothing takes it off. Null
+  /// for a wire being drawn afresh.
+  final BridgeGraphEdge? detached;
+
   Offset to;
-  _InFlight(this.from, this.to);
+  _InFlight(this.from, this.to, {this.detached});
 }
 
 /// Boxes being dragged: where the pointer took hold, and where each box being
@@ -625,7 +633,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// sockets are sorted here rather than at each call site. An occupied input
   /// is re-routed rather than doubled (§1.1); a type mismatch never gets this
   /// far, having been declined without a bridge call.
-  void _connect(_Socket a, _Socket b) {
+  ///
+  /// **An output is not an input.** Only the destination is exclusive: the
+  /// edges kept are every one that does not land on this socket, so a producer
+  /// goes on feeding everything it already fed and a second wire out of it is
+  /// an addition rather than a replacement. [without] is the wire this gesture
+  /// took off an input on its way here, which leaves in the same commit.
+  void _connect(_Socket a, _Socket b, {BridgeGraphEdge? without}) {
     final from = a.isInput ? b : a;
     final to = a.isInput ? a : b;
     final source = _outputRef(from);
@@ -633,18 +647,42 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (source == null || dest == null) return;
     _commit(_wiringNow(edges: [
       for (final e in _graph!.wiring.edges)
-        if (e.to != dest) e,
+        if (e.to != dest && e != without) e,
       BridgeGraphEdge(from: source, to: dest),
     ]));
   }
 
-  void _disconnect(_Socket socket) {
-    final dest = _inputRef(socket);
-    if (dest == null) return;
+  /// Take one wire off, as its own `setGraph` and so its own undo step.
+  void _removeEdge(BridgeGraphEdge edge) {
     _commit(_wiringNow(edges: [
       for (final e in _graph!.wiring.edges)
-        if (e.to != dest) e,
+        if (e != edge) e,
     ]));
+  }
+
+  /// The stored wire landing on [socket], if one does.
+  BridgeGraphEdge? _edgeInto(_Socket socket) {
+    final dest = _inputRef(socket);
+    if (dest == null) return null;
+    for (final e in _graph!.wiring.edges) {
+      if (e.to == dest) return e;
+    }
+    return null;
+  }
+
+  /// The socket a stored wire leaves from, as the canvas draws it.
+  _Socket? _sourceSocket(BridgeGraphEdge edge, _Layout layout) {
+    final box = layout.byKey[_sourceKey(edge)];
+    if (box == null) return null;
+    final portId = switch (edge.from) {
+      BridgeOutputRef_Driver(:final port) => port,
+      BridgeOutputRef_SourceMatte() => 'matte',
+      BridgeOutputRef_EffectData(:final port) => port,
+    };
+    final i = box.outputs.indexWhere((p) => p.id == portId);
+    final at = box.socket(portId, false);
+    if (i < 0 || at == null) return null;
+    return _Socket(box.node.node, box.outputs[i], false, at);
   }
 
   BridgeOutputRef? _outputRef(_Socket socket) {
@@ -1068,7 +1106,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
     final socket = layout.socketAt(at);
     if (socket != null && !_isChainType(socket.port.portType)) {
-      setState(() => _flight = _InFlight(socket, at));
+      // **A wire that is already there is grabbed by its far end** (owner, desk
+      // test: "connections that already exist can't be un-done"). Pressing a
+      // wired input used to start a *second* wire from that input, which no
+      // drop could accept — an input takes one wire — so an existing wire could
+      // only be taken off by clicking its socket dead on. Now the press picks
+      // the wire up: drop it on another input to move it, or on nothing at all
+      // to take it off. Pressing an **output** still draws a new wire, which is
+      // what lets one output feed any number of inputs.
+      final held = socket.isInput ? _edgeInto(socket) : null;
+      final grabbed = held == null ? null : _sourceSocket(held, layout);
+      setState(() => _flight = grabbed == null
+          ? _InFlight(socket, at)
+          : _InFlight(grabbed, at, detached: held));
       return;
     }
 
@@ -1165,9 +1215,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (_flight case final flight?) {
       setState(() => _flight = null);
       final landed = layout.socketAt(at);
-      if (!moved && flight.from.isInput && flight.from.port.wired) {
-        // A press and release on a wired input takes its wire off.
-        _disconnect(flight.from);
+      if (flight.detached case final held?) {
+        // The wire in hand came off an input. Dropped on another socket that
+        // will take it, it moves there; dropped on anything else — empty
+        // canvas, a socket that refuses it, or the very socket it came off,
+        // which is the press-and-release that always unplugged — it goes.
+        if (moved && landed != null && _accepts(flight.from, landed)) {
+          _connect(flight.from, landed, without: held);
+        } else {
+          _removeEdge(held);
+        }
         return;
       }
       if (landed == null) {

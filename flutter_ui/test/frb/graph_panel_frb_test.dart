@@ -154,6 +154,96 @@ void main() {
       expect(p.layer.getGraphDrivers(), hasLength(1));
     });
 
+    /// **N5, first half — a wire that is already there could not be taken off**
+    /// (owner, desk test). Pressing a wired input used to start a *second* wire
+    /// out of it, which no drop could accept, so the only way to unplug was to
+    /// click the socket dead on without moving a pixel. A press on a wired
+    /// input now takes hold of the wire itself, by its far end.
+    testWidgets('a wire pulled off its input and dropped on nothing goes',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+
+      var from = tester.getCenter(socket('driver:$wiggle', 'value'));
+      final radius = tester.getCenter(socket(key, 'radius'));
+      await tester.dragFrom(from, radius - from);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      // Off the input, out onto bare canvas.
+      await tester.dragFrom(radius, const Offset(0, 220));
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, isEmpty);
+      expect(find.byKey(const ValueKey<String>('graph-search')), findsNothing,
+          reason: 'a wire being taken off is not a wire looking for a node');
+
+      // And it is one undo step of its own, like every other gesture here.
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+    });
+
+    /// The same grab, let go on another socket: the wire moves there rather
+    /// than doubling, because an input takes one wire.
+    testWidgets('a wire pulled off its input onto another input moves',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+
+      final out = tester.getCenter(socket('driver:$wiggle', 'value'));
+      final radius = tester.getCenter(socket(key, 'radius'));
+      await tester.dragFrom(out, radius - out);
+      await tester.pump();
+
+      final mix = tester.getCenter(socket(key, 'mix'));
+      await tester.dragFrom(radius, mix - radius);
+      await tester.pump();
+
+      final edges = p.layer.getGraph().wiring.edges;
+      expect(edges, hasLength(1));
+      expect(edges.single.to,
+          isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'mix'));
+    });
+
+    /// **N5, second half — one output feeds any number of inputs.** Only the
+    /// destination is exclusive: a second wire drawn out of a producer is an
+    /// addition, never a replacement.
+    testWidgets('one driver output fans out to two parameters', (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+
+      var out = tester.getCenter(socket('driver:$wiggle', 'value'));
+      final radius = tester.getCenter(socket(key, 'radius'));
+      await tester.dragFrom(out, radius - out);
+      await tester.pump();
+
+      out = tester.getCenter(socket('driver:$wiggle', 'value'));
+      final mix = tester.getCenter(socket(key, 'mix'));
+      await tester.dragFrom(out, mix - out);
+      await tester.pump();
+
+      final edges = p.layer.getGraph().wiring.edges;
+      expect(edges, hasLength(2), reason: 'the first wire is still there');
+      expect(
+        edges.every((e) =>
+            e.from == BridgeOutputRef.driver(node: wiggle, port: 'value')),
+        isTrue,
+      );
+    });
+
     /// The engine would refuse this, and its refusal is the backstop. The
     /// panel's own job is to decline it *first*, from the two port types it is
     /// already holding — so the gesture costs nothing at all.
