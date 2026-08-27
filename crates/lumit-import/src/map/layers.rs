@@ -742,3 +742,85 @@ fn bezier(shape: &Shape) -> BezierPath {
         closed: shape.closed.unwrap_or(true),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aep::enums;
+
+    /// The eight modes in After Effects' menu that Lumit's compositor has no
+    /// operator for. Dissolve and its dancing twin are stochastic rather than
+    /// per-pixel arithmetic; the stencils and silhouettes gate the whole stack
+    /// beneath the layer (a matte's job here, not a blend's); Alpha Add and
+    /// Luminescent Premultiply are alpha arithmetic, not colour.
+    ///
+    /// Every one of them lands on Normal **and says so** in the conversion
+    /// report — the picture changes, so the only unacceptable outcome is a
+    /// quiet one.
+    const NO_EQUIVALENT: &[&str] = &[
+        "DISSOLVE",
+        "DANCING_DISSOLVE",
+        "STENCIL_ALPHA",
+        "STENCIL_LUMA",
+        "SILHOUETTE_ALPHA",
+        "SILHOUETTE_LUMA",
+        "LUMINESCENT_PREMUL",
+        "ALPHA_ADD",
+    ];
+
+    /// **Every transfer code After Effects can write is either mapped or
+    /// named** (docs/11 §4).
+    ///
+    /// The two halves of the blend import — the parser's code table and the
+    /// mapper's name table — are written apart and can drift apart, and the
+    /// way that shows is a mode importing silently as Normal. This walks the
+    /// whole code range and insists on one of exactly two outcomes for each:
+    /// a Lumit mode, or a name on the short list above.
+    #[test]
+    fn every_after_effects_transfer_code_maps_or_is_named_as_unavailable() {
+        for code in 0..=38u32 {
+            for dancing in [false, true] {
+                let name = enums::blend(code, dancing);
+                // A code the table does not know comes back as its own number
+                // (the funnel rule): there is no mode to check.
+                if name.parse::<u32>().is_ok() {
+                    continue;
+                }
+                // Classic is imported as its modern namesake, so it is the
+                // namesake that has to exist.
+                let modern = name.strip_prefix("CLASSIC_").unwrap_or(&name);
+                if NO_EQUIVALENT.contains(&modern) {
+                    assert!(
+                        standard(modern).is_none(),
+                        "{name} (code {code}) is on the no-equivalent list but maps anyway"
+                    );
+                } else {
+                    assert!(
+                        standard(modern).is_some(),
+                        "{name} (code {code}) imports silently as Normal"
+                    );
+                }
+            }
+        }
+    }
+
+    /// **And nothing on Lumit's side is unreachable.** The other direction of
+    /// the same drift: a blend mode the compositor can do that no After
+    /// Effects name arrives at is a mapping somebody forgot to write, and it
+    /// looks exactly like "a lot of modes are missing" in a converted project.
+    #[test]
+    fn every_lumit_blend_mode_is_reachable_from_after_effects() {
+        let reached: Vec<BlendMode> = (0..=38u32)
+            .filter_map(|code| {
+                let name = enums::blend(code, false);
+                standard(name.strip_prefix("CLASSIC_").unwrap_or(&name))
+            })
+            .collect();
+        for mode in BlendMode::ALL {
+            assert!(
+                reached.contains(mode),
+                "{mode:?} is in Lumit's dropdown but no After Effects mode converts to it"
+            );
+        }
+    }
+}

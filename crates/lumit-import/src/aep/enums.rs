@@ -86,7 +86,7 @@ const BLEND: &[(u32, &str)] = &[
     (16, "LUMINOSITY"),
     (17, "STENCIL_ALPHA"),
     (18, "STENCIL_LUMA"),
-    (19, "SILHOUETE_ALPHA"),
+    (19, "SILHOUETTE_ALPHA"),
     (20, "SILHOUETTE_LUMA"),
     (21, "LUMINESCENT_PREMUL"),
     (22, "ALPHA_ADD"),
