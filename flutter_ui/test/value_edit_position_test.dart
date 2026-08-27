@@ -1,19 +1,23 @@
 // Clicking a value must not move the value.
 //
 // **Why this file exists.** The owner called entering edit mode on a value
-// well "very jarring": the number jumped as the editor opened. Two separate
-// causes, one in each of the two widgets that do this —
+// well "very jarring": the number jumped as the editor opened. Three separate
+// causes, two in [DragValueField] and one in [TimeReadout] —
 //
 // * [DragValueField] rested at the width of its own reading with the number
 //   against the right edge, and opened a **fixed 72-wide** box with the text
 //   against the *left* edge. Both the box and the number moved, on every
 //   click.
+// * The open editor's box was the well's whole 20px height with its text at
+//   the *top* of it, four and a half pixels above where the reading had been.
+//   The same complaint on the other axis, found once the sideways jump was
+//   gone: an `EditableText` handed a tight height lays its line out at the top.
 // * [TimeReadout] kept its box, but rested against the left of a slot cut for
 //   the longest reading it could ever carry. The frame count rests as `F48`
 //   and edits as `48` (K-460), so the letter went and the digits slid one
 //   glyph left to fill the gap.
 //
-// Both are now anchored the same way in both states, so the glyphs that
+// All three are now anchored the same way in both states, so the glyphs that
 // survive the change stay on the pixels they were on.
 
 import 'package:flutter/widgets.dart';
