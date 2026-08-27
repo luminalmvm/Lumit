@@ -19,7 +19,8 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show effectLabelOf, EffectParamRowFrb;
+    show effectLabelOf, EffectParamRowFrb, EffectPointRowFrb;
+import 'package:lumit_flutter/state/dropper.dart' show DropperSample;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
@@ -1304,7 +1305,8 @@ void main() {
           reason: 'the panel does not act on the chord itself — acting here '
               'and at the shell is what pasted twice');
 
-      await pasteSelectionFrb(p.state, p.uiState, p.uiState.selectedComp, other);
+      await pasteSelectionFrb(
+          p.state, p.uiState, p.uiState.selectedComp, other);
       await tester.pumpAndSettle();
       expect(other.getEffects(), hasLength(1),
           reason: 'the shell asks the claim, and once asked is once pasted');
@@ -1794,6 +1796,170 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
+    // A pick is a typed value, not a reset (K-621).
+    // -----------------------------------------------------------------------
+
+    /// **Lifting a number off the picture must not throw the curve away.**
+    ///
+    /// The colour swatch had this right from K-535: a picked channel goes
+    /// through `scalarWithValueAt`, so a keyed colour takes a key at the
+    /// playhead. The two *number* pickers beside it did not — the focal-point
+    /// dropper and the x/y crosshair both stated a bare static — so picking a
+    /// focus distance on an animated depth-of-field deleted every keyframe it
+    /// had, which is the opposite of the gesture's whole meaning.
+    ///
+    /// Typing the same number keeps the curve, so picking it must too.
+    testWidgets('picking a focus distance keys it rather than flattening it',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final id = p.layer.getEffects().single.id();
+
+      // Two keys, neither of them under the playhead: a pick at frame 0 has to
+      // leave both standing and plant a third.
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+            time: p.uiState.selectedComp!.timeOfFrame(frame: frame),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      final animated = BridgeScalar.keyframed([key(10, 0.2), key(20, 0.8)]);
+
+      BridgeEffectValue? written;
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: EffectParamRowFrb(
+          effectId: id,
+          // The focal point of a depth-of-field: the one row that offers a
+          // depth dropper, and it offers it only beside a `depth` layer.
+          param: const BridgeParamInfo(
+            id: 'focus',
+            label: 'Focus',
+            kind: BridgeParamKind.float(
+                default_: 0.5,
+                sliderMin: 0,
+                sliderMax: 1,
+                hardMin: 0,
+                hardMax: 1),
+            unit: BridgeUnit.raw,
+          ),
+          value: BridgeEffectValue.float(animated),
+          siblings: {
+            'depth': BridgeEffectValue.layer(p.layer.internallayerId),
+          },
+          comp: p.uiState.selectedComp!,
+          playheadFrame: 0,
+          onSeek: (_) {},
+          onWrite: (_, __, v) => written = v,
+          onLive: (_, __, ___) {},
+          ownerLayerId: p.layer.internallayerId,
+          ownerLayers: p.uiState.model.layers,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Arm it the way a hand does, then hand it the sample the Viewer would.
+      await tester.tap(find.byKey(ValueKey<String>('dropper-fx-$id-focus')));
+      await tester.pumpAndSettle();
+      final arm = p.uiState.dropper.value;
+      expect(arm, isNotNull, reason: 'the tap armed the dropper');
+      arm!.onPick(const DropperSample(
+          r: 0, g: 0, b: 0, depth: 0.4, x: 4, y: 4, region: 1));
+      await tester.pumpAndSettle();
+
+      final value = written;
+      expect(value, isA<BridgeEffectValue_Float>());
+      final scalar = (value as BridgeEffectValue_Float).field0;
+      expect(scalar, isA<BridgeScalar_Keyframed>(),
+          reason: 'a pick on a keyed property stays keyed — it is a typed '
+              'value, not a reset');
+      final keys = (scalar as BridgeScalar_Keyframed).field0;
+      expect(keys.length, 3,
+          reason: 'the two keys that were there survive, and the pick plants '
+              'a third under the playhead');
+      expect(keys.first.value, closeTo(0.4, 1e-9),
+          reason: 'the new key at frame 0 carries the sampled depth');
+      expect([keys[1].value, keys[2].value], [0.2, 0.8],
+          reason: 'the keys away from the playhead are untouched');
+    });
+
+    /// The same rule on the crosshair that picks a *position*: an animated
+    /// Centre keeps its path, and the pick keys both axes at the playhead.
+    testWidgets('picking a point keys both axes rather than flattening them',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final id = p.layer.getEffects().single.id();
+
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+            time: p.uiState.selectedComp!.timeOfFrame(frame: frame),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      BridgeParamInfo axis(String id, String label) => BridgeParamInfo(
+            id: id,
+            label: label,
+            kind: const BridgeParamKind.float(
+                default_: 0,
+                sliderMin: -1000,
+                sliderMax: 1000,
+                hardMin: null,
+                hardMax: null),
+            unit: BridgeUnit.px,
+          );
+
+      final written = <String, BridgeEffectValue>{};
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: EffectPointRowFrb(
+          effectId: id,
+          xParam: axis('centre_x', 'Centre x'),
+          yParam: axis('centre_y', 'Centre y'),
+          xValue: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(10, 100), key(20, 300)])),
+          yValue: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(10, 50), key(20, 150)])),
+          comp: p.uiState.selectedComp!,
+          playheadFrame: 0,
+          onSeek: (_) {},
+          onWrite: (_, param, v) => written[param] = v,
+          onLive: (_, __, ___) {},
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(ValueKey<String>('dropper-fx-$id-centre_x')));
+      await tester.pumpAndSettle();
+      final arm = p.uiState.dropper.value;
+      expect(arm, isNotNull, reason: 'the crosshair armed');
+      arm!.onPick(const DropperSample(
+          r: 0,
+          g: 0,
+          b: 0,
+          depth: 0,
+          x: 8,
+          y: 8,
+          xFrac: 0.5,
+          yFrac: 0.25,
+          region: 1));
+      await tester.pumpAndSettle();
+
+      for (final id in ['centre_x', 'centre_y']) {
+        final value = written[id];
+        expect(value, isA<BridgeEffectValue_Float>(),
+            reason: '$id was written');
+        final scalar = (value as BridgeEffectValue_Float).field0;
+        expect(scalar, isA<BridgeScalar_Keyframed>(),
+            reason: '$id keeps its keyframes through a pick');
+        expect((scalar as BridgeScalar_Keyframed).field0.length, 3,
+            reason: '$id keeps both keys and gains one at the playhead');
+      }
+    });
+
+    // -----------------------------------------------------------------------
     // The unit rider and the vector-pair chain (K-443, docs/15 §12A.3).
     // -----------------------------------------------------------------------
 
@@ -1954,7 +2120,8 @@ void main() {
     /// A **keyed** other half scales whole (K-610): every key's value times the
     /// factor, every key's time, interpolation and eased shape held. Scaling
     /// only the number under the playhead would plant keys nobody made.
-    testWidgets('a chained pair scales a keyed half key by key', (tester) async {
+    testWidgets('a chained pair scales a keyed half key by key',
+        (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'lens_flare');
       p.uiState.model.refresh();
@@ -1971,8 +2138,8 @@ void main() {
           .field0;
 
       // x static, y a two-key curve with an eased side worth keeping.
-      const eased = BridgeSideInterp.bezier(
-          BridgeBezierSide(speed: 12, influence: 0.4));
+      const eased =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 12, influence: 0.4));
       final keys = [
         const BridgeKeyframe(
           time: BridgeRational(num: 0, den: 1),
@@ -1993,8 +2160,8 @@ void main() {
             id: 'light_x',
             value: const BridgeEffectValue.float(BridgeScalar.static_(100)))
         ..setValue(
-            id: 'light_y', value: BridgeEffectValue.float(
-                BridgeScalar.keyframed(keys)));
+            id: 'light_y',
+            value: BridgeEffectValue.float(BridgeScalar.keyframed(keys)));
       p.layer.setEffects(effects: stack);
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
@@ -2021,7 +2188,8 @@ void main() {
       expect(scaled.field0.length, 2, reason: 'no key is added or dropped');
       expect([for (final k in scaled.field0) k.value], [100.0, -40.0],
           reason: 'x doubled, so every key doubled');
-      expect([for (final k in scaled.field0) k.time], [keys[0].time, keys[1].time],
+      expect(
+          [for (final k in scaled.field0) k.time], [keys[0].time, keys[1].time],
           reason: 'times are the other axis');
       expect(scaled.field0.first.interpIn, const BridgeSideInterp.linear());
       expect(scaled.field0.last.interpOut, const BridgeSideInterp.hold());

@@ -535,7 +535,8 @@ class EffectParamRowFrb extends StatelessWidget {
           );
           // A number picked off the picture rather than typed: the focal point
           // of a depth-of-field, read straight off its own depth pass.
-          final depth = _depthDropper(context, id, hardMin, hardMax);
+          final depth =
+              _depthDropper(context, id, field0, frame, hardMin, hardMax);
           if (depth == null) return field;
           return Row(
             mainAxisSize: MainAxisSize.min,
@@ -862,8 +863,15 @@ class EffectParamRowFrb extends StatelessWidget {
   /// effect uses. `depth_invert` is applied here, at the pick, so the value
   /// written is the one the parameter means; the caption and the committed
   /// number can never disagree.
-  Widget? _depthDropper(
-      BuildContext context, UuidValue id, double? hardMin, double? hardMax) {
+  ///
+  /// **A pick is a typed value, not a reset** (K-621). It takes `scalar` and
+  /// writes through `scalarWithValueAt` for the same reason the colour swatch
+  /// beside it does: a keyed Focus takes a key at the playhead, and a static one
+  /// stays static. Writing a bare static here flattened the curve — every
+  /// keyframe on the focal distance gone, for the gesture that was meant to set
+  /// one of them.
+  Widget? _depthDropper(BuildContext context, UuidValue id, BridgeScalar scalar,
+      int frame, double? hardMin, double? hardMax) {
     if (param.id != 'focus') return null;
     if (siblings['depth'] case BridgeEffectValue_Layer(:final field0)
         when field0 != null) {
@@ -882,7 +890,7 @@ class EffectParamRowFrb extends StatelessWidget {
         final d = invert ? 1 - sample.depth : sample.depth;
         final low = hardMin ?? 0, high = hardMax ?? 1;
         return BridgeEffectValue.float(
-            BridgeScalar.static_(d.clamp(low, high)));
+            scalarWithValueAt(scalar, d.clamp(low, high), comp, frame));
       }
 
       final before = value;
@@ -1680,20 +1688,24 @@ class EffectPointRowFrb extends StatelessWidget {
               }
               // Both halves at once, so a pick is never scaled by the chain:
               // it is a position, and a position is stated rather than nudged.
+              //
+              // **A pick is a typed value, not a reset** (K-621): a keyed axis
+              // takes a key at the playhead through the same `scalarWithValueAt`
+              // the well beside it writes through, and a static one stays
+              // static. It used to state both halves as bare statics, which is
+              // how picking a Centre on an animated point threw its whole path
+              // away.
+              BridgeEffectValue at(BridgeScalar? was, double v) =>
+                  BridgeEffectValue.float(was == null
+                      ? BridgeScalar.static_(v)
+                      : scalarWithValueAt(was, v, comp, frame));
+
               void put(
                 void Function(UuidValue, String, BridgeEffectValue) write,
                 DropperSample sample,
               ) {
-                write(
-                    id,
-                    xParam.id,
-                    BridgeEffectValue.float(
-                        BridgeScalar.static_(sample.xFrac * spanX)));
-                write(
-                    id,
-                    yParam.id,
-                    BridgeEffectValue.float(
-                        BridgeScalar.static_(sample.yFrac * spanY)));
+                write(id, xParam.id, at(sx, sample.xFrac * spanX));
+                write(id, yParam.id, at(sy, sample.yFrac * spanY));
               }
 
               ui.armDropper(DropperArm(

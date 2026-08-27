@@ -19106,3 +19106,28 @@ Tests: in Rust, `api::tests::a_value_written_past_a_parameters_hard_range_is_cla
 above and below Blur's hard 0–2000 both land on it, a value past the 0–500 slider does not,
 the keys of an animated write are clamped with it, and Glow's open-ended Threshold takes 120
 while still holding its floor.
+
+
+## K-621 — A pick is a typed value, not a reset
+
+**Status: DECIDED (2026-08-27).** A value lifted off the picture with a dropper behaves
+exactly as the same number typed into the well beside it: on a **keyframed** property it
+writes the key under the playhead, or plants one there, and leaves every other key standing.
+It never flattens the property to a static. That is `scalarWithValueAt`, which is the one road
+every other edit to an animated number already takes.
+
+**Why.** The colour swatch had this right since K-535, and its dropper shares its value
+builder, so a keyed colour channel always took a key. The two *number* pickers beside it did
+not: the depth-of-field focal-point dropper and the x/y crosshair each stated a bare static.
+Picking a focus distance on an animated depth-of-field therefore deleted every keyframe the
+focus had — the whole animation, for a gesture whose entire meaning is "set it to this, here".
+Nothing engine-side was clearing anything; the wipe was a `BridgeScalar::Static` sent from
+Dart, which is exactly what a static is for and exactly the wrong thing to send.
+
+**The rule, so the next dropper does not have to re-derive it.** A picker is an input device
+for a value, not an edit of its own kind. Whatever the well writes, the dropper beside it
+writes; the only thing a pick decides is the number.
+
+Tests: in Flutter, `effect_controls_frb_test.dart` — picking a focus distance on a keyed Focus
+leaves both existing keys and plants a third under the playhead, and picking a position keys
+both axes of an animated point instead of flattening either.
