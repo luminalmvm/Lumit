@@ -1199,6 +1199,56 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// **A field of one's own is named by whoever added it** (K-619). Adding
+    /// one seeded the key `field_6` and left it there, in a well that took no
+    /// typing — so a container filled up with fields named after nothing. The
+    /// key is a plain string on the way to FFmpeg, so it is typed like the
+    /// value beside it, and the spec writes a field only when both halves are
+    /// there.
+    testWidgets('a metadata field of one\'s own is named by hand',
+        (tester) async {
+      await open(tester);
+
+      // Metadata is the last section on a scrolling page, so it is brought
+      // into view before anything in it is pressed.
+      Future<void> add() async {
+        final button = find.byKey(const ValueKey('export-metadata-add'));
+        await tester.ensureVisible(button);
+        await tester.pumpAndSettle();
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+      }
+
+      await add();
+
+      // The five classic rows lead, so the added one is the sixth.
+      final name = find.byKey(const ValueKey('export-metadata-name-5'));
+      expect(name, findsOneWidget, reason: 'the added row carries its own key');
+      expect(find.descendant(of: name, matching: find.byType(EditableText)),
+          findsOneWidget,
+          reason: 'and the key is a field, not a reading: it used to be a '
+              'dead well holding field_6');
+      expect(find.text('field_6'), findsOneWidget,
+          reason: 'seeded with something rather than nothing');
+
+      await tester.enterText(name, 'encoded_by');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('encoded_by'), findsOneWidget,
+          reason: 'what was typed is what the row now says');
+      expect(find.text('field_6'), findsNothing);
+
+      // A second one seeds its own key and is edited on its own.
+      await add();
+      expect(find.byKey(const ValueKey('export-metadata-name-6')),
+          findsOneWidget);
+      expect(find.text('encoded_by'), findsOneWidget,
+          reason: 'and the first one keeps its name');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// **A section the format cannot use is dead all the way through**
     /// (K-618, widening docs/15 §12A.3d's per-row rule). A sound file has no
     /// picture, so every control in Picture is disabled — the resize tick, the

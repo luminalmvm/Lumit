@@ -153,6 +153,11 @@ const double exportAudioBitRateWidth = 90;
 /// The resample-quality face at the end of the Resize row.
 const double exportResampleWidth = 80;
 
+/// A field-of-one's-own's **name** well in the Metadata section, standing in
+/// the room the classic rows give their label: the key is FFmpeg's own word,
+/// typed, and it sits where the eye already looks for the name of a row.
+const double exportMetadataNameWidth = exportLabelColumn;
+
 /// How long a section's box stays lit after its tab is clicked.
 const Duration exportSectionFlash = Duration(milliseconds: 600);
 
@@ -208,12 +213,42 @@ List<_Format> get _formats => [
 /// The five classic fields are prefilled with their own names; a field of one's
 /// own carries its key in a well of its own, because the key is FFmpeg's word
 /// and not a translatable one.
+///
+/// **A field of one's own is named by whoever added it.** Its key started as
+/// `field_6`, `field_7` and stayed there, which wrote a container full of
+/// fields named after nothing. The key is a plain string on the way to FFmpeg,
+/// so it is typed like any other — [name] is that editor, and it is null for
+/// the five classics, whose keys are the standard's and not ours to change.
 class _MetaField {
-  final String key;
+  /// The classic five: a fixed key and a translated label above it.
+  final String? fixedKey;
   final String? label;
+
+  /// A field of one's own: its key, typed. Null for the classics.
+  final TextEditingController? name;
+
   final TextEditingController value;
-  _MetaField(this.key, this.label, String initial)
-      : value = TextEditingController(text: initial);
+
+  _MetaField(String key, this.label, String initial)
+      : fixedKey = key,
+        name = null,
+        value = TextEditingController(text: initial);
+
+  /// A field of one's own, seeded with a key to start from.
+  _MetaField.own(String key)
+      : fixedKey = null,
+        label = null,
+        name = TextEditingController(text: key),
+        value = TextEditingController(text: '');
+
+  /// What goes into the container. Trimmed, because a key with a space either
+  /// side of it is a different key to FFmpeg and to nobody else.
+  String get key => (fixedKey ?? name?.text ?? '').trim();
+
+  void dispose() {
+    name?.dispose();
+    value.dispose();
+  }
 }
 
 /// The classic fields, in the order docs/06 §7.4 lists them — FFmpeg's own
@@ -513,7 +548,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     _scroll.dispose();
     _presetName.dispose();
     for (final field in _metadata) {
-      field.value.dispose();
+      field.dispose();
     }
     super.dispose();
   }
@@ -616,7 +651,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       region: Float64List.fromList(widget.region ?? const []),
       metadata: [
         for (final field in _metadata)
-          if (field.value.text.trim().isNotEmpty)
+          // Both halves, or neither: a value under no name has nowhere to go,
+          // and a name over no value writes an empty field.
+          if (field.key.isNotEmpty && field.value.text.trim().isNotEmpty)
             BridgeMetadataField(key: field.key, value: field.value.text.trim()),
       ],
       qualityDivisor: _quality,
@@ -1748,9 +1785,25 @@ class _ExportDialogState extends State<_ExportDialog> {
               t,
               field.label ?? '',
               Row(children: [
-                if (field.label == null) ...[
-                  _well(t, field.key,
-                      tone: _caps.metadata ? t.textMuted : t.textDisabled),
+                if (field.name case final name?) ...[
+                  // The key, typed: FFmpeg's own word, and the reason the row
+                  // has no label above it.
+                  SizedBox(
+                    width: exportMetadataNameWidth,
+                    child: _caps.metadata
+                        ? HouseTextField(
+                            key: ValueKey<String>('export-metadata-name-$index'),
+                            controller: name,
+                            width: exportMetadataNameWidth,
+                            fill: t.surface0,
+                            onSubmitted: (_) => _edit(() {}),
+                            submitOnLostFocus: true,
+                          )
+                        : _well(t, name.text,
+                            key: ValueKey<String>(
+                                'export-metadata-name-$index'),
+                            tone: t.textDisabled),
+                  ),
                   const SizedBox(width: 6),
                 ],
                 Expanded(
@@ -1778,7 +1831,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                     key: ValueKey<String>('export-metadata-remove-$index'),
                     onPressed: _caps.metadata
                         ? () => _edit(() {
-                              _metadata.removeAt(index).value.dispose();
+                              _metadata.removeAt(index).dispose();
                             })
                         : null,
                     child: Text(l10n.exportMetadataRemove, style: t.body),
@@ -1795,8 +1848,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: HouseButton(
                   key: const ValueKey('export-metadata-add'),
                   onPressed: _caps.metadata
-                      ? () => _edit(() => _metadata.add(_MetaField(
-                          'field_${_metadata.length + 1}', null, '')))
+                      ? () => _edit(() => _metadata
+                          .add(_MetaField.own('field_${_metadata.length + 1}')))
                       : null,
                   child: Text(l10n.exportMetadataAdd, style: t.body),
                 ),

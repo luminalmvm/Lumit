@@ -19049,3 +19049,26 @@ like every other house control.
 
 Tests: in Flutter, `shell_frb_test.dart` — a sound file leaves no live control in Picture and
 an image sequence none in Metadata, and neither draws the line that used to explain it.
+
+
+## K-619 — A metadata field of one's own is named by whoever added it
+
+**Status: DECIDED (2026-08-27).** The export dialog's Metadata section lets a field of one's
+own carry a **typed key**. *Add field* seeds `field_6`, `field_7` and so on as a starting
+point; the key sits in a well of its own, in the room the classic rows give their label, and
+it is edited like the value beside it. The five classic fields keep their fixed keys — those
+are the standard's words (`title`, `artist`, `copyright`, `comment`, `creation_time`) and not
+ours to change.
+
+**A field is written only when both halves are there.** A key with no value writes an empty
+field; a value under no key has nowhere to go. Keys are trimmed, because a key with a space
+either side of it is a different key to FFmpeg and to nobody else.
+
+**Why.** The key was drawn in a dead well and stayed at `field_6` for the life of the
+project, so anybody who added a field ended up with a container full of fields named after
+nothing. The engine never wanted it that way: `BridgeMetadataField.key` is a plain string,
+and the lock was entirely in the dialog.
+
+Tests: in Flutter, `shell_frb_test.dart` — an added field's key is a field rather than a
+reading, it seeds `field_6`, it keeps what is typed into it, and a second added field seeds
+and edits on its own.
