@@ -1359,6 +1359,15 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// has to know whether the answer is *it*.
   bool? _hoveredHandleIsStart;
 
+  /// Whether [x], in the ruler's own pixels, lands in either work-area
+  /// handle's reach — the same [_workHandleWidth] the handles claim.
+  bool _onWorkHandle(double x, ({int start, int end, bool whole}) work) {
+    if (widget.onWorkArea == null) return false;
+    const half = _workHandleWidth / 2;
+    return (x - widget.axis.xOf(work.start)).abs() <= half ||
+        (x - widget.axis.xOf(work.end)).abs() <= half;
+  }
+
   /// The work area as it should draw right now: the panel's, with the edge
   /// being dragged moved to where the pointer is. Each edge stops one frame
   /// short of the other, the rule [workAreaWith] commits.
@@ -1387,7 +1396,19 @@ class _TimelineRulerState extends State<TimelineRuler> {
       key: const ValueKey('tl-ruler'),
       behavior: HitTestBehavior.opaque,
       onTapDown: (d) {
-        widget.onSeek(axis.frameAt(d.localPosition.dx));
+        // **A press on a work-area handle is that handle's** (owner, desk
+        // test): grabbing an edge used to drag the playhead to the pointer
+        // first, so a span could not be resized without losing where you
+        // were. `HitTestBehavior.opaque` on the handle does not settle this —
+        // it stops the widgets *behind* it, not the ruler this one sits
+        // inside, whose tap recognizer joins the arena from the same press and
+        // fires on the press deadline whether or not it goes on to win. Only
+        // the *scrub* stands down: the pair of clicks that gives the whole
+        // comp back is still counted, so a band too narrow to have a middle is
+        // not a band that cannot be cleared.
+        if (!_onWorkHandle(d.localPosition.dx, work)) {
+          widget.onSeek(axis.frameAt(d.localPosition.dx));
+        }
         if (!_rulerTaps.tap()) return;
         // The second click of a pair, on ground nothing else claimed — a flag
         // and a work-area handle are opaque, so neither reaches here.

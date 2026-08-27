@@ -4595,6 +4595,44 @@ void main() {
           reason: 'one undo returns to the span before the drag');
     });
 
+    /// **Grabbing an edge is not scrubbing** (owner, desk test). The ruler's
+    /// own tap recognizer joins the arena from the same press as the handle's
+    /// drag and fires on the press deadline whether or not it goes on to win,
+    /// so taking hold of a work-area edge dragged the playhead to the pointer
+    /// before the resize had even begun.
+    testWidgets('grabbing a work-area edge leaves the playhead alone',
+        (tester) async {
+      final p = withComp();
+      p.comp.setWorkArea(
+          span: workAreaWith(
+              comp: p.comp,
+              current: null,
+              wanted: p.comp.durationFrames() ~/ 2,
+              isStart: false));
+      await mount(tester, p);
+      p.uiState.playheadFrame.value = 3;
+      await tester.pump();
+
+      final gesture = await tester
+          .startGesture(tester.getCenter(find.byKey(const ValueKey('tl-work-end'))));
+      // Past the press deadline, which is when the playhead used to jump.
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(p.uiState.playheadFrame.value, 3,
+          reason: 'the press belongs to the handle');
+
+      // Crossed in steps, as a hand does.
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(-12, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(p.uiState.playheadFrame.value, 3,
+          reason: 'and so does the drag that followed it');
+      expect(workAreaFrames(p.comp).end, lessThan(p.comp.durationFrames() ~/ 2),
+          reason: 'the edge itself did move');
+    });
+
     /// The lane area is rows all the way down. One layer used to leave the
     /// ground, the seams and the marquee stopping 22 px in, so most of the
     /// area was a hole: nothing to look at and nothing to click on.

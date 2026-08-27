@@ -571,9 +571,14 @@ right-click menu, one-per-frame replacement. Additions, each spec'd already and 
   `onDoubleTap` recogniser: one on this surface would hold every single click — the scrub —
   back until its timer expired. Which of the two a pair of clicks means is decided by where
   it lands: on the band, in the ruler's lower half, the work area is given back; anywhere
-  else on the ground a marker is made. A flag and a work-area handle are opaque, so neither
-  reaches this handler at all. Cancelling the label editor leaves the marker: the
-  double-click is what made it, and the dialogue only names it.
+  else on the ground a marker is made. A flag and a work-area handle are opaque, which stops
+  the widgets *behind* them but not this handler above them: the ruler's tap recogniser joins
+  the arena from the same press and fires on the press deadline whether or not it goes on to
+  win, so a press within a work-area handle's reach **does not scrub** — that was the playhead
+  jumping to the pointer as an edge was taken hold of. Only the scrub stands down; the pair of
+  clicks is still counted, so a band too narrow to have a middle can still be cleared.
+  Cancelling the label editor leaves the marker: the double-click is what made it, and the
+  dialogue only names it.
 - Work-area and marker drags **snap** (§4.5) with the capture line — built in TI-9 — and
   **answer `Escape`**, which puts the edge or the flag back and writes nothing (P3, gap 19).
   One `DragEscape` and one `_caught` serve both, since only one of them can be in flight.
