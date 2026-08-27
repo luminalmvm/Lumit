@@ -1385,6 +1385,137 @@ fn writing_the_wrong_kind_to_a_parameter_is_refused() {
     ));
 }
 
+/// **A hard range is the engine's to keep, not the panel's** (docs/08 §1.2,
+/// K-620).
+///
+/// The bounds used to cross the seam as advice and nothing more: every control
+/// clamped its own reading, and every path that did not — a keyframe dragged in
+/// the graph editor, a number wired from a node, a value picked off the Viewer —
+/// wrote straight past them. Worse, it was the *preview* that went out of range
+/// while the committed value came back inside it, so a scrub past the end showed
+/// a picture the parameter could not hold and then snapped away from it on
+/// release.
+///
+/// So `set_value` clamps, and both the preview and the commit stage through it.
+/// A slider's travel is untouched — typing past that is still allowed, which is
+/// the whole difference between the two ranges.
+#[test]
+fn a_value_written_past_a_parameters_hard_range_is_clamped_to_it() {
+    use crate::api::effect::{BridgeEffectValue, BridgeRational, BridgeScalar};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let target = comp.add_solid_layer().expect("a layer to blur");
+    target.add_effect("blur".into()).expect("blur added");
+
+    let radius = |staged: &Vec<crate::api::effect::BridgeEffectInstance>| match staged[0]
+        .get_value("radius".into())
+    {
+        Ok(BridgeEffectValue::Float(BridgeScalar::Static(v))) => v,
+        other => panic!("radius reads back as a static float, got {other:?}"),
+    };
+
+    // Blur's Radius: slider 0–500, hard 0–2000.
+    let mut staged = target.get_effects().expect("stack");
+    staged[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(9000.0)),
+        )
+        .expect("accepted");
+    assert!(
+        (radius(&staged) - 2000.0).abs() < 1e-9,
+        "a value above the hard maximum lands on it, not past it"
+    );
+
+    staged[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(-50.0)),
+        )
+        .expect("accepted");
+    assert!(
+        radius(&staged).abs() < 1e-9,
+        "and a value below the hard minimum lands on that"
+    );
+
+    // A number between the slider's end and the hard bound is *not* clamped:
+    // typing past the travel is allowed, and only the hard range is not.
+    staged[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(900.0)),
+        )
+        .expect("accepted");
+    assert!(
+        (radius(&staged) - 900.0).abs() < 1e-9,
+        "a slider's travel is a suggestion; typing past it stays legal"
+    );
+
+    // **The keys, not only the number under the playhead.** A radius keyed to
+    // 9000 two seconds away is as far out of range as one set there now.
+    let key = |num: i64, value: f64| crate::api::effect::BridgeKeyframe {
+        time: BridgeRational { num, den: 1 },
+        value,
+        interp_in: crate::api::effect::BridgeSideInterp::Linear,
+        interp_out: crate::api::effect::BridgeSideInterp::Linear,
+    };
+    staged[0]
+        .set_value(
+            "radius".into(),
+            BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(0, -10.0), key(2, 9000.0)])),
+        )
+        .expect("accepted");
+    let Ok(BridgeEffectValue::Float(BridgeScalar::Keyframed(keys))) =
+        staged[0].get_value("radius".into())
+    else {
+        panic!("the animated radius reads back keyframed");
+    };
+    assert_eq!(keys.len(), 2, "clamping moves values, never keys");
+    assert!(
+        keys[0].value.abs() < 1e-9,
+        "the low key came up to the floor"
+    );
+    assert!(
+        (keys[1].value - 2000.0).abs() < 1e-9,
+        "and the high key came down to the ceiling"
+    );
+
+    // **A one-sided range stays one-sided** (K-090). Glow's Threshold clamps at
+    // nought below and runs unbounded above — HDR values really do glow harder —
+    // so the open end must not acquire a ceiling from the closed one.
+    target.add_effect("glow".into()).expect("glow added");
+    let mut staged = target.get_effects().expect("stack");
+    let glow = staged
+        .iter_mut()
+        .find(|fx| fx.get_parameters().iter().any(|p| p == "threshold"))
+        .expect("the glow is in the stack");
+    glow.set_value(
+        "threshold".into(),
+        BridgeEffectValue::Float(BridgeScalar::Static(120.0)),
+    )
+    .expect("accepted");
+    assert!(
+        matches!(
+            glow.get_value("threshold".into()),
+            Ok(BridgeEffectValue::Float(BridgeScalar::Static(v))) if (v - 120.0).abs() < 1e-9
+        ),
+        "an unbounded end is unbounded: nothing invents a maximum for it"
+    );
+    glow.set_value(
+        "threshold".into(),
+        BridgeEffectValue::Float(BridgeScalar::Static(-3.0)),
+    )
+    .expect("accepted");
+    assert!(
+        matches!(
+            glow.get_value("threshold".into()),
+            Ok(BridgeEffectValue::Float(BridgeScalar::Static(v))) if v.abs() < 1e-9
+        ),
+        "while the closed end still holds"
+    );
+}
+
 /// Keys the engine could not evaluate are refused on the way in. `anim::evaluate`
 /// walks the list assuming it is sorted, so an unsorted one would not fail — it
 /// would silently evaluate wrongly, which is far harder to notice.

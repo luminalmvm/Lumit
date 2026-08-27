@@ -19072,3 +19072,37 @@ and the lock was entirely in the dialog.
 Tests: in Flutter, `shell_frb_test.dart` — an added field's key is a field rather than a
 reading, it seeds `field_6`, it keeps what is typed into it, and a second added field seeds
 and edits on its own.
+
+
+## K-620 — A parameter's hard range is the engine's to keep
+
+**Status: DECIDED (2026-08-27).** `BridgeEffectInstance::set_value` clamps every number it is
+handed to the hard range the effect's schema declares. A **slider's travel is untouched** —
+typing past it stays legal, and that is the whole difference between the two ranges
+(docs/08 §1.2) — but a hard bound is now enforced where the value is written rather than
+described to the interface and left there.
+
+**Clamping an animation means clamping its keyframes.** A radius keyed three seconds away to
+a number the parameter cannot hold is exactly as out of range as one set there now, and it
+would arrive the moment the playhead did. An expression passes through untouched: it is a
+string until it runs, and the resolve step's own reads keep their clamps. A one-sided range
+stays one-sided (K-090) — nothing invents a ceiling for Glow's Threshold.
+
+**Why.** The bounds crossed the seam as advice. Every control clamped its own reading, which
+worked exactly as long as every route to a parameter was a value well — and several are not:
+a keyframe dragged in the graph editor, a number picked off the Viewer, a driver wire, a
+pasted or loaded value all wrote straight past the range. Worse, the preview and the commit
+could disagree. A scrub past the end rendered a picture the parameter could not hold, because
+the staging path and the committing path clamped in different places; the value then jumped on
+release. Both stage through `set_value`, so clamping there once makes the picture a gesture
+shows and the number it lands on the same value, in every panel at once.
+
+**What this does not change.** `BridgeParamKind` still carries the bounds, and the controls
+still clamp what they draw — a well that shows 2000 while the engine holds 2000 is agreeing,
+not deciding. The point is that a control which forgets can no longer be the reason a
+parameter holds a value it does not have.
+
+Tests: in Rust, `api::tests::a_value_written_past_a_parameters_hard_range_is_clamped_to_it` —
+above and below Blur's hard 0–2000 both land on it, a value past the 0–500 slider does not,
+the keys of an animated write are clamped with it, and Glow's open-ended Threshold takes 120
+while still holding its floor.

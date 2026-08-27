@@ -92,6 +92,18 @@ undo step:
     grabbed. The driver call stages the graph's *nodes* only: a drag on a
     number changes no wire, no position and no badge, and staging them would be
     inventing a state the document cannot be in.
+- **A parameter's hard range is kept engine-side, on ingest** (K-620).
+    `BridgeEffectInstance::set_value` clamps what it is given to the range the
+    effect's schema declares — statics and every keyframe alike, an expression
+    passed through because it is a string until it runs — and both the preview
+    and the commit stage through that one call. The bounds still cross in
+    `BridgeParamKind` so a control can draw its travel and clamp its own
+    reading, but that reading is the panel *agreeing* with the engine, never the
+    only thing standing between a gesture and an illegal value. A route that
+    forgets — a keyframe dragged in the graph editor, a Viewer pick, a driver
+    wire, a preset — can no longer write past the range, and a scrub can no
+    longer preview a picture the parameter cannot hold and then land elsewhere.
+    A slider's *travel* is untouched: typing past it stays legal (docs/08 §1.2).
 
 ### The four binding rules
 

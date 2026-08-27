@@ -1260,24 +1260,32 @@ impl BridgeEffectValue {
         }
     }
 
-    /// Overwrite `target` with this value.
+    /// Overwrite `target` with this value, held inside `bounds`.
     ///
     /// A parameter's *kind* is declared by the effect's schema and is not the
     /// panel's to change, so a mismatched pair is refused rather than replacing
     /// the value: writing a number to a colour would leave an instance the
     /// effect's own resolver cannot read, and it would be undoable but not
     /// obviously wrong on screen.
+    ///
+    /// `bounds` is the parameter's declared hard range ([`hard_bounds`]), and it
+    /// is applied here rather than trusted to the caller — see [`clamp_animation`].
     #[frb(ignore)]
-    fn write_at(self, target: &mut EffectValue, offset: Rational) -> Result<(), BridgeError> {
+    fn write_at(
+        self,
+        target: &mut EffectValue,
+        offset: Rational,
+        bounds: (Option<f64>, Option<f64>),
+    ) -> Result<(), BridgeError> {
         match (self, target) {
             (BridgeEffectValue::Float(scalar), EffectValue::Float(property)) => {
-                property.animation = scalar.animation_at(offset)?;
+                property.animation = clamp_animation(scalar.animation_at(offset)?, bounds);
                 Ok(())
             }
             (BridgeEffectValue::Point(point), EffectValue::Point(x, y)) => {
                 let (ax, ay) = (point.x.animation_at(offset)?, point.y.animation_at(offset)?);
-                x.animation = ax;
-                y.animation = ay;
+                x.animation = clamp_animation(ax, bounds);
+                y.animation = clamp_animation(ay, bounds);
                 Ok(())
             }
             (BridgeEffectValue::Colour(colour), EffectValue::Colour(channels)) => {
@@ -1288,7 +1296,7 @@ impl BridgeEffectValue {
                     colour.a.animation_at(offset)?,
                 ];
                 for (property, animation) in channels.iter_mut().zip(animations) {
-                    property.animation = animation;
+                    property.animation = clamp_animation(animation, bounds);
                 }
                 Ok(())
             }
@@ -1339,6 +1347,65 @@ impl BridgeEffectValue {
             }
             _ => Err(BridgeError::ParamKindMismatch),
         }
+    }
+}
+
+/// The two numbers a parameter's stored value may never leave, or `None` either
+/// side where it is unbounded there (docs/08 §1.2).
+///
+/// **A slider's travel is not a bound.** Typing past it is allowed, and that is
+/// the whole difference between a soft range and a hard one — so only the `hard`
+/// pair, a closed [`ParamKind::Slider`]'s range (which is both its travel and
+/// its bound, K-414) and a colour's per-channel range answer here. Every other
+/// kind is unbounded by declaration, an `Angle` deliberately so: it winds
+/// through full turns rather than stopping at 360.
+///
+/// [`ParamKind::Slider`]: lumit_core::fx::ParamKind::Slider
+#[frb(ignore)]
+fn hard_bounds(kind: &lumit_core::fx::ParamKind) -> (Option<f64>, Option<f64>) {
+    use lumit_core::fx::ParamKind;
+    match *kind {
+        ParamKind::Float { hard, .. } => hard,
+        ParamKind::Int { hard, .. } => (hard.0.map(|v| v as f64), hard.1.map(|v| v as f64)),
+        // A closed range and a colour's channel range are hard by definition.
+        ParamKind::Slider { range, .. } | ParamKind::Colour { range, .. } => {
+            (Some(range.0), Some(range.1))
+        }
+        _ => (None, None),
+    }
+}
+
+/// `animation` with every value it can take pulled inside `bounds`.
+///
+/// **Clamping an animation means clamping its keys**, not only the number the
+/// playhead happens to be over — the same rule the mask scalars' own
+/// `clamped_property` follows. A radius keyed to −40 three seconds away is just
+/// as far out of range as one set to −40 now, and it would arrive the moment the
+/// playhead did.
+///
+/// An expression cannot be clamped here at all: it is a string until it runs, so
+/// it passes through and the resolve step's own reads keep their clamps. A pair
+/// that is not a range — either end NaN, or a low above its high — is left alone
+/// rather than trusted, because `f64::clamp` panics on both and an engine crate
+/// does not panic (docs/14 §4).
+#[frb(ignore)]
+fn clamp_animation(animation: Animation, bounds: (Option<f64>, Option<f64>)) -> Animation {
+    let lo = bounds.0.unwrap_or(f64::NEG_INFINITY);
+    let hi = bounds.1.unwrap_or(f64::INFINITY);
+    if !(lo <= hi) || (lo.is_infinite() && hi.is_infinite()) {
+        return animation;
+    }
+    match animation {
+        Animation::Static(value) => Animation::Static(value.clamp(lo, hi)),
+        Animation::Keyframed(keys) => Animation::Keyframed(
+            keys.into_iter()
+                .map(|key| Keyframe {
+                    value: key.value.clamp(lo, hi),
+                    ..key
+                })
+                .collect(),
+        ),
+        expression => expression,
     }
 }
 
@@ -1620,8 +1687,25 @@ impl BridgeEffectInstance {
     ///
     /// Refused when `value` is of a different kind from the parameter, so a
     /// control can never quietly change what a parameter *is*.
+    ///
+    /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
+    /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+    /// dragged in the graph editor, picked off the Viewer, wired from a node,
+    /// pasted, loaded from a preset — passes through this one call, and both the
+    /// preview and the commit stage through it, so clamping once here is what
+    /// makes the picture a scrub shows and the value it lands on the same number.
+    /// A control that also clamps its own reading is agreeing with the engine,
+    /// not deciding for it; a control that forgets to can no longer render a
+    /// value the parameter does not have.
     #[frb(sync)]
     pub fn set_value(&mut self, id: String, value: BridgeEffectValue) -> Result<(), BridgeError> {
+        // An effect this build does not know has no schema to consult, so its
+        // parameters stay unbounded rather than refused: a project carrying one
+        // still opens and still edits, exactly as `list_parameters` allows.
+        let bounds = lumit_core::fx::schema(&self.effect.effect.match_name)
+            .and_then(|schema| schema.params.iter().find(|p| p.id == id))
+            .map_or((None, None), |p| hard_bounds(&p.kind));
+
         // Every parameter the schema declares is already present: `new` fills
         // the staged copy. A name that is still missing is one no schema
         // declares — a caller bug, not an old project — and stays refused.
@@ -1633,7 +1717,7 @@ impl BridgeEffectInstance {
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
 
-        value.write_at(&mut param.value, offset)
+        value.write_at(&mut param.value, offset, bounds)
     }
 
     #[frb(ignore)]

@@ -9591,6 +9591,37 @@ running, appears next to what the gesture is doing, and leaves no trace behind. 
 also why it floats *above* everything rather than sitting inside the row — a hint that
 made room for itself would push the panel about every time you touched a number.
 
+Alongside its unit, a control declares its **range** — and there are two of them, which
+is a distinction worth having. The **slider range** is the travel: how far the drag or
+the track goes, chosen so the everyday values are comfortable to reach. You are allowed
+to leave it by typing, and that is deliberate — Blur's Radius slides to 500 because that
+covers almost every shot, not because 900 is nonsense. The **hard range** is the other
+kind: the numbers the parameter genuinely does not have. A radius below zero is not a
+smaller blur, it is not a blur at all. Either end of a hard range can be left open where
+that is honest — Glow's Threshold has a floor of nought and no ceiling, because a
+brighter-than-white pixel really does glow harder.
+
+Who *enforces* the hard range is the part that had gone wrong. It used to be each
+control's own job: the number field knew its bounds and clamped what you typed into it.
+That works for as long as every way of changing a number goes through a number field —
+and it does not. A keyframe dragged up in the graph editor, a value picked off the
+picture with the eyedropper, a number wired in from a node, a preset loaded from disk:
+each of those is a different piece of code, and each one had to remember the bounds by
+itself. Some did not. Worse, the *preview* and the *commit* could disagree: dragging a
+value past the end would show you a picture the parameter could not actually hold, and
+then jump somewhere else the moment you let go, because only one of the two paths
+clamped.
+
+So the clamp moved to the one place every route passes through — the engine's own
+"write this parameter" call, which both the live preview and the final commit go through
+(K-620). The engine already knows every parameter's declared range; it simply keeps it
+now, instead of describing it to the interface and hoping. Clamping an animation means
+clamping *its keyframes*, not just the number under the playhead: a radius keyed to a
+value it cannot hold three seconds away is exactly as wrong as one set there now, and it
+would arrive the moment the playhead did. A control that still clamps its own reading is
+agreeing with the engine rather than deciding for it, which is the right way round: the
+interface displays and forwards, the engine decides.
+
 ## 17. The Timeline's two views, in plain terms
 
 The Timeline shows the same composition two ways, and a pair of words at the top right of
