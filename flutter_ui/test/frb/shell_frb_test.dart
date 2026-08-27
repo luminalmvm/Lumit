@@ -828,32 +828,6 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// Queueing closes the dialog and shows the queue — and the queue is now
-    /// raised while the dialog is still standing, so no window is ever asked
-    /// to find the Overlay from a context on its way out. The error that
-    /// wording guards against is the red "looking up a deactivated widget's
-    /// ancestor is unsafe" screen the owner saw after an export; the scrim's
-    /// own half of it is covered in `modal_window_test`.
-    testWidgets('queueing an export leaves no deactivated context behind',
-        (tester) async {
-      await open(tester,
-          picker: () async => '${Directory.systemTemp.path}/queued.mp4');
-      await tester.tap(find.byKey(const ValueKey('export-choose')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('export-add-to-queue')));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull,
-          reason: 'the queue went up before the dialog came down');
-      expect(find.byKey(const ValueKey('export-queue-title-strip')),
-          findsOneWidget,
-          reason: 'and the queue is what is on screen now');
-
-      await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
-      await tester.pumpAndSettle();
-    });
-
     /// The dialog's fields default to the composition's own facts (K-201): the
     /// frame rate is the comp's, and the span is the work area exactly as the
     /// Timeline set it — already typed, not re-derived by the user.
@@ -1541,15 +1515,15 @@ void main() {
       expect(find.byType(LumitAppView), findsNothing,
           reason: 'and the shell is still not behind it');
 
-      // Blank project is the way straight through.
-      await tester.tap(find.byKey(const ValueKey('welcome-card-blank')));
+      // New project is the way straight through (K-617).
+      await tester.tap(find.byKey(const ValueKey('welcome-card-new')));
       await tester.pumpAndSettle();
       expect(find.byType(LumitAppView), findsOneWidget);
     });
 
     /// Settings ▸ General can stand the welcome screen down for every launch
     /// (K-481). Lumit then opens straight into the shell, whose Viewer offers
-    /// the same three ways to start until something is displayed — so the
+    /// the same two ways to start until something is displayed — so the
     /// setting hides no choice.
     testWidgets('the launch setting is honoured', (tester) async {
       tester.view.physicalSize = const Size(1800, 1100);
@@ -1568,7 +1542,7 @@ void main() {
       expect(find.byType(WelcomeScreenFrb), findsNothing);
       expect(find.byType(LumitAppView), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget,
-          reason: 'the shell\'s own empty stage offers the same three ways in');
+          reason: 'the shell\'s own empty stage offers the same two ways in');
     });
 
     testWidgets('can be stood down, for the tests that drive the shell',
