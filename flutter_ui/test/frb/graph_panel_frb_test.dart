@@ -762,6 +762,99 @@ void main() {
       expect(placed.y, 320);
     });
 
+    /// **N7 — a box dropped on a wire falls into it.** The wire splits: what
+    /// fed the consumer now feeds the box, and the box feeds the consumer. One
+    /// `setGraph`, so one undo step, like every other gesture on this canvas.
+    testWidgets('an unwired box dropped on a wire is inserted into it',
+        (tester) async {
+      final p = withBlur();
+      final first = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      final spare = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+
+      final out = tester.getCenter(socket('driver:$first', 'value'));
+      final radius = tester.getCenter(socket(key, 'radius'));
+      await tester.dragFrom(out, radius - out);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      // The cubic's handles run horizontally out of each socket by the same
+      // reach, so the point halfway along it is the midpoint of the two ends.
+      final middle = (tester.getCenter(socket('driver:$first', 'value')) +
+              tester.getCenter(socket(key, 'radius'))) /
+          2;
+      final box = find.byKey(ValueKey<String>('graph-node-driver:$spare'));
+      final grab = tester.getCenter(box);
+      await tester.dragFrom(grab, middle - grab);
+      await tester.pump();
+
+      final edges = p.layer.getGraph().wiring.edges;
+      expect(edges, hasLength(2));
+      final blur = p.layer
+          .getGraph()
+          .nodes
+          .firstWhere((n) => n.matchName == 'blur')
+          .node;
+      expect(
+        edges.any((e) =>
+            e.from == BridgeOutputRef.driver(node: first, port: 'value') &&
+            e.to ==
+                BridgeInputRef.param(
+                    node: BridgeNodeRef.driver(spare), port: 'amount')),
+        isTrue,
+        reason: 'what fed the parameter now feeds the box',
+      );
+      expect(
+        edges.any((e) =>
+            e.from == BridgeOutputRef.driver(node: spare, port: 'value') &&
+            e.to == BridgeInputRef.param(node: blur, port: 'radius')),
+        isTrue,
+        reason: 'and the box feeds the parameter',
+      );
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1),
+          reason: 'one gesture, one undo step');
+    });
+
+    /// A box that already carries wires is only being moved: dropping it on a
+    /// wire would leave the question of what became of its own.
+    testWidgets('a wired box dragged over a wire is only moved', (tester) async {
+      final p = withBlur();
+      final first = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      final other = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+
+      var out = tester.getCenter(socket('driver:$first', 'value'));
+      final radius = tester.getCenter(socket(key, 'radius'));
+      await tester.dragFrom(out, radius - out);
+      await tester.pump();
+      out = tester.getCenter(socket('driver:$other', 'value'));
+      final mix = tester.getCenter(socket(key, 'mix'));
+      await tester.dragFrom(out, mix - out);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(2));
+
+      final middle = (tester.getCenter(socket('driver:$first', 'value')) +
+              tester.getCenter(socket(key, 'radius'))) /
+          2;
+      final box = find.byKey(ValueKey<String>('graph-node-driver:$other'));
+      final grab = tester.getCenter(box);
+      await tester.dragFrom(grab, middle - grab);
+      await tester.pump();
+
+      expect(p.layer.getGraph().wiring.edges, hasLength(2),
+          reason: 'the drop moved the box and nothing else');
+    });
+
     /// **A box is renamed by double-clicking its name** (owner, desk test).
     /// Both kinds commit the way their bypass does — a driver through
     /// `setGraph`, a stack effect through the staged `setEffects` — so each is

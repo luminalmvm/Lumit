@@ -316,6 +316,60 @@ bool _alwaysDrawn(BridgePortType type) =>
 bool graphNoStream(BridgeGraphNode node) =>
     node.inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
 
+/// Where one stored wire starts and ends in canvas units, and the type it
+/// carries — the *source* port's, which is the type the wire is. Null when
+/// either end names a box that is not on the canvas.
+///
+/// Read by the painter, which colours the wire by that type, and by the drop
+/// test, which asks how near a dragged box is to the curve (N7).
+(Offset, Offset, BridgePortType)? _edgeEnds(_Layout layout, BridgeGraphEdge e) {
+  final (fromKey, fromPort) = switch (e.from) {
+    BridgeOutputRef_Driver(:final node, :final port) => (
+        graphNodeKey(BridgeNodeRef.driver(node)),
+        port
+      ),
+    BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+    BridgeOutputRef_EffectData(:final effect, :final port) => (
+        graphNodeKey(BridgeNodeRef.effect(effect)),
+        port
+      ),
+  };
+  final (toKey, toPort) = switch (e.to) {
+    BridgeInputRef_Param(:final node, :final port) => (graphNodeKey(node), port),
+    BridgeInputRef_Matte(:final effect) => (
+        graphNodeKey(BridgeNodeRef.effect(effect)),
+        'matte'
+      ),
+  };
+  final fromBox = layout.byKey[fromKey];
+  final toBox = layout.byKey[toKey];
+  if (fromBox == null || toBox == null) return null;
+  final from = fromBox.socket(fromPort, false);
+  final to = toBox.socket(toPort, true);
+  if (from == null || to == null) return null;
+  final i = fromBox.outputs.indexWhere((p) => p.id == fromPort);
+  return (from, to, fromBox.outputs[i < 0 ? 0 : i].portType);
+}
+
+/// How near a wire a dropped box has to land to fall into it, canvas units.
+const double _wireGrab = 18;
+
+/// How far [at] is from a wire's curve, sampled along it.
+///
+/// A wire is one cubic and twenty points describe it closely enough to say
+/// whether a box was dropped on it — this runs during a drag, over a handful of
+/// wires, and never in an idle rebuild.
+double _wireDistance(Offset a, Offset b, Offset at) {
+  var best = double.infinity;
+  for (final metric in graphWirePath(a, b).computeMetrics()) {
+    for (var i = 0; i <= 20; i++) {
+      final point = metric.getTangentForOffset(metric.length * i / 20)?.position;
+      if (point != null) best = math.min(best, (point - at).distance);
+    }
+  }
+  return best;
+}
+
 /// A wire being dragged: where it left, and where the pointer is now.
 class _InFlight {
   final _Socket from;
@@ -448,6 +502,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   _InFlight? _flight;
   _NodeDrag? _nodeDrag;
+
+  /// The wire the box being dragged is over and would drop into (N7), drawn
+  /// picked while it is. Held so the highlight and the release agree.
+  BridgeGraphEdge? _dropWire;
   Offset? _panFrom;
   Offset? _pressAt;
 
@@ -1087,6 +1145,60 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       (wire.isInput ? info.outputs : info.inputs).any((port) =>
           !_isChainType(port.portType) && port.portType == wire.port.portType);
 
+  // --- Dropping a box into a wire (N7) ------------------------------------
+
+  /// The wire the box being dragged would fall into, and the two sockets of
+  /// its own that would take its ends — null unless a single box carrying no
+  /// wires at all is sitting over one it can carry.
+  ///
+  /// The wire splits: what fed the consumer now feeds this box, and this box
+  /// feeds the consumer. Standard node-editor behaviour, and one `setGraph`, so
+  /// one undo step like every other gesture here.
+  ({BridgeGraphEdge edge, _Socket into, _Socket outOf})? _dropInsert(
+      _Layout layout) {
+    final drag = _nodeDrag;
+    final graph = _graph;
+    // One box, and only a box nothing is joined to: dropping a wired node on a
+    // wire would ask what happens to the wires it already has, and the answer
+    // "nothing" would be a surprise either way.
+    if (drag == null || graph == null || drag.origins.length != 1) return null;
+    final box = layout.byKey[drag.key];
+    if (box == null) return null;
+    if (graph.wiring.edges.any((e) => _touches(e, box.node.node))) return null;
+
+    // Where the box is *now*, which the held layout is a frame behind on.
+    final at = (_positions[drag.key] ?? box.rect.topLeft) +
+        Offset(box.rect.width / 2, box.rect.height / 2);
+
+    for (final edge in graph.wiring.edges) {
+      final ends = _edgeEnds(layout, edge);
+      if (ends == null) continue;
+      if (_wireDistance(ends.$1, ends.$2, at) > _wireGrab) continue;
+      final into = _freeSocket(box, ends.$3, isInput: true);
+      final outOf = _freeSocket(box, ends.$3, isInput: false);
+      // Both types match the wire's by construction and the box has nothing
+      // joined to it, so neither half can mismatch or close a loop; the
+      // engine's own refusal stays the backstop.
+      if (into != null && outOf != null) {
+        return (edge: edge, into: into, outOf: outOf);
+      }
+    }
+    return null;
+  }
+
+  /// This box's first socket of [type] on the given side that could take the
+  /// wire — the picture's own path excluded, since that is the effect list's
+  /// and not this gesture's.
+  _Socket? _freeSocket(_Box box, BridgePortType type, {required bool isInput}) {
+    for (final port in isInput ? box.inputs : box.outputs) {
+      if (_isChainType(port.portType) || port.portType != type) continue;
+      if (isInput && port.wired) continue;
+      final at = box.socket(port.id, isInput);
+      if (at != null) return _Socket(box.node.node, port, isInput, at);
+    }
+    return null;
+  }
+
   // --- Pointer work -------------------------------------------------------
 
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
@@ -1195,6 +1307,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         for (final entry in drag.origins.entries) {
           _positions[entry.key] = entry.value + (at - drag.grab);
         }
+        _dropWire = _dropInsert(layout)?.edge;
       });
       return;
     }
@@ -1241,8 +1354,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     }
 
     if (_nodeDrag case final drag?) {
+      // Asked before the drag is let go of, since it is what the answer is
+      // worked out from.
+      final insert = moved ? _dropInsert(layout) : null;
       setState(() {
         _nodeDrag = null;
+        _dropWire = null;
         // The press that kept a standing pick, released without moving: that
         // is a plain click, and a plain click replaces.
         if (!moved && drag.collapse) {
@@ -1250,6 +1367,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           if (node != null) _pick([node]);
         }
       });
+      if (insert != null) {
+        final source = _outputRef(insert.outOf);
+        final dest = _inputRef(insert.into);
+        if (source != null && dest != null) {
+          // The wire splits, and the box's new position rides the same write.
+          _commit(_wiringNow(edges: [
+            for (final e in _graph!.wiring.edges)
+              if (e != insert.edge) e,
+            BridgeGraphEdge(from: insert.edge.from, to: dest),
+            BridgeGraphEdge(from: source, to: insert.edge.to),
+          ]));
+          return;
+        }
+      }
       if (moved && _graph != null) _commit(_wiringNow());
       return;
     }
@@ -1440,6 +1571,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           layout: layout,
                           edges: _graph!.wiring.edges,
                           flight: _flight,
+                          dropWire: _dropWire,
                           pan: _pan,
                           zoom: _zoom,
                           grid: t.surface2,
@@ -2022,6 +2154,9 @@ class _GraphPainter extends CustomPainter {
   final _Layout layout;
   final List<BridgeGraphEdge> edges;
   final _InFlight? flight;
+
+  /// The wire a box is being dragged over and would drop into (N7).
+  final BridgeGraphEdge? dropWire;
   final Offset pan;
   final double zoom;
   final Color grid;
@@ -2033,6 +2168,7 @@ class _GraphPainter extends CustomPainter {
     required this.layout,
     required this.edges,
     required this.flight,
+    required this.dropWire,
     required this.pan,
     required this.zoom,
     required this.grid,
@@ -2061,52 +2197,20 @@ class _GraphPainter extends CustomPainter {
     }
 
     for (final edge in edges) {
-      final ends = _endsOf(edge);
+      final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      _wire(canvas, ends.$1, ends.$2, ends.$3, dashes: false);
+      // The wire a box is being dropped into wears the canvas's own picked
+      // colour while it is under one (N7, K-473) — the same mark a picked box
+      // wears, because both say "this is what the release will act on".
+      final into = edge == dropWire;
+      _wire(canvas, ends.$1, ends.$2,
+          into ? theme.animated : portColour(theme, ends.$3),
+          dashes: false, weight: into ? 2 : 1);
     }
 
     if (flight case final f?) {
       _wire(canvas, f.from.at, f.to, dragged, dashes: true);
     }
-  }
-
-  /// Where one stored wire starts and ends, and what colour it takes — the
-  /// *source* port's type, which is the type the wire carries. Null when
-  /// either end names a box that is not on the canvas.
-  (Offset, Offset, Color)? _endsOf(BridgeGraphEdge edge) {
-    final (fromKey, fromPort) = switch (edge.from) {
-      BridgeOutputRef_Driver(:final node, :final port) => (
-          graphNodeKey(BridgeNodeRef.driver(node)),
-          port
-        ),
-      BridgeOutputRef_SourceMatte() => ('source', 'matte'),
-      BridgeOutputRef_EffectData(:final effect, :final port) => (
-          graphNodeKey(BridgeNodeRef.effect(effect)),
-          port
-        ),
-    };
-    final (toKey, toPort) = switch (edge.to) {
-      BridgeInputRef_Param(:final node, :final port) => (
-          graphNodeKey(node),
-          port
-        ),
-      BridgeInputRef_Matte(:final effect) => (
-          graphNodeKey(BridgeNodeRef.effect(effect)),
-          'matte'
-        ),
-    };
-    final fromBox = layout.byKey[fromKey];
-    final toBox = layout.byKey[toKey];
-    if (fromBox == null || toBox == null) return null;
-    final from = fromBox.socket(fromPort, false);
-    final to = toBox.socket(toPort, true);
-    if (from == null || to == null) return null;
-    final type = fromBox.outputs
-        .firstWhere((p) => p.id == fromPort,
-            orElse: () => fromBox.outputs.first)
-        .portType;
-    return (from, to, portColour(theme, type));
   }
 
   void _paintGrid(Canvas canvas, Size size) {
@@ -2127,12 +2231,12 @@ class _GraphPainter extends CustomPainter {
   /// — with the minimum stub that keeps it visible when the consumer sits left
   /// of its producer.
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
-      {required bool dashes}) {
+      {required bool dashes, double weight = 1}) {
     final path = graphWirePath(_screen(from), _screen(to), zoom: zoom);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke
-      ..strokeWidth = graphWireWidth * zoom;
+      ..strokeWidth = graphWireWidth * zoom * weight;
     canvas.drawPath(dashes ? _dash(path) : path, paint);
   }
 
