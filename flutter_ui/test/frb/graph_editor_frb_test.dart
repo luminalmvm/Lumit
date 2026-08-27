@@ -1117,6 +1117,29 @@ void main() {
       expect(channels, hasLength(1),
           reason: 'a Slider kind is a float and belongs in the graph');
       expect(channels.single.keys, hasLength(2));
+
+      // **M28 leftover.** The parameter's hard range reaches the graph, so the
+      // line drawn while a key is dragged can be held inside the range the
+      // engine will put the value in. Completion is closed 0..100 (K-414).
+      expect(channels.single.hardBounds, (0.0, 100.0));
+      expect(channels.single.clampToBounds(140), 100);
+      expect(channels.single.clampToBounds(-20), 0);
+      expect(channels.single.clampToBounds(40), 40);
+    });
+
+    /// A transform has no parameter range to be held inside, so its curve is
+    /// drawn wherever it is dragged — the clamp must not invent a bound.
+    testWidgets('an unbounded channel clamps nothing', (tester) async {
+      final p = withLayer();
+      p.uiState.model.refresh();
+      final id = p.layer.internallayerId.toString();
+      final channels = graphChannels(
+        layers: p.uiState.model.layers,
+        selected: ['$id/transform/positionX'],
+      );
+      expect(channels, isNotEmpty);
+      expect(channels.first.hardBounds, (null, null));
+      expect(channels.first.clampToBounds(-9000), -9000);
     });
 
     /// **A mask's numbers reach the graph** (K-341), and so does its **shape**

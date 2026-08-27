@@ -140,6 +140,35 @@ class GraphChannel {
     this.animatorValue,
   });
 
+  /// The hard bounds the engine will clamp a written value to, where this
+  /// channel has any (docs/08 §1.2, K-620) — either side open on its own.
+  ///
+  /// Read so the curve drawn *during* a drag can agree with where the key will
+  /// actually come to rest: the commit and the preview pixels have always
+  /// clamped, and a line that overshot on the way was the drawing disagreeing
+  /// with both. A transform, a mask value and the Retime are unbounded here,
+  /// which is the honest answer — their limits are not a parameter's range.
+  (double?, double?) get hardBounds => switch (param?.kind) {
+        BridgeParamKind_Float(:final hardMin, :final hardMax) =>
+          (hardMin, hardMax),
+        BridgeParamKind_Int(:final hardMin, :final hardMax) => (
+            hardMin?.toDouble(),
+            hardMax?.toDouble()
+          ),
+        // A closed range is the travel *and* the bound — that is what closed
+        // means (K-414).
+        BridgeParamKind_Slider(:final min, :final max) => (min, max),
+        _ => (null, null),
+      };
+
+  /// [value] held inside this channel's hard bounds.
+  double clampToBounds(double value) {
+    final (low, high) = hardBounds;
+    if (low != null && value < low) return low;
+    if (high != null && value > high) return high;
+    return value;
+  }
+
   List<BridgeKeyframe> get keys => keysOf(scalar);
   bool get isStatic => scalar is BridgeScalar_Static;
   double get staticValue => switch (scalar) {

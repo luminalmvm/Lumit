@@ -1697,7 +1697,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           move(channel, keyFrame(key, widget.fps), key.value);
       moved[i] = BridgeKeyframe(
         time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
-        value: value,
+        // Inside the parameter's hard range, which is where the engine will
+        // put it (M28): the value that lands and the pixels the Viewer shows
+        // have always clamped, and only the line drawn on the way did not.
+        value: channel.clampToBounds(value),
         interpIn: key.interpIn,
         interpOut: key.interpOut,
       );
