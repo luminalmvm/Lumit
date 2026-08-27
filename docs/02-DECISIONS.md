@@ -18952,7 +18952,11 @@ Tests: in Flutter, `dock_test.dart` — Hierarchy is in none of the shipped work
 over `WorkspacePreset.values` so a preset added by copying an old one cannot bring it back
 quietly.
 
-## K-614 — The Depth map answers to Gamma, the way the Focus map does
+## K-615 — The Depth map answers to Gamma, the way the Focus map does
+
+*(Renumbered: this entry first claimed K-614, which the Hierarchy-panel entry above had
+taken in the same wave — the precedent K-612 set. Tile's K-613 above is the other half of
+that wave and keeps its number, having claimed it first.)*
 
 **Status: DECIDED (2026-08-27).** Amends [08-EFFECTS.md](08-EFFECTS.md) §3.22's Display row;
 K-395's twirl, K-313's neutral branches and the ±10 Gamma range all stand.

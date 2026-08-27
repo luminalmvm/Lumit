@@ -4920,7 +4920,7 @@ pub fn dof(rgba: &mut [f32], depth: Option<&[f32]>, w: u32, h: u32, p: &DofParam
                 // channel pick, the invert and Gamma — the view that says
                 // whether the pass is aligned, upside down, or crushed to its
                 // two ends. Gamma rescales the axis here exactly as it rescales
-                // it for the Focus map below (K-614).
+                // it for the Focus map below (K-615).
                 let m = dof_depth_view(d_centre, focus, p.gamma);
                 rgba[oi] = m;
                 rgba[oi + 1] = m;
@@ -5135,7 +5135,7 @@ pub fn dof_falloff(d: f32, focus: f32, range: f32, falloff: f32) -> f32 {
     e * e * (3.0 - 2.0 * e)
 }
 
-/// The grey the Depth-map view draws (K-614): the depth axis **as the ramp reads
+/// The grey the Depth-map view draws (K-615): the depth axis **as the ramp reads
 /// it**, which is the depth distance from focus scaled by Gamma and put back
 /// on the axis.
 ///

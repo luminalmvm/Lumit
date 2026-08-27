@@ -3976,7 +3976,7 @@ fn wgsl_dof_matches_the_cpu_oracle() {
         ),
         (
             // Both views answer to Gamma, and answer to it the same way
-            // (K-614) — so the twin has to rescale the depth axis where the
+            // (K-615) — so the twin has to rescale the depth axis where the
             // oracle does.
             "depth map squeezed",
             lumit_core::fx::cpu::DofParams {

@@ -1809,7 +1809,7 @@ view: **Rendered** the normal blurred output, **Depth map** the post-invert, pos
 **post-Gamma** depth as greyscale, **Focus map** the smooth in-focus mask, white where sharp),
 Mix.
 
-**Both views answer to Gamma, and answer the same way** (K-614). Gamma scales the depth's
+**Both views answer to Gamma, and answer the same way** (K-615). Gamma scales the depth's
 distance from focus, so the Focus map has always moved with it; the Depth map drew the raw
 depth and sat still, which is the wrong half of a pair that is read together. The Depth map
 now draws the axis the ramp reads — `focus + (d − focus)·2^gamma` — so a pass whose content

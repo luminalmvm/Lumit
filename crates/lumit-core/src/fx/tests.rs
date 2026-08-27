@@ -9206,7 +9206,7 @@ fn a_legacy_dof_resolves_to_the_neutral_aperture() {
     );
 }
 
-/// **Both diagnostic views answer to Gamma, and answer the same way** (K-614,
+/// **Both diagnostic views answer to Gamma, and answer the same way** (K-615,
 /// docs/08 §3.22). The Focus map always did — the control scales the depth
 /// distance before the ramp — while the Depth map drew the raw depth and sat
 /// still however far the control was dragged, which is the bug this holds shut.

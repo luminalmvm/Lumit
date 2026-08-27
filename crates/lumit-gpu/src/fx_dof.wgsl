@@ -131,7 +131,7 @@ fn coc_falloff(d: f32, focus: f32) -> f32 {
     return e * e * (3.0 - 2.0 * e); // smoothstep ramp
 }
 
-// The Depth-map view's grey (K-614): the depth axis as the ramp reads it — the
+// The Depth-map view's grey (K-615): the depth axis as the ramp reads it — the
 // distance from focus scaled by the same Gamma multiplier and put back on the
 // axis, so the two diagnostic views show the same axis. == cpu::dof_depth_view,
 // branch for branch: the neutral multiplier is exactly 1, but `(d - focus) +
@@ -231,7 +231,7 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.display == 1u) {
         // Depth map: the post-invert depth as opaque greyscale — after the
         // channel pick and after Gamma, so it is what the effect is actually
-        // reading (K-614). == cpu::dof_depth_view.
+        // reading (K-615). == cpu::dof_depth_view.
         let m = depth_view(d, focus);
         textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
         return;
