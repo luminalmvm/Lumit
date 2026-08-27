@@ -1350,6 +1350,103 @@ pub fn build_comp_draws_at(
         // every layer that already carries a decoded field.
         let mut flow_below = Vec::new();
 
+        // The layer's own Matte (K-142), built before the kind match so that
+        // **every** arm can use it — the adjustment arm pushes and `continue`s,
+        // and while this lived below the match an adjustment layer's Matte
+        // dropdown chose a source that gated nothing at all.
+        let matte = layer.matte.as_ref().and_then(|mr| {
+            let src = comp.layers.iter().find(|l| l.id == mr.layer)?;
+            // A Precomp matte renders its comp (K-268): a comp has no pixels
+            // until it is rendered, so `pixels_for` gives up on one and the
+            // matte silently gated nothing — a layer set to a precomp matte
+            // simply vanished. The nested render stands in for the source
+            // texture; the source-mode toggles below do not apply to it,
+            // because a comp already carries its layers' own masks and
+            // effects (the K-266 layer-input boundary, unchanged).
+            let nested = in_span(src).then(|| nested_comp_draw(src)).flatten();
+            // Matte source mode (K-142). None reads the source's raw pixels —
+            // clear its masks so `pixels_for` skips them; Masks and Effects and
+            // masks keep them.
+            let (m_rgba, m_w, m_h, m_nat) = if let Some(n) = &nested {
+                (
+                    Vec::new(),
+                    n.width,
+                    n.height,
+                    (n.width as f32, n.height as f32),
+                )
+            } else if mr.source.applies_masks() {
+                pixels_for(src)?
+            } else {
+                let mut bare = src.clone();
+                bare.masks.clear();
+                pixels_for(&bare)?
+            };
+            let mlt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+            let mtr = &src.transform;
+            // Effects and masks matte (K-142): resolve the matte source's own
+            // stack at its layer time so gpu.rs runs it on the matte texture
+            // before the matte gates the consumer. Uses the source's decode scale
+            // (its px@comp radii stay honest under reduced-res preview), the same
+            // §1.4 markers and the same resolve export uses (K-031). Empty for
+            // None / Masks or when the source's fx switch is off.
+            let (fx, lut_files) = if nested.is_some() {
+                // The nested render already ran every layer's own stack.
+                Default::default()
+            } else if mr.source.folds_effects() && src.switches.fx {
+                let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                let scale = m_w as f32 / m_nat.0.max(1.0);
+
+                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                let drivers = drivers_for(src, mlt, context.clone());
+                (
+                    lumit_core::fx::resolve_stack_temporal_named(
+                        &src.effects,
+                        &drivers,
+                        mlt,
+                        mlt,
+                        comp_diag * scale,
+                        scale,
+                        &markers,
+                        context.clone(),
+                    )
+                    .1,
+                    lut_files(&src.effects, mlt),
+                )
+            } else {
+                Default::default()
+            };
+            Some(MatteDraw {
+                rgba: m_rgba,
+                tex_w: m_w,
+                tex_h: m_h,
+                natural_size: m_nat,
+                position: (
+                    mtr.position_x.value_at_with_context(mlt, context.clone()) as f32,
+                    mtr.position_y.value_at_with_context(mlt, context.clone()) as f32,
+                ),
+                anchor: (
+                    mtr.anchor_x.value_at_with_context(mlt, context.clone()) as f32,
+                    mtr.anchor_y.value_at_with_context(mlt, context.clone()) as f32,
+                ),
+                scale: (
+                    mtr.scale_x.value_at_with_context(mlt, context.clone()) as f32,
+                    mtr.scale_y.value_at_with_context(mlt, context.clone()) as f32,
+                ),
+                rotation_deg: mtr.rotation.value_at_with_context(mlt, context.clone()) as f32,
+                opacity: mtr.opacity.value_at_with_context(mlt, context.clone()) as f32,
+                z: mtr.position_z.value_at_with_context(mlt, context.clone()) as f32,
+                rotation_x_deg: mtr.rotation_x.value_at_with_context(mlt, context.clone()) as f32,
+                rotation_y_deg: mtr.rotation_y.value_at_with_context(mlt, context.clone()) as f32,
+                three_d: src.switches.three_d,
+                luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
+                inverted: mr.inverted,
+                fx,
+                lut_files,
+                nested,
+                colour_space: crate::colour::footage_colour_space(doc, &src.kind),
+            })
+        });
+
         let (source, natural) = match &layer.kind {
             // Guarded so a Precomp acting as an adjustment (K-537) falls
             // through to the adjustment arm below rather than drawing its comp.
@@ -1625,7 +1722,10 @@ pub fn build_comp_draws_at(
                     rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
                     rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
                     three_d: layer.switches.three_d,
-                    matte: None,
+                    // The adjustment's own Matte gates where its stack lands,
+                    // exactly as a matte gates an ordinary layer's picture: it
+                    // multiplies into the coverage the blend uses (realise.rs).
+                    matte,
                     blend: lumit_gpu::Blend::Normal,
                     mask_cov: (!layer.masks.is_empty()).then(|| {
                         // Adjustment masks live in comp space (comp-sized
@@ -1710,99 +1810,6 @@ pub fn build_comp_draws_at(
                 )
             }
         };
-
-        let matte = layer.matte.as_ref().and_then(|mr| {
-            let src = comp.layers.iter().find(|l| l.id == mr.layer)?;
-            // A Precomp matte renders its comp (K-268): a comp has no pixels
-            // until it is rendered, so `pixels_for` gives up on one and the
-            // matte silently gated nothing — a layer set to a precomp matte
-            // simply vanished. The nested render stands in for the source
-            // texture; the source-mode toggles below do not apply to it,
-            // because a comp already carries its layers' own masks and
-            // effects (the K-266 layer-input boundary, unchanged).
-            let nested = in_span(src).then(|| nested_comp_draw(src)).flatten();
-            // Matte source mode (K-142). None reads the source's raw pixels —
-            // clear its masks so `pixels_for` skips them; Masks and Effects and
-            // masks keep them.
-            let (m_rgba, m_w, m_h, m_nat) = if let Some(n) = &nested {
-                (
-                    Vec::new(),
-                    n.width,
-                    n.height,
-                    (n.width as f32, n.height as f32),
-                )
-            } else if mr.source.applies_masks() {
-                pixels_for(src)?
-            } else {
-                let mut bare = src.clone();
-                bare.masks.clear();
-                pixels_for(&bare)?
-            };
-            let mlt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
-            let mtr = &src.transform;
-            // Effects and masks matte (K-142): resolve the matte source's own
-            // stack at its layer time so gpu.rs runs it on the matte texture
-            // before the matte gates the consumer. Uses the source's decode scale
-            // (its px@comp radii stay honest under reduced-res preview), the same
-            // §1.4 markers and the same resolve export uses (K-031). Empty for
-            // None / Masks or when the source's fx switch is off.
-            let (fx, lut_files) = if nested.is_some() {
-                // The nested render already ran every layer's own stack.
-                Default::default()
-            } else if mr.source.folds_effects() && src.switches.fx {
-                let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-                let scale = m_w as f32 / m_nat.0.max(1.0);
-
-                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
-                let drivers = drivers_for(src, mlt, context.clone());
-                (
-                    lumit_core::fx::resolve_stack_temporal_named(
-                        &src.effects,
-                        &drivers,
-                        mlt,
-                        mlt,
-                        comp_diag * scale,
-                        scale,
-                        &markers,
-                        context.clone(),
-                    )
-                    .1,
-                    lut_files(&src.effects, mlt),
-                )
-            } else {
-                Default::default()
-            };
-            Some(MatteDraw {
-                rgba: m_rgba,
-                tex_w: m_w,
-                tex_h: m_h,
-                natural_size: m_nat,
-                position: (
-                    mtr.position_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.position_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                anchor: (
-                    mtr.anchor_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.anchor_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                scale: (
-                    mtr.scale_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.scale_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                rotation_deg: mtr.rotation.value_at_with_context(mlt, context.clone()) as f32,
-                opacity: mtr.opacity.value_at_with_context(mlt, context.clone()) as f32,
-                z: mtr.position_z.value_at_with_context(mlt, context.clone()) as f32,
-                rotation_x_deg: mtr.rotation_x.value_at_with_context(mlt, context.clone()) as f32,
-                rotation_y_deg: mtr.rotation_y.value_at_with_context(mlt, context.clone()) as f32,
-                three_d: src.switches.three_d,
-                luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
-                inverted: mr.inverted,
-                fx,
-                lut_files,
-                nested,
-                colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-            })
-        });
 
         // Spatial units are px@comp (docs/08 §2.3); the effect runs on the
         // layer's decoded texture, so the preview factor is decode/natural, to

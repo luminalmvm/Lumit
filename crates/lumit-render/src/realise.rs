@@ -754,6 +754,102 @@ impl Realiser<'_> {
     /// raster — white where the effects apply — placed by its transform,
     /// so the transform moves the coverage map, never the picture. No
     /// masks means full coverage (a white quad over the whole comp).
+    /// One matte source rendered alone into comp space.
+    ///
+    /// Deliberately at FULL comp resolution whatever the render scale: the
+    /// fragment samples the matte by normalised comp UV, so any size is
+    /// correct — shrink it later if it ever shows in a profile.
+    ///
+    /// Both places a matte gates something come through here — an ordinary
+    /// layer's picture, and an adjustment layer's coverage — so the two can
+    /// never disagree about what a matte source looks like.
+    fn matte_texture(
+        &self,
+        width: u32,
+        height: u32,
+        cam_mat: Option<lumit_gpu::Mat4>,
+        m: &crate::draw::MatteDraw,
+    ) -> wgpu::Texture {
+        // A Precomp matte realises its nested comp exactly as a
+        // Precomp layer's picture does (K-268, the K-266 layer-input
+        // shape); anything else is the uploaded source pixels.
+        let linear = if let Some(n) = &m.nested {
+            self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
+        } else {
+            let src = self
+                .engine
+                .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
+            // Through the matte source's own colour space (K-490),
+            // as its own picture would be: log footage read as
+            // sRGB gates by the wrong shape, and a matte is
+            // nothing but a shape.
+            self.engine
+                .linearise_through(&self.ctx, &src, self.input_transform(&m.colour_space))
+        };
+        // After-effects matte (K-142): run the matte source's own
+        // stack on its texture before it gates the consumer, so a keyed
+        // or blurred matte works. Temporal inputs stay empty in v1 — the
+        // matte source's echo/flow degrades to a still (documented). The
+        // same run export performs, so the two agree (K-031).
+        let linear = if m.fx.is_empty() {
+            linear
+        } else {
+            let luts = self.load_luts(&m.lut_files);
+            crate::fxops::run_ops(
+                self.fx,
+                &self.ctx,
+                linear,
+                m.tex_w,
+                m.tex_h,
+                &m.fx,
+                &[],
+                &[],
+                &luts,
+                &[],
+                &[],
+                &[],
+                // As above: a referenced layer's own stack walks no
+                // mask path, and carries no birth schedule, in v1.
+                &[],
+                &[],
+                // A matte's own stack is part of the layer it
+                // gates, not a row of its own.
+                None,
+                // As above: unnamed in v1 (K-421), so uncached.
+                None,
+            )
+        };
+        // A matte source's own stack cannot grow the raster
+        // either (K-542): it is placed by `m.natural_size` below,
+        // and a matte is a shape, not a picture that reaches
+        // further. Cropped back to the size it was placed at.
+        let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, m.tex_w, m.tex_h);
+        self.compositor.composite_with_camera(
+            &self.ctx,
+            width,
+            height,
+            [0.0, 0.0, 0.0, 0.0],
+            &[lumit_gpu::CompositeLayer {
+                texture: &linear,
+                size: m.natural_size,
+                position: m.position,
+                anchor: m.anchor,
+                scale: m.scale,
+                rotation_deg: m.rotation_deg,
+                opacity: m.opacity,
+                matte: None,
+                blend: lumit_gpu::Blend::Normal,
+                z: m.z,
+                rotation_x_deg: m.rotation_x_deg,
+                rotation_y_deg: m.rotation_y_deg,
+                three_d: m.three_d,
+                layer_mask: None,
+                pre: None,
+            }],
+            cam_mat,
+        )
+    }
+
     fn coverage_texture(
         &self,
         camera: Option<lumit_core::model::CameraPose>,
@@ -769,6 +865,21 @@ impl Realiser<'_> {
         let src = self.engine.upload_srgb8(&self.ctx, rgba, w, h);
         let linear = self.engine.linearise(&self.ctx, &src);
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
+        // **The adjustment layer's own Matte** (K-142). An adjustment has no
+        // picture for a matte to gate — what it has is coverage, which is
+        // exactly where the effect lands, so the matte multiplies into that.
+        // The result reads the way it does on any other layer: the stack
+        // applies where the matte says and nowhere else. `None` on every
+        // adjustment without one, which composites as it always did.
+        let matte_tex = l
+            .matte
+            .as_ref()
+            .map(|m| self.matte_texture(width, height, cam_mat, m));
+        let matte = matte_tex.as_ref().map(|mt| lumit_gpu::MatteInput {
+            texture: mt,
+            luma: l.matte.as_ref().is_some_and(|m| m.luma),
+            inverted: l.matte.as_ref().is_some_and(|m| m.inverted),
+        });
         // Rendered at the render scale: `adjust_blend` reads coverage texel by
         // texel against the below/processed rasters, so they must match.
         self.compositor.composite_seeded(
@@ -785,7 +896,7 @@ impl Realiser<'_> {
                 rotation_deg: l.rotation_deg,
                 // Layer opacity is applied once, in the blend itself.
                 opacity: 100.0,
-                matte: None,
+                matte,
                 blend: lumit_gpu::Blend::Normal,
                 z: l.z,
                 rotation_x_deg: l.rotation_x_deg,
@@ -1071,96 +1182,9 @@ impl Realiser<'_> {
         let matte_textures: Vec<Option<wgpu::Texture>> = layers
             .iter()
             .map(|l| {
-                l.matte.as_ref().map(|m| {
-                    // A Precomp matte realises its nested comp exactly as a
-                    // Precomp layer's picture does (K-268, the K-266 layer-input
-                    // shape); anything else is the uploaded source pixels.
-                    let linear = if let Some(n) = &m.nested {
-                        self.realise_nested(
-                            n.key,
-                            n.camera,
-                            n.width,
-                            n.height,
-                            n.background,
-                            &n.draws,
-                        )
-                    } else {
-                        let src = self
-                            .engine
-                            .upload_srgb8(&self.ctx, &m.rgba, m.tex_w, m.tex_h);
-                        // Through the matte source's own colour space (K-490),
-                        // as its own picture would be: log footage read as
-                        // sRGB gates by the wrong shape, and a matte is
-                        // nothing but a shape.
-                        self.engine.linearise_through(
-                            &self.ctx,
-                            &src,
-                            self.input_transform(&m.colour_space),
-                        )
-                    };
-                    // After-effects matte (K-decision): run the matte source's own
-                    // stack on its texture before it gates the consumer, so a keyed
-                    // or blurred matte works. Temporal inputs stay empty in v1 — the
-                    // matte source's echo/flow degrades to a still (documented). The
-                    // same run export performs, so the two agree (K-031).
-                    let linear = if m.fx.is_empty() {
-                        linear
-                    } else {
-                        let luts = self.load_luts(&m.lut_files);
-                        crate::fxops::run_ops(
-                            self.fx,
-                            &self.ctx,
-                            linear,
-                            m.tex_w,
-                            m.tex_h,
-                            &m.fx,
-                            &[],
-                            &[],
-                            &luts,
-                            &[],
-                            &[],
-                            &[],
-                            // As above: a referenced layer's own stack walks no
-                            // mask path, and carries no birth schedule, in v1.
-                            &[],
-                            &[],
-                            // A matte's own stack is part of the layer it
-                            // gates, not a row of its own.
-                            None,
-                            // As above: unnamed in v1 (K-421), so uncached.
-                            None,
-                        )
-                    };
-                    // A matte source's own stack cannot grow the raster
-                    // either (K-542): it is placed by `m.natural_size` below,
-                    // and a matte is a shape, not a picture that reaches
-                    // further. Cropped back to the size it was placed at.
-                    let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, m.tex_w, m.tex_h);
-                    self.compositor.composite_with_camera(
-                        &self.ctx,
-                        width,
-                        height,
-                        [0.0, 0.0, 0.0, 0.0],
-                        &[lumit_gpu::CompositeLayer {
-                            texture: &linear,
-                            size: m.natural_size,
-                            position: m.position,
-                            anchor: m.anchor,
-                            scale: m.scale,
-                            rotation_deg: m.rotation_deg,
-                            opacity: m.opacity,
-                            matte: None,
-                            blend: lumit_gpu::Blend::Normal,
-                            z: m.z,
-                            rotation_x_deg: m.rotation_x_deg,
-                            rotation_y_deg: m.rotation_y_deg,
-                            three_d: m.three_d,
-                            layer_mask: None,
-                            pre: None,
-                        }],
-                        cam_mat,
-                    )
-                })
+                l.matte
+                    .as_ref()
+                    .map(|m| self.matte_texture(width, height, cam_mat, m))
             })
             .collect();
         let comp_layers: Vec<lumit_gpu::CompositeLayer> = linear_textures

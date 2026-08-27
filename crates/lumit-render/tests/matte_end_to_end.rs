@@ -410,6 +410,78 @@ fn an_adjustment_layer_reads_a_hidden_matte() {
     }
 }
 
+/// **The Matte dropdown on an adjustment layer gates its whole stack.**
+///
+/// Not the per-effect Matte row above, but the layer's own Matte — the row in
+/// the timeline every layer carries. The draw builder used to leave it behind
+/// on the adjustment arm (the arm pushes its draw and moves on, and the matte
+/// was built after the arm), so the dropdown chose a source that gated nothing
+/// whatever: the adjustment applied to the entire frame.
+///
+/// A grey plate under an adjustment layer carrying a +1 stop Exposure, matted
+/// by a hidden white band down the left half. The exposure must reach the plate
+/// under the band and leave the rest of it exactly as it found it.
+#[test]
+fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let grey_def = Uuid::now_v7();
+    let white_def = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items
+        .push(solid(grey_def, "grey", [0.25, 0.25, 0.25, 1.0], COMP, COMP));
+    doc.items
+        .push(solid(white_def, "band", [1.0, 1.0, 1.0, 1.0], BAND, COMP));
+
+    // A layer matte is composited into comp space by its own transform rather
+    // than resampled to an effect's raster, so the band needs no precomp
+    // wrapper here (unlike trap 1 in this file's header).
+    let mut matte_layer = layer("matte source", LayerKind::Solid { def: white_def });
+    matte_layer.switches.visible = false;
+
+    let mut adjust = layer("adjustment", LayerKind::Adjustment);
+    let mut exposure = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+    for p in &mut exposure.params {
+        if p.id == "stops" {
+            p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
+        }
+    }
+    adjust.effects = vec![exposure];
+    adjust.matte = Some(MatteRef {
+        layer: matte_layer.id,
+        channel: MatteChannel::Alpha,
+        inverted: false,
+        source: lumit_core::model::LayerInputSource::default(),
+    });
+
+    let base = layer("base", LayerKind::Solid { def: grey_def });
+    let comp = comp_of("Comp", vec![matte_layer, adjust, base]);
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    let doc = Arc::new(doc);
+    let (rgba, w, _h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    assert_ne!(lifted, source, "the Exposure must actually do something");
+    for x in LIT {
+        assert_eq!(
+            px(&rgba, w, x),
+            lifted,
+            "column {x} is under the layer matte: the adjustment applies in full"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            source,
+            "column {x} is past the layer matte: the adjustment is held off"
+        );
+    }
+}
+
 /// The bound document again, with the Matte row's Invert and Channel and the
 /// Mix row's Blend set as asked — `None` for a parameter leaves it at its
 /// default, and `strip` removes the two K-425 rows altogether, which is what
