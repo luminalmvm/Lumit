@@ -283,6 +283,30 @@ void main() {
     /// it before, so an effect could not be selected here at all — and Copy,
     /// which acts on the selection, had nothing to take but the whole layer.
     /// Shift takes the run between, the way it does in every other list here.
+    /// And a click on **nothing** puts it down again (owner, desk test). The
+    /// panel's floor was inert, so a pick made here outlived the moment it was
+    /// made in and pointed the next Delete or Copy at an effect nobody was
+    /// looking at any more.
+    testWidgets('clicking an empty spot clears the pick', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p, transform: false);
+      final stack = p.layer.getEffects();
+
+      await tester.tap(heading(effectLabelOf(stack.single.name())));
+      await tester.pumpAndSettle();
+      expect(p.uiState.selectedEffects.value, [stack.single.id()]);
+
+      // The floor: below the one card, where nothing is drawn.
+      final ground = tester.getRect(find.byKey(const ValueKey('fx-ground')));
+      final card = tester.getRect(find.byKey(const ValueKey('fx-card-0')));
+      await tester.tapAt(Offset(ground.center.dx, card.bottom + 20));
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.selectedEffects.value, isEmpty,
+          reason: 'a click on nothing is a click on nothing');
+    });
+
     testWidgets('clicking an effect name picks it, and Shift takes the run',
         (tester) async {
       final p = withLayer();

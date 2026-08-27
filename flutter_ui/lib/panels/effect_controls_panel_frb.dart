@@ -592,190 +592,205 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       border: Border.all(color: t.accent),
                       color: t.accent.withValues(alpha: 0.06),
                     ),
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                children: [
-                  // Source (a text layer's words, a solid's colour) and Retime
-                  // ride with Transform behind the same choice: all three are
-                  // the *layer*, and this panel is about the effects on it.
-                  // Settings → Interface brings them back together.
-                  if (ui.workspace.interface.transformInEffectControls) ...[
-                    // What the layer is made of comes before where it sits: a
-                    // text layer's words are the first thing you want when
-                    // you select one.
-                    SourceRowsFrb(
-                      key:
-                          ValueKey<String>('src-card-${layer.internallayerId}'),
-                      layer: layer,
-                      onChanged: ui.model.refresh,
-                      open: _isOpen('source'),
-                      onToggle: () => _toggle('source'),
-                    ),
-                    // Flow sits between what the layer is made of and where it
-                    // sits, because that is what it is: how the source is
-                    // *sampled* (K-088). It shows itself only when the layer's
-                    // flow switch is on.
-                    FlowRowsFrb(
-                      key: ValueKey<String>(
-                          'flow-card-${layer.internallayerId}'),
-                      layer: layer,
-                      onChanged: ui.model.refresh,
-                      comp: comp,
-                      playheadFrame: playhead,
-                      onSeek: (frame) => ui.playheadFrame.value = frame,
-                      open: _isOpen('flow'),
-                      onToggle: () => _toggle('flow'),
-                    ),
-                    _TransformSection(
-                      key: ValueKey<String>('tf-card-${layer.internallayerId}'),
-                      layer: layer,
-                      comp: comp,
-                      transform: info.transform,
-                      axisModes: info.axisModes,
-                      // A camera is 3D by construction whatever its switch
-                      // says (K-023) — its z and rotation rows must always
-                      // draw. Decided here from the model the panel already
-                      // holds, not by asking the engine per rebuild (K-184).
-                      threeD: info.switches.threeD ||
-                          info.kind == BridgeLayerKind.camera,
-                      isCamera: info.kind == BridgeLayerKind.camera,
-                      corrected: info.trackCorrected,
-                      playheadFrame: playhead,
-                      onSeek: (frame) => ui.playheadFrame.value = frame,
-                      onChanged: ui.model.refresh,
-                      open: _isOpen('transform'),
-                      onToggle: () => _toggle('transform'),
-                    ),
-                  ],
-                  // **The letters, one at a time** (K-609), and outside the
-                  // choice above on purpose. Transform, Source and Retime move
-                  // between this panel and the Timeline's fold because they
-                  // exist in both; the Animators section has no Timeline home
-                  // yet, so hiding it with them would hide the whole feature
-                  // from anybody who has not turned the layer cards on. It
-                  // shows itself only where there is something to show: a
-                  // layer that is not a Text layer has no letters to animate.
-                  TextAnimatorRowsFrb(
-                    key: ValueKey<String>('anim-card-${layer.internallayerId}'),
-                    layer: layer,
-                    onChanged: ui.model.refresh,
-                    comp: comp,
-                    playheadFrame: playhead,
-                    onSeek: (frame) => ui.playheadFrame.value = frame,
-                    open: _isOpen('animators'),
-                    onToggle: () => _toggle('animators'),
-                  ),
-                  // A null layer has no picture, so nothing here changes one
-                  // — but the parameters are real, animatable values, which is
-                  // exactly what a null is for once expressions can read them
-                  // (K-274). Said plainly, once, rather than refusing the drop.
-                  if (info.kind == BridgeLayerKind.nullLayer &&
-                      info.effects.isNotEmpty)
-                    Padding(
-                      key: const ValueKey('fx-null-inert'),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 8),
-                      child: Text(
-                        'A null layer draws nothing, so an effect here changes '
-                        'no picture. Its parameters stay live — a null is '
-                        'where a control lives when it is meant to drive other '
-                        'layers.',
-                        style: t.small.copyWith(color: t.textMuted),
-                      ),
-                    ),
-                  if (info.effects.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      child: Text(
-                        l10n.noEffectsYet,
-                        style: t.small,
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  else
-                    for (var index = 0; index < info.effects.length; index++)
-                      _EffectSection(
-                        key: ValueKey<String>('fx-card-$index'),
-                        info: info.effects[index],
-                        open: _isOpen('fx-${info.effects[index].id}'),
-                        onToggle: () =>
-                            _toggleEffect(info.effects[index].id, picked),
-                        selected: picked.contains(info.effects[index].id),
-                        driven: _driven,
-                        renaming: _renamingEffect == info.effects[index].id,
-                        onRenamed: (name) {
-                          // Stage the name on a fresh handle and commit the
-                          // stack — one SetLayerEffects, one undo step, the
-                          // same shape every stack edit has.
-                          final stack = layer.getEffects();
-                          for (final instance in stack) {
-                            if (instance.id() == info.effects[index].id) {
-                              instance.setCustomName(name: name);
-                              try {
-                                layer.setEffects(effects: stack);
-                              } catch (_) {
-                                // The stack changed under us; re-reading is
-                                // the recovery.
-                              }
-                              break;
-                            }
-                          }
-                          setState(() => _renamingEffect = null);
-                          ui.model.refresh();
-                        },
-                        // Escape: close the editor, write nothing (K-323).
-                        onRenameCancelled: () =>
-                            setState(() => _renamingEffect = null),
-                        onStartRename: () => setState(
-                            () => _renamingEffect = info.effects[index].id),
-                        onSelect: () => ui.pickEffect(
-                          layer,
-                          info.effects[index].id,
-                          order: [for (final e in info.effects) e.id],
-                        ),
-                        stagedValue: _effects.stagedValue,
-                        trackCorrected: info.trackCorrected,
-                        index: index,
-                        count: info.effects.length,
-                        onStackChanged: ui.model.refresh,
-                        onWrite: (id, param, value) {
-                          _effects.write(layer, id, param, value);
-                          ui.model.refresh();
-                        },
-                        onWritePair: (id, values) {
-                          _effects.writeAll(layer, id, values);
-                          ui.model.refresh();
-                        },
-                        onLive: (id, param, value) => setState(() {
-                          _effects.live(comp, layer, id, param, value,
-                              frame: ui.playheadFrame.value,
-                              scale: ui.viewerScale);
-                        }),
+              // **A click on nothing clears the pick.** Every other surface
+              // in the editor works this way — the Timeline's lane ground,
+              // the Project panel's floor, the graph canvas — and an effect
+              // left lit after a click somewhere else pointed the next
+              // Delete or Copy at something nobody was looking at.
+              //
+              // Translucent, so it sits *under* everything the rows claim: a
+              // heading, a control or a row that answers the tap wins the
+              // arena and this never hears it. What is left is the empty
+              // spot.
+              child: GestureDetector(
+                key: const ValueKey('fx-ground'),
+                behavior: HitTestBehavior.translucent,
+                onTap: ui.clearEffectSelection,
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    // Source (a text layer's words, a solid's colour) and Retime
+                    // ride with Transform behind the same choice: all three are
+                    // the *layer*, and this panel is about the effects on it.
+                    // Settings → Interface brings them back together.
+                    if (ui.workspace.interface.transformInEffectControls) ...[
+                      // What the layer is made of comes before where it sits: a
+                      // text layer's words are the first thing you want when
+                      // you select one.
+                      SourceRowsFrb(
+                        key:
+                            ValueKey<String>('src-card-${layer.internallayerId}'),
                         layer: layer,
-                        allLayers: ui.model.layers,
+                        onChanged: ui.model.refresh,
+                        open: _isOpen('source'),
+                        onToggle: () => _toggle('source'),
+                      ),
+                      // Flow sits between what the layer is made of and where it
+                      // sits, because that is what it is: how the source is
+                      // *sampled* (K-088). It shows itself only when the layer's
+                      // flow switch is on.
+                      FlowRowsFrb(
+                        key: ValueKey<String>(
+                            'flow-card-${layer.internallayerId}'),
+                        layer: layer,
+                        onChanged: ui.model.refresh,
                         comp: comp,
                         playheadFrame: playhead,
                         onSeek: (frame) => ui.playheadFrame.value = frame,
-                        isGroupOpen: _isGroupOpen,
-                        onToggleGroup: _toggleGroup,
-                        pressed: _actionPressed,
-                        themedGraphs: ui.workspace.themedEffectGraphs,
-                        curvePlotSize: ui.workspace.curvePlotSize,
-                        onCurvePlotSize: ui.workspace.setCurvePlotSize,
-                        onAction: (effect, param) {
-                          try {
-                            fireEffectAction(
-                                layer: layer, effect: effect, param: param);
-                          } catch (_) {
-                            // Refused — another analysis is already running,
-                            // or the media cannot be read. The effect's own
-                            // status line says which; a thrown error here
-                            // would be a dialogue over a button press.
-                          }
-                          setState(() => _actionPressed += 1);
-                        },
+                        open: _isOpen('flow'),
+                        onToggle: () => _toggle('flow'),
                       ),
-                ],
+                      _TransformSection(
+                        key: ValueKey<String>('tf-card-${layer.internallayerId}'),
+                        layer: layer,
+                        comp: comp,
+                        transform: info.transform,
+                        axisModes: info.axisModes,
+                        // A camera is 3D by construction whatever its switch
+                        // says (K-023) — its z and rotation rows must always
+                        // draw. Decided here from the model the panel already
+                        // holds, not by asking the engine per rebuild (K-184).
+                        threeD: info.switches.threeD ||
+                            info.kind == BridgeLayerKind.camera,
+                        isCamera: info.kind == BridgeLayerKind.camera,
+                        corrected: info.trackCorrected,
+                        playheadFrame: playhead,
+                        onSeek: (frame) => ui.playheadFrame.value = frame,
+                        onChanged: ui.model.refresh,
+                        open: _isOpen('transform'),
+                        onToggle: () => _toggle('transform'),
+                      ),
+                    ],
+                    // **The letters, one at a time** (K-609), and outside the
+                    // choice above on purpose. Transform, Source and Retime move
+                    // between this panel and the Timeline's fold because they
+                    // exist in both; the Animators section has no Timeline home
+                    // yet, so hiding it with them would hide the whole feature
+                    // from anybody who has not turned the layer cards on. It
+                    // shows itself only where there is something to show: a
+                    // layer that is not a Text layer has no letters to animate.
+                    TextAnimatorRowsFrb(
+                      key: ValueKey<String>('anim-card-${layer.internallayerId}'),
+                      layer: layer,
+                      onChanged: ui.model.refresh,
+                      comp: comp,
+                      playheadFrame: playhead,
+                      onSeek: (frame) => ui.playheadFrame.value = frame,
+                      open: _isOpen('animators'),
+                      onToggle: () => _toggle('animators'),
+                    ),
+                    // A null layer has no picture, so nothing here changes one
+                    // — but the parameters are real, animatable values, which is
+                    // exactly what a null is for once expressions can read them
+                    // (K-274). Said plainly, once, rather than refusing the drop.
+                    if (info.kind == BridgeLayerKind.nullLayer &&
+                        info.effects.isNotEmpty)
+                      Padding(
+                        key: const ValueKey('fx-null-inert'),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 8),
+                        child: Text(
+                          'A null layer draws nothing, so an effect here changes '
+                          'no picture. Its parameters stay live — a null is '
+                          'where a control lives when it is meant to drive other '
+                          'layers.',
+                          style: t.small.copyWith(color: t.textMuted),
+                        ),
+                      ),
+                    if (info.effects.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: Text(
+                          l10n.noEffectsYet,
+                          style: t.small,
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      for (var index = 0; index < info.effects.length; index++)
+                        _EffectSection(
+                          key: ValueKey<String>('fx-card-$index'),
+                          info: info.effects[index],
+                          open: _isOpen('fx-${info.effects[index].id}'),
+                          onToggle: () =>
+                              _toggleEffect(info.effects[index].id, picked),
+                          selected: picked.contains(info.effects[index].id),
+                          driven: _driven,
+                          renaming: _renamingEffect == info.effects[index].id,
+                          onRenamed: (name) {
+                            // Stage the name on a fresh handle and commit the
+                            // stack — one SetLayerEffects, one undo step, the
+                            // same shape every stack edit has.
+                            final stack = layer.getEffects();
+                            for (final instance in stack) {
+                              if (instance.id() == info.effects[index].id) {
+                                instance.setCustomName(name: name);
+                                try {
+                                  layer.setEffects(effects: stack);
+                                } catch (_) {
+                                  // The stack changed under us; re-reading is
+                                  // the recovery.
+                                }
+                                break;
+                              }
+                            }
+                            setState(() => _renamingEffect = null);
+                            ui.model.refresh();
+                          },
+                          // Escape: close the editor, write nothing (K-323).
+                          onRenameCancelled: () =>
+                              setState(() => _renamingEffect = null),
+                          onStartRename: () => setState(
+                              () => _renamingEffect = info.effects[index].id),
+                          onSelect: () => ui.pickEffect(
+                            layer,
+                            info.effects[index].id,
+                            order: [for (final e in info.effects) e.id],
+                          ),
+                          stagedValue: _effects.stagedValue,
+                          trackCorrected: info.trackCorrected,
+                          index: index,
+                          count: info.effects.length,
+                          onStackChanged: ui.model.refresh,
+                          onWrite: (id, param, value) {
+                            _effects.write(layer, id, param, value);
+                            ui.model.refresh();
+                          },
+                          onWritePair: (id, values) {
+                            _effects.writeAll(layer, id, values);
+                            ui.model.refresh();
+                          },
+                          onLive: (id, param, value) => setState(() {
+                            _effects.live(comp, layer, id, param, value,
+                                frame: ui.playheadFrame.value,
+                                scale: ui.viewerScale);
+                          }),
+                          layer: layer,
+                          allLayers: ui.model.layers,
+                          comp: comp,
+                          playheadFrame: playhead,
+                          onSeek: (frame) => ui.playheadFrame.value = frame,
+                          isGroupOpen: _isGroupOpen,
+                          onToggleGroup: _toggleGroup,
+                          pressed: _actionPressed,
+                          themedGraphs: ui.workspace.themedEffectGraphs,
+                          curvePlotSize: ui.workspace.curvePlotSize,
+                          onCurvePlotSize: ui.workspace.setCurvePlotSize,
+                          onAction: (effect, param) {
+                            try {
+                              fireEffectAction(
+                                  layer: layer, effect: effect, param: param);
+                            } catch (_) {
+                              // Refused — another analysis is already running,
+                              // or the media cannot be read. The effect's own
+                              // status line says which; a thrown error here
+                              // would be a dialogue over a button press.
+                            }
+                            setState(() => _actionPressed += 1);
+                          },
+                        ),
+                  ],
+                ),
               ),
             ),
           ),
