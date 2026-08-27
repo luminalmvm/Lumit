@@ -339,11 +339,10 @@ List<BridgeKeyframe> withKeyAt(
   final merged = <double, BridgeKeyframe>{
     for (final k in keys) keyFrame(k, fps): k,
   };
-  merged[frame] = BridgeKeyframe(
-    time: timeOfSubframe(frame, fpsNum, fpsDen),
-    value: value,
-    interpIn: const BridgeSideInterp.linear(),
-    interpOut: const BridgeSideInterp.linear(),
+  merged[frame] = keyframeAmong(
+    keys,
+    timeOfSubframe(frame, fpsNum, fpsDen),
+    value,
   );
   final frames = merged.keys.toList()..sort();
   return [for (final f in frames) merged[f]!];

@@ -22,6 +22,60 @@ void main() {
   envelopeTests();
   envelopeShapeTests();
   tangentModeTests();
+
+  /// **M19 — a new keyframe takes after its neighbours.** It used to be born
+  /// linear on both sides whatever it landed between, so planting one in the
+  /// middle of a held run quietly turned that run into a ramp.
+  group('keyframeAmong', () {
+    const hold = BridgeSideInterp.hold();
+    const ease = BridgeSideInterp.bezier(
+        BridgeBezierSide(speed: 0, influence: 0.5));
+
+    test('with nothing around it, linear both sides', () {
+      final made = keyframeAmong(const [], rat(1, 1), 5);
+      expect(made.interpIn, isA<BridgeSideInterp_Linear>());
+      expect(made.interpOut, isA<BridgeSideInterp_Linear>());
+      expect(made.value, 5);
+    });
+
+    test('planted after a held key, it holds', () {
+      final keys = [key(0, 1, 0, interpOut: hold)];
+      final made = keyframeAmong(keys, rat(1, 1), 5);
+      expect(made.interpIn, isA<BridgeSideInterp_Hold>());
+      expect(made.interpOut, isA<BridgeSideInterp_Hold>(),
+          reason: 'with only a key before it, both halves take that one');
+    });
+
+    test('each half matches the side it faces', () {
+      final keys = [
+        key(0, 1, 0, interpOut: hold),
+        key(2, 1, 10, interpIn: ease),
+      ];
+      final made = keyframeAmong(keys, rat(1, 1), 5);
+      expect(made.interpIn, isA<BridgeSideInterp_Hold>(),
+          reason: 'it arrives out of a hold');
+      expect(made.interpOut, isA<BridgeSideInterp_Bezier>(),
+          reason: 'and leaves into an ease');
+    });
+
+    test('a bezier is inherited as an easy ease, not as its neighbour shape',
+        () {
+      final keys = [key(0, 1, 0, interpOut: ease)];
+      final made = keyframeAmong(keys, rat(1, 1), 5);
+      final side = made.interpOut as BridgeSideInterp_Bezier;
+      expect(side.field0.speed, 0);
+      expect(side.field0.influence, closeTo(1 / 3, 1e-12),
+          reason: 'the shape belongs to the key that stores it');
+    });
+
+    test('planted before the first key, it takes that key', () {
+      final keys = [key(2, 1, 10, interpIn: hold)];
+      final made = keyframeAmong(keys, rat(1, 1), 5);
+      expect(made.interpIn, isA<BridgeSideInterp_Hold>());
+      expect(made.interpOut, isA<BridgeSideInterp_Hold>());
+    });
+  });
+
   group('evaluateKeys', () {
     test('clamps past the ends and lerps a straight span', () {
       final keys = [key(0, 1, 10), key(1, 1, 20)];

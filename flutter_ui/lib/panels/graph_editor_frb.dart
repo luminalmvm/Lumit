@@ -821,14 +821,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         final f = t1 > t0 ? (seconds - t0) / (t1 - t0) : 0.0;
         planted = speeds[at - 1] + (speeds[at] - speeds[at - 1]) * f;
       }
-      final grown = [...keys]..insert(
-          at,
-          BridgeKeyframe(
-            time: time,
-            value: 0,
-            interpIn: const BridgeSideInterp.linear(),
-            interpOut: const BridgeSideInterp.linear(),
-          ));
+      final grown = [...keys]..insert(at, keyframeAmong(keys, time, 0));
       final withSpeed = [...speeds]..insert(at, planted);
       commitChannelEdits({
         channel: BridgeScalar.keyframed(envelopeToKeys(grown, withSpeed)),
@@ -841,12 +834,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         channel.isStatic ? channel.staticValue : evaluateKeys(keys, seconds);
     final next = [
       ...keys,
-      BridgeKeyframe(
-        time: time,
-        value: value,
-        interpIn: const BridgeSideInterp.linear(),
-        interpOut: const BridgeSideInterp.linear(),
-      ),
+      keyframeAmong(keys, time, value),
     ]..sort(
         (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
     commitChannelEdits({channel: BridgeScalar.keyframed(next)});
@@ -1639,12 +1627,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (replaced) return out;
     // The playhead genuinely sits between keys and the plant has not landed
     // yet: show the key the release will write, in order.
-    final planted = BridgeKeyframe(
-      time: timeOfSubframe(row.frame.toDouble(), widget.fpsNum, widget.fpsDen),
-      value: row.value,
-      interpIn: const BridgeSideInterp.linear(),
-      interpOut: const BridgeSideInterp.linear(),
-    );
+    final planted = keyframeAmong(out,
+        timeOfSubframe(row.frame.toDouble(), widget.fpsNum, widget.fpsDen),
+        row.value);
     final at = out.indexWhere((k) => keyFrame(k, widget.fps) > row.frame);
     if (at < 0) {
       out.add(planted);

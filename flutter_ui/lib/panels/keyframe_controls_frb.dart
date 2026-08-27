@@ -43,6 +43,7 @@ import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
+import 'graph_maths.dart' show keyframeAmong;
 
 /// The scalar with `value` written at `frame`: the key already there is
 /// updated, or a new linear key is inserted in order. This is what typing or
@@ -73,12 +74,8 @@ BridgeScalar scalarWithValueAt(
   }
   if (!replaced) {
     next
-      ..add(BridgeKeyframe(
-        time: comp.timeOfFrame(frame: frame),
-        value: value,
-        interpIn: const BridgeSideInterp.linear(),
-        interpOut: const BridgeSideInterp.linear(),
-      ))
+      ..add(keyframeAmong(
+          scalar.field0, comp.timeOfFrame(frame: frame), value))
       ..sort((a, b) => comp
           .frameAtTime(time: a.time)
           .compareTo(comp.frameAtTime(time: b.time)));
@@ -438,7 +435,8 @@ class KeyframeControlsFrb extends StatelessWidget {
       return;
     }
     onWrite([
-      for (final v in values) BridgeScalar.keyframed([_newKeyAt(frame, v)])
+      for (final v in values)
+        BridgeScalar.keyframed([_newKeyAt(const [], frame, v)])
     ]);
   }
 
@@ -468,7 +466,7 @@ class KeyframeControlsFrb extends StatelessWidget {
       }
       // Keys must stay strictly ascending in time — the engine enforces it on
       // the way in, so this inserts in order rather than appending and hoping.
-      final added = [...keys, _newKeyAt(frame, values[axis])]..sort((a, b) =>
+      final added = [...keys, _newKeyAt(keys, frame, values[axis])]..sort((a, b) =>
           comp
               .frameAtTime(time: a.time)
               .compareTo(comp.frameAtTime(time: b.time)));
@@ -477,15 +475,10 @@ class KeyframeControlsFrb extends StatelessWidget {
     onWrite(next);
   }
 
-  BridgeKeyframe _newKeyAt(int frame, double value) => BridgeKeyframe(
-        time: comp.timeOfFrame(frame: frame),
-        value: value,
-        // Linear both sides: the neutral default. Easing is the graph editor's
-        // business, and guessing a bezier here would be a shape the user did not
-        // ask for.
-        interpIn: const BridgeSideInterp.linear(),
-        interpOut: const BridgeSideInterp.linear(),
-      );
+  /// A key planted here takes after the keys it lands between (M19), so a
+  /// stopwatch pressed inside a held run does not quietly turn it linear.
+  BridgeKeyframe _newKeyAt(List<BridgeKeyframe> keys, int frame, double value) =>
+      keyframeAmong(keys, comp.timeOfFrame(frame: frame), value);
 
   /// The nearest key strictly before or after `frame`.
   BridgeKeyframe? _neighbour(int frame, {required bool before}) {

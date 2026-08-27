@@ -923,3 +923,58 @@ List<double> gridValues(double lo, double hi, double height) {
   }
   return out;
 }
+
+/// **What interpolation a brand-new keyframe is born with** (M19).
+///
+/// Not a fixed default: it takes after the keys it lands between. The half
+/// facing backwards takes the kind of the previous key's *outgoing* side, and
+/// the half facing forwards the kind of the next key's *incoming* side, so a
+/// key planted in the middle of a held run holds, one planted between two eased
+/// keys eases, and one planted between a hold and an ease does both — each side
+/// matching what it faces. With a neighbour on one side only, both halves take
+/// that one; with no neighbours at all, linear, which is what a first key has
+/// always been.
+///
+/// **The kind, not the shape.** A bezier side's speed is in value units per
+/// second and its influence is a reach in time — both belong to the key that
+/// stores them, so copying them onto a key somewhere else would be copying a
+/// curve nobody drew. A new bezier side is therefore the easy ease every fresh
+/// bezier is (speed 0, influence a third), and an Auto side is carried over as
+/// it stands, since an Auto tangent works itself out from its neighbours
+/// anyway.
+BridgeSideInterp inheritedSide(BridgeSideInterp? facing) => switch (facing) {
+      BridgeSideInterp_Hold() => const BridgeSideInterp.hold(),
+      BridgeSideInterp_Bezier() => BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: 0, influence: 1 / 3)),
+      BridgeSideInterp_Auto() => facing,
+      _ => const BridgeSideInterp.linear(),
+    };
+
+/// A new keyframe at [seconds] carrying [value], taking its interpolation from
+/// the keys around it (M19). [keys] need not be sorted; a key already at that
+/// moment is ignored, since planting on one is an edit and not an insertion.
+BridgeKeyframe keyframeAmong(
+  List<BridgeKeyframe> keys,
+  BridgeRational time,
+  double value,
+) {
+  final seconds = rationalSeconds(time);
+  BridgeKeyframe? before;
+  BridgeKeyframe? after;
+  for (final key in keys) {
+    final at = rationalSeconds(key.time);
+    if (at < seconds &&
+        (before == null || at > rationalSeconds(before.time))) {
+      before = key;
+    }
+    if (at > seconds && (after == null || at < rationalSeconds(after.time))) {
+      after = key;
+    }
+  }
+  return BridgeKeyframe(
+    time: time,
+    value: value,
+    interpIn: inheritedSide(before?.interpOut ?? after?.interpIn),
+    interpOut: inheritedSide(after?.interpIn ?? before?.interpOut),
+  );
+}
