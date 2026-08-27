@@ -18906,9 +18906,8 @@ the oracle does.
 the owner's own word after desktop testing.
 
 1. **The tab is `animated` solid** — no alpha at rest and no step under the pointer. This
-   supersedes the strength half of [K-576](#k-576--the-work-area-handles-are-thicker-quieter-and-stop-under-the-clock)
-   (`animated` at 0.6, 0.8 hovered) and the "a step stronger than its edge, another step
-   under the pointer" ladder of K-529. Everything else K-576 settled stands: 4px wide, a 1px
+   supersedes the strength half of K-576 (`animated` at 0.6, 0.8 hovered) and the "a step
+   stronger than its edge, another step under the pointer" ladder of K-529. Everything else K-576 settled stands: 4px wide, a 1px
    corner, topping out 18px down the ruler, and the ten pixels either side of an edge still
    grabbing across the ruler's whole height.
 2. **A press within a handle's reach does not move the playhead.** The ruler scrubs on

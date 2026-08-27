@@ -415,15 +415,15 @@ void main() {
             reason: 'the $end handle stands above the highlight it moves');
       }
 
-      // The tab is drawn, and it is the band's own colour a step stronger —
-      // derived, never a second hex (K-529, the owner's reference image).
+      // The tab is drawn, and it is the band's own colour **solid** —
+      // derived, never a second hex (K-529, the owner's reference image;
+      // K-613, which took the alpha off).
       final tabFinder = find.descendant(
           of: find.byKey(const ValueKey('tl-work-start')),
           matching: find.byType(DecoratedBox));
       final tab = tester.widget<DecoratedBox>(tabFinder);
       final t = LumitTheme.dark();
-      expect((tab.decoration as BoxDecoration).color,
-          workAreaHandleColour(t, hovered: false));
+      expect((tab.decoration as BoxDecoration).color, workAreaHandleColour(t));
 
       // Thicker, shorter, and still a rectangle (K-576, the owner's ruling
       // from desktop testing): the drawn tab stops under the clock's labels
@@ -443,14 +443,13 @@ void main() {
           BorderRadius.circular(workAreaHandleRadius));
       expect(workAreaHandleRadius, lessThan(workAreaHandleTabWidth / 2),
           reason: 'a corner taken off, not a pill');
-      expect(workAreaHandleColour(t, hovered: false).a,
-          greaterThan(workAreaEdgeColour(t).a),
-          reason: 'a step stronger than the band\'s edge, in the same hue');
-      expect(workAreaHandleColour(t, hovered: true).a,
-          greaterThan(workAreaHandleColour(t, hovered: false).a),
-          reason: 'and one more step under the pointer');
-      expect(workAreaHandleColour(t, hovered: false).r, t.animated.r,
-          reason: 'derived from the band\'s own colour, not a new one');
+      expect(workAreaHandleColour(t).a, 1.0,
+          reason: 'solid (K-613): a tab drawn through takes its colour from '
+              'whatever it happens to be standing over');
+      expect(workAreaHandleColour(t).a, greaterThan(workAreaEdgeColour(t).a),
+          reason: 'stronger than the band\'s edge, in the same hue');
+      expect(workAreaHandleColour(t), t.animated,
+          reason: 'the band\'s own colour, not a new one');
 
       // The cache bar is *on* the band's row, at the ruler's floor — not a
       // strip of its own beneath it (§12A.1).

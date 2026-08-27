@@ -1354,11 +1354,6 @@ class _TimelineRulerState extends State<TimelineRuler> {
     );
   }
 
-  /// Which work-area handle the pointer is over, or null. Held rather than
-  /// read from a hover intent because the two handles are one loop and each
-  /// has to know whether the answer is *it*.
-  bool? _hoveredHandleIsStart;
-
   /// Whether [x], in the ruler's own pixels, lands in either work-area
   /// handle's reach — the same [_workHandleWidth] the handles claim.
   bool _onWorkHandle(double x, ({int start, int end, bool whole}) work) {
@@ -1504,10 +1499,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   top: 0,
                   bottom: 0,
                   child: MouseRegion(
+                    // The cursor is the whole of what the pointer changes
+                    // here: the tab itself is solid and does not brighten
+                    // (K-613), so there is no hover state to hold.
                     cursor: SystemMouseCursors.resizeLeftRight,
-                    onEnter: (_) =>
-                        setState(() => _hoveredHandleIsStart = isStart),
-                    onExit: (_) => setState(() => _hoveredHandleIsStart = null),
                     child: GestureDetector(
                       key: ValueKey('tl-work-${isStart ? 'start' : 'end'}'),
                       behavior: HitTestBehavior.opaque,
@@ -1593,10 +1588,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                             width: workAreaHandleTabWidth,
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: workAreaHandleColour(t,
-                                    hovered: _hoveredHandleIsStart == isStart ||
-                                        _dragFrame != null &&
-                                            _dragIsStart == isStart),
+                                color: workAreaHandleColour(t),
                                 borderRadius:
                                     BorderRadius.circular(workAreaHandleRadius),
                               ),
@@ -2217,22 +2209,15 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
 /// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
-/// A work-area **handle**'s tab, at rest and under the pointer (K-529, the
-/// owner's reference image).
+/// A work-area **handle**'s tab (K-529, the owner's reference image; K-613).
 ///
-/// Derived from the band's own colour, never a second hex: the tab is the same
-/// hue as the highlight it moves, one step stronger than the band's edge
-/// ([workAreaEdgeColour]'s half) so it reads as a thing to grab rather than as
-/// a line to look at. Hover takes another step, which is the only thing that
-/// changes under the pointer — the shape and the width do not, so nothing
-/// jumps as the hand arrives.
-///
-/// **One step down the ladder** since the owner ran it on a real composition
-/// (2026-08-25): a wider tab carries more of its colour, and at the old
-/// strengths the pair read as two lit bars standing over the clock. The ladder
-/// is the same one, a tenth apart — edge, tab, tab under the pointer.
-Color workAreaHandleColour(LumitTheme t, {required bool hovered}) =>
-    t.animated.withValues(alpha: hovered ? 0.8 : 0.6);
+/// The band's own colour at full strength, never a second hex and never an
+/// alpha: a tab drawn through is a tab whose colour changes with whatever it
+/// happens to be standing over — the clock, a tick, the band — and the pair
+/// read as smudges rather than as the two things you take hold of. There is no
+/// hover step, because there is nowhere above solid to go; the pointer already
+/// says the handle is live by turning into the resize cursor.
+Color workAreaHandleColour(LumitTheme t) => t.animated;
 
 /// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
 /// Narrow, because it is a mark on an edge rather than a bar of its own —
