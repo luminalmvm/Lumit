@@ -1,4 +1,5 @@
 ADBE Angle Control
+ADBE Apply Color LUT2
 ADBE BEZMESH
 ADBE Black&White
 ADBE Brightness & Contrast 2
@@ -13,6 +14,7 @@ ADBE Drop Shadow
 ADBE Easy Levels2
 ADBE Echo
 ADBE Emboss
+ADBE Exposure2
 ADBE Fill
 ADBE Find Edges
 ADBE Fractal Noise
@@ -21,6 +23,7 @@ ADBE Geometry2
 ADBE Glo2
 ADBE HUE SATURATION
 ADBE IRIS_WIPE
+ADBE Invert
 ADBE Laser
 ADBE Lightning 2
 ADBE Linear Wipe
@@ -44,6 +47,7 @@ ADBE Roughen Edges
 ADBE Scribble Fill
 ADBE Set Matte3
 ADBE ShadowHighlight
+ADBE Sharpen
 ADBE Slider Control
 ADBE Spherize
 ADBE Stroke
@@ -55,6 +59,7 @@ ADBE Tint
 ADBE Tritone
 ADBE Turbulent Displace
 ADBE Twirl
+ADBE Unsharp Mask2
 ADBE Venetian Blinds
 ADBE WRPMESH
 ADBE Wave Warp

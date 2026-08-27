@@ -1379,3 +1379,274 @@ fn a_polygon_masks_perimeter_is_exact() {
     };
     assert!(close(perimeter(&open), 1000.0));
 }
+
+// ---------------------------------------------------------------------------
+// The shipped table (docs/11 §5)
+// ---------------------------------------------------------------------------
+
+/// **Every mapping the table held when it was Rust still resolves to the same
+/// Lumit effect.**
+///
+/// The list below is the sixty-two rows as they stood on the day the table moved
+/// out of `fx_colour`/`fx_distort` and into `ae-effect-map.toml`, written down
+/// once so that the move could not quietly change one of them. It is the point
+/// of the file's existence turned into an assertion: an editable table is only
+/// worth having if editing it is the *only* way a mapping changes.
+///
+/// Each row is a claim about the seam end to end rather than about the file:
+/// the match name goes through [`crate::map::map_effect`] exactly as an import
+/// does, and the Lumit effect that comes back is compared. The two deliberate
+/// placeholders are on the list too, as the effects that must NOT map.
+#[test]
+fn every_mapping_the_table_started_with_still_resolves() {
+    // (After Effects match name, the Lumit effect it becomes — or "" for the
+    // rows docs/11 §5 sends to a placeholder on purpose).
+    const ROWS: &[(&str, &str)] = &[
+        // The colour / blur / generate / temporal half.
+        ("ADBE Gaussian Blur 2", "blur"),
+        ("ADBE Motion Blur", "directional_blur"),
+        ("ADBE Radial Blur", "radial_blur"),
+        ("ADBE Glo2", "glow"),
+        ("ADBE Easy Levels2", "levels"),
+        ("ADBE HUE SATURATION", "hue_saturation"),
+        ("ADBE Brightness & Contrast 2", "brightness"),
+        ("ADBE Tint", "tint"),
+        ("ADBE Photo Filter", "photo_filter"),
+        ("ADBE Black&White", "black_and_white"),
+        ("ADBE ShadowHighlight", "shadow_highlight"),
+        ("ADBE Tritone", "tritone"),
+        ("ADBE Posterize", "posterize"),
+        ("ADBE Threshold", "threshold"),
+        ("ADBE Broadcast Colors", "broadcast_safe"),
+        ("ADBE Fill", "fill"),
+        ("ADBE Ramp", "gradient"),
+        ("ADBE Noise", "noise"),
+        ("ADBE Fractal Noise", "fractal_noise"),
+        ("ADBE Laser", "beam"),
+        ("ADBE Lightning 2", "lightning"),
+        ("APC Radio Waves", "radio_waves"),
+        ("APC Vegas", "vegas"),
+        ("VISINF Grain Implant", "add_grain"),
+        ("ADBE Scribble Fill", "scribble"),
+        ("ADBE Stroke", "stroke"),
+        ("ADBE Echo", "echo"),
+        ("ADBE Posterize Time", "posterize_time"),
+        // The distortion / stylise / transition / utility / controls half.
+        ("ADBE Geometry2", "transform"),
+        ("ADBE Set Matte3", "set_matte"),
+        ("ADBE Tile", "tile"),
+        ("ADBE Offset", "offset"),
+        ("ADBE Mirror", "mirror"),
+        ("ADBE Optics Compensation", "lens_distort"),
+        ("ADBE Turbulent Displace", "turbulent_displace"),
+        ("ADBE Corner Pin", "corner_pin"),
+        ("ADBE Displacement Map", "displacement_map"),
+        ("ADBE Polar Coordinates", "polar_coordinates"),
+        ("ADBE Twirl", "twirl"),
+        ("ADBE Spherize", "spherize"),
+        ("ADBE Ripple", "ripple"),
+        ("ADBE Wave Warp", "wave_warp"),
+        ("ADBE BEZMESH", "bezier_warp"),
+        ("ADBE WRPMESH", "warp"),
+        ("ADBE Drop Shadow", "drop_shadow"),
+        ("ADBE Roughen Edges", "roughen_edges"),
+        ("ADBE Median", "median"),
+        ("ADBE Mosaic", "mosaic"),
+        ("ADBE Find Edges", "find_edges"),
+        ("ADBE Emboss", "emboss"),
+        ("ADBE Texturize", "texturize"),
+        ("ADBE Channel Blur", "channel_blur"),
+        ("ADBE Linear Wipe", "linear_wipe"),
+        ("ADBE Radial Wipe", "radial_wipe"),
+        ("ADBE IRIS_WIPE", "iris_wipe"),
+        ("ADBE Venetian Blinds", "venetian_blinds"),
+        ("APC CardWipeCam", "card_wipe"),
+        ("ADBE Slider Control", "slider_control"),
+        ("ADBE Angle Control", "angle_control"),
+        ("ADBE Checkbox Control", "checkbox_control"),
+        ("ADBE Color Control", "colour_control"),
+        ("ADBE Point Control", "point_control"),
+        // Placeholders on purpose (docs/11 §5).
+        ("VISINF Grain Removal", ""),
+        ("ADBE Timewarp", ""),
+    ];
+
+    for (ae, lumit) in ROWS {
+        let ran = run(&effect(ae, ae, Vec::new()));
+        if lumit.is_empty() {
+            assert!(!ran.mapped, "{ae} must stay a placeholder");
+            assert_eq!(ran.inst.effect.namespace, EffectNamespace::Placeholder);
+            continue;
+        }
+        assert!(ran.mapped, "{ae} must still map");
+        assert_eq!(
+            ran.inst.effect.match_name, *lumit,
+            "{ae} used to become {lumit}"
+        );
+        assert_eq!(ran.inst.effect.namespace, EffectNamespace::Builtin);
+    }
+}
+
+/// **A match name the table does not carry is a placeholder, not a guess** —
+/// the rule the whole file degrades to, and the reason a wrong row is safe to
+/// ship.
+#[test]
+fn a_name_the_table_does_not_carry_is_a_placeholder() {
+    let ran = run(&effect("ADBE Nothing Like This", "Nothing", Vec::new()));
+    assert!(!ran.mapped);
+    assert_eq!(ran.inst.effect.namespace, EffectNamespace::Placeholder);
+}
+
+// ---------------------------------------------------------------------------
+// The five rows that arrived with the file (docs/11 §5)
+// ---------------------------------------------------------------------------
+
+/// **Invert: Blend With Original is Mix read from the other end, and a Channel
+/// Lumit has not got is reported rather than quietly obeyed.**
+#[test]
+fn invert_complements_its_blend_and_reports_a_channel_it_cannot_keep() {
+    let rgb = run(&effect(
+        "ADBE Invert",
+        "Invert",
+        vec![
+            leaf("ADBE Invert-0001", serde_json::json!(0)),
+            keyed("ADBE Invert-0002", &[(0.0, 0.0, 4.0), (2.0, 75.0, 4.0)]),
+        ],
+    ));
+    assert!(rgb.mapped);
+    assert_eq!(rgb.inst.effect.match_name, "invert");
+    // 0 % blended back is the whole effect (Mix 100); 75 % back is Mix 25.
+    let keys = rgb.keys("mix");
+    assert!(close(keys[0].value, 100.0));
+    assert!(close(keys[1].value, 25.0));
+    // The handle turns over with the value — the dial runs the other way.
+    assert!(matches!(
+        keys[0].interp_out,
+        SideInterp::Bezier { speed, .. } if close(speed, -4.0)
+    ));
+    assert!(
+        !rgb.approximated("Channel"),
+        "RGB is the channel set Lumit inverts: nothing to say"
+    );
+
+    let red = run(&effect(
+        "ADBE Invert",
+        "Invert",
+        vec![
+            leaf("ADBE Invert-0001", serde_json::json!(1)),
+            leaf("ADBE Invert-0002", serde_json::json!(0)),
+        ],
+    ));
+    assert!(
+        red.mapped,
+        "it still imports — the control is reported, not the effect dropped"
+    );
+    assert!(red.approximated("Channel"));
+}
+
+/// **Exposure: a stop is a stop, and the second grade in After Effects' panel
+/// is named rather than half-applied.**
+#[test]
+fn exposure_carries_its_stops_and_reports_the_grade_beside_them() {
+    let ran = run(&effect(
+        "ADBE Exposure2",
+        "Exposure",
+        vec![
+            leaf("ADBE Exposure2-0001", serde_json::json!(0)),
+            keyed("ADBE Exposure2-0003", &[(0.0, -1.5, 0.5), (2.0, 2.25, 0.5)]),
+            leaf("ADBE Exposure2-0004", serde_json::json!(0.1)),
+            leaf("ADBE Exposure2-0005", serde_json::json!(1.2)),
+        ],
+    ));
+    assert!(ran.mapped);
+    assert_eq!(ran.inst.effect.match_name, "exposure");
+    let keys = ran.keys("stops");
+    assert!(close(keys[0].value, -1.5));
+    assert!(close(keys[1].value, 2.25));
+    // Unchanged units, so the handle is unchanged too.
+    assert!(matches!(
+        keys[0].interp_out,
+        SideInterp::Bezier { speed, .. } if close(speed, 0.5)
+    ));
+    for param in ["Offset", "Gamma Correction", "Channels"] {
+        assert!(
+            ran.report.rows.iter().any(|r| matches!(
+                &r.reason,
+                Reason::EffectParamNotCarried { param: p, .. } if p == param
+            )),
+            "{param} has no Lumit counterpart and must be named"
+        );
+    }
+}
+
+/// **Apply Color LUT arrives as the LUT effect with its file row empty and a
+/// report row saying so.** After Effects' own scripting cannot read the chosen
+/// cube (K-410's trap); the alternative is an inert placeholder, which is worse,
+/// because then the stack would not even say a LUT belonged there.
+#[test]
+fn apply_colour_lut_becomes_the_lut_effect_and_names_the_file_it_cannot_bring() {
+    let ran = run(&effect(
+        "ADBE Apply Color LUT2",
+        "Apply Color LUT",
+        Vec::new(),
+    ));
+    assert!(ran.mapped);
+    assert_eq!(ran.inst.effect.match_name, "lut");
+    assert_eq!(ran.inst.param("input_space"), Some(&EffectValue::Choice(0)));
+    assert!(ran.report.rows.iter().any(|r| matches!(
+        &r.reason,
+        Reason::EffectParamNotCarried { param, .. } if param == "Color LUT"
+    )));
+}
+
+/// **Sharpen: a hundred of After Effects' units is Lumit's classic kernel, and
+/// the report says the dial reads differently** (docs/11 §5's
+/// undocumented-base rule).
+#[test]
+fn sharpen_converts_its_amount_onto_the_kernel_coefficient() {
+    let ran = run(&effect(
+        "ADBE Sharpen",
+        "Sharpen",
+        vec![keyed(
+            "ADBE Sharpen-0001",
+            &[(0.0, 0.0, 20.0), (2.0, 150.0, 20.0)],
+        )],
+    ));
+    assert!(ran.mapped);
+    assert_eq!(ran.inst.effect.match_name, "sharpen_simple");
+    let keys = ran.keys("amount");
+    assert!(close(keys[0].value, 0.0), "zero is zero on both sides");
+    assert!(close(keys[1].value, 1.5));
+    assert!(matches!(
+        keys[0].interp_out,
+        SideInterp::Bezier { speed, .. } if close(speed, 0.2)
+    ));
+    assert!(ran.rebased("Sharpen Amount"));
+    // The neighbourhood After Effects uses, which is Lumit's default.
+    assert!(close(ran.f("radius"), 1.0));
+}
+
+/// **Unsharp Mask: Amount and Radius one for one, Threshold rescaled and said
+/// so, and Luminance only switched off to match what After Effects did.**
+#[test]
+fn unsharp_mask_carries_its_three_controls_and_sharpens_every_channel() {
+    let ran = run(&effect(
+        "ADBE Unsharp Mask2",
+        "Unsharp Mask",
+        vec![
+            leaf("ADBE Unsharp Mask2-0001", serde_json::json!(120.0)),
+            leaf("ADBE Unsharp Mask2-0002", serde_json::json!(12.0)),
+            leaf("ADBE Unsharp Mask2-0003", serde_json::json!(51.0)),
+        ],
+    ));
+    assert!(ran.mapped);
+    assert_eq!(ran.inst.effect.match_name, "sharpen");
+    assert!(close(ran.f("amount"), 120.0));
+    assert!(close(ran.f("radius"), 12.0), "AE pixels are px@comp");
+    assert!(close(ran.f("threshold"), 51.0 / 255.0));
+    assert!(ran.approximated("Threshold"));
+    assert!(
+        !ran.flag("luminance_only"),
+        "After Effects sharpens every channel, so the import does too"
+    );
+}

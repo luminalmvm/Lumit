@@ -5298,8 +5298,8 @@ unrecognised effect becomes a **placeholder**: it keeps its name, its on/off sta
 and every one of its parameters as real Lumit properties that animate and appear in
 the graph editor, and it renders nothing. It never disappears, and it survives being
 saved and reopened, so the day Lumit learns that effect the data is still there. The
-mapping table that will recognise the effects Lumit *does* have plugs into a single
-function (`map_effect`); until it exists, everything takes the placeholder road, which
+table that recognises the effects Lumit *does* have plugs into a single function
+(`map_effect`), and everything it does not recognise takes the placeholder road, which
 is the honest answer rather than a hopeful one.
 
 Those effects come with a wrinkle in the report. After Effects' own scripting cannot
@@ -5317,6 +5317,44 @@ renderer's name, a footage item's interpretation settings, a layer's stretch
 percentage — is parked in an **`ae` namespace** on whichever object it belonged to.
 Lumit's own file format carries fields it does not understand through a save
 untouched, so that data survives indefinitely and a later version can pick it up.
+
+### The list of After Effects effects is a file, not a program (K-623)
+
+Every effect in After Effects has a second, hidden name that never changes: Gaussian
+Blur is really `ADBE Gaussian Blur 2`, and it stays that whatever the person renames it
+to in their project. Those are the names an import recognises effects by, and Lumit
+keeps the list of them in `crates/lumit-import/ae-effect-map.toml` — a plain text file
+of short blocks, one per effect, saying "when you see this After Effects name, build
+that Lumit effect".
+
+It is a file rather than a list in the program for one reason: **the names are Adobe's,
+and we get them wrong**. Of the first sixty in the list, twelve were wrong until
+somebody sat down with a real copy of After Effects and checked. A wrong name is not a
+crash or a warning — it is an effect that silently comes across as a placeholder, doing
+nothing, because nothing recognised it. Keeping the list in a file means that when the
+next one turns up, or Adobe renames something in a new version, the fix is an edited
+text file rather than a new build of Lumit. A copy of the file placed beside the Lumit
+executable is used in place of the built-in one; if that copy is missing, unreadable, or
+mistyped into something that is not valid text of the right shape, the built-in one is
+used instead, so an edit can never leave the importer with no list at all.
+
+What the file does **not** contain is the translating. Each block names a *conversion* —
+a word like `gaussian_blur` — and the conversion itself is code, in `fx_colour.rs` and
+`fx_distort.rs`. That line is drawn where it is because the two kinds of mistake fail
+differently. A wrong name loses an effect visibly and is fixed by typing. A wrong
+conversion is arithmetic — After Effects measures a twirl's radius as a percentage of
+the layer and Lumit measures every distance in pixels; After Effects has fifteen warp
+styles and Lumit has thirteen; After Effects' Spherize has one signed radius where
+Lumit has a size and a direction — and getting it slightly wrong produces a picture
+that looks plausible and is not the one the person had. Each of those has a test of its
+own comparing the two programs' actual output. Data anybody can edit into a wrong
+picture is not data worth shipping loose.
+
+The two halves cannot come apart, either. If the file names a conversion this build of
+Lumit does not have, or a Lumit effect it does not ship, that block is simply not
+believed, and the effect takes the placeholder road it would have taken anyway. An
+edited file can correct a name; it can never make the importer do something there is no
+code for.
 
 ### Agreeing with other programs about what a colour means — `crates/lumit-colour` (K-489, K-490)
 

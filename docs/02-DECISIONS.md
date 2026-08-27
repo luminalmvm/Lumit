@@ -19161,3 +19161,105 @@ Tests: in Flutter, `keymap_frb_test.dart` — with Opacity keyed and Rotation me
 `U` draws Transform and Opacity and neither Rotation nor Position, `UU` draws all of them,
 `UUU` shuts the layer, and twirling the heading by hand after a `U` brings the unkeyed rows
 back.
+
+## K-623 — The AE effect map becomes the shipped `ae-effect-map.toml` it was always specified as, and the table gains Invert, Exposure, Apply Color LUT, Sharpen and Unsharp Mask
+
+**Status: DECIDED (2026-08-27).** docs/11-AE-IMPORT.md §5 has always specified the effect
+mapping table as "a versioned data file (`ae-effect-map.toml`, shipped with the app and
+updatable independently)". What was built was sixty-two Rust match arms across
+`crates/lumit-import/src/map/fx_colour.rs` and `fx_distort.rs`. The owner's call is that
+the doc wins, and this entry records both the move and the line it stopped at, because
+the reconciliation is not "all of §5 becomes data".
+
+**What is in the file.** `crates/lumit-import/ae-effect-map.toml`, one `[[effect]]` block
+per row: `ae` (After Effects' match name — the key), `name` (After Effects' own name for
+the effect, as the import report says it), `lumit` (the Lumit effect's match name), and
+`conversion` (which conversion carries the controls across). A deliberate-placeholder row
+carries `suggest` instead of the last two, and `pending_audit` marks the ten rows whose
+property trees the 2026-08-20 sitting did not capture. `crates/lumit-import/src/map/
+table.rs` loads it once per process.
+
+**What is not, and why the line is there.** §5's "per-parameter correspondence and
+unit/range conversion" stays in Rust; the file names which conversion a row uses, and
+`fx_colour.rs`/`fx_distort.rs` hold it. The two halves fail differently, which is the
+whole argument:
+
+- A **name** is Adobe's. Twelve of the original sixty were wrong until the audit, and a
+  wrong one is silent — the effect arrives as a placeholder because nothing claimed it.
+  That is exactly the fault an editable file fixes, and the only one that needs fixing
+  faster than a release.
+- A **conversion** is arithmetic with a picture on the end of it: a change of base
+  (Twirl's radius, a per cent of the layer against px@comp), an option list that maps by
+  position and is anchored on an audited default, a control one side splits where the
+  other joins (Spherize's signed radius). Each is golden-frame tested per effect. A
+  half-right conversion is a plausible wrong picture rather than a visible gap, and data
+  that can only be edited into a wrong picture is not data worth shipping loose.
+
+The two cannot come apart: a row naming a conversion the build does not have, or a Lumit
+effect it does not ship, goes unclaimed and its effect takes the placeholder road it
+would have taken anyway. An edited file can correct a name; it can never make the
+importer do something there is no code for.
+
+**Loading and fallback** (§5 was silent; this is the simple answer). An
+`ae-effect-map.toml` beside the executable replaces the built-in copy when it is there.
+Absent, unreadable, not valid TOML, or holding no rows at all — each falls back to the
+copy compiled in with `include_str!`, so an edit leaves the importer no worse than it
+found it. An empty table counts as broken rather than as "map nothing", because a table
+with no rows turns every effect in every project into a placeholder, which is a worse
+failure than ignoring the file. Nothing is reported to the user about the fallback in
+v1: the honest surface for it is the import report, and a table loaded once per process
+does not belong to one import.
+
+**The five new rows** (all `pending_audit`: the effect list in `tools/ae-audit/
+ae-audit-report.json` confirms the match names, but their property trees were not in the
+captured set, so the parameter numbering is reconstructed; `claimed-matchnames.txt` goes
+from 65 names to 70 so the next sitting settles it):
+
+- **Invert** (`ADBE Invert` → `invert`). Blend With Original is Lumit's Mix read from the
+  other end — AE's 0 keeps the whole effect where Lumit's 100 does — so it is
+  complemented rather than copied, on the value and on every handle. AE's Channel is
+  thirteen ways of choosing what to invert; RGB is its default and the only one Lumit
+  has, so any other imports as RGB and is reported as approximated (§5's option-list rule
+  — the effect still imports, the control is what is reported).
+- **Exposure** (`ADBE Exposure2` → `exposure`). A photographic stop is a doubling of
+  light on both sides, so Exposure converts unchanged. AE's Offset, Gamma Correction, its
+  per-channel Red/Green/Blue trios and Bypass Linear Light Conversion have no counterpart
+  — Lumit's Exposure is stops and nothing else (K-106), and the working space is already
+  scene-linear — and each is reported by name rather than half-applied.
+- **Apply Color LUT** (`ADBE Apply Color LUT2` → `lut`). The same effect on both sides.
+  The cube cannot come across: AE holds the chosen file in a custom control its own
+  scripting will not read (the Curves trap, K-410), so the file row lands empty and the
+  report names it. Mapping it anyway beats a placeholder — the effect is in the stack, in
+  the right place, and the `.cube` is re-picked once, where a placeholder would not even
+  say a LUT belonged there. Input space stays Linear, which is what AE applies the table
+  in (K-543).
+- **Sharpen** (`ADBE Sharpen` → `sharpen_simple`). Both sides run `u + a·(4u −
+  neighbours)`, so the shape carries and only the dial's base differs. The base is
+  undocumented, so §5's defaults-are-the-anchor rule applies: Lumit's Amount is the
+  kernel's own coefficient, 1 being the classic 5/−1 sharpen, and a hundred of AE's units
+  is that kernel — divided by a hundred, reported as rebased, and zero is zero on both
+  sides. Lumit's Radius is a kernel stride AE has no counterpart for; it stays at 1, which
+  is AE's own 3×3 neighbourhood, so nothing is lost and nothing is reported.
+- **Unsharp Mask** (`ADBE Unsharp Mask2` → `sharpen`). Amount is a per cent of the detail
+  signal on both sides and Radius is pixels on both (px@comp, §2.3). AE measures Threshold
+  in display levels 0–255 and Lumit in linear light 0–1, so it is scaled to a fraction of
+  full scale and the difference in what it *measures* is reported — a threshold is a
+  contrast, not a colour, so there is no transfer function to put it through. Lumit's
+  **Luminance only** defaults on where AE sharpens every channel, so the import switches
+  it off: an imported effect should look like the one it came from, not like Lumit's
+  default.
+
+**One knock-on in the golden fixture.** `tools/ae-bridge/fixtures/fixture.lum-bundle`
+carries an `ADBE Invert` set to the Red channel, and it was the fixture's example of a
+match name the table did not carry. It carries one now, so the fixture proves the other
+end of the same rule instead: the effect imports and the Channel is reported as
+approximated. The golden report's counts move by one in each direction (adjusted 58 → 59,
+placeholders 2 → 1); Curves remains the placeholder that matters, since its point list is
+the one property AE's scripting cannot read at all.
+
+Tests: `map::table::tests` — the shipped file parses, every row names an effect this build
+ships, and a broken or empty override is ignored rather than obeyed.
+`map::fx_colour::tests::every_mapping_the_table_started_with_still_resolves` walks all
+sixty-two original rows through `map_effect` and asserts the Lumit effect each becomes,
+the two deliberate placeholders included — the move could not quietly change one. Five
+more tests assert the new rows parameter for parameter and the report rows each promised.

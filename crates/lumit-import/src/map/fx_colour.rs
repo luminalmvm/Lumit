@@ -49,6 +49,7 @@ use crate::capture::Property;
 use crate::report::{ItemPath, Outcome, Reason};
 
 use super::props::{display_name, find, from_node, match_name_of, ramp};
+use super::table::Row;
 use super::{srgb_to_linear, Conv};
 
 /// This half of the table's claim on a match name.
@@ -71,68 +72,70 @@ pub(super) fn claim(
     Some(mapped)
 }
 
+/// The conversion the shipped table ([`super::table`], docs/11 §5) names for
+/// this match name, if it is one of this half's.
+///
+/// Which After Effects name reaches which conversion is the table's business
+/// rather than this file's: the names are Adobe's, and a wrong one is an effect
+/// that quietly arrives as a placeholder, so they live in a file that can be
+/// corrected without a rebuild. What stays here is everything the table cannot
+/// say — the arithmetic, the option lists, the controls one side splits and the
+/// other joins. A row naming a conversion this build does not have goes
+/// unclaimed, so an edited table can never ask for code that is not here.
 #[allow(clippy::too_many_lines)]
 fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    match match_name_of(node) {
+    let row = super::table::table().row(match_name_of(node))?;
+    // A row the table deliberately sends to a placeholder, naming what does the
+    // job in Lumit instead (docs/11 §5). Curves is not one of them: its point
+    // list is the one property After Effects' own scripting cannot read
+    // (K-410), so it takes the ordinary placeholder road and the report's
+    // `PropertyUnreadable` row says why.
+    if let Some(instead) = &row.suggest {
+        suggest(conv, path, node, instead);
+        return None;
+    }
+    match row.conversion.as_str() {
         // --- Blur and sharpen -------------------------------------------
-        "ADBE Gaussian Blur 2" => gaussian_blur(conv, path, node),
-        "ADBE Motion Blur" => directional_blur(conv, path, node),
-        "ADBE Radial Blur" => radial_blur(conv, path, node),
-        "ADBE Glo2" => glow(conv, path, node),
+        "gaussian_blur" => gaussian_blur(conv, path, node, row),
+        "directional_blur" => directional_blur(conv, path, node, row),
+        "radial_blur" => radial_blur(conv, path, node, row),
+        "sharpen_simple" => sharpen_simple(conv, path, node, row),
+        "unsharp_mask" => unsharp_mask(conv, path, node, row),
+        "glow" => glow(conv, path, node, row),
 
         // --- Colour ------------------------------------------------------
-        "ADBE Easy Levels2" => levels(conv, path, node),
-        "ADBE HUE SATURATION" => hue_saturation(conv, path, node),
-        "ADBE Brightness & Contrast 2" => brightness(conv, path, node),
-        "ADBE Tint" => tint(conv, path, node),
-        "ADBE Photo Filter" => photo_filter(conv, path, node),
-        "ADBE Black&White" => black_and_white(conv, path, node),
-        "ADBE ShadowHighlight" => shadow_highlight(conv, path, node),
-        "ADBE Tritone" => tritone(conv, path, node),
-        "ADBE Posterize" => posterize(conv, path, node),
-        "ADBE Threshold" => threshold(conv, path, node),
-        "ADBE Broadcast Colors" => broadcast_safe(conv, path, node),
+        "levels" => levels(conv, path, node, row),
+        "hue_saturation" => hue_saturation(conv, path, node, row),
+        "brightness" => brightness(conv, path, node, row),
+        "tint" => tint(conv, path, node, row),
+        "photo_filter" => photo_filter(conv, path, node, row),
+        "black_and_white" => black_and_white(conv, path, node, row),
+        "shadow_highlight" => shadow_highlight(conv, path, node, row),
+        "tritone" => tritone(conv, path, node, row),
+        "posterize" => posterize(conv, path, node, row),
+        "threshold" => threshold(conv, path, node, row),
+        "broadcast_safe" => broadcast_safe(conv, path, node, row),
+        "invert" => invert(conv, path, node, row),
+        "exposure" => exposure(conv, path, node, row),
+        "apply_colour_lut" => apply_colour_lut(conv, path, node, row),
 
         // --- Generate ----------------------------------------------------
-        "ADBE Fill" => fill(conv, path, node),
-        "ADBE Ramp" => gradient(conv, path, node),
-        "ADBE Noise" => noise(conv, path, node),
-        "ADBE Fractal Noise" => fractal_noise(conv, path, node),
-        "ADBE Laser" => beam(conv, path, node),
-        "ADBE Lightning 2" => lightning(conv, path, node),
-        "APC Radio Waves" => radio_waves(conv, path, node),
-        "APC Vegas" => vegas(conv, path, node),
-        "VISINF Grain Implant" => add_grain(conv, path, node),
-        "ADBE Scribble Fill" => scribble(conv, path, node),
-        "ADBE Stroke" => stroke(conv, path, node),
+        "fill" => fill(conv, path, node, row),
+        "gradient" => gradient(conv, path, node, row),
+        "noise" => noise(conv, path, node, row),
+        "fractal_noise" => fractal_noise(conv, path, node, row),
+        "beam" => beam(conv, path, node, row),
+        "lightning" => lightning(conv, path, node, row),
+        "radio_waves" => radio_waves(conv, path, node, row),
+        "vegas" => vegas(conv, path, node, row),
+        "add_grain" => add_grain(conv, path, node, row),
+        "scribble" => scribble(conv, path, node, row),
+        "stroke" => stroke(conv, path, node, row),
 
         // --- Temporal ----------------------------------------------------
-        "ADBE Echo" => echo(conv, path, node),
-        "ADBE Posterize Time" => posterize_time(conv, path, node),
+        "echo" => echo(conv, path, node, row),
+        "posterize_time" => posterize_time(conv, path, node, row),
 
-        // --- Deliberate placeholders (docs/11 §5) ------------------------
-        //
-        // Curves is not here: its point list is the one property After Effects'
-        // own scripting cannot read (K-410), so the instance takes the ordinary
-        // placeholder road and `PropertyUnreadable` says why.
-        "VISINF Grain Removal" => {
-            suggest(
-                conv,
-                path,
-                node,
-                "removing grain is a programme of its own rather than an effect port",
-            );
-            None
-        }
-        "ADBE Timewarp" => {
-            suggest(
-                conv,
-                path,
-                node,
-                "Retime with flow frame interpolation does the same job",
-            );
-            None
-        }
         _ => None,
     }
 }
@@ -171,16 +174,16 @@ struct Fx<'a> {
 }
 
 impl<'a> Fx<'a> {
-    /// A fresh Lumit instance of `lumit`, carrying every declared default, or
-    /// `None` when this build does not ship that effect (which cannot happen
-    /// for the names in [`build`], and is a placeholder rather than a panic if
-    /// it ever does).
-    fn new(path: &ItemPath, node: &'a Property, lumit: &str, ae: &'static str) -> Option<Fx<'a>> {
-        let mut inst = lumit_core::fx::instantiate(lumit)?;
+    /// A fresh Lumit instance of the effect the table's `row` names, carrying
+    /// every declared default, or `None` when this build does not ship that
+    /// effect — which an edited `ae-effect-map.toml` can now ask for, and which
+    /// is a placeholder rather than a panic when it does (docs/14 §4).
+    fn new(path: &ItemPath, node: &'a Property, row: &'static Row) -> Option<Fx<'a>> {
+        let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
         // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
         Some(Fx {
-            ae,
+            ae: &row.name,
             node,
             here: path.property(display_name(node, match_name_of(node))),
             at: path.clone(),
@@ -500,8 +503,13 @@ fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty, bool) {
 /// both of the others are switches Lumit's Gaussian does not have: it always
 /// blurs on both axes, and its edge policy is the fixed Repeat that K-137
 /// settled on.
-fn gaussian_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "blur", "Gaussian Blur")?;
+fn gaussian_blur(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Gaussian Blur 2-0001", "radius", 1.0, 0.0);
     fx.drop_params(conv, &["Blur Dimensions", "Repeat Edge Pixels"]);
     fx.done()
@@ -514,8 +522,9 @@ fn directional_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
     node: &Property,
+    row: &'static Row,
 ) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "directional_blur", "Directional Blur")?;
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Motion Blur-0001", "angle", 1.0, 0.0);
     fx.float(conv, "ADBE Motion Blur-0002", "length", 1.0, 0.0);
     fx.done()
@@ -525,8 +534,13 @@ fn directional_blur(
 /// and the centre is a point on both sides since K-558 — AE's layer pixels are
 /// Lumit's px@comp, so the two numbers copy across — while AE's antialiasing
 /// and seed have no counterpart.
-fn radial_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "radial_blur", "Radial Blur")?;
+fn radial_blur(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Radial Blur-0001", "amount", 1.0, 0.0);
     fx.point(conv, "ADBE Radial Blur-0002", "centre_x", "centre_y", 1.0);
     // 1 Spin, 2 Zoom — AE's default of 1 is Spin, which is Lumit's 0.
@@ -537,12 +551,81 @@ fn radial_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<
     fx.done()
 }
 
+/// "Sharpen" → **Sharpen** (docs/08 §3.9, the plain 3×3 sibling K-138 split
+/// out). Both sides run the same fixed high-pass — `u + a·(4u − neighbours)` —
+/// so the shape carries and only the dial's base differs.
+///
+/// **The base is undocumented, so the defaults are the anchor** (docs/11 §5's
+/// standing rule). After Effects shows Sharpen Amount as a whole number with no
+/// published relation to a kernel; Lumit's Amount is the kernel's own
+/// coefficient, where 1 is the classic 5/−1 sharpen. A hundred of After
+/// Effects' units is that classic kernel, so the number is divided by a
+/// hundred and the report says the dial reads differently. Zero is zero on both
+/// sides, which is the one pairing that needs no anchor at all.
+///
+/// Lumit's Radius is a kernel *stride* After Effects has no counterpart for; it
+/// is left at 1, which is the 3×3 neighbourhood After Effects uses, so nothing
+/// is lost and nothing is reported.
+fn sharpen_simple(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    fx.float(conv, "ADBE Sharpen-0001", "amount", 0.01, 0.0);
+    fx.rebased(conv, "Sharpen Amount");
+    fx.done()
+}
+
+/// "Unsharp Mask" → **Unsharp mask** (docs/08 §3.9). The classic three
+/// controls, one for one: Amount is a per cent of the detail signal on both
+/// sides, and Radius is pixels on both (px@comp in Lumit, §2.3).
+///
+/// Two things are said rather than assumed. After Effects measures Threshold in
+/// display levels 0–255 and Lumit in linear light 0–1, so the number is scaled
+/// to a fraction of full scale and the difference in what it measures is
+/// reported — a threshold is a contrast, not a colour, so there is no transfer
+/// function to put it through. And Lumit's **Luminance only** defaults on where
+/// After Effects sharpens every channel, so the import switches it off: an
+/// imported Unsharp mask should look like the one it came from, not like
+/// Lumit's own default.
+fn unsharp_mask(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    fx.float(conv, "ADBE Unsharp Mask2-0001", "amount", 1.0, 0.0);
+    fx.float(conv, "ADBE Unsharp Mask2-0002", "radius", 1.0, 0.0);
+    fx.float(
+        conv,
+        "ADBE Unsharp Mask2-0003",
+        "threshold",
+        1.0 / 255.0,
+        0.0,
+    );
+    fx.approx_named(
+        conv,
+        "Threshold",
+        "a fraction of full scale, measured in linear light rather than in display levels",
+    );
+    fx.set("luminance_only", EffectValue::Bool(false));
+    fx.done()
+}
+
 /// "Glow" → **Glow** (docs/08 §3.28). Lumit's glow is exposure-aware: it is
 /// four numbers (a threshold in light, a softness, a radius and an intensity)
 /// where AE's is fourteen, most of them describing a colour ramp applied to
 /// the halo. Threshold, Radius and Intensity carry; the rest is reported.
-fn glow(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "glow", "Glow")?;
+fn glow(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // AE's Glow Threshold is an eight-bit display value (its 60% default
     // arrives as 153); Lumit's is scene-linear light.
     if let Some(leaf) = fx.leaf("ADBE Glo2-0002") {
@@ -597,8 +680,13 @@ fn channel_group(v: i64) -> Option<&'static str> {
 /// "Levels" → **Levels** (docs/08 §3.31). The scripting DOM exposes one set of
 /// five numbers plus the Channel picker that says which channel they belong
 /// to, so the import writes that channel's group and leaves the others neutral.
-fn levels(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "levels", "Levels")?;
+fn levels(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     let channel = fx.still("ADBE Easy Levels2-0001").unwrap_or(1.0).round() as i64;
     let Some(g) = channel_group(channel) else {
         fx.approx_named(
@@ -631,8 +719,13 @@ fn levels(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
 /// they belong to. A colourised instance is the one case that takes the
 /// placeholder road, because Colorize discards the source hue and no Lumit
 /// control does that.
-fn hue_saturation(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "hue_saturation", "Hue/Saturation")?;
+fn hue_saturation(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     if fx.still("ADBE HUE SATURATION-0007").unwrap_or(0.0).abs() > f64::EPSILON {
         conv.report.row(
             fx.here.clone(),
@@ -687,8 +780,13 @@ fn hue_saturation(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opti
 /// "Brightness & Contrast" → **Brightness** (docs/08 §3.32, K-397). One effect
 /// carrying both sliders under AE's names and AE's neutral point, so both
 /// numbers cross unchanged.
-fn brightness(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "brightness", "Brightness & Contrast")?;
+fn brightness(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(
         conv,
         "ADBE Brightness & Contrast 2-0001",
@@ -709,8 +807,13 @@ fn brightness(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<E
 
 /// "Tint" → **Tint** (docs/08 §3.23). Both colours and the amount carry; AE's
 /// Amount to Tint is a per cent and so is Lumit's Mix.
-fn tint(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "tint", "Tint")?;
+fn tint(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.colour(conv, "ADBE Tint-0001", "black");
     fx.colour(conv, "ADBE Tint-0002", "white");
     fx.float(conv, "ADBE Tint-0003", "mix", 1.0, 0.0);
@@ -721,8 +824,13 @@ fn tint(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectI
 /// counterpart under the same name; the twenty named filters are Lumit's own
 /// chromaticities, Adobe's not being published, so it is a look-for-look
 /// conversion.
-fn photo_filter(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "photo_filter", "Photo Filter")?;
+fn photo_filter(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // Twenty-one entries on both sides, in Adobe's order, ending on Custom;
     // AE's list is 1-based and Lumit's is 0-based.
     fx.choice(conv, "ADBE Photo Filter-0001", "filter", |v| {
@@ -745,8 +853,9 @@ fn black_and_white(
     conv: &mut Conv<'_>,
     path: &ItemPath,
     node: &Property,
+    row: &'static Row,
 ) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "black_and_white", "Black & White")?;
+    let mut fx = Fx::new(path, node, row)?;
     for (i, lumit) in ["reds", "yellows", "greens", "cyans", "blues", "magentas"]
         .into_iter()
         .enumerate()
@@ -777,8 +886,9 @@ fn shadow_highlight(
     conv: &mut Conv<'_>,
     path: &ItemPath,
     node: &Property,
+    row: &'static Row,
 ) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "shadow_highlight", "Shadow/Highlight")?;
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE ShadowHighlight-0002", "shadow_amount", 1.0, 0.0);
     fx.float(
         conv,
@@ -849,8 +959,13 @@ fn shadow_highlight(
 /// "Tritone" → **Tritone** (docs/08 §3.60). The three stops and the blend
 /// carry; the stops are placed perceptually and a highlight above white is
 /// scaled rather than clamped.
-fn tritone(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "tritone", "Tritone")?;
+fn tritone(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.colour(conv, "ADBE Tritone-0001", "highlights");
     fx.colour(conv, "ADBE Tritone-0002", "midtones");
     fx.colour(conv, "ADBE Tritone-0003", "shadows");
@@ -866,8 +981,13 @@ fn tritone(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effe
 /// "Posterize" → **Posterize** (docs/08 §3.58). One number, unchanged; the
 /// bands land in the same places rather than at the same numbers, because
 /// Lumit quantises a perceptual position in scene-linear light.
-fn posterize(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "posterize", "Posterize")?;
+fn posterize(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Posterize-0001", "levels", 1.0, 0.0);
     fx.differs(
         conv,
@@ -879,8 +999,13 @@ fn posterize(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Ef
 
 /// "Threshold" → **Threshold** (docs/08 §3.59). AE's Level is an eight-bit
 /// display value and Lumit's is a per cent of the same perceptual placement.
-fn threshold(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "threshold", "Threshold")?;
+fn threshold(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Threshold-0001", "level", 100.0 / 255.0, 0.0);
     fx.rebased(conv, "Level");
     fx.done()
@@ -890,8 +1015,13 @@ fn threshold(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Ef
 /// a counterpart in the same units; the signal is encoded with the square root
 /// both render paths already agree about, which is under two IRE from the real
 /// transfer function.
-fn broadcast_safe(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "broadcast_safe", "Broadcast Colors")?;
+fn broadcast_safe(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // 1 NTSC, 2 PAL — AE's default of 1 is NTSC, which is Lumit's 0.
     fx.choice(conv, "ADBE Broadcast Colors-0001", "standard", |v| {
         (u32::from(v == 2), None)
@@ -916,6 +1046,89 @@ fn broadcast_safe(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opti
     fx.done()
 }
 
+/// "Invert" → **Invert** (docs/08 §3.22). Lumit's Invert is `1 − c` on RGB and
+/// nothing else, so one of After Effects' two controls carries and the other
+/// is a list Lumit does not have.
+///
+/// Blend With Original is the same dial as Lumit's Mix read from the other end
+/// — After Effects' 0 keeps all of the effect where Lumit's Mix of 100 does —
+/// so it is complemented rather than copied. Channel is After Effects' thirteen
+/// ways of choosing what to invert (RGB, one channel, one axis of HLS or YIQ);
+/// its default is RGB, which is the only one Lumit has, so a project that left
+/// it alone imports whole and one that did not is reported rather than
+/// approximated into a different picture.
+fn invert(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    fx.float(conv, "ADBE Invert-0002", "mix", -1.0, 100.0);
+    if fx.still("ADBE Invert-0001").unwrap_or(0.0).round() as i64 != 0 {
+        fx.approx_named(conv, "Channel", "RGB, the channels Lumit's Invert works on");
+    }
+    fx.done()
+}
+
+/// "Exposure" → **Exposure** (docs/08 §3.13). The one control both sides mean
+/// the same way carries exactly: a photographic stop is a doubling of light in
+/// After Effects and in Lumit, so the number crosses unchanged and an animated
+/// exposure ramp arrives ramping the same way.
+///
+/// Everything else about After Effects' Exposure is a second grade wearing the
+/// same panel — an Offset added after the gain, a Gamma Correction, and the
+/// whole of it again per channel behind a Channels dropdown. Lumit's Exposure
+/// is stops and nothing else on purpose (K-106: the single photographic lever,
+/// with Colour balance and Gamma beside it for the rest), so each of those is
+/// reported by name and left for the grade that actually does it. Bypass Linear
+/// Light Conversion goes the same way: Lumit's working space *is* scene-linear
+/// (docs/01 §6), so there is nothing to bypass.
+fn exposure(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    fx.float(conv, "ADBE Exposure2-0003", "stops", 1.0, 0.0);
+    fx.drop_params(
+        conv,
+        &[
+            "Channels",
+            "Offset",
+            "Gamma Correction",
+            "Red",
+            "Green",
+            "Blue",
+            "Bypass Linear Light Conversion",
+        ],
+    );
+    fx.done()
+}
+
+/// "Apply Color LUT" → **LUT** (docs/08 §3.11). The same effect on both sides —
+/// a `.cube` table applied per pixel — and the row exists so it arrives as one
+/// rather than as an inert placeholder.
+///
+/// **The cube itself cannot come across.** After Effects holds the chosen file
+/// in a custom control its own scripting does not read (the trap Curves falls
+/// into, K-410), so the file row lands empty and the report names it: the
+/// effect is in the stack, in the right place, with the right neighbours, and
+/// the `.cube` is re-picked once. Input space is left at Linear, which is what
+/// After Effects applies the table in and what this effect did before the row
+/// existed (K-543).
+fn apply_colour_lut(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    fx.drop_param(conv, "Color LUT");
+    fx.done()
+}
+
 // ---------------------------------------------------------------------------
 // Generate
 // ---------------------------------------------------------------------------
@@ -923,8 +1136,13 @@ fn broadcast_safe(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Opti
 /// "Fill" → **Fill** (docs/08 §3.34). Exact for a whole-alpha fill; a
 /// mask-targeted one, with its Invert and the two Feather controls, is
 /// reported rather than approximated.
-fn fill(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "fill", "Fill")?;
+fn fill(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.colour(conv, "ADBE Fill-0002", "colour");
     fx.float(conv, "ADBE Fill-0005", "mix", 100.0, 0.0);
     let targeted = fx.still("ADBE Fill-0001").unwrap_or(0.0) > 0.5
@@ -944,8 +1162,13 @@ fn fill(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectI
 /// colours, Ramp Scatter and Blend With Original all have counterparts; the
 /// ramp interpolates in scene-linear light, so its midpoint sits where the
 /// light says.
-fn gradient(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "gradient", "Gradient Ramp")?;
+fn gradient(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.point(conv, "ADBE Ramp-0001", "start_x", "start_y", 1.0);
     fx.colour(conv, "ADBE Ramp-0002", "start_colour");
     fx.point(conv, "ADBE Ramp-0003", "end_x", "end_y", 1.0);
@@ -966,8 +1189,13 @@ fn gradient(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Eff
 
 /// "Noise" → **Noise** (docs/08 §3.36). Amount and colour noise map directly;
 /// AE's "Clip result values" has no counterpart, scene-linear having headroom.
-fn noise(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "noise", "Noise")?;
+fn noise(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Noise-0001", "amount", 1.0, 0.0);
     fx.toggle("ADBE Noise-0002", "colour_noise");
     fx.differs(
@@ -989,8 +1217,13 @@ const AE_FRACTAL_SCALE_BASE: f64 = 2.0;
 /// the transform, the sub settings and the evolution cycle convert directly;
 /// Scale converts through AE's own base, and AE's dozen fractal types and four
 /// noise types collapse onto the two apiece Lumit ships.
-fn fractal_noise(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "fractal_noise", "Fractal Noise")?;
+fn fractal_noise(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // 1 is Basic on both sides; every other fold is the turbulent sum.
     fx.choice(conv, "ADBE Fractal Noise-0001", "fractal_type", |v| {
         if v == 1 {
@@ -1054,8 +1287,13 @@ fn fractal_noise(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Optio
 /// px@comp (K-558), so it is multiplied by the run the points just converted
 /// describe — read at time zero, since a keyframed pair means AE's fraction
 /// stood for a distance that moved and no single pixel number is all of them.
-fn beam(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "beam", "Beam")?;
+fn beam(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.point(conv, "ADBE Laser-0001", "start_x", "start_y", 1.0);
     fx.point(conv, "ADBE Laser-0002", "end_x", "end_y", 1.0);
     let at_zero = |fx: &Fx<'_>, id: &str| match fx.inst.param(id) {
@@ -1091,8 +1329,13 @@ const AE_LIGHTNING_TURBULENCE_BASE: f64 = 12.0;
 /// conductivity state, forking, decay and the two colour groups convert; four
 /// of AE's eight types are built and the other four map to the nearest; the
 /// bolt's own shape is Lumit's, AE's displacement being undocumented.
-fn lightning(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "lightning", "Advanced Lightning")?;
+fn lightning(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // 1 Direction, 2 Strike, 3 Breaking, 4 Bouncey, 5 Omni, 6 Anywhere,
     // 7 Vertical, 8 Two-Way Strike. AE's default of 1 is Direction, Lumit's 0.
     fx.choice(
@@ -1160,8 +1403,13 @@ fn lightning(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Ef
 /// wave motion and the stroke convert; AE's clock becomes Lumit's Time
 /// control, its start and end widths become one width, and only the Polygon
 /// wave type is built.
-fn radio_waves(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "radio_waves", "Radio Waves")?;
+fn radio_waves(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.point(conv, "APC Radio Waves-0004", "centre_x", "centre_y", 1.0);
 
     // §2.4 forbids an effect that reads the clock, so the clock becomes two
@@ -1256,8 +1504,13 @@ fn radio_waves(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<
 /// and the segments convert; AE's count of segments becomes a length, exactly
 /// on the Mask/Path half where the perimeter can be measured and approximately
 /// on the Image Contours half where it cannot.
-fn vegas(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "vegas", "Vegas")?;
+fn vegas(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // 1 Image Contours, 2 Mask/Path.
     let mask_half = fx.still("APC Vegas-0052").unwrap_or(1.0).round() as i64 == 2;
     let perimeter = fx.mask(conv, "APC Vegas-0050", "path");
@@ -1338,8 +1591,13 @@ fn vegas(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
 /// colour balances and the tonal amounts convert; AE's Animation Speed becomes
 /// Lumit's Animate switch, its movable tonal boundaries become three fixed
 /// ones, and the grain field itself is Lumit's own.
-fn add_grain(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "add_grain", "Add Grain")?;
+fn add_grain(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     // AE states these as multipliers about 1.0 and Lumit as per cents, which
     // its own neutral 100 for the channel balances and the tonal amounts pins.
     fx.float(conv, "VISINF Grain Implant-0008", "intensity", 100.0, 0.0);
@@ -1395,8 +1653,13 @@ fn add_grain(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Ef
 /// "Scribble" → **Scribble** (docs/08 §3.78), the first import to carry a mask
 /// reference across (K-408). The mask, the stroke and the wiggle convert; the
 /// edge options, the variations and the multi-mask fill types are reported.
-fn scribble(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "scribble", "Scribble")?;
+fn scribble(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.mask(conv, "ADBE Scribble Fill-0002", "path");
     fx.colour(conv, "ADBE Scribble Fill-0006", "colour");
     fx.float(conv, "ADBE Scribble Fill-0010", "angle", 1.0, 0.0);
@@ -1454,8 +1717,13 @@ fn scribble(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Eff
 /// "Stroke" → **Stroke** (docs/08 §3.79). Every control has a counterpart and
 /// Paint Style maps option for option; AE's Brush Size is a radius where
 /// Lumit's Brush size is a width, so it doubles.
-fn stroke(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "stroke", "Stroke")?;
+fn stroke(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.mask(conv, "ADBE Stroke-0001", "path");
     fx.colour(conv, "ADBE Stroke-0002", "colour");
     fx.float(conv, "ADBE Stroke-0003", "brush_size", 2.0, 0.0);
@@ -1489,8 +1757,13 @@ fn stroke(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effec
 /// carry; Lumit's echoes are one frame apart by declaration (its temporal
 /// window is the previous sixteen frames), so AE's Echo Time is reported
 /// unless it already names a single frame back.
-fn echo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "echo", "Echo")?;
+fn echo(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Echo-0002", "echoes", 1.0, 0.0);
     fx.float(conv, "ADBE Echo-0004", "decay", 1.0, 0.0);
     // 1 Add, 2 Maximum, 3 Minimum, 4 Screen, 5 Composite in Back,
@@ -1523,8 +1796,13 @@ fn echo(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectI
 /// "Posterize Time" → **Posterize time** (docs/08 §3.26). One number, and it
 /// means the same thing; Lumit adds a Phase AE does not have, which defaults
 /// to zero and so changes nothing on import.
-fn posterize_time(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
-    let mut fx = Fx::new(path, node, "posterize_time", "Posterize Time")?;
+fn posterize_time(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Posterize Time-0001", "rate", 1.0, 0.0);
     fx.done()
 }

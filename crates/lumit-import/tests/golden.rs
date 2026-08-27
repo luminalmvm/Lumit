@@ -1108,18 +1108,22 @@ fn the_transform_shadow_and_the_two_mask_reading_effects_convert() {
 // The report
 // ---------------------------------------------------------------------------
 
-/// **The report's counts, and the two placeholders the fixture is built to
+/// **The report's counts, and the placeholder the fixture is built to
 /// produce.**
 ///
 /// Curves is the effect After Effects' own scripting cannot read: its point
 /// list is `CUSTOM_VALUE` data (K-410), so the instance keeps its slot as a
 /// placeholder *and* the property is named as unreadable — the pair, not one
-/// or the other, is what stops a Curves shipping with no curve. `ADBE Invert`
-/// is the other half of the fixture's placeholder story: a match name Lumit
-/// does not ship, which becomes an inert node holding every parameter and
-/// never the closest guess (docs/11 §6).
+/// or the other, is what stops a Curves shipping with no curve.
+///
+/// The fixture's `ADBE Invert` used to be the second half of that story, as a
+/// match name the table did not carry. It carries one now, and the other end of
+/// the same rule is what the fixture proves instead: its Channel is Red, one of
+/// the twelve After Effects has and Lumit does not, so the effect imports and
+/// the *control* is reported as approximated rather than the picture quietly
+/// changing (docs/11 §5).
 #[test]
-fn the_report_counts_what_it_says_and_names_both_placeholders() {
+fn the_report_counts_what_it_says_and_names_its_placeholder() {
     let report = report();
 
     assert_eq!(
@@ -1128,8 +1132,10 @@ fn the_report_counts_what_it_says_and_names_both_placeholders() {
             imported: 62,
             // One fewer Adjusted row since K-497: the guide flag is a switch
             // Lumit has now, so it crosses over instead of being reported.
-            adjusted: 58,
-            placeholders: 2,
+            // One more since Invert joined the table: the fixture's Channel is
+            // Red, which is a row rather than a placeholder now.
+            adjusted: 59,
+            placeholders: 1,
             skipped: 1,
         }
     );
@@ -1148,21 +1154,24 @@ fn the_report_counts_what_it_says_and_names_both_placeholders() {
         Reason::PropertyUnreadable { match_name } if match_name == "ADBE CurvesCustom-0001"
     )));
 
-    let invert = effect(host, "ADBE Invert");
-    assert_eq!(invert.effect.namespace, EffectNamespace::Placeholder);
-    assert_eq!(invert.custom_name.as_deref(), Some("Invert"));
-    // Its parameters are real Lumit properties, not a dump.
-    assert!(matches!(
-        invert.param("ADBE Invert-0001"),
-        Some(EffectValue::Float(_))
-    ));
+    // Invert maps, and the one control Lumit has no counterpart for is a row.
+    let invert = effect(host, "invert");
+    assert_eq!(invert.effect.namespace, EffectNamespace::Builtin);
+    // Blend With Original 0 is the whole effect, which is a Mix of 100.
+    assert_eq!(
+        invert.param("mix"),
+        Some(&EffectValue::Float(lumit_core::anim::Property::fixed(
+            100.0
+        )))
+    );
     assert!(reported(|r| matches!(
         r,
-        Reason::EffectPlaceholder { match_name } if match_name == "ADBE Invert"
+        Reason::EffectParamApproximated { effect, param, .. }
+            if effect == "Invert" && param == "Channel"
     )));
 
-    // Exactly those two, and exactly one unreadable property.
-    assert_eq!(report.of(Outcome::Placeholder).len(), 2);
+    // Exactly that one, and exactly one unreadable property.
+    assert_eq!(report.of(Outcome::Placeholder).len(), 1);
     assert_eq!(report.of(Outcome::Skipped).len(), 1);
 
     // Every row reads as a sentence naming where it happened.

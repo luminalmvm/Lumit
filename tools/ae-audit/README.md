@@ -16,7 +16,7 @@ satisfied for the whole effect table.
 ## What it records
 
 - Every effect the installation ships: match name, display name, category.
-- For each of the 65 match names Lumit's import table claims
+- For each of the 70 match names Lumit's import table claims
   (`claimed-matchnames.txt`): found / missing, the display name AE gives it, and its
   full property tree — each property's match name, name, value type and default.
   A missing name gets a best-guess suspect so a rename is one look to confirm.

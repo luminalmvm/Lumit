@@ -310,10 +310,34 @@ mapped effects — which describes the overwhelming majority of montage projects
 
 ## 5. The effect mapping table
 
-Lumit maintains a versioned data file (`ae-effect-map.toml`, shipped with the app and
-updatable independently) mapping AE effect **match names** to Lumit built-in effects
-([08-EFFECTS.md](08-EFFECTS.md)) with per-parameter correspondence and unit/range
-conversion. Seeded with the montage staples:
+Lumit maintains a versioned data file (`crates/lumit-import/ae-effect-map.toml`, shipped
+with the app and updatable independently) mapping AE effect **match names** to Lumit
+built-in effects ([08-EFFECTS.md](08-EFFECTS.md)). One row per effect: AE's match name,
+AE's own name for it as the report says it, the Lumit effect it becomes, and which
+**conversion** carries its controls across. A match name with no row takes the
+placeholder road (§6).
+
+**The per-parameter correspondence and the unit conversion are code, not rows** (K-623).
+The file names which conversion a row uses; `crates/lumit-import/src/map/fx_colour.rs`
+and `fx_distort.rs` hold it. That division is the reconciliation of this section with
+what was actually built, and it is drawn where it is because the two halves fail
+differently: a *name* is Adobe's and we get it wrong — twelve of the original sixty
+were, until the audit below — and a wrong name is an effect that silently arrives as a
+placeholder, exactly the fault a file anyone can open and correct is worth having. A
+*conversion* is a change of base, an option list that maps by position, and a control
+one side splits where the other joins; it is golden-frame tested per effect, and a
+half-right one is a silently wrong picture rather than a visible gap. Data that can only
+be edited into a wrong picture is not data worth shipping loose.
+
+**Loading**, once per process: an `ae-effect-map.toml` beside the executable is used in
+its place if it is there; anything wrong with it — absent, unreadable, not valid TOML,
+or holding no rows at all — falls back to the copy built into the application, so an
+edited file can leave the importer no worse than it found it. A row naming a conversion
+this build does not have, or a Lumit effect it does not ship, goes unclaimed and its
+effect becomes a placeholder — an edited table can never make the importer do something
+it has no code for.
+
+Seeded with the montage staples:
 
 | AE effect (match name) | Lumit effect |
 |---|---|
@@ -382,6 +406,11 @@ conversion. Seeded with the montage staples:
 | "Checkbox Control" (`ADBE Checkbox Control`) | **Checkbox control** (built, docs/08 §3.82) — **pending audit**: direct. AE stores a checkbox as a number, which is the switch |
 | "Color Control" (`ADBE Color Control`) | **Colour control** (built, docs/08 §3.83) — **pending audit**: direct, the swatch crossing from the project’s display space into scene-linear light like every other imported colour (§3) |
 | "Point Control" (`ADBE Point Control`) | **Point control** (built, docs/08 §3.84) — **pending audit**: direct, AE’s raster pixels read as px@comp (§2.3), onto Lumit’s adjacent `_x`/`_y` pair |
+| "Invert" (`ADBE Invert`) | **Invert** (built, docs/08 §3.22) — **pending audit** (K-623): mapped. Blend With Original is Lumit’s Mix read from the other end — AE’s 0 keeps the whole effect where Lumit’s 100 does — so it is complemented rather than copied, on the value and on every handle. AE’s Channel is thirteen ways of choosing what to invert (RGB, one channel, one axis of HLS or YIQ); RGB is its default and the only one Lumit has, so any other imports as RGB and is reported as approximated |
+| "Exposure" (`ADBE Exposure2`) | **Exposure** (built, docs/08 §3.13) — **pending audit**: mapped on the one control both sides mean the same way. A photographic stop is a doubling of light in AE and in Lumit, so Exposure converts unchanged, keyframes and handles with it. AE’s Offset, Gamma Correction, the per-channel Red/Green/Blue trios behind its Channels dropdown, and Bypass Linear Light Conversion have no counterpart — Lumit’s Exposure is stops and nothing else (K-106), and its working space is already scene-linear — and each is reported by name |
+| "Apply Color LUT" (`ADBE Apply Color LUT2`) | **LUT** (built, docs/08 §3.11) — **pending audit**: the same effect on both sides, and the row exists so it arrives as one rather than as an inert placeholder. **The cube itself cannot come across**: AE holds the chosen file in a custom control its own scripting does not read (the Curves trap, K-410), so the file row lands empty and the report names it — the effect is in the stack, in the right place, and the `.cube` is re-picked once. Input space stays Linear, which is what AE applies the table in (K-543) |
+| "Sharpen" (`ADBE Sharpen`) | **Sharpen** (built, docs/08 §3.9, the plain 3×3 sibling of the Unsharp mask) — **pending audit**: mapped. Both sides run `u + a·(4u − neighbours)`, so the shape carries and only the dial’s base differs. **The base is undocumented, so the defaults are the anchor**: Lumit’s Amount is the kernel’s own coefficient, where 1 is the classic 5/−1 sharpen, and a hundred of AE’s units is that kernel — the number is divided by a hundred and the rebase is reported. Zero is zero on both sides. Lumit’s Radius is a kernel stride AE has no counterpart for and stays at 1, which is AE’s own 3×3 neighbourhood, so nothing is lost and nothing is reported |
+| "Unsharp Mask" (`ADBE Unsharp Mask2`) | **Unsharp mask** (built, docs/08 §3.9) — **pending audit**: direct on two of three. Amount is a per cent of the detail signal on both sides and Radius is pixels on both (px@comp in Lumit, §2.3). AE measures Threshold in display levels 0–255 and Lumit in linear light 0–1, so it is scaled to a fraction of full scale and the difference in what it *measures* is reported — a threshold is a contrast, not a colour, so there is no transfer function to put it through. Lumit’s **Luminance only** defaults on where AE sharpens every channel, so the import switches it off: an imported Unsharp mask should look like the one it came from, not like Lumit’s default |
 
 Match names in this table were **verified against a live After Effects 26.0**
 (2026-08-20, `tools/ae-audit/` — the report is the evidence): 48 of the original 60
@@ -396,12 +425,15 @@ MUST have a golden-frame test: the AE-rendered frame and the Lumit-rendered fram
 reference comp compared within a stated tolerance. Unmapped match names fall through to
 placeholders — never to the closest guess.
 
-**The five Controls rows are marked pending** (K-414): their match names are the famous
-ones but were not in that sitting’s audited set, so they enter the table pending and
-`tools/ae-audit/claimed-matchnames.txt` gained them (60 names to 65) so the next sitting
-confirms them. A pending row is safe to ship for §6’s reason: a match name this table
-has wrong is a name nothing claims, and an unclaimed name becomes a placeholder with
-every parameter kept, never a guess.
+**Ten rows are marked `pending_audit`** — the five Controls (K-414) and the five added
+with the file itself (Invert, Exposure, Apply Color LUT, Sharpen, Unsharp Mask, K-623).
+Their match names are the famous ones and the effect list in the audit report confirms
+them, but their *property trees* were not in that sitting’s captured set, so the
+parameter numbering below is reconstructed rather than read off a live After Effects.
+`tools/ae-audit/claimed-matchnames.txt` carries all ten (60 names to 70) so the next
+sitting confirms them. A pending row is safe to ship for §6’s reason: a match name this
+table has wrong is a name nothing claims, and an unclaimed name becomes a placeholder
+with every parameter kept, never a guess.
 
 Two rules run through every row above and are stated once here rather than in each:
 

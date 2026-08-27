@@ -40,67 +40,62 @@ use crate::report::{ItemPath, Outcome, Reason};
 use super::props::{self, ae_map, axis_of, display_name, from_node, match_name_of};
 use super::{srgb_to_linear, Conv};
 
-/// One row of the table: the Lumit effect, and how its controls are filled.
+/// One conversion: how a Lumit effect's controls are filled from an After
+/// Effects instance.
 type Build = for<'a, 'b, 'c> fn(&'a mut Fx<'b, 'c>);
 
-/// docs/11 §5's rows, keyed by After Effects match name.
+/// This half's conversions, keyed by the name `ae-effect-map.toml` calls them.
 ///
-/// Match names are the audit's (`tools/ae-audit/ae-audit-report.json`,
-/// 2026-08-20 against a live After Effects 26.0), never memory: the Atomic
-/// Power effects carry `APC`, Warp is `ADBE WRPMESH`, Iris Wipe is
-/// `ADBE IRIS_WIPE`.
-///
-/// **The five Controls rows are the exception, and are marked PENDING AUDIT**
-/// (K-414): their match names are the famous ones but they are not in the
-/// audited set, because the family landed after that sitting.
-/// `tools/ae-audit/claimed-matchnames.txt` carries them so the next sitting
-/// checks them. Nothing else rests on it: a match name this table has wrong is
-/// a name nothing claims, and an unclaimed name takes the placeholder road with
-/// every parameter kept (docs/11 §5, §6) — which is the failure the whole table
-/// degrades to and the reason a pending row may ship.
-fn row(ae: &str) -> Option<(&'static str, Build)> {
-    Some(match ae {
+/// Which After Effects match name reaches which of these is the shipped table's
+/// business ([`super::table`], docs/11 §5) rather than this file's — the names
+/// are Adobe's and we get them wrong, so they live in a file that can be
+/// corrected without a rebuild. What stays here is the arithmetic: a change of
+/// base, an option list that maps by position, a control After Effects splits
+/// where Lumit joins. A row naming a conversion this build does not have simply
+/// goes unclaimed, so an edited table can never ask for code that is not here.
+fn conversion(key: &str) -> Option<Build> {
+    Some(match key {
         // --- Utility ---
-        "ADBE Geometry2" => ("transform", transform as Build),
-        "ADBE Set Matte3" => ("set_matte", set_matte),
+        "transform" => transform as Build,
+        "set_matte" => set_matte,
         // --- Distortion ---
-        "ADBE Tile" => ("tile", motion_tile),
-        "ADBE Offset" => ("offset", offset),
-        "ADBE Mirror" => ("mirror", mirror),
-        "ADBE Optics Compensation" => ("lens_distort", optics_compensation),
-        "ADBE Turbulent Displace" => ("turbulent_displace", turbulent_displace),
-        "ADBE Corner Pin" => ("corner_pin", corner_pin),
-        "ADBE Displacement Map" => ("displacement_map", displacement_map),
-        "ADBE Polar Coordinates" => ("polar_coordinates", polar_coordinates),
-        "ADBE Twirl" => ("twirl", twirl),
-        "ADBE Spherize" => ("spherize", spherize),
-        "ADBE Ripple" => ("ripple", ripple),
-        "ADBE Wave Warp" => ("wave_warp", wave_warp),
-        "ADBE BEZMESH" => ("bezier_warp", bezier_warp),
-        "ADBE WRPMESH" => ("warp", warp),
+        "motion_tile" => motion_tile,
+        "offset" => offset,
+        "mirror" => mirror,
+        "optics_compensation" => optics_compensation,
+        "turbulent_displace" => turbulent_displace,
+        "corner_pin" => corner_pin,
+        "displacement_map" => displacement_map,
+        "polar_coordinates" => polar_coordinates,
+        "twirl" => twirl,
+        "spherize" => spherize,
+        "ripple" => ripple,
+        "wave_warp" => wave_warp,
+        "bezier_warp" => bezier_warp,
+        "warp" => warp,
         // --- Stylise ---
-        "ADBE Drop Shadow" => ("drop_shadow", drop_shadow),
-        "ADBE Roughen Edges" => ("roughen_edges", roughen_edges),
-        "ADBE Median" => ("median", median),
-        "ADBE Mosaic" => ("mosaic", mosaic),
-        "ADBE Find Edges" => ("find_edges", find_edges),
-        "ADBE Emboss" => ("emboss", emboss),
-        "ADBE Texturize" => ("texturize", texturize),
+        "drop_shadow" => drop_shadow,
+        "roughen_edges" => roughen_edges,
+        "median" => median,
+        "mosaic" => mosaic,
+        "find_edges" => find_edges,
+        "emboss" => emboss,
+        "texturize" => texturize,
         // --- Blur (the one that sits in this half because it is a wipe's
         // neighbour in docs/11's ordering, not because it blurs) ---
-        "ADBE Channel Blur" => ("channel_blur", channel_blur),
+        "channel_blur" => channel_blur,
         // --- Transition ---
-        "ADBE Linear Wipe" => ("linear_wipe", linear_wipe),
-        "ADBE Radial Wipe" => ("radial_wipe", radial_wipe),
-        "ADBE IRIS_WIPE" => ("iris_wipe", iris_wipe),
-        "ADBE Venetian Blinds" => ("venetian_blinds", venetian_blinds),
-        "APC CardWipeCam" => ("card_wipe", card_wipe),
-        // --- Controls (K-414) — PENDING AUDIT (see the note above) ---
-        "ADBE Slider Control" => ("slider_control", slider_control),
-        "ADBE Angle Control" => ("angle_control", angle_control),
-        "ADBE Checkbox Control" => ("checkbox_control", checkbox_control),
-        "ADBE Color Control" => ("colour_control", colour_control),
-        "ADBE Point Control" => ("point_control", point_control),
+        "linear_wipe" => linear_wipe,
+        "radial_wipe" => radial_wipe,
+        "iris_wipe" => iris_wipe,
+        "venetian_blinds" => venetian_blinds,
+        "card_wipe" => card_wipe,
+        // --- Controls (K-414) ---
+        "slider_control" => slider_control,
+        "angle_control" => angle_control,
+        "checkbox_control" => checkbox_control,
+        "colour_control" => colour_control,
+        "point_control" => point_control,
         _ => return None,
     })
 }
@@ -116,8 +111,9 @@ pub(crate) fn claim(
     node: &Property,
 ) -> Option<EffectInstance> {
     let ae = match_name_of(node);
-    let (lumit, build) = row(ae)?;
-    let mut fx = Fx::new(conv, path, node, ae, lumit)?;
+    let row = super::table::table().row(ae)?;
+    let build = conversion(&row.conversion)?;
+    let mut fx = Fx::new(conv, path, node, ae, &row.lumit)?;
     build(&mut fx);
     fx.conv.report.imported();
     Some(fx.inst)

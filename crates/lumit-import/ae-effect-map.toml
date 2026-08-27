@@ -1,0 +1,480 @@
+# The After Effects effect mapping table — docs/11-AE-IMPORT.md §5.
+#
+# One row per After Effects effect the importer recognises, keyed by AE's
+# **match name** (the stable internal name that survives a user renaming the
+# effect). A row says which Lumit built-in does the same job and which
+# conversion carries its controls across; a match name with no row here takes
+# the placeholder road (§6) with every parameter kept, never a guess.
+#
+# This file ships beside the application and is read at import time, so a match
+# name that turns out to be wrong — twelve of the original sixty were, before
+# the 2026-08-20 audit against a live After Effects 26.0 — can be corrected
+# without rebuilding Lumit. Put an edited copy next to the executable and it is
+# used in place of this one; if it cannot be read or does not parse, the copy
+# built into the application is used instead, so a mistyped override never
+# leaves the importer with no table at all.
+#
+# Fields:
+#   ae             AE's match name. The key; must be unique.
+#   name           AE's own name for the effect, as the import report says it.
+#   lumit          The Lumit effect's match name (docs/08-EFFECTS.md).
+#   conversion     Which conversion carries the controls across. Named for the
+#                  Lumit effect; `crates/lumit-import/src/map/fx_colour.rs` and
+#                  `fx_distort.rs` hold the arithmetic, because a unit change,
+#                  an option list and a split control are code rather than data.
+#                  A row naming a conversion the build does not have is ignored.
+#   suggest        Instead of `lumit`/`conversion`: this effect deliberately
+#                  becomes a placeholder, and the report names what does the job
+#                  in Lumit (§5's "placeholder + report" rows).
+#   pending_audit  The match name is the famous one but was not in the audited
+#                  set (K-414). Safe to ship: a match name this table has wrong
+#                  is a name nothing claims, and an unclaimed name becomes a
+#                  placeholder with every parameter kept.
+
+version = 1
+
+# --- Blur and sharpen ------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Gaussian Blur 2"
+name = "Gaussian Blur"
+lumit = "blur"
+conversion = "gaussian_blur"
+
+[[effect]]
+ae = "ADBE Motion Blur"
+name = "Directional Blur"
+lumit = "directional_blur"
+conversion = "directional_blur"
+
+[[effect]]
+ae = "ADBE Radial Blur"
+name = "Radial Blur"
+lumit = "radial_blur"
+conversion = "radial_blur"
+
+[[effect]]
+ae = "ADBE Channel Blur"
+name = "Channel Blur"
+lumit = "channel_blur"
+conversion = "channel_blur"
+
+[[effect]]
+ae = "ADBE Sharpen"
+name = "Sharpen"
+lumit = "sharpen_simple"
+conversion = "sharpen_simple"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Unsharp Mask2"
+name = "Unsharp Mask"
+lumit = "sharpen"
+conversion = "unsharp_mask"
+pending_audit = true
+
+# --- Colour ----------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Glo2"
+name = "Glow"
+lumit = "glow"
+conversion = "glow"
+
+[[effect]]
+ae = "ADBE Easy Levels2"
+name = "Levels"
+lumit = "levels"
+conversion = "levels"
+
+[[effect]]
+ae = "ADBE HUE SATURATION"
+name = "Hue/Saturation"
+lumit = "hue_saturation"
+conversion = "hue_saturation"
+
+[[effect]]
+ae = "ADBE Brightness & Contrast 2"
+name = "Brightness & Contrast"
+lumit = "brightness"
+conversion = "brightness"
+
+[[effect]]
+ae = "ADBE Tint"
+name = "Tint"
+lumit = "tint"
+conversion = "tint"
+
+[[effect]]
+ae = "ADBE Photo Filter"
+name = "Photo Filter"
+lumit = "photo_filter"
+conversion = "photo_filter"
+
+[[effect]]
+ae = "ADBE Black&White"
+name = "Black & White"
+lumit = "black_and_white"
+conversion = "black_and_white"
+
+[[effect]]
+ae = "ADBE ShadowHighlight"
+name = "Shadow/Highlight"
+lumit = "shadow_highlight"
+conversion = "shadow_highlight"
+
+[[effect]]
+ae = "ADBE Tritone"
+name = "Tritone"
+lumit = "tritone"
+conversion = "tritone"
+
+[[effect]]
+ae = "ADBE Posterize"
+name = "Posterize"
+lumit = "posterize"
+conversion = "posterize"
+
+[[effect]]
+ae = "ADBE Threshold"
+name = "Threshold"
+lumit = "threshold"
+conversion = "threshold"
+
+[[effect]]
+ae = "ADBE Broadcast Colors"
+name = "Broadcast Colors"
+lumit = "broadcast_safe"
+conversion = "broadcast_safe"
+
+[[effect]]
+ae = "ADBE Invert"
+name = "Invert"
+lumit = "invert"
+conversion = "invert"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Exposure2"
+name = "Exposure"
+lumit = "exposure"
+conversion = "exposure"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Apply Color LUT2"
+name = "Apply Color LUT"
+lumit = "lut"
+conversion = "apply_colour_lut"
+pending_audit = true
+
+# --- Generate --------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Fill"
+name = "Fill"
+lumit = "fill"
+conversion = "fill"
+
+[[effect]]
+ae = "ADBE Ramp"
+name = "Gradient Ramp"
+lumit = "gradient"
+conversion = "gradient"
+
+[[effect]]
+ae = "ADBE Noise"
+name = "Noise"
+lumit = "noise"
+conversion = "noise"
+
+[[effect]]
+ae = "ADBE Fractal Noise"
+name = "Fractal Noise"
+lumit = "fractal_noise"
+conversion = "fractal_noise"
+
+[[effect]]
+ae = "ADBE Laser"
+name = "Beam"
+lumit = "beam"
+conversion = "beam"
+
+[[effect]]
+ae = "ADBE Lightning 2"
+name = "Advanced Lightning"
+lumit = "lightning"
+conversion = "lightning"
+
+[[effect]]
+ae = "APC Radio Waves"
+name = "Radio Waves"
+lumit = "radio_waves"
+conversion = "radio_waves"
+
+[[effect]]
+ae = "APC Vegas"
+name = "Vegas"
+lumit = "vegas"
+conversion = "vegas"
+
+[[effect]]
+ae = "VISINF Grain Implant"
+name = "Add Grain"
+lumit = "add_grain"
+conversion = "add_grain"
+
+[[effect]]
+ae = "ADBE Scribble Fill"
+name = "Scribble"
+lumit = "scribble"
+conversion = "scribble"
+
+[[effect]]
+ae = "ADBE Stroke"
+name = "Stroke"
+lumit = "stroke"
+conversion = "stroke"
+
+# --- Temporal --------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Echo"
+name = "Echo"
+lumit = "echo"
+conversion = "echo"
+
+[[effect]]
+ae = "ADBE Posterize Time"
+name = "Posterize Time"
+lumit = "posterize_time"
+conversion = "posterize_time"
+
+# --- Utility ---------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Geometry2"
+name = "Transform"
+lumit = "transform"
+conversion = "transform"
+
+[[effect]]
+ae = "ADBE Set Matte3"
+name = "Set Matte"
+lumit = "set_matte"
+conversion = "set_matte"
+
+# --- Distortion ------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Tile"
+name = "Motion Tile"
+lumit = "tile"
+conversion = "motion_tile"
+
+[[effect]]
+ae = "ADBE Offset"
+name = "Offset"
+lumit = "offset"
+conversion = "offset"
+
+[[effect]]
+ae = "ADBE Mirror"
+name = "Mirror"
+lumit = "mirror"
+conversion = "mirror"
+
+[[effect]]
+ae = "ADBE Optics Compensation"
+name = "Optics Compensation"
+lumit = "lens_distort"
+conversion = "optics_compensation"
+
+[[effect]]
+ae = "ADBE Turbulent Displace"
+name = "Turbulent Displace"
+lumit = "turbulent_displace"
+conversion = "turbulent_displace"
+
+[[effect]]
+ae = "ADBE Corner Pin"
+name = "Corner Pin"
+lumit = "corner_pin"
+conversion = "corner_pin"
+
+[[effect]]
+ae = "ADBE Displacement Map"
+name = "Displacement Map"
+lumit = "displacement_map"
+conversion = "displacement_map"
+
+[[effect]]
+ae = "ADBE Polar Coordinates"
+name = "Polar Coordinates"
+lumit = "polar_coordinates"
+conversion = "polar_coordinates"
+
+[[effect]]
+ae = "ADBE Twirl"
+name = "Twirl"
+lumit = "twirl"
+conversion = "twirl"
+
+[[effect]]
+ae = "ADBE Spherize"
+name = "Spherize"
+lumit = "spherize"
+conversion = "spherize"
+
+[[effect]]
+ae = "ADBE Ripple"
+name = "Ripple"
+lumit = "ripple"
+conversion = "ripple"
+
+[[effect]]
+ae = "ADBE Wave Warp"
+name = "Wave Warp"
+lumit = "wave_warp"
+conversion = "wave_warp"
+
+[[effect]]
+ae = "ADBE BEZMESH"
+name = "Bezier Warp"
+lumit = "bezier_warp"
+conversion = "bezier_warp"
+
+[[effect]]
+ae = "ADBE WRPMESH"
+name = "Warp"
+lumit = "warp"
+conversion = "warp"
+
+# --- Stylise ---------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Drop Shadow"
+name = "Drop Shadow"
+lumit = "drop_shadow"
+conversion = "drop_shadow"
+
+[[effect]]
+ae = "ADBE Roughen Edges"
+name = "Roughen Edges"
+lumit = "roughen_edges"
+conversion = "roughen_edges"
+
+[[effect]]
+ae = "ADBE Median"
+name = "Median (Legacy)"
+lumit = "median"
+conversion = "median"
+
+[[effect]]
+ae = "ADBE Mosaic"
+name = "Mosaic"
+lumit = "mosaic"
+conversion = "mosaic"
+
+[[effect]]
+ae = "ADBE Find Edges"
+name = "Find Edges"
+lumit = "find_edges"
+conversion = "find_edges"
+
+[[effect]]
+ae = "ADBE Emboss"
+name = "Emboss"
+lumit = "emboss"
+conversion = "emboss"
+
+[[effect]]
+ae = "ADBE Texturize"
+name = "Texturize"
+lumit = "texturize"
+conversion = "texturize"
+
+# --- Transition ------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Linear Wipe"
+name = "Linear Wipe"
+lumit = "linear_wipe"
+conversion = "linear_wipe"
+
+[[effect]]
+ae = "ADBE Radial Wipe"
+name = "Radial Wipe"
+lumit = "radial_wipe"
+conversion = "radial_wipe"
+
+[[effect]]
+ae = "ADBE IRIS_WIPE"
+name = "Iris Wipe"
+lumit = "iris_wipe"
+conversion = "iris_wipe"
+
+[[effect]]
+ae = "ADBE Venetian Blinds"
+name = "Venetian Blinds"
+lumit = "venetian_blinds"
+conversion = "venetian_blinds"
+
+[[effect]]
+ae = "APC CardWipeCam"
+name = "Card Wipe"
+lumit = "card_wipe"
+conversion = "card_wipe"
+
+# --- Controls (K-414) ------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Slider Control"
+name = "Slider Control"
+lumit = "slider_control"
+conversion = "slider_control"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Angle Control"
+name = "Angle Control"
+lumit = "angle_control"
+conversion = "angle_control"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Checkbox Control"
+name = "Checkbox Control"
+lumit = "checkbox_control"
+conversion = "checkbox_control"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Color Control"
+name = "Color Control"
+lumit = "colour_control"
+conversion = "colour_control"
+pending_audit = true
+
+[[effect]]
+ae = "ADBE Point Control"
+name = "Point Control"
+lumit = "point_control"
+conversion = "point_control"
+pending_audit = true
+
+# --- Deliberate placeholders (docs/11 §5) ----------------------------------
+#
+# Curves is not here: its point list is the one property After Effects' own
+# scripting cannot read (K-410), so the instance takes the ordinary placeholder
+# road and the report's PropertyUnreadable row says why.
+
+[[effect]]
+ae = "VISINF Grain Removal"
+name = "Remove Grain"
+suggest = "removing grain is a programme of its own rather than an effect port"
+
+[[effect]]
+ae = "ADBE Timewarp"
+name = "Timewarp"
+suggest = "Retime with flow frame interpolation does the same job"

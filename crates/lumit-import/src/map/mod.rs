@@ -37,6 +37,7 @@ mod fx_colour;
 mod fx_distort;
 mod layers;
 mod props;
+mod table;
 mod time;
 
 use std::collections::{BTreeMap, HashMap};
