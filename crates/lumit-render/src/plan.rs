@@ -223,14 +223,19 @@ pub fn collect_comp_jobs(
         if l.audio_only {
             continue;
         }
-        // A layer acting as an adjustment (K-537) draws the composite beneath
-        // it, so its own frames are never asked for — decoding them would be
-        // a video decode nobody looks at.
-        if l.is_adjustment() {
-            continue;
-        }
         if l.switches.visible && in_span(l) {
-            wanted.push(l.id);
+            // A layer acting as an adjustment (K-537) draws the composite
+            // beneath it, so its OWN frames are never asked for — decoding them
+            // would be a video decode nobody looks at. Only its own frames,
+            // though: it still gates by a matte and still feeds its effects'
+            // layer inputs, and skipping the whole layer here took those
+            // references with it. A matte source is normally hidden, so it was
+            // wanted by nothing else and never decoded — which is a matte that
+            // works while its source layer is switched on and stops the moment
+            // it is switched off.
+            if !l.is_adjustment() {
+                wanted.push(l.id);
+            }
             if let Some(m) = &l.matte {
                 if !wanted.contains(&m.layer) {
                     wanted.push(m.layer);
@@ -942,6 +947,139 @@ mod tests {
                 "{how} onto a precomp must plan the one decode its footage needs"
             );
             assert_eq!(jobs[0].item, item);
+        }
+    }
+
+    /// **A hidden matte source decodes for whatever layer names it, an
+    /// adjustment layer included** (docs/06 §1.6).
+    ///
+    /// The regression, and the reason it read as "hiding the matte layer breaks
+    /// the matte": a layer acting as an adjustment draws the composite beneath
+    /// it rather than a picture of its own, so this walk skipped it outright —
+    /// and took its matte reference with it. The matte source was then wanted by
+    /// nothing but itself, so it decoded only while its own visibility switch
+    /// was on. Switch off the eye — which is what everyone does to a matte
+    /// source, since its picture is not meant to be in the frame — and its
+    /// footage never decoded, `pixels_for` gave up, and the matte silently
+    /// vanished. On an ordinary consumer the same matte worked, which is what
+    /// made it look like a visibility bug rather than an adjustment one.
+    ///
+    /// Both consumers are checked, hidden matte source either way: the ordinary
+    /// one is the case that always worked and must keep working, the adjustment
+    /// one is the fix.
+    #[test]
+    fn a_hidden_matte_source_decodes_for_an_adjustment_layer_too() {
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MatteChannel,
+            MatteRef, MediaRef, Switches, TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "l".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: lumit_core::retime::Interpolation::default(),
+            parked_flow: None,
+            blend: lumit_core::model::BlendMode::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp = |layers: Vec<Layer>| Composition {
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers,
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        };
+
+        for adjustment in [false, true] {
+            let mut doc = Document::new();
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+            }));
+            // Hidden, as a matte source always is: its picture is the gate, not
+            // part of the frame.
+            let mut matte_layer = layer(LayerKind::Footage { item });
+            matte_layer.switches.visible = false;
+            let matte_id = matte_layer.id;
+            let mut consumer = layer(LayerKind::Solid {
+                def: Uuid::now_v7(),
+            });
+            consumer.adjustment = adjustment;
+            consumer.matte = Some(MatteRef {
+                layer: matte_layer.id,
+                channel: MatteChannel::Alpha,
+                inverted: false,
+                source: lumit_core::model::LayerInputSource::default(),
+            });
+            let outer = comp(vec![matte_layer, consumer]);
+            let outer_id = outer.id;
+            doc.items.push(ProjectItem::Composition(outer));
+            let probes: HashMap<Uuid, crate::SourceProbe> = [(
+                item,
+                crate::SourceProbe::Video {
+                    fps: 60.0,
+                    width: 64,
+                    height: 64,
+                    frames: 600,
+                    audio: false,
+                },
+            )]
+            .into_iter()
+            .collect();
+            let outer = doc.comp(outer_id).unwrap();
+            let jobs = plan_comp_frame(&doc, outer, 0.0, Quality::default(), &probes);
+            let who = if adjustment {
+                "a layer acting as an adjustment"
+            } else {
+                "an ordinary layer"
+            };
+            assert_eq!(
+                jobs.len(),
+                1,
+                "{who} matted by a hidden footage layer must plan that layer's decode"
+            );
+            assert_eq!(jobs[0].item, item);
+            assert_eq!(
+                jobs[0].layer, matte_id,
+                "and the job is the matte source's own, not the consumer's"
+            );
         }
     }
 

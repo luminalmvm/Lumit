@@ -189,14 +189,20 @@ the AE 2023 model). Four combinations: alpha or luma, normal or inverted.
 - Matte application happens at the consumer's composite step: the consumer's post-transform
   premultiplied image is multiplied by the matte's coverage (alpha channel, or luma per §3.5)
   before blending.
-- A matte layer keeps its own visibility switch; being a matte does not disable it. A layer MAY
-  matte a layer that is itself matted; cycles are rejected at compile time.
+- A matte layer keeps its own visibility switch; being a matte does not disable it, and
+  switching it **off** takes it out of the composite only — it still renders for whatever
+  consumes it as a matte, which is the whole point of hiding one. A layer MAY matte a layer
+  that is itself matted; cycles are rejected at compile time.
 - A **Precomp** matte source has no pixels of its own: its nested comp is rendered (the same
   recursion §1.4 performs for a Precomp layer's picture, under the same cycle guard) and that
   render is the matte signal (K-268). The matte **source mode** (§none/masks/effects, K-142)
   does not apply to a comp reference — a comp already carries its own layers' masks and
   effects. Footage inside such a comp decodes with the rest of the frame: the decode plan
-  follows matte and layer-input references whether or not the referenced layer is visible.
+  follows matte and layer-input references whether or not the referenced layer is visible —
+  and whatever the layer doing the referencing is. A layer acting as an adjustment asks for no
+  frames of its own (it draws the composite beneath it), but the sources it gates by and reads
+  from are planned like anyone else's; skipping the layer outright took its references with it,
+  so a hidden source went undecoded and the matte quietly stopped working.
 
 ### 1.7 Anti-aliasing the composite (K-274)
 

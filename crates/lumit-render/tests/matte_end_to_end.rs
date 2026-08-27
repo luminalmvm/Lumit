@@ -44,8 +44,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::model::{
-    Composition, Document, EffectValue, Layer, LayerKind, LinearColour, ProjectItem, SolidDef,
-    Switches, TransformGroup,
+    Composition, Document, EffectValue, Layer, LayerKind, LinearColour, MatteChannel, MatteRef,
+    ProjectItem, SolidDef, Switches, TransformGroup,
 };
 use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::headless::HeadlessRenderer;
@@ -278,6 +278,134 @@ fn a_black_matte_suppresses_the_effect_entirely() {
             px(&rgba, w, x),
             want,
             "column {x}: a black matte must leave the source untouched"
+        );
+    }
+}
+
+/// **A hidden layer still mattes, and still stays out of the picture** (K-???).
+///
+/// The visibility switch says "do not composite this layer into the frame". It
+/// has never meant "stop being a matte": a matte source is hidden precisely so
+/// its own picture does not paint over the thing it is gating, which is how
+/// every project authors one. Hiding it and losing the matte is the bug.
+///
+/// The scene is the plainest statement of both halves at once: a full-frame
+/// grey plate matted by a hidden 32-wide white solid on the left of a 64-wide
+/// comp. The left half must be the grey (the matte let it through) and never
+/// the white (the matte source itself did not draw); the right half must be the
+/// comp background (the matte held it back).
+#[test]
+fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let grey_def = Uuid::now_v7();
+    let white_def = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items
+        .push(solid(grey_def, "grey", [0.25, 0.25, 0.25, 1.0], COMP, COMP));
+    doc.items
+        .push(solid(white_def, "band", [1.0, 1.0, 1.0, 1.0], BAND, COMP));
+
+    let mut matte_layer = layer("matte source", LayerKind::Solid { def: white_def });
+    matte_layer.switches.visible = false;
+    let mut base = layer("base", LayerKind::Solid { def: grey_def });
+    base.matte = Some(MatteRef {
+        layer: matte_layer.id,
+        channel: MatteChannel::Alpha,
+        inverted: false,
+        source: lumit_core::model::LayerInputSource::default(),
+    });
+
+    let comp = comp_of("Comp", vec![matte_layer, base]);
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    let doc = Arc::new(doc);
+    let (rgba, w, _h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+
+    let grey = lumit_core::pixels::srgb_encode(0.25);
+    for x in LIT {
+        assert_eq!(
+            px(&rgba, w, x),
+            grey,
+            "column {x} is under the hidden matte: the plate must show through it"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            0,
+            "column {x} is past the hidden matte: the plate must be held back"
+        );
+    }
+}
+
+/// **And an adjustment layer reads a hidden matte too** — the consumer
+/// the decode planner used to skip outright, taking its matte reference with
+/// it, so the source decoded only while its own eye was on.
+///
+/// A grey plate under an adjustment layer whose Exposure of +1 stop takes the
+/// same hidden white band as its Matte: the exposure reaches the plate on the
+/// left of the band and nowhere else.
+#[test]
+fn an_adjustment_layer_reads_a_hidden_matte() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let grey_def = Uuid::now_v7();
+    let white_def = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items
+        .push(solid(grey_def, "grey", [0.25, 0.25, 0.25, 1.0], COMP, COMP));
+    doc.items
+        .push(solid(white_def, "band", [1.0, 1.0, 1.0, 1.0], BAND, COMP));
+
+    // Wrapped in a full-size comp so the band keeps its geometry through the
+    // resample to the effect's raster (trap 1 in this file's header).
+    let band_comp = comp_of(
+        "band comp",
+        vec![layer("band", LayerKind::Solid { def: white_def })],
+    );
+    let band_comp_id = band_comp.id;
+    doc.items.push(ProjectItem::Composition(band_comp));
+    let mut matte_layer = layer("matte source", LayerKind::Precomp { comp: band_comp_id });
+    matte_layer.switches.visible = false;
+
+    let mut adjust = layer("adjustment", LayerKind::Adjustment);
+    let mut exposure = lumit_core::fx::instantiate("exposure").expect("exposure is a built-in");
+    for p in &mut exposure.params {
+        if p.id == "stops" {
+            p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
+        }
+        if p.id == lumit_core::fx::MATTE_PARAM {
+            p.value = EffectValue::Layer(Some(matte_layer.id));
+        }
+    }
+    adjust.effects = vec![exposure];
+
+    let base = layer("base", LayerKind::Solid { def: grey_def });
+    let comp = comp_of("Comp", vec![matte_layer, adjust, base]);
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    let doc = Arc::new(doc);
+    let (rgba, w, _h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    for x in LIT {
+        assert_eq!(
+            px(&rgba, w, x),
+            lifted,
+            "column {x} is under the hidden matte: the adjustment applies in full"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            source,
+            "column {x} is past the hidden matte: the adjustment is held off"
         );
     }
 }
