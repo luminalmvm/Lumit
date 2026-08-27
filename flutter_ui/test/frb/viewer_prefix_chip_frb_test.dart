@@ -249,6 +249,77 @@ void main() {
       expect(chip(), findsNothing);
     });
 
+    /// **N4 — the Source box takes the chip too.** The layer's own picture,
+    /// before any effect, is a point on the chain like every other box, and the
+    /// chip says the layer's name rather than an effect's.
+    testWidgets('appears on the Source box and cuts the whole stack',
+        (tester) async {
+      final p = withTwo();
+      const size = Size(900, 600);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+        child: Stack(children: [
+          const GraphPanelFrb(),
+          ViewerPrefixChip(uiState: p.uiState),
+        ]),
+      ));
+      await tester.pump();
+
+      await tester.tapAt(tester.getCenter(
+          find.byKey(const ValueKey<String>('graph-node-source'))));
+      await tester.pump();
+
+      expect(chip(), findsOneWidget);
+      expect(find.text('at ${p.layer.getInfo().name}'), findsOneWidget);
+
+      await tester.tap(chip());
+      await tester.pump();
+      expect(p.uiState.viewerPrefix, isNotNull);
+      expect(p.uiState.viewerPrefix!.effect, isNull,
+          reason: 'the Source keeps nothing of the stack');
+    });
+
+    /// **N4 — each box keeps the answer it was left at.** The chip used to be
+    /// one flag for the whole application, so anything that could not name a
+    /// point turned it off for good; coming back to the box you were looking at
+    /// showed the finished picture and you had to ask again.
+    testWidgets('a box comes back to the answer it was left at',
+        (tester) async {
+      final p = withTwo();
+      final effects = p.layer.getEffects();
+      p.uiState.setEffectSelection(p.layer, [effects.first.id()]);
+      await tester.pumpWidget(chipOnly(p));
+      await tester.pump();
+
+      await tester.tap(chip());
+      await tester.pump();
+      expect(p.uiState.atSelectedEffect.value, isTrue);
+
+      // Away to something that names no point at all, and the chip goes quiet.
+      p.uiState.clearEffectSelection();
+      await tester.pump();
+      expect(p.uiState.atSelectedEffect.value, isFalse);
+
+      // And back: the box remembers.
+      p.uiState.setEffectSelection(p.layer, [effects.first.id()]);
+      await tester.pump();
+      expect(p.uiState.atSelectedEffect.value, isTrue);
+      expect(p.uiState.viewerPrefix!.effect, effects.first.id());
+
+      // Turned off by hand, it stays off across the same round trip.
+      await tester.tap(chip());
+      await tester.pump();
+      p.uiState.clearEffectSelection();
+      p.uiState.setEffectSelection(p.layer, [effects.first.id()]);
+      await tester.pump();
+      expect(p.uiState.atSelectedEffect.value, isFalse);
+    });
+
     /// **The cost claim.** A toggle is one render request — the same one a
     /// playhead step makes — because the point rides the render the Viewer was
     /// going to ask for anyway. The old panel needed a bound because it was a

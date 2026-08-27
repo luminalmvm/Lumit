@@ -13043,7 +13043,7 @@ impl SseDecode for crate::api::state::BridgePrefixPoint {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_layer = <crate::api::layer::LayerReference>::sse_decode(deserializer);
-        let mut var_effect = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_effect = <Option<uuid::Uuid>>::sse_decode(deserializer);
         return crate::api::state::BridgePrefixPoint {
             layer: var_layer,
             effect: var_effect,
@@ -20720,7 +20720,7 @@ impl SseEncode for crate::api::state::BridgePrefixPoint {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::layer::LayerReference>::sse_encode(self.layer, serializer);
-        <uuid::Uuid>::sse_encode(self.effect, serializer);
+        <Option<uuid::Uuid>>::sse_encode(self.effect, serializer);
     }
 }
 

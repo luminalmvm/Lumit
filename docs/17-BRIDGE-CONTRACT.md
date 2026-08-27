@@ -716,7 +716,9 @@ path, documented beside the types in
 - **The Viewer's picture may be cut short at an effect (K-528, superseding
     K-486's thumbnail seam).** `CompositionReference::render_frame(frame, scale,
     mode, prefix)` takes an optional `BridgePrefixPoint` — a layer (which
-    carries its composition) and the effect instance to stop **after**. With one
+    carries its composition) and the effect instance to stop **after**, or no
+    effect at all for the layer's own picture before any of them — the Source
+    box on the node canvas, which takes the chip like every other box. With one
     set, the engine renders the composition with that layer's effect stack
     truncated there and publishes it down the ordinary zero-copy frame
     transport, at the Viewer's own quality. There is no second render path and

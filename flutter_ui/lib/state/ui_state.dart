@@ -22,7 +22,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -715,46 +715,93 @@ class LumitUiState extends ChangeNotifier {
   /// for, and the two need not be mounted together.
   final ValueNotifier<bool> atSelectedEffect = ValueNotifier(false);
 
+  /// The points the chip has been left engaged at, by node, for the session
+  /// (N4).
+  ///
+  /// **The chip is per box, and it stays as it was left.** Walking back onto a
+  /// box you were looking *at* shows it at that box again, without asking
+  /// twice; walking back onto one you turned off shows the finished picture.
+  /// A box that has never been answered takes the answer the walk arrived with
+  /// — which is what makes stepping down a stack with the chip on keep working
+  /// (K-528) — and keeps it from then on.
+  ///
+  /// Session state, not document state: this is a way of *looking*, so it has
+  /// no business in the file, on the undo stack, or in what "unsaved changes"
+  /// means. It goes when the application does.
+  final Map<String, bool> _atNodes = {};
+
+  /// The point on the chain the chip is about: the layer, and the effect the
+  /// stack stops **after** — null for the layer's own picture, which is the
+  /// Source box (N4). Null altogether when nothing names a single point.
+  ///
+  /// One picked effect names one, in either panel that picks effects. The
+  /// Source box carries no effect id and so cannot ride that selection at all;
+  /// the Graph panel's own pick is what names it.
+  (LayerReference, UuidValue?)? get viewerPrefixPoint {
+    final layer = selectedEffectsLayer;
+    final picked = selectedEffects.value;
+    if (layer != null && picked.length == 1) return (layer, picked.single);
+    final onSource = selectedLayer.value;
+    if (graphNode.value is BridgeNodeRef_Source && onSource != null) {
+      return (onSource, null);
+    }
+    return null;
+  }
+
+  /// How [_atNodes] remembers one point.
+  String? get _chipNodeKey {
+    final point = viewerPrefixPoint;
+    if (point == null) return null;
+    return '${point.$1.internallayerId}/${point.$2 ?? 'source'}';
+  }
+
   /// Where the Viewer is cutting the stack, or null for the picture as the
   /// document has it — read by [requestFrame] and by nothing else.
   ///
-  /// **Derived, never stored.** One effect selected and the chip engaged is the
-  /// whole of it, so the point cannot drift from the selection it names: there
-  /// is no second copy to keep in step. A run of effects picked names no single
+  /// **Derived, never stored.** The picked point and the chip engaged is the
+  /// whole of it, so the cut cannot drift from the selection it names: there is
+  /// no second copy to keep in step. A run of effects picked names no single
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
-    final layer = selectedEffectsLayer;
-    final picked = selectedEffects.value;
-    if (!atSelectedEffect.value || layer == null || picked.length != 1) {
-      return null;
-    }
-    return BridgePrefixPoint(layer: layer, effect: picked.single);
+    if (!atSelectedEffect.value) return null;
+    final point = viewerPrefixPoint;
+    if (point == null) return null;
+    return BridgePrefixPoint(layer: point.$1, effect: point.$2);
   }
 
   /// Turn the chip on or off, and show what it asks for.
   ///
   /// The render is the point: nothing else tells the engine, and the frame the
   /// Viewer is already showing is of the other picture. One call, which is the
-  /// same one a playhead step makes.
+  /// same one a playhead step makes. The answer is remembered against this box,
+  /// so coming back to it comes back to this.
   void setAtSelectedEffect(bool on) {
+    if (_chipNodeKey case final key?) _atNodes[key] = on;
     if (atSelectedEffect.value == on) return;
     atSelectedEffect.value = on;
     requestFrame();
   }
 
-  /// Keep the chip honest after the effect selection moves.
+  /// Follow the pick: the chip reads how this box was last left (N4).
   ///
-  /// Picking a **different** single effect keeps it engaged and moves the
-  /// point: walking down a stack watching each effect land is what it is for.
-  /// Picking a run, or nothing, leaves no single point to stop at, so it goes
-  /// off — a chip that outlived its selection would leave the Viewer quietly
+  /// Picking a **different** box moves the point and shows that box's own
+  /// answer — walking down a stack watching each effect land is what it is for.
+  /// Picking a run, or nothing, leaves no single point to stop at, so the chip
+  /// goes off: one that outlived its selection would leave the Viewer quietly
   /// showing a truncated composition with nothing on screen saying why.
   ///
-  /// Silent while the chip is off, because an effect is picked on every click
-  /// in two panels and a render apiece would be a render nobody asked for.
+  /// Silent unless the answer actually changes, because a box is picked on
+  /// every click in three panels and a render apiece would be a render nobody
+  /// asked for.
   void _followSelectionWithChip() {
-    if (!atSelectedEffect.value) return;
-    if (selectedEffects.value.length != 1) atSelectedEffect.value = false;
+    final key = _chipNodeKey;
+    // Nothing names a single point, so the chip has nothing to say and goes
+    // quiet. What each box was left at is remembered, so coming back to one is
+    // coming back to where you left it.
+    final on = key == null ? false : _atNodes[key] ?? atSelectedEffect.value;
+    if (key != null) _atNodes[key] = on;
+    if (atSelectedEffect.value == on) return;
+    atSelectedEffect.value = on;
     requestFrame();
   }
 
@@ -1119,6 +1166,9 @@ class LumitUiState extends ChangeNotifier {
     // hangs off its refresh rather than off each of the several ways a layer
     // can disappear.
     model.addListener(_dropVanishedFromSelection);
+    // The Source box is picked on the canvas and nowhere else, so the effect
+    // selection cannot be what tells the chip about it (N4).
+    graphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
     model.addListener(_frontLiveCompIfFrontedOneHasGone);

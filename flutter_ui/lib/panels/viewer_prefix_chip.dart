@@ -28,23 +28,28 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show effectLabelOf;
 import 'viewer_panel_frb.dart' show viewerTagLeft, viewerTagTop;
 
-/// The name of the effect the chip would stop at, or `null` when there is no
+/// The name of the point the chip would stop at, or `null` when there is no
 /// single one — nothing picked, a whole run picked, or a pick whose effect this
 /// layer no longer carries.
+///
+/// **The Source box is a point like any other** (N4): picked on the node
+/// canvas, it names the layer's own picture before any effect, and the chip
+/// says the layer's name.
 ///
 /// Read from [LumitUiState.model], which is the frontend's own held copy of the
 /// document, so this is a map lookup and never a call across the bridge.
 String? prefixChipName(LumitUiState ui) {
-  final layer = ui.selectedEffectsLayer;
-  final picked = ui.selectedEffects.value;
-  if (layer == null || picked.length != 1) return null;
-  final info = ui.model.byId(layer.internallayerId)?.info;
+  final point = ui.viewerPrefixPoint;
+  if (point == null) return null;
+  final info = ui.model.byId(point.$1.internallayerId)?.info;
   if (info == null) return null;
-  for (final effect in info.effects) {
-    if (effect.id == picked.single) {
+  final effect = point.$2;
+  if (effect == null) return info.name;
+  for (final on in info.effects) {
+    if (on.id == effect) {
       // The user's own name where one is set (K-321), else the effect's label,
       // exactly as the Effect controls heading spells it.
-      return effect.customName ?? effectLabelOf(effect.name);
+      return on.customName ?? effectLabelOf(on.name);
     }
   }
   return null;
@@ -67,6 +72,9 @@ class ViewerPrefixChip extends StatelessWidget {
       listenable: Listenable.merge([
         uiState.selectedEffects,
         uiState.atSelectedEffect,
+        // The Source box is picked on the canvas alone (N4), so the effect
+        // selection is not what moves the chip onto it.
+        uiState.graphNode,
         uiState.model,
       ]),
       builder: (context, _) {

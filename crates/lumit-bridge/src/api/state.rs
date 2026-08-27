@@ -228,7 +228,14 @@ pub struct BridgePrefixPoint {
     pub layer: crate::api::layer::LayerReference,
     /// The effect instance the stack stops **after**. An effect the layer no
     /// longer carries cuts nothing, for the same reason.
-    pub effect: Uuid,
+    ///
+    /// `None` is the layer's **own picture**, before any effect at all — the
+    /// Source box on the node canvas, which is a point on the chain like every
+    /// other box and so takes the chip like every other box (N4). The engine
+    /// has always been able to answer it (`graph::prefix_len` reads
+    /// `NodeRef::Source` as "keep nought"); there was simply no way to say it
+    /// here.
+    pub effect: Option<Uuid>,
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).

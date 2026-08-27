@@ -3455,7 +3455,7 @@ fn the_viewer_asks_for_a_prefix_on_the_render_it_was_making_anyway() {
         None,
         Some(BridgePrefixPoint {
             layer,
-            effect: uuid::Uuid::now_v7(),
+            effect: Some(uuid::Uuid::now_v7()),
         }),
     ] {
         assert!(

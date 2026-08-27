@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `document_for`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `clamp_animation`, `document_for`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
@@ -227,6 +227,16 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   ///
   /// Refused when `value` is of a different kind from the parameter, so a
   /// control can never quietly change what a parameter *is*.
+  ///
+  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
+  /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+  /// dragged in the graph editor, picked off the Viewer, wired from a node,
+  /// pasted, loaded from a preset — passes through this one call, and both the
+  /// preview and the commit stage through it, so clamping once here is what
+  /// makes the picture a scrub shows and the value it lands on the same number.
+  /// A control that also clamps its own reading is agreeing with the engine,
+  /// not deciding for it; a control that forgets to can no longer render a
+  /// value the parameter does not have.
   void setValue({required String id, required BridgeEffectValue value});
 }
 

@@ -12046,7 +12046,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return BridgePrefixPoint(
       layer: dco_decode_layer_reference(arr[0]),
-      effect: dco_decode_Uuid(arr[1]),
+      effect: dco_decode_opt_Uuid(arr[1]),
     );
   }
 
@@ -15243,7 +15243,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_layer = sse_decode_layer_reference(deserializer);
-    var var_effect = sse_decode_Uuid(deserializer);
+    var var_effect = sse_decode_opt_Uuid(deserializer);
     return BridgePrefixPoint(layer: var_layer, effect: var_effect);
   }
 
@@ -18648,7 +18648,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgePrefixPoint self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_layer_reference(self.layer, serializer);
-    sse_encode_Uuid(self.effect, serializer);
+    sse_encode_opt_Uuid(self.effect, serializer);
   }
 
   @protected
@@ -20207,6 +20207,16 @@ class BridgeEffectInstanceImpl extends RustOpaque
   ///
   /// Refused when `value` is of a different kind from the parameter, so a
   /// control can never quietly change what a parameter *is*.
+  ///
+  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
+  /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+  /// dragged in the graph editor, picked off the Viewer, wired from a node,
+  /// pasted, loaded from a preset — passes through this one call, and both the
+  /// preview and the commit stage through it, so clamping once here is what
+  /// makes the picture a scrub shows and the value it lands on the same number.
+  /// A control that also clamps its own reading is agreeing with the engine,
+  /// not deciding for it; a control that forgets to can no longer render a
+  /// value the parameter does not have.
   void setValue({required String id, required BridgeEffectValue value}) =>
       BridgeLib.instance.api.crateApiEffectBridgeEffectInstanceSetValue(
           that: this, id: id, value: value);

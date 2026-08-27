@@ -3355,7 +3355,11 @@ fn cut_to_prefix(
         .find(|l| l.id == prefix.layer.layer_id)?;
     let keep = lumit_core::graph::prefix_len(
         &layer.effects,
-        lumit_core::graph::NodeRef::Effect(prefix.effect),
+        prefix
+            .effect
+            .map_or(lumit_core::graph::NodeRef::Source, |id| {
+                lumit_core::graph::NodeRef::Effect(id)
+            }),
     )?;
     // ponytail: one document clone per cut frame, which is what every drag
     // preview already costs. The ceiling is that the clone scales with the
@@ -4303,8 +4307,18 @@ mod tests {
         let project_id = project.id;
         let at = |effect| BridgePrefixPoint {
             layer: crate::api::layer::LayerReference::new(project_id, comp, layer_id),
-            effect,
+            effect: Some(effect),
         };
+        // The Source box: the layer's own picture, before any effect (N4).
+        let at_source = BridgePrefixPoint {
+            layer: crate::api::layer::LayerReference::new(project_id, comp, layer_id),
+            effect: None,
+        };
+        assert_eq!(
+            stack(&super::viewed(Some(at_source), document.clone())),
+            0,
+            "at the Source nothing of the stack is kept"
+        );
         assert_eq!(
             stack(&super::viewed(Some(at(first.id)), document.clone())),
             1,
@@ -4369,7 +4383,7 @@ mod tests {
         };
         let point = crate::api::state::BridgePrefixPoint {
             layer: crate::api::layer::LayerReference::new(Uuid::nil(), comp, layer_id),
-            effect: Uuid::now_v7(),
+            effect: Some(Uuid::now_v7()),
         };
 
         state.fill_exhausted = true;
