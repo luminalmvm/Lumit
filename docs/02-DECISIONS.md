@@ -18984,3 +18984,37 @@ cursor over a handle, which is the affordance a hover brightening was standing i
 Tests: in Flutter, `timeline_alignment_test.dart` — the drawn tab's colour is `animated` at
 full alpha and stronger than the band's edge; and `timeline_panel_frb_test.dart` — a press
 on a work-area handle leaves the playhead where it was while the edge itself still moves.
+
+## K-617 — The welcome page offers two things: New project and Open
+
+**Status: DECIDED (2026-08-27).** The welcome screen, and the empty Viewer behind it, carry
+**exactly two** start cards:
+
+- **New project** — hands the window straight to the editor on the empty project the
+  application already booted with. It asks nothing. Where the file goes is the first save's
+  question.
+- **Open** — the picker, and the `.lum` it names.
+
+The third card is gone. That was *New project* in its old sense (K-480): it opened the save
+picker **first** and the editor second, on a project that now had a home, and it sat beside a
+*Blank project* card that did what the surviving card does. The surviving card takes the name
+*New project*, because that is what it is.
+
+**Why.** Two cards doing almost the same thing, told apart by a question one of them asks
+first, is a choice nobody wants to make at the door. A new project has nothing in it to lose,
+so the folder question buys nothing at launch and costs a decision — and a person who backed
+out of the picker was left on the welcome screen wondering what had happened. Save as is
+still there, on the File menu and on `Ctrl+Shift+S`, for the moment somebody actually wants to
+say where a project lives.
+
+**This is a content change only.** The page's shape, its measurements and its type are
+untouched bar the cards sharing the 560 column two ways instead of three; the drawing is the
+owner's to revisit.
+
+**What this supersedes.** K-480's picker-first *New project* card and the *Blank project* card
+beside it, and the "three start cards" of [15-DESIGN.md](15-DESIGN.md) §12A.3b and
+[07-UI-SPEC.md](07-UI-SPEC.md) §17.
+
+Tests: in Flutter, `welcome_metrics_test.dart` — two cards, 275 wide each, and *New project*
+opens the shell on a project with no path while asking no picker; `shell_frb_test.dart` — the
+boot splash hands over and *New project* is the way straight through.

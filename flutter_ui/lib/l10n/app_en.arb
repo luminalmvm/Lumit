@@ -8272,23 +8272,15 @@
   },
   "welcomeNewProject": "New project",
   "@welcomeNewProject": {
-    "description": "Welcome screen: the title of the first of three start cards. It makes a project and asks where on disk to keep it. Fits a 180px card on one line."
+    "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
   },
-  "welcomeNewProjectNote": "Choose a project folder",
+  "welcomeNewProjectNote": "Save later",
   "@welcomeNewProjectNote": {
-    "description": "Welcome screen: the small note under New project, saying what pressing it will ask for. One line in a 180px card."
-  },
-  "welcomeBlankProject": "Blank project",
-  "@welcomeBlankProject": {
-    "description": "Welcome screen: the title of the second start card. It goes straight into the editor with an empty project that has no file yet."
-  },
-  "welcomeBlankProjectNote": "Save later",
-  "@welcomeBlankProjectNote": {
-    "description": "Welcome screen: the small note under Blank project, saying the project has no file until the user saves it. Two words if possible."
+    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
   },
   "welcomeOpenProject": "Open",
   "@welcomeOpenProject": {
-    "description": "Welcome screen: the title of the third start card, which opens an existing project from disk."
+    "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
   },
   "welcomeOpenProjectNote": ".lum file",
   "@welcomeOpenProjectNote": {

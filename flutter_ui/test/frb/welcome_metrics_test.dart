@@ -63,7 +63,6 @@ void main() {
       WidgetTester tester, {
       List<String> recents = const [],
       Future<String?> Function()? openPicker,
-      Future<String?> Function()? savePicker,
       Size size = const Size(900, 600),
     }) async {
       tester.view.physicalSize = size;
@@ -79,7 +78,6 @@ void main() {
         child: WelcomeScreenFrb(
           onDone: () => done = true,
           openPicker: openPicker,
-          savePicker: savePicker,
         ),
         state: p.state,
         uiState: p.uiState,
@@ -185,23 +183,25 @@ void main() {
           reason: 'no ground to judge: the mark as it is usually seen');
     });
 
-    /// 3. **Three start cards, 180 × 63 with 10 between them.** The height is
+    /// 3. **Two start cards, 63 tall with 10 between them.** The height is
     /// 14 of padding round a 13px title, a 4px gap and the 9px note, with the
     /// hairline counted in — §12A.6's rule that a mockup height is the
-    /// effective one.
+    /// effective one. There were three until K-617 took the folder-first card
+    /// off the page; the two that are left share the same 560 column.
     testWidgets('the start cards are the drawing\'s size', (tester) async {
       await mount(tester);
 
+      expect(find.byKey(const ValueKey('welcome-card-blank')), findsNothing,
+          reason: 'the page offers New project and Open, and nothing else');
+
       final left = band(tester, 'welcome-card-new');
-      final middle = band(tester, 'welcome-card-blank');
       final right = band(tester, 'welcome-card-open');
 
-      for (final card in [left, middle, right]) {
+      for (final card in [left, right]) {
         expect(card.height, welcomeCardHeight, reason: '63 in the drawing');
-        expect(card.width, 180, reason: '(560 - 2 × 10) / 3');
+        expect(card.width, 275, reason: '(560 - 10) / 2');
       }
-      expect(middle.left - left.right, welcomeCardGap);
-      expect(right.left - middle.right, welcomeCardGap);
+      expect(right.left - left.right, welcomeCardGap);
       expect(right.right - left.left, welcomeColumnWidth);
 
       // A card's title is body at 13 in the primary grey; its note is the
@@ -338,69 +338,27 @@ void main() {
 
     // --- What it does -----------------------------------------------------
 
-    /// 8. **Blank project hands the window over and nothing else.** The empty
-    /// project the application boots with is already loaded, so this card has
-    /// nothing to make.
-    testWidgets('Blank project opens the shell', (tester) async {
+    /// 8. **New project hands the window over and nothing else** (K-617). The
+    /// empty project the application boots with is already loaded, so this
+    /// card has nothing to make and nothing to ask: where the file goes is a
+    /// question for the first save. It was the *Blank project* card until the
+    /// owner took the folder-first one off the page and gave this one its
+    /// name.
+    testWidgets('New project opens the shell, asking nothing', (tester) async {
       final p = await mount(tester);
 
-      await tester.tap(find.byKey(const ValueKey('welcome-card-blank')));
+      await tester.tap(find.byKey(const ValueKey('welcome-card-new')));
       await tester.pump();
 
       expect(done, isTrue);
       expect(p.state.project, isNotNull);
       expect(p.state.project!.path(), isNull,
-          reason: 'saved later, as the '
-              'card says');
-    });
-
-    /// 9. **A cancelled picker leaves the screen up.** Somebody who backed out
-    /// of choosing a folder has not started work, and must not be dropped into
-    /// an editor they did not ask for.
-    testWidgets('a cancelled picker does not hand over', (tester) async {
-      await mount(tester, savePicker: () async => null);
-
-      await tester.tap(find.byKey(const ValueKey('welcome-card-new')));
-      await tester.pumpAndSettle();
-
-      expect(done, isFalse);
-    });
-
-    /// 9b. **New project is the Save as flow, and choosing a folder is the
-    /// first act** (K-480): the picker, the file, then the editor — on the
-    /// project that now has a home, never on one that does not.
-    testWidgets('New project saves where it was asked to, then hands over',
-        (tester) async {
-      final dir = Directory.systemTemp.createTempSync('lumit-new');
-      addTearDown(() {
-        try {
-          dir.deleteSync(recursive: true);
-        } catch (_) {}
-      });
-      final target = '${dir.path}${Platform.pathSeparator}First project.lum';
-      var asked = 0;
-
-      final p = await mount(tester);
-      await tester.runAsync(() => startNewProject(
-            p.state,
-            p.uiState,
-            picker: () async {
-              asked++;
-              return target;
-            },
-            onStarted: () => done = true,
-          ));
-
-      expect(asked, 1, reason: 'the picker opens straight away');
-      expect(File(target).existsSync(), isTrue,
-          reason: 'and the file is written');
-      expect(p.state.project!.path(), target);
-      expect(done, isTrue, reason: 'the editor opens on the saved project');
+          reason: 'saved later, as the card says');
     });
 
     /// 9c. **Escape closes the screen with nothing open** (K-481). It is the
     /// standard way out of anything that has taken the window, and it is safe
-    /// because the shell behind it offers the same three ways to start.
+    /// because the shell behind it offers the same two ways to start.
     testWidgets('Escape closes the welcome screen', (tester) async {
       await mount(tester);
 
@@ -633,7 +591,7 @@ void main() {
   // --- The empty shell (K-481) ---------------------------------------------
   //
   // The welcome screen can be closed with nothing open, so something has to be
-  // behind it. The three ways to start work stand in the Viewer until
+  // behind it. The two ways to start work stand in the Viewer until
   // something is displayed — the same three, from the same file, so they can
   // never drift apart.
   group('The empty stage (frb)', () {
@@ -653,17 +611,18 @@ void main() {
       return p;
     }
 
-    /// 18. **Nothing open, so the Viewer offers the three ways to start.** An
+    /// 18. **Nothing open, so the Viewer offers the two ways to start.** An
     /// empty editor whose largest panel says "select a composition" when there
     /// is no composition to select is a dead end.
-    testWidgets('the three actions stand where the picture would be',
+    testWidgets('the two actions stand where the picture would be',
         (tester) async {
       await mount(tester);
 
       expect(find.byKey(const ValueKey('empty-stage')), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget);
-      expect(find.byKey(const ValueKey('welcome-card-blank')), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-open')), findsOneWidget);
+      expect(find.byKey(const ValueKey('welcome-card-blank')), findsNothing,
+          reason: 'the same two the welcome offers, and no third (K-617)');
       expect(find.text(l10n.selectACompositionFirst), findsNothing);
     });
 

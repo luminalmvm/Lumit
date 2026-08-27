@@ -1220,10 +1220,11 @@ has said how they want to start. Somebody who double-clicked a `.lum` is never s
   surface whose relative luminance is above 0.5, light below it, and light when there is no
   ground to judge. It is a brand mark, not a phrase, so it is the same in every language.
   It replaces the word set in mono at 0.08em, which was this section's rule until K-480.
-- **Three start cards, 180×63, ten apart** — New project (choose a folder), Blank project
-  (save later), Open (a `.lum`). Each is a `surface_1` well behind a plain hairline with a
-  13px title and a sentence-case kicker note under it at 0.06em; hover takes fill and edge
-  up one step, exactly as a house button's does.
+- **Two start cards, 63 tall and ten apart, sharing the column** — New project (save later)
+  and Open (a `.lum`), and nothing else (K-617): the third card, which asked for a folder
+  before it would open anything, is gone. Each is a `surface_1` well behind a plain hairline
+  with a 13px title and a sentence-case kicker note under it at 0.06em; hover takes fill and
+  edge up one step, exactly as a house button's does.
 - **No filled action anywhere on the page.** §3.1's rule is a ceiling of one, not a floor,
   and this screen spends none of the accent.
 - **The recents list is a kicker strip over a hairline well.** *Recent* is capitalised —

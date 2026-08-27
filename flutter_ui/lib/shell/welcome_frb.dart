@@ -130,17 +130,14 @@ TextStyle welcomeFact(LumitTheme t) =>
 class WelcomeScreenFrb extends StatefulWidget {
   final VoidCallback onDone;
 
-  /// The file pickers, so a widget test can answer them — no plugin channel
-  /// opens a real dialogue in one. The same seam `openProjectFrb` and
-  /// `saveProjectFrb` already take.
+  /// The file picker, so a widget test can answer it — no plugin channel opens
+  /// a real dialogue in one. The same seam `openProjectFrb` already takes.
   final Future<String?> Function()? openPicker;
-  final Future<String?> Function()? savePicker;
 
   const WelcomeScreenFrb({
     super.key,
     required this.onDone,
     this.openPicker,
-    this.savePicker,
   });
 
   @override
@@ -247,7 +244,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
         child: StartCards(
           onStarted: widget.onDone,
           openPicker: widget.openPicker,
-          savePicker: widget.savePicker,
         ),
       );
 
@@ -359,33 +355,21 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
       );
 }
 
-// --- The three ways to start work -----------------------------------------
+// --- The two ways to start work -------------------------------------------
 
-/// New project: choose where the `.lum` lives **first**, then open the editor
-/// on the project that now has a home (K-480).
-///
-/// The card's own note is the promise ("choose a project folder"), so a
-/// cancelled picker leaves everything as it was rather than dropping somebody
-/// into an editor they did not ask for — [onStarted] runs only when the file
-/// is genuinely on disk.
-Future<void> startNewProject(
-  LumitState app,
-  LumitUiState ui, {
-  Future<String?> Function()? picker,
-  VoidCallback? onStarted,
-}) async {
-  await saveProjectFrb(app, ui, forcePicker: true, picker: picker);
-  if (app.project?.path() != null) onStarted?.call();
-}
-
-/// Blank project: no file, no questions.
+/// New project: no file, no questions (K-617).
 ///
 /// From the welcome screen there is nothing to make — the empty project the
 /// application boots with is already loaded (see `main`), so this is the card
 /// that says "get out of my way". From the empty shell, where the project may
-/// be one that *does* have a home on disk with nothing shown in it, it starts a
-/// fresh one, which is what the word blank means.
-void startBlankProject(LumitState app, {VoidCallback? onStarted}) {
+/// be one that *does* have a home on disk with nothing shown in it, it starts
+/// a fresh one.
+///
+/// **It does not ask where the file goes.** A second card did, ahead of the
+/// editor (K-480), and the owner has taken it off the page: a project with
+/// nothing in it has nothing to lose, so where it lives is a question for the
+/// first save rather than for the door.
+void startNewProject(LumitState app, {VoidCallback? onStarted}) {
   if (app.project?.path() != null) app.newProject();
   onStarted?.call();
 }
@@ -400,8 +384,8 @@ Future<void> startOpenProject(
   if (app.project?.path() != null) onStarted?.call();
 }
 
-/// The three start cards, in a row that gives each of them a third of whatever
-/// width it is handed.
+/// The **two** start cards, in a row that gives each of them half of whatever
+/// width it is handed (K-617): *New project* and *Open*, and nothing else.
 ///
 /// One widget for the two places they appear — the welcome screen and the empty
 /// shell behind it — so the ways to start work cannot drift apart. [onStarted]
@@ -410,19 +394,16 @@ Future<void> startOpenProject(
 class StartCards extends StatelessWidget {
   final VoidCallback? onStarted;
   final Future<String?> Function()? openPicker;
-  final Future<String?> Function()? savePicker;
 
   const StartCards({
     super.key,
     this.onStarted,
     this.openPicker,
-    this.savePicker,
   });
 
   @override
   Widget build(BuildContext context) {
     final app = context.read<LumitState>();
-    final ui = context.read<LumitUiState>();
     return Row(
       children: [
         Expanded(
@@ -430,17 +411,7 @@ class StartCards extends StatelessWidget {
             id: 'welcome-card-new',
             title: l10n.welcomeNewProject,
             note: l10n.welcomeNewProjectNote,
-            onTap: () => startNewProject(app, ui,
-                picker: savePicker, onStarted: onStarted),
-          ),
-        ),
-        const SizedBox(width: welcomeCardGap),
-        Expanded(
-          child: _WelcomeCard(
-            id: 'welcome-card-blank',
-            title: l10n.welcomeBlankProject,
-            note: l10n.welcomeBlankProjectNote,
-            onTap: () => startBlankProject(app, onStarted: onStarted),
+            onTap: () => startNewProject(app, onStarted: onStarted),
           ),
         ),
         const SizedBox(width: welcomeCardGap),
@@ -469,12 +440,11 @@ class StartCards extends StatelessWidget {
 /// A project that *has* compositions and simply has none fronted is a different
 /// sentence, and keeps the panel's ordinary empty line.
 class EmptyStageFrb extends StatelessWidget {
-  /// The pickers, so a widget test can answer them — the same seam the welcome
+  /// The picker, so a widget test can answer it — the same seam the welcome
   /// screen takes.
   final Future<String?> Function()? openPicker;
-  final Future<String?> Function()? savePicker;
 
-  const EmptyStageFrb({super.key, this.openPicker, this.savePicker});
+  const EmptyStageFrb({super.key, this.openPicker});
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +467,6 @@ class EmptyStageFrb extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: welcomeColumnWidth),
           child: StartCards(
             openPicker: openPicker,
-            savePicker: savePicker,
           ),
         ),
       ),

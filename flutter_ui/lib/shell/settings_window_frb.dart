@@ -722,7 +722,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           l10n.settingsGroupWorkspace,
           [
             // Off means Lumit opens straight into the shell (K-481); the
-            // Viewer offers the same three ways to start until something is
+            // Viewer offers the same two ways to start until something is
             // displayed, so nothing is hidden by turning this off.
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,

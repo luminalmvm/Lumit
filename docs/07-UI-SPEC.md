@@ -2438,9 +2438,9 @@ small image over each choice, remain the destination (polish tracked in TODO).
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
   every panel from first launch.
 - **The welcome screen** (K-448, K-464, K-468, superseding the card above once the redesigned
-  shell lands): the launch window carries the **New**, **Blank** and **Open** project
-  cards, with **Manual** and **What's new** as outlined buttons, and no "free and open
-  source" line. With nothing open, the same three cards repeat in the empty Viewer until a
+  shell lands): the launch window carries **exactly two** start cards — **New project** and
+  **Open** (K-617) — with **Manual** and **What's new** as outlined buttons, and no "free and
+  open source" line. With nothing open, the same two cards repeat in the empty Viewer until a
   composition is viewed.
   It is **the window** between the boot splash and the shell rather than a card over
   either, and it is not shown at all when a `.lum` arrived on the command line. Under the
@@ -2450,11 +2450,12 @@ small image over each choice, remain the destination (polish tracked in TODO).
   **Clear** that empties the list and a **×** on each row that forgets just that one.
   Neither asks first: nothing is deleted and File ▸ Open brings a project back.
   A footer carries the **product** version — `Lumit 0.2.0`, not the boot line's crate name
-  (K-480) — and the two links. **New project opens the save picker first** and the editor
-  second, on the project that now has a home; a cancelled picker leaves the screen up
-  (K-480). **Escape closes the screen** with nothing open (K-481), and
+  (K-480) — and the two links. **New project asks nothing**: it hands the window to the
+  editor on the empty project already loaded, and where the file goes is the first save's
+  question (K-617, superseding K-480's picker-first card). **Escape closes the screen** with
+  nothing open (K-481), and
   **Settings ▸ General ▸ Workspace ▸ Welcome screen on launch** stands it down for every
-  launch — off means Lumit opens straight into the shell, where the same three cards are
+  launch — off means Lumit opens straight into the shell, where the same two cards are
   waiting in the Viewer, so the setting hides no choice. The shape and every measurement
   are in [15-DESIGN.md](15-DESIGN.md) §12A.3b–c.
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or

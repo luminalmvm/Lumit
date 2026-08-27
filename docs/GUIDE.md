@@ -10442,9 +10442,9 @@ since a theme colour is one that changes and these do not.
 **The empty shell.** The welcome page can now be closed with nothing open — Escape does it,
 and Settings ▸ General can stop it appearing at launch at all. That would once have left
 somebody staring at an editor with no document and no obvious way to start one, so the
-Viewer now shows the same three cards the welcome shows — New project, Blank project, Open
-— until there is something to display. They are not a copy: they are the same piece of
-interface, running the same three functions, mounted in a second place. If a project *does*
+Viewer now shows the same two cards the welcome shows — New project and Open — until there
+is something to display. They are not a copy: they are the same piece of interface, running
+the same two functions, mounted in a second place. If a project *does*
 have compositions and simply has none open, the Viewer says what it always said — "select a
 composition" — because that is a different situation and deserves a different sentence.
 
