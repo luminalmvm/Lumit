@@ -197,11 +197,21 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // anything else falls through to the claim it displaced.
     if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
     ui.deleteClaim = _deleteClaim;
+    // Copy and Paste are claimed the same way, and for the same reason
+    // (K-300). They were answered on the keyboard instead for a while, which
+    // took the chord here *and* left the shell's own Paste to run: one press
+    // put the effects on the layer twice.
+    if (ui.copyClaim != _copyClaim) _priorCopyClaim = ui.copyClaim;
+    ui.copyClaim = _copyClaim;
+    if (ui.pasteClaim != _pasteClaim) _priorPasteClaim = ui.pasteClaim;
+    ui.pasteClaim = _pasteClaim;
     _readDriven();
   }
 
-  /// The claim this panel had to displace to take Delete.
+  /// The claims this panel had to displace to take the editing chords.
   bool Function()? _priorDeleteClaim;
+  bool Function()? _priorCopyClaim;
+  bool Function()? _priorPasteClaim;
 
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
@@ -210,6 +220,32 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     if (_boundUi?.deleteClaim == _deleteClaim) {
       _boundUi!.deleteClaim = _priorDeleteClaim;
     }
+    if (_boundUi?.copyClaim == _copyClaim) {
+      _boundUi!.copyClaim = _priorCopyClaim;
+    }
+    if (_boundUi?.pasteClaim == _pasteClaim) {
+      _boundUi!.pasteClaim = _priorPasteClaim;
+    }
+  }
+
+  bool _copyClaim() {
+    final ui = _boundUi;
+    if (!mounted ||
+        ui == null ||
+        ui.activePanel.value != Panel.effectControls) {
+      return _priorCopyClaim?.call() ?? false;
+    }
+    return _copyPickedEffects(ui) || (_priorCopyClaim?.call() ?? false);
+  }
+
+  bool _pasteClaim() {
+    final ui = _boundUi;
+    if (!mounted ||
+        ui == null ||
+        ui.activePanel.value != Panel.effectControls) {
+      return _priorPasteClaim?.call() ?? false;
+    }
+    return _pastePickedEffects(ui) || (_priorPasteClaim?.call() ?? false);
   }
 
   bool _deleteClaim() {
@@ -337,8 +373,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       setState(() => _renamingEffect = picked.first);
       return true;
     }
-    if (action == 'edit.copy') return _copyPickedEffects(ui);
-    if (action == 'edit.paste') return _pastePickedEffects(ui);
+    // Copy, Paste and Delete are **claimed**, not answered here: see
+    // `didChangeDependencies`.
     return false;
   }
 
@@ -353,11 +389,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// — which is a copy that "does nothing", because the paste that follows
   /// puts keyframes back rather than the effect.
   ///
-  /// A `HardwareKeyboard` handler runs before the focus tree, so answering
-  /// here settles it: while this panel is the active one and an effect is
-  /// picked in it, the effect is what the chord means. Nothing is claimed
-  /// otherwise — with no effect picked the chord falls through to the shell,
-  /// which copies the layer as it always did.
+  /// A claim on the chord settles it: while this panel is the active one and
+  /// an effect is picked in it, the effect is what the chord means. Nothing is
+  /// claimed otherwise — with no effect picked the chord falls through to the
+  /// claim this one displaced, and then to the shell, which copies the layer
+  /// as it always did.
   bool _copyPickedEffects(LumitUiState ui) {
     final layer = ui.selectedEffectsLayer;
     final picked = ui.selectedEffects.value;
@@ -379,8 +415,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// Claimed only when the tray actually holds effects. A layer on the
   /// clipboard is the shell's business, and an empty tray is too: the shell's
   /// paste reads the *system* clipboard for a document copied in another Lumit
-  /// window (K-302), which is asynchronous and has no place in a key handler
-  /// that must answer yes or no on the spot.
+  /// window (K-302), which is asynchronous and has no place in a claim that
+  /// must answer yes or no on the spot.
   bool _pastePickedEffects(LumitUiState ui) {
     if (ui.clipboard.kind != ClipboardKind.effects) return false;
     final text = ui.clipboard.text;

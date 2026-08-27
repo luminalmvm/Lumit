@@ -45,8 +45,8 @@ void main() {
     /// finder knows about the capitals.
     Finder heading(String label) => find.text(label.toUpperCase());
 
-    /// `Ctrl+C` and `Ctrl+V` as the hardware keyboard delivers them, modifier
-    /// held across the letter the way a person presses them.
+    /// A chord as the hardware keyboard delivers it, modifier held across the
+    /// letter the way a person presses them.
     Future<void> chord(WidgetTester tester, LogicalKeyboardKey key) async {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(key);
@@ -54,8 +54,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> copyChord(WidgetTester tester) =>
-        chord(tester, LogicalKeyboardKey.keyC);
     Future<void> pasteChord(WidgetTester tester) =>
         chord(tester, LogicalKeyboardKey.keyV);
 
@@ -1200,28 +1198,32 @@ void main() {
     /// test). The chord had no handler on this panel at all, so it went to the
     /// shell, where `copySelectionFrb` offers it first to whichever panel has
     /// *claimed* copy for keyframes — and a paste that answers the claim puts
-    /// keys back, not the effect. The panel now answers for its own selection
-    /// while it is the active one, which is what makes the round trip land.
-    testWidgets('Ctrl+C and Ctrl+V carry an effect, onto another layer too',
+    /// keys back, not the effect. The panel now claims both chords while it is
+    /// the active one, chaining onto whatever held them, which is what makes
+    /// the round trip land.
+    testWidgets('Copy and Paste carry an effect, onto another layer too',
         (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
       p.layer.addEffect(name: 'vignette');
-      await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
 
-      // Anything at all could have claimed the chord at the shell — this is
-      // exactly what the Timeline does with a property row picked — and the
-      // effect must still win while this panel is the one being used.
+      // Anything at all could have claimed the chord already — this is exactly
+      // what the Timeline does with a property row picked — and the effect
+      // must still win while this panel is the one being used. Set before the
+      // panel mounts, because chaining is what mounting does.
       p.uiState.copyClaim = () => true;
       p.uiState.pasteClaim = () => true;
+
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.effectControls;
 
       final second = p.layer.getEffects()[1];
       await tester.tap(heading(effectLabelOf(second.name())));
       await tester.pumpAndSettle();
       expect(p.uiState.selectedEffects.value, [second.id()]);
 
-      await copyChord(tester);
+      // Through the shell's own Copy, which is the only route the chord takes.
+      expect(copySelectionFrb(p.uiState), isTrue);
       expect(p.uiState.clipboard.kind, ClipboardKind.effects,
           reason: 'the picked effect went on the clipboard, not the keys a '
               'panel elsewhere had claimed');
@@ -1231,7 +1233,13 @@ void main() {
       p.uiState.setSelection([other]);
       await tester.pumpAndSettle();
 
-      await pasteChord(tester);
+      Future<void> paste() async {
+        await pasteSelectionFrb(
+            p.state, p.uiState, p.uiState.selectedComp, other);
+        await tester.pumpAndSettle();
+      }
+
+      await paste();
       expect(other.getEffects(), hasLength(1),
           reason: 'one effect, not the whole stack it was picked out of');
       expect(other.getEffects().single.name(), second.name());
@@ -1243,8 +1251,39 @@ void main() {
 
       // Pasting again onto the same layer stacks a second copy — the paste is
       // an append, exactly as loading a preset is.
-      await pasteChord(tester);
+      await paste();
       expect(other.getEffects(), hasLength(2));
+    });
+
+    /// **P0 — `Ctrl+V` pasted twice** (owner, desk test). The panel answered
+    /// the chord on the hardware keyboard *and* the shell answered it, and
+    /// every hardware-keyboard handler runs on every key: one press put the
+    /// effects on the layer twice. The panel claims the chord now, exactly as
+    /// it already claimed Delete, and a claim is asked once.
+    testWidgets('the paste chord is claimed, never answered on the keyboard',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.effectControls;
+
+      final source = p.layer.getEffects().single;
+      p.uiState
+          .copyEffectsToClipboard(p.layer.copyEffects(effects: [source.id()]));
+
+      final other = p.uiState.selectedComp!.addSolidLayer();
+      p.uiState.setSelection([other]);
+      await tester.pumpAndSettle();
+
+      await pasteChord(tester);
+      expect(other.getEffects(), isEmpty,
+          reason: 'the panel does not act on the chord itself — acting here '
+              'and at the shell is what pasted twice');
+
+      await pasteSelectionFrb(p.state, p.uiState, p.uiState.selectedComp, other);
+      await tester.pumpAndSettle();
+      expect(other.getEffects(), hasLength(1),
+          reason: 'the shell asks the claim, and once asked is once pasted');
     });
 
     /// With nothing picked out of a stack the chord is **not** claimed: the
@@ -1253,8 +1292,6 @@ void main() {
         (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
-      await mount(tester, p);
-      p.uiState.activePanel.value = Panel.effectControls;
 
       var claimed = false;
       p.uiState.copyClaim = () {
@@ -1262,7 +1299,9 @@ void main() {
         return true;
       };
 
-      await copyChord(tester);
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.effectControls;
+
       expect(copySelectionFrb(p.uiState), isTrue,
           reason: 'the shell is still the one that answers');
       expect(claimed, isTrue);
