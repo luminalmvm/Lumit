@@ -2473,6 +2473,66 @@ impl AudioJobsBuilder {
         }
     }
 
+    /// **Whether this layer could make a sound** — the question the timeline
+    /// asks to decide whether to draw a mute switch on the row (K-435).
+    ///
+    /// The same two kinds [`Self::walk`] mixes, answered the same way, so the
+    /// switch appears exactly where pressing it changes what the comp sounds
+    /// like: a footage layer whose file carries an audio stream, or a **Precomp
+    /// layer over a comp that holds one at any depth**. A Precomp is the case
+    /// this exists for — `walk` has always scaled a nested comp's audio by the
+    /// carrier layer's Volume and silenced it on that layer's mute, so the
+    /// switch worked the whole time and simply was not being drawn.
+    ///
+    /// Deliberately blind to the audible and solo switches. Those say what a
+    /// layer is *doing*; a switch that vanished the moment it was pressed could
+    /// never be pressed back.
+    ///
+    /// Answered through the same per-item probe cache, so asking about every
+    /// row of a comp probes each file once.
+    pub fn layer_has_audio(&mut self, doc: &Document, layer: &lumit_core::model::Layer) -> bool {
+        self.kind_has_audio(doc, &layer.kind, &mut Vec::new())
+    }
+
+    fn kind_has_audio(
+        &mut self,
+        doc: &Document,
+        kind: &LayerKind,
+        visited: &mut Vec<Uuid>,
+    ) -> bool {
+        match kind {
+            LayerKind::Footage { item, .. } => match doc.item(*item) {
+                Some(ProjectItem::Footage(f)) => self.item_has_audio(*item, &footage_path(f)),
+                _ => false,
+            },
+            LayerKind::Precomp { comp: nested_id } => {
+                // The same cycle guard the mixing walk carries: a comp that
+                // (transitively) contains itself stops here rather than
+                // recursing forever.
+                if visited.contains(nested_id) {
+                    return false;
+                }
+                let Some(nested) = doc.comp(*nested_id) else {
+                    return false;
+                };
+                visited.push(*nested_id);
+                let mut has = false;
+                for l in &nested.layers {
+                    if self.kind_has_audio(doc, &l.kind, visited) {
+                        has = true;
+                        break;
+                    }
+                }
+                visited.pop();
+                has
+            }
+            // Every other kind is silent, including a Sequence layer: `walk`
+            // does not mix one either, and a switch that did nothing would be
+            // worse than no switch at all.
+            _ => false,
+        }
+    }
+
     /// Whether footage `item` at `path` carries an audio stream, cached so each
     /// file is probed for audio at most once across a session.
     fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
@@ -3764,6 +3824,55 @@ mod tests {
             "the Precomp layer's Volume rides on the job"
         );
         assert!((job.carriers[0].0.value_at(0.0) - -6.0).abs() < 1e-9);
+    }
+
+    /// **A Precomp layer over a comp that has sound in it says it has sound**
+    /// (K-435). The timeline draws a row's mute switch only where the layer can
+    /// make a sound, and the question used to be asked of the layer's own
+    /// footage item alone — which a Precomp layer does not have. So a precomp
+    /// holding the music, the ordinary way a bed is placed, wore no mute switch
+    /// at all, even though muting it (as the walk above shows) has always
+    /// silenced the song.
+    ///
+    /// The same scene as the test above, plus the cases either side of it: a
+    /// silent precomp, a bare solid, and a comp nested two deep.
+    #[test]
+    fn a_precomp_over_a_comp_with_sound_in_it_carries_a_mute_switch() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let middle = push_comp(&mut doc, "B", 32, 32);
+        push_layer(&mut doc, middle, LayerKind::Precomp { comp: inner });
+        let silent = push_comp(&mut doc, "silent", 32, 32);
+        let outer = push_comp(&mut doc, "C", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: middle });
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: silent });
+
+        let mut builder = AudioJobsBuilder::new();
+        builder.has_audio.insert(song, true);
+        let c = doc.comp(outer).unwrap().clone();
+        assert!(
+            builder.layer_has_audio(&doc, &c.layers[0]),
+            "the song is two comps down, and the switch belongs on the row"
+        );
+        assert!(
+            !builder.layer_has_audio(&doc, &c.layers[1]),
+            "a precomp with nothing in it must not claim a mute switch"
+        );
+
+        // The footage layer itself, and a layer with no source at all.
+        let a = doc.comp(inner).unwrap().clone();
+        assert!(builder.layer_has_audio(&doc, &a.layers[0]));
+        let mut mute = a.layers[0].clone();
+        mute.switches.audible = false;
+        assert!(
+            builder.layer_has_audio(&doc, &mute),
+            "muting a layer must not take its own mute switch away"
+        );
+        let mut null = a.layers[0].clone();
+        null.kind = LayerKind::Null;
+        assert!(!builder.layer_has_audio(&doc, &null));
     }
 
     /// **The export contract for the deferred flare bake (K-350).** A fresh
