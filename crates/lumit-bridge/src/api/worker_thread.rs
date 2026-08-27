@@ -1,4 +1,4 @@
-use std::{eprintln, println, sync::mpsc::Receiver};
+use std::sync::mpsc::Receiver;
 
 use crate::api::composition::BridgePlaybackMode;
 use flutter_rust_bridge::frb;
@@ -1752,7 +1752,7 @@ impl Playback {
         }
         self.pace_reported = std::time::Instant::now();
         let ms = |cost: Option<f64>| cost.map_or(0.0, |secs| secs * 1000.0);
-        println!(
+        note!(
             "Playback pace: present p95 {:.2} ms, render p95 {:.2} ms, ring {}, budget {:.2} ms",
             ms(self.present_costs.p95()),
             ms(self.costs.p95()),
@@ -2254,11 +2254,11 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
 
     {
         let Ok(state) = project.state() else {
-            eprintln!("No such project; not starting the render worker");
+            note!("No such project; not starting the render worker");
             return;
         };
         let Ok(mut state) = state.write() else {
-            eprintln!("Project state poisoned; not starting the render worker");
+            note!("Project state poisoned; not starting the render worker");
             return;
         };
 
@@ -2316,7 +2316,7 @@ fn build_viewer_renderer(
     let mut renderer = match HeadlessRenderer::new() {
         Ok(renderer) => renderer,
         Err(err) => {
-            eprintln!("Could not create the renderer, stopping the worker: {err}");
+            note!("Could not create the renderer, stopping the worker: {err}");
             return None;
         }
     };
@@ -2384,7 +2384,7 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
     if !state.renderer.device_lost() {
         return;
     }
-    eprintln!("The graphics device was lost; rebuilding the renderer");
+    note!("The graphics device was lost; rebuilding the renderer");
     let Some(mut renderer) = build_viewer_renderer(&state.project, stream) else {
         // No second device to be had, or the project has closed under us. The
         // worker stops rather than spinning on a renderer it cannot rebuild;
@@ -2420,7 +2420,7 @@ fn worker_loop(
     receiver: Receiver<WorkerRequest>,
     stream: WorkerResponseStream,
 ) {
-    println!("Worker thread started");
+    note!("Worker thread started");
     let mut stream = stream;
     raise_timer_resolution();
 
@@ -2493,7 +2493,7 @@ fn worker_loop(
                 Ok(request) => Some(request),
                 Err(std::sync::mpsc::TryRecvError::Empty) => None,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    eprintln!("Receiver disconnected, stopping the worker");
+                    note!("Receiver disconnected, stopping the worker");
                     return;
                 }
             }
@@ -2536,7 +2536,7 @@ fn worker_loop(
                     None
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    eprintln!("Receiver disconnected, stopping the worker");
+                    note!("Receiver disconnected, stopping the worker");
                     return;
                 }
             }
@@ -2832,7 +2832,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         // A frame that will not render stops playback rather than
                         // spinning on it — the alternative is a silent loop burning
                         // a core on a comp that cannot be drawn.
-                        eprintln!("Playback stopped: {err}");
+                        note!("Playback stopped: {err}");
                         state.playback = None;
                         _ = stream.add(WorkerResponse::PlaybackEnded);
                     }
@@ -2895,7 +2895,7 @@ fn present_ring_frame(
                 },
             ));
         }
-        Err(err) => eprintln!("Shared-texture present failed, dropping frame: {err}"),
+        Err(err) => note!("Shared-texture present failed, dropping frame: {err}"),
     }
 
     #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -2913,7 +2913,7 @@ fn present_ring_frame(
                 tier: crate::realtime::tier(),
             }));
         }
-        Err(err) => eprintln!("Shared DMA-BUF present failed, dropping frame: {err}"),
+        Err(err) => note!("Shared DMA-BUF present failed, dropping frame: {err}"),
     }
 
     #[cfg(not(any(
@@ -2923,7 +2923,7 @@ fn present_ring_frame(
     )))]
     {
         let _ = (renderer, frame, prepared, stream);
-        eprintln!("No zero-copy transport in this build; dropping the frame");
+        note!("No zero-copy transport in this build; dropping the frame");
     }
 }
 
@@ -3125,7 +3125,7 @@ fn handle_requests(
                 }
             };
             if let Err(err) = outcome {
-                eprintln!("Dropping frame: {err}");
+                note!("Dropping frame: {err}");
             }
         }
     }
@@ -3682,7 +3682,7 @@ fn trace_scope(
                 }
             };
             let Some(made) = made else {
-                eprintln!("Scope render failed, dropping the trace");
+                note!("Scope render failed, dropping the trace");
                 return Ok(());
             };
             made
@@ -3699,7 +3699,7 @@ fn trace_scope(
                 rgba: trace,
             }));
         }
-        Err(err) => eprintln!("Scope trace failed: {err}"),
+        Err(err) => note!("Scope trace failed: {err}"),
     }
     Ok(())
 }
@@ -4045,7 +4045,7 @@ fn publish_frame(
     )))]
     {
         let _ = (state, comp, frame, scale, document, stream, mode, cacheable);
-        eprintln!("No zero-copy transport in this build; dropping the frame");
+        note!("No zero-copy transport in this build; dropping the frame");
     }
 }
 
@@ -4089,14 +4089,14 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            eprintln!("Shared DMA-BUF render failed, dropping frame: {err}");
+            note!("Shared DMA-BUF render failed, dropping frame: {err}");
             return;
         }
     };
     let shared = match state.renderer.present_prepared_dmabuf(&prepared) {
         Ok(shared) => shared,
         Err(err) => {
-            eprintln!("Shared DMA-BUF present failed, dropping frame: {err}");
+            note!("Shared DMA-BUF present failed, dropping frame: {err}");
             return;
         }
     };
@@ -4157,14 +4157,14 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            eprintln!("Shared-texture render failed, dropping frame: {err}");
+            note!("Shared-texture render failed, dropping frame: {err}");
             return;
         }
     };
     let shared = match state.renderer.present_prepared(&prepared) {
         Ok(shared) => shared,
         Err(err) => {
-            eprintln!("Shared-texture present failed, dropping frame: {err}");
+            note!("Shared-texture present failed, dropping frame: {err}");
             return;
         }
     };

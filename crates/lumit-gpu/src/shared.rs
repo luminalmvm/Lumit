@@ -314,13 +314,13 @@ unsafe fn wait_for_copy(context: &ID3D11DeviceContext, query: &ID3D11Query) {
             Ok(()) if done.as_bool() => return,
             // Device removed or reset: no amount of waiting will finish this.
             Err(err) => {
-                eprintln!("lumit-gpu: shared texture: GetData failed while awaiting the frame copy: {err}");
+                note!("lumit-gpu: shared texture: GetData failed while awaiting the frame copy: {err}");
                 return;
             }
             Ok(()) => {}
         }
         if start.elapsed() >= COPY_WAIT_LIMIT {
-            eprintln!(
+            note!(
                 "lumit-gpu: shared texture: the GPU did not report the frame copy finished within {COPY_WAIT_LIMIT:?}; showing the frame anyway"
             );
             return;

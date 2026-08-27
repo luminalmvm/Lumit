@@ -38,6 +38,8 @@
 //!   disk), which back the Settings cache controls and the Timeline's cache bar.
 //! - `profiling` — whether the worker is measuring per-layer and per-effect
 //!   render times for the indicators (docs/13 §7.1).
+//! - `note` — the `note!` macro every diagnostic line in this crate goes
+//!   through: a console that has closed must not panic the editor.
 //! - [`beats`] — the beat-detection worker: one analysis at a time, on a
 //!   thread of its own, so a detection cannot sit on the pool every panel's
 //!   reads share.
@@ -65,6 +67,11 @@
     clippy::unimplemented
 )]
 mod frb_generated;
+
+// Declared first, and with `#[macro_use]`, so `note!` is in scope for every
+// module below it — see [`note`] for why no module may `println!`.
+#[macro_use]
+mod note;
 
 // Pure defaults over lumit-core — no decoder, no GPU. It was gated on
 // media+render when it also held the v0 ops that needed them.

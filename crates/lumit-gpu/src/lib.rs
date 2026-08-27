@@ -9,6 +9,11 @@
 //! too-dark bugs — and it is why preview can be bit-identical to export
 //! (decision K-031).
 
+// Declared first, and with `#[macro_use]`, so `note!` is in scope for the whole
+// crate — see [`note`] for why nothing here may `eprintln!`.
+#[macro_use]
+mod note;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -359,7 +364,7 @@ pub fn no_adapter() {
          supposed to have one (install mesa-vulkan-drivers for the lavapipe \
          software rasteriser, or unset the variable to skip)"
     );
-    eprintln!("skipping: no GPU adapter");
+    note!("skipping: no GPU adapter");
 }
 
 /// Whether [`REQUIRE_ADAPTER_ENV`]'s value demands an adapter. Unset, empty and
@@ -714,14 +719,17 @@ impl GpuContext {
         // Which adapter was picked is the first thing anyone asks when the
         // Viewer is black or a hybrid-GPU machine chose the wrong card — but it
         // is noise on every test and every shipped run, so it is opt-in. The
-        // crate has no logging framework (the workspace prints diagnostics with
-        // `eprintln!`), so the gate is an environment variable: set
-        // `LUMIT_GPU_DEBUG` to anything to get the line.
+        // crate has no logging framework (diagnostics go out through `note!`),
+        // so the gate is an environment variable: set `LUMIT_GPU_DEBUG` to
+        // anything to get the line.
         if std::env::var_os("LUMIT_GPU_DEBUG").is_some() {
             let info = adapter.get_info();
-            eprintln!(
+            note!(
                 "lumit-gpu: adapter selected: {} ({:?}, backend {:?}, driver {})",
-                info.name, info.device_type, info.backend, info.driver_info,
+                info.name,
+                info.device_type,
+                info.backend,
+                info.driver_info,
             );
         }
         // wgpu's defaults for both of these panic. An engine crate may not panic
@@ -732,7 +740,7 @@ impl GpuContext {
         // report and carry on, in the same shape as the rest of the workspace's
         // diagnostics, rather than to take the process down mid-edit.
         device.on_uncaptured_error(Box::new(|e| {
-            eprintln!("lumit-gpu: uncaptured wgpu error: {e}");
+            note!("lumit-gpu: uncaptured wgpu error: {e}");
         }));
         // A lost device is survivable, but only if somebody hears about it. The
         // driver calls this on a thread and at a moment of its own choosing, so
@@ -741,7 +749,7 @@ impl GpuContext {
         let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let raise = std::sync::Arc::clone(&lost);
         device.set_device_lost_callback(move |reason, msg| {
-            eprintln!("lumit-gpu: device lost ({reason:?}): {msg}");
+            note!("lumit-gpu: device lost ({reason:?}): {msg}");
             raise.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 

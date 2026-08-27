@@ -1,4 +1,4 @@
-use std::{println, sync::Arc};
+use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
 
@@ -1631,7 +1631,7 @@ impl CompositionReference {
         };
 
         sender.send(request).map_err(|err| {
-            println!("Error while requesting render: {err:?}");
+            note!("Error while requesting render: {err:?}");
             BridgeError::InvalidWorkerState
         })
     }

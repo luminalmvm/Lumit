@@ -208,6 +208,13 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
   `warn` for degradation-ladder activations and recoveries, `info` for lifecycle, `debug`
   and below for everything else. Logging in per-pixel or per-sample paths is forbidden;
   per-frame paths log at `trace` behind a compile-time feature.
+- `tracing` is not wired yet; until it is, the handful of interim diagnostics go through each
+  crate's `note!` macro (`lumit-bridge`, `lumit-gpu`), which drops a failed write. The standard
+  print macros **panic** when the write fails, and a closed console is normal for a windowed
+  build — a panic in a `#[frb(sync)]` call then crosses into Dart as a `PanicException` and the
+  call's real work is reported as a crash. `crates/lumit-bridge/tests/no_panicking_prints.rs`
+  fails the build on a `println!` in shipping engine code; test targets and the two command-line
+  crates (`lumit-bench`, `lumit-ofx-broker`) are exempt.
 - Per-node GPU and CPU timings are collected in release builds (cheap counters, no
   allocation) — they feed the scheduler's adaptive concurrency and the pre-emptive tiling of
   nodes that trend towards the TDR window ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §5).

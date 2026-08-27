@@ -593,7 +593,7 @@ impl LumitBridgeState {
         };
 
         let Ok(streams) = STREAMS.read() else {
-            eprintln!("Stream registry poisoned; dropping change for {project_id}");
+            note!("Stream registry poisoned; dropping change for {project_id}");
             return;
         };
 

@@ -38,7 +38,7 @@ static ANNOUNCED: AtomicBool = AtomicBool::new(false);
 pub(crate) fn set_wanted(on: bool) {
     WANTED.store(on, Ordering::Relaxed);
     ANNOUNCED.store(false, Ordering::Relaxed);
-    println!("Render profiling {}", if on { "on" } else { "off" });
+    note!("Render profiling {}", if on { "on" } else { "off" });
 }
 
 /// Say — **once** per switching on — that a frame really was measured, and what
@@ -52,7 +52,7 @@ pub(crate) fn set_wanted(on: bool) {
 /// measured, and a second line with layers in it means the numbers left here.
 pub(crate) fn announce_first(frame: u64, layers: usize, total_ms: f32) {
     if !ANNOUNCED.swap(true, Ordering::Relaxed) {
-        println!("Render profiling: measured frame {frame} — {layers} layer(s), {total_ms:.1} ms");
+        note!("Render profiling: measured frame {frame} — {layers} layer(s), {total_ms:.1} ms");
     }
 }
 

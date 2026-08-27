@@ -12239,3 +12239,34 @@ at each frame, because a layer whose box grew and shrank frame by frame would dr
 about. And because the room is added on the left and top too, the words would jump the first time
 you add an animator — so the command that adds one also moves the layer's anchor point by the
 same amount, in the same undo step, and nothing moves.
+
+## 35. Why the engine never says `println`, in plain terms
+
+Programs write notes to a **console** — the black window a developer starts the app from, and the
+place `flutter run` prints its lines. The engine uses it for a handful of diagnostics: which
+graphics card was chosen, that the render worker started, that a frame was dropped.
+
+The surprise is what happens when nothing is listening. The console can go away — Lumit is a
+windowed application, not a terminal one, and a Windows build that was launched from a window
+manager has no console at all; a `flutter run` that has been closed leaves a pipe with nobody at
+the other end. Writing into that fails, and Rust's ordinary printing macros answer a failed write
+by **crashing the program**. Not the note: the program. That is a genuine bug the owner hit — the
+switch that turns the render-time numbers off does its work and then prints one line saying so,
+and the line, not the work, is what came back as *"Could not measure render times: PanicException
+(failed printing to stdout: The pipe is being closed)"*.
+
+The fix is a rule rather than a patch. Every diagnostic in the engine goes through a small macro
+called `note!` — it writes the same line to the same place and, if the write fails, **drops the
+error and carries on**. A note nobody can hear is not worth an editing session. It reads exactly
+like the macro it replaces, so nothing else about the code changed.
+
+Two crates carry their own copy of `note!`, eight lines each: `lumit-bridge`, where the engine
+talks to the frontend, and `lumit-gpu`, which reports a lost graphics device from inside a
+callback the driver itself invokes — the worst possible place for a crash. They share no
+dependency, and two small copies are a cheaper answer than a new link between them.
+
+The rule is kept by a test rather than by discipline:
+`crates/lumit-bridge/tests/no_panicking_prints.rs` reads every shipping engine source file and
+fails the build if a plain `println!` has crept back in. Test code is exempt — a test is run from
+a terminal that is listening — as are the two command-line programs (the benchmark runner and the
+OFX broker) whose printed output is the whole point of them.
