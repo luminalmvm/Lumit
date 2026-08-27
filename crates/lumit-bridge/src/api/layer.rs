@@ -3973,46 +3973,36 @@ impl LayerReference {
 
     /// Whether this layer's source actually carries sound.
     ///
-    /// What decides whether the Audio group appears under a layer at all
-    /// (docs/07 §4.3): every layer *has* a Volume property in the model, but on
-    /// a solid or a title it can never be heard, and a control that cannot do
-    /// anything is worse than no control. Footage is the case that matters, and
-    /// the answer is the container's own: a file with an audio stream.
+    /// What decides whether the Audio group and the mute switch appear under a
+    /// layer at all (docs/07 §4.3): every layer *has* a Volume property in the
+    /// model, but on a solid or a title it can never be heard, and a control
+    /// that cannot do anything is worse than no control.
+    ///
+    /// **The mixer's own answer, at any depth.** A Precomp layer over footage
+    /// that sings is audible — `walk` mixes it — and asking only whether *this*
+    /// layer is Footage said no, so a converted precomp came up with no mute
+    /// switch and no volume. [`AudioJobsBuilder::layer_has_audio`] is the one
+    /// that decides what gets mixed, so it is the one asked here: the panel and
+    /// the mixer cannot disagree about what makes a sound.
     ///
     /// Probing opens the file with FFmpeg, so this is deliberately **not**
-    /// `#[frb(sync)]`. A layer whose media cannot be resolved answers false —
-    /// a missing file is not a reason to offer a volume control.
+    /// `#[frb(sync)]`, and the document lock is let go of before any probing.
+    /// A layer whose media cannot be resolved answers false — a missing file is
+    /// not a reason to offer a volume control.
     pub fn has_audio(&self) -> Result<bool, BridgeError> {
         let layer = self.item()?;
-        let lumit_core::model::LayerKind::Footage { item, .. } = layer.kind else {
-            return Ok(false);
+        let snapshot = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
         };
-
-        let proj = self.project()?;
-        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-        let snapshot = proj.store.snapshot();
-        let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item) else {
-            return Ok(false);
-        };
-
-        #[cfg(feature = "media")]
-        {
-            let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, footage)
-            else {
-                return Ok(false);
-            };
-            Ok(crate::probe::ensure_probed(&src)
-                .map(|p| p.audio.is_some())
-                .unwrap_or(false))
-        }
-
-        // Without a decoder nothing can be probed, so nothing claims to have
-        // sound rather than every footage layer claiming it.
-        #[cfg(not(feature = "media"))]
-        {
-            let _ = footage;
-            Ok(false)
-        }
+        // ponytail: a fresh probe cache per call, so a precomp of many footage
+        // items is probed once per *ask* rather than once per session. The
+        // frontend asks once per layer and holds the answer, so the ceiling is
+        // one walk per layer; share the audio engine's builder if that ever
+        // stops being true — it cannot be borrowed here without holding the
+        // audio lock across a file open.
+        Ok(lumit_render::headless::AudioJobsBuilder::new().layer_has_audio(&snapshot, &layer))
     }
 
     /// This layer's Retime property — layer-local time → source time, in

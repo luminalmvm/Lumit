@@ -2226,6 +2226,73 @@ fn volume_round_trips_and_a_solid_reports_no_audio() {
     );
 }
 
+/// **A converted precomp holding sound wears a mute switch** (owner, desk
+/// test). The Timeline draws the switch only where `has_audio` says yes, and
+/// this seam used to answer it of the layer's *own* footage item alone — a
+/// Precomp layer has none, so the ordinary way to place a music bed came up
+/// with no mute switch and no volume, though muting it has always silenced the
+/// song. The question is now the mixer's own
+/// (`AudioJobsBuilder::layer_has_audio`), so the panel and the walk cannot
+/// disagree about what makes a sound.
+#[test]
+fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, silent_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+    let inner = add_comp(&project, "Music");
+    inner
+        .add_footage_layer(&footage, false)
+        .expect("the sound is placed");
+    let inner_layer = inner.get_layers().expect("layers").remove(0);
+    if !inner_layer.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture. The claim
+        // is about the *precomp* case, and there is nothing to nest.
+        return;
+    }
+
+    let outer = add_comp(&project, "Edit");
+    let precomp = outer.add_precomp_layer(&inner).expect("nested");
+    assert!(
+        precomp.has_audio().expect("asked"),
+        "the song is a comp down, and the mute switch belongs on the row"
+    );
+
+    let quiet = add_comp(&project, "Nothing");
+    let over_nothing = outer.add_precomp_layer(&quiet).expect("nested");
+    assert!(
+        !over_nothing.has_audio().expect("asked"),
+        "a precomp with nothing in it must not claim a mute switch"
+    );
+}
+
+/// Sixteen-bit mono PCM, a tenth of a second of silence: enough of a file for
+/// a probe to find an audio stream in.
+fn silent_wav() -> Vec<u8> {
+    const RATE: u32 = 44_100;
+    const SAMPLES: u32 = RATE / 10;
+    let data = SAMPLES * 2;
+    let mut wav = Vec::with_capacity(44 + data as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&RATE.to_le_bytes());
+    wav.extend_from_slice(&(RATE * 2).to_le_bytes()); // bytes per second
+    wav.extend_from_slice(&2u16.to_le_bytes()); // block align
+    wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data.to_le_bytes());
+    wav.resize(44 + data as usize, 0);
+    wav
+}
+
 /// **The Audio layer (K-435).** The sound of a clip, added as its own layer:
 /// the same footage source, no picture, one undo step.
 ///
