@@ -251,9 +251,15 @@ Widget _capitalised(Widget child, bool on) =>
         : child;
 
 /// A 14 px themed checkbox.
+///
+/// **A null [onChanged] is disabled**, the way every other house control says
+/// it (docs/15 §12A.3d): the box takes no click and no key, it is out of the
+/// focus order, and it draws in `text_disabled` — a tick you can read and
+/// cannot move. Call sites used to hand it an empty callback instead, which
+/// made a box that looked live, took the click, and did nothing with it.
 class HouseCheckbox extends StatefulWidget {
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
   const HouseCheckbox(
       {super.key, required this.value, required this.onChanged});
 
@@ -274,49 +280,57 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final onChanged = widget.onChanged;
+    // The mockups' checkbox (K-450): a 9px outlined box whose checked state is
+    // a 5px block of the primary text colour — no accent, which also puts the
+    // control inside §3.1's accent discipline. The 14px container stays as the
+    // hit target around the smaller mark; the focus ring reads in the animated
+    // token, like a focused value well.
+    final mark = SizedBox(
+      width: 14,
+      height: 14,
+      child: Center(
+        child: Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(1),
+            border: Border.all(
+                color: onChanged == null
+                    ? t.textDisabled
+                    : _focused
+                        ? t.animated
+                        : t.textMuted,
+                width: _focused && onChanged != null ? 1.5 : 1),
+          ),
+          child: widget.value
+              ? Center(
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    color: onChanged == null ? t.textDisabled : t.textPrimary,
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+    // Disabled: no gesture, no focus, no shortcut — just the reading.
+    if (onChanged == null) return mark;
     return FocusableActionDetector(
       focusNode: _focusNode,
       shortcuts: _activateShortcuts,
       actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
-          widget.onChanged(!widget.value);
+          onChanged(!widget.value);
           return null;
         }),
       },
       onFocusChange: (has) => setState(() => _focused = has),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onChanged(!widget.value),
-        // The mockups' checkbox (K-450): a 9px outlined box whose checked
-        // state is a 5px block of the primary text colour — no accent, which
-        // also puts the control inside §3.1's accent discipline. The 14px
-        // container stays as the hit target around the smaller mark; the
-        // focus ring reads in the animated token, like a focused value well.
-        child: SizedBox(
-          width: 14,
-          height: 14,
-          child: Center(
-            child: Container(
-              width: 9,
-              height: 9,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(1),
-                border: Border.all(
-                    color: _focused ? t.animated : t.textMuted,
-                    width: _focused ? 1.5 : 1),
-              ),
-              child: widget.value
-                  ? Center(
-                      child: Container(
-                        width: 5,
-                        height: 5,
-                        color: t.textPrimary,
-                      ),
-                    )
-                  : null,
-            ),
-          ),
-        ),
+        onTap: () => onChanged(!widget.value),
+        child: mark,
       ),
     );
   }

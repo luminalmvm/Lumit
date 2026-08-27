@@ -19018,3 +19018,34 @@ beside it, and the "three start cards" of [15-DESIGN.md](15-DESIGN.md) §12A.3b 
 Tests: in Flutter, `welcome_metrics_test.dart` — two cards, 275 wide each, and *New project*
 opens the shell on a project with no path while asking no picker; `shell_frb_test.dart` — the
 boot splash hands over and *New project* is the way straight through.
+
+
+## K-618 — A section the format cannot use is disabled throughout, and says nothing about it
+
+**Status: DECIDED (2026-08-27).** K-479/K-485's rule — *a control a format cannot honour is
+disabled, not drawn live and not left out* — applies to a whole **section** and not only to a
+row. Choosing **Audio** disables every control in *Picture*: the resize tick and the two
+fields behind it, the aspect lock, the four crop insets and *use region of interest*, on top
+of the channel, alpha, depth and bitrate rows the capability table already killed. Choosing
+**Image sequence** disables every control in *Metadata*: both buttons and every value field.
+
+**And the lines that said so are gone.** Two readings sat under those rows explaining that
+the section could do nothing — "This format has nowhere to keep metadata." and "A still
+sequence states no space, so only the default is offered." Both are removed. A dead control
+already says it, in no space and in every language; a sentence beside live controls said the
+opposite of what the controls were doing.
+
+**Why now.** The owner found the dialog on the desk: Image sequence and Audio each left a
+paragraph of apology next to a section whose ticks and wells still took the click and still
+wrote into the spec. The spec was refused later, at the queue, which is the arrangement K-479
+exists to prevent.
+
+**What this needed underneath.** `HouseCheckbox` had no disabled state — call sites handed it
+an empty callback, so the box looked live, took the click and did nothing. Its `onChanged` is
+nullable now, and null draws in `text_disabled` with no gesture, no focus and no shortcut,
+like every other house control.
+
+**Removed strings** (Crowdin): `exportMetadataUnsupported`, `exportColourUntagged`.
+
+Tests: in Flutter, `shell_frb_test.dart` — a sound file leaves no live control in Picture and
+an image sequence none in Metadata, and neither draws the line that used to explain it.

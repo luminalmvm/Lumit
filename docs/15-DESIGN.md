@@ -1318,6 +1318,11 @@ live and not left out** — the engine refuses such a spec outright, so a dialog
 be set would only be arranging a refusal, and one that hid the row would leave the reader
 wondering where it went. The same face is used for the rows no *subsystem* backs — **guide
 layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on hover.
+**A whole section a format cannot use is dead all the way through** (K-618): a sound file
+disables every control in Picture, an image sequence every control in Metadata, and neither
+carries a line under the rows saying the section does nothing. The disabled face is the
+sentence; a sentence beside it was one more thing to read and left live controls sitting
+next to a note that said they did not matter.
 
 **The Time section's two overrides say exactly what they do, and one of them has two
 answers rather than three** (K-502). *Motion blur* offers **Current settings**, **On for checked

@@ -1199,6 +1199,79 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// **A section the format cannot use is dead all the way through**
+    /// (K-618, widening docs/15 §12A.3d's per-row rule). A sound file has no
+    /// picture, so every control in Picture is disabled — the resize tick, the
+    /// fields behind it, the aspect lock, the crop wells and *use region of
+    /// interest* — and an image sequence has nowhere to keep metadata, so the
+    /// fields and both buttons there are. There used to be a line under the
+    /// rows saying so instead, with the controls beside it still live.
+    testWidgets('a section the format cannot use is disabled throughout',
+        (tester) async {
+      await open(tester);
+
+      bool tickLive(String key) =>
+          tester
+              .widget<HouseCheckbox>(find.byKey(ValueKey<String>(key)))
+              .onChanged !=
+          null;
+
+      // An mp4 writes a picture, so the whole section is live.
+      expect(tickLive('export-resize'), isTrue);
+      expect(tickLive('export-lock-aspect'), isTrue);
+      expect(tickLive('export-use-region'), isTrue);
+      // A crop inset carries its key on the control itself: a drag well while
+      // the format has a picture, a plain reading when it has not.
+      bool cropIsLive() =>
+          tester.widget(find.byKey(const ValueKey('export-crop-left')))
+              is DragValueField;
+      expect(cropIsLive(), isTrue, reason: 'a crop inset is a well you drag');
+
+      await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
+      await tester.pumpAndSettle();
+
+      expect(tickLive('export-resize'), isFalse,
+          reason: 'there is nothing to resize');
+      expect(tickLive('export-lock-aspect'), isFalse);
+      expect(tickLive('export-use-region'), isFalse);
+      expect(cropIsLive(), isFalse,
+          reason: 'the crop insets read rather than take a drag');
+
+      // Metadata: an image sequence has no container to keep it in.
+      await tester.tap(find.byKey(const ValueKey('export-type-video')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('export-metadata-0')), findsOneWidget);
+      expect(
+          tester
+              .widget<HouseButton>(
+                  find.byKey(const ValueKey('export-metadata-add')))
+              .onPressed,
+          isNotNull);
+
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
+      await tester.pumpAndSettle();
+      expect(find.text('This format has nowhere to keep metadata.'),
+          findsNothing,
+          reason: 'the line that said the section did nothing has gone');
+      expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('export-metadata-0')),
+            matching: find.byType(EditableText),
+          ),
+          findsNothing,
+          reason: 'and the field it stood under is a reading now');
+      expect(
+          tester
+              .widget<HouseButton>(
+                  find.byKey(const ValueKey('export-metadata-add')))
+              .onPressed,
+          isNull,
+          reason: 'with nothing to add a field to');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// The Colour section lists what the *format* can state, and says which of
     /// the two it is doing (K-498): a still sequence carries no tag, so it is
     /// offered only the space an untagged file is universally taken to be.
@@ -1226,8 +1299,9 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('states no space'), findsOneWidget,
-          reason: 'a still sequence tags nothing, and the reading says so');
+      expect(find.textContaining('states no space'), findsNothing,
+          reason: 'a still sequence tags nothing, and the dead list is how it '
+              'says so (K-618): the line under the rows has gone');
       expect(
           tester
               .widget<HouseButton>(find.descendant(

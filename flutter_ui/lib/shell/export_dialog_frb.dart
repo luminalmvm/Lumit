@@ -522,6 +522,13 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   bool get _images => _format.type == ExportOutputType.imageSequence;
 
+  /// Whether the chosen format writes a picture at all. A sound file does not,
+  /// so the whole Picture section is drawn **disabled** (docs/15 §12A.3d's
+  /// rule, widened from the row to the section): there was a line under the
+  /// rows saying the section did nothing, and a dead control says it better
+  /// and in less room.
+  bool get _picture => _caps.video || _images;
+
   /// The span in comp frames, end exclusive.
   (int, int) get _range => switch (_span) {
         _Span.workArea => (_workStart, _workEnd),
@@ -1409,13 +1416,13 @@ class _ExportDialogState extends State<_ExportDialog> {
             HouseCheckbox(
               key: const ValueKey('export-resize'),
               value: _resize,
-              onChanged: (on) => _edit(() => _resize = on),
+              onChanged: _picture ? (on) => _edit(() => _resize = on) : null,
             ),
             const SizedBox(width: 6),
             SizedBox(
               width: exportSizeWell,
               height: dialogControlHeight,
-              child: _resize
+              child: _resize && _picture
                   ? DragValueField(
                       key: const ValueKey('export-resize-width'),
                       value: _resizeWidth,
@@ -1435,7 +1442,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             SizedBox(
               width: exportSizeWell,
               height: dialogControlHeight,
-              child: _resize
+              child: _resize && _picture
                   ? DragValueField(
                       key: const ValueKey('export-resize-height'),
                       value: _resizeHeight,
@@ -1452,12 +1459,14 @@ class _ExportDialogState extends State<_ExportDialog> {
             HouseCheckbox(
               key: const ValueKey('export-lock-aspect'),
               value: _lockAspect,
-              onChanged: (on) => _edit(() => _lockAspect = on),
+              onChanged:
+                  _picture ? (on) => _edit(() => _lockAspect = on) : null,
             ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(l10n.exportLockAspect,
-                  style: t.body.copyWith(color: t.textMuted),
+                  style: t.body.copyWith(
+                      color: _picture ? t.textMuted : t.textDisabled),
                   overflow: TextOverflow.ellipsis),
             ),
             const Spacer(),
@@ -1496,12 +1505,14 @@ class _ExportDialogState extends State<_ExportDialog> {
             HouseCheckbox(
               key: const ValueKey('export-use-region'),
               value: _useRegion,
-              onChanged: (on) => _edit(() => _useRegion = on),
+              onChanged:
+                  _picture ? (on) => _edit(() => _useRegion = on) : null,
             ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(l10n.exportUseRegionOfInterest,
-                  style: t.body.copyWith(color: t.textMuted),
+                  style: t.body.copyWith(
+                      color: _picture ? t.textMuted : t.textDisabled),
                   overflow: TextOverflow.ellipsis),
             ),
             const SizedBox(width: 8),
@@ -1511,7 +1522,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                 child: Text(
                   l10n.exportFinalSize('$width', '$height'),
                   key: const ValueKey('export-final-size'),
-                  style: dialogMono(t),
+                  style: dialogMono(t)
+                      .copyWith(color: _picture ? null : t.textDisabled),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1594,11 +1606,9 @@ class _ExportDialogState extends State<_ExportDialog> {
                 key: const ValueKey('export-colour-tagging'))
           else if (_caps.colourSpaces.length > 1)
             _reading(t, l10n.exportColourStated,
-                key: const ValueKey('export-colour-tagging'))
-          else if (_caps.colourSpaces.isNotEmpty)
-            _reading(t, l10n.exportColourUntagged,
                 key: const ValueKey('export-colour-tagging')),
           _reading(t, l10n.exportColourNote),
+
         ],
       );
 
@@ -1739,18 +1749,27 @@ class _ExportDialogState extends State<_ExportDialog> {
               field.label ?? '',
               Row(children: [
                 if (field.label == null) ...[
-                  _well(t, field.key, tone: t.textMuted),
+                  _well(t, field.key,
+                      tone: _caps.metadata ? t.textMuted : t.textDisabled),
                   const SizedBox(width: 6),
                 ],
                 Expanded(
-                  child: HouseTextField(
-                    key: ValueKey<String>('export-metadata-$index'),
-                    controller: field.value,
-                    width: double.infinity,
-                    fill: t.surface0,
-                    onSubmitted: (_) => _edit(() {}),
-                    submitOnLostFocus: true,
-                  ),
+                  // A container with nowhere to keep metadata gets the reading
+                  // and not the field: the disabled face is the whole message,
+                  // where a line under the rows saying so was one more thing
+                  // to read.
+                  child: _caps.metadata
+                      ? HouseTextField(
+                          key: ValueKey<String>('export-metadata-$index'),
+                          controller: field.value,
+                          width: double.infinity,
+                          fill: t.surface0,
+                          onSubmitted: (_) => _edit(() {}),
+                          submitOnLostFocus: true,
+                        )
+                      : _well(t, field.value.text,
+                          key: ValueKey<String>('export-metadata-$index'),
+                          tone: t.textDisabled),
                 ),
                 const SizedBox(width: 6),
                 SizedBox(
@@ -1784,7 +1803,6 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ]),
           ),
-          if (!_caps.metadata) _reading(t, l10n.exportMetadataUnsupported),
         ],
       );
 
@@ -1833,7 +1851,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         HouseCheckbox(
           key: ValueKey<String>(id),
           value: value,
-          onChanged: onChanged ?? (_) {},
+          onChanged: onChanged,
         ),
         const SizedBox(width: 6),
         Text(label,
@@ -1877,19 +1895,27 @@ class _ExportDialogState extends State<_ExportDialog> {
       Row(mainAxisSize: MainAxisSize.min, children: [
         Padding(
           padding: const EdgeInsets.only(right: 4),
-          child: Text(mark, style: dialogMono(t)),
+          child: Text(mark,
+              style: dialogMono(t)
+                  .copyWith(color: _picture ? null : t.textDisabled)),
         ),
         SizedBox(
           width: exportCropWell,
           height: dialogControlHeight,
-          child: DragValueField(
-            key: ValueKey<String>('export-crop-$id'),
-            value: value,
-            min: 0,
-            max: (limit - 1).clamp(0, 16384),
-            fill: t.surface0,
-            onChanged: (v) => _edit(() => set(v.toInt())),
-          ),
+          // A sound file has nothing to crop, so the well is a reading rather
+          // than a control — the same dead face the auto bitrate wears.
+          child: _picture
+              ? DragValueField(
+                  key: ValueKey<String>('export-crop-$id'),
+                  value: value,
+                  min: 0,
+                  max: (limit - 1).clamp(0, 16384),
+                  fill: t.surface0,
+                  onChanged: (v) => _edit(() => set(v.toInt())),
+                )
+              : _well(t, '$value',
+                  key: ValueKey<String>('export-crop-$id'),
+                  tone: t.textDisabled),
         ),
         const SizedBox(width: 6),
       ]);

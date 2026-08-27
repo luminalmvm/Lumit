@@ -9173,10 +9173,6 @@
   "@exportMetadataRemove": {
     "description": "Export dialog, Metadata section: takes one field's row off the list. The button at the end of every row."
   },
-  "exportMetadataUnsupported": "This format has nowhere to keep metadata.",
-  "@exportMetadataUnsupported": {
-    "description": "Export dialog, Metadata section: a factual line under the rows, shown when the chosen format's container holds no metadata — an image sequence, for instance."
-  },
   "metadataTitle": "Title",
   "@metadataTitle": {
     "description": "Export dialog, Metadata section: the name of the piece, written into the file."
@@ -9253,10 +9249,6 @@
   "exportColourStated": "The file states this space in its own header.",
   "@exportColourStated": {
     "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
-  "exportColourUntagged": "A still sequence states no space, so only the default is offered.",
-  "@exportColourUntagged": {
-    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format cannot record which colour space it was written in, which is why the list has one entry. One sentence."
   },
   "exportAudio44k": "44.100 kHz",
   "@exportAudio44k": {
