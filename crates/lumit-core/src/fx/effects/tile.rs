@@ -4,7 +4,8 @@
 //! **In plain terms.** Cut a rectangle out of the picture and stamp it side by
 //! side until the frame is full. Tile width and height say how big the rectangle
 //! is in pixels (half the frame gives a 2×2 grid), Tile centre says where it is
-//! cut from, and Output width and height say how much gets stamped. Narrower
+//! cut from, and Output width and height say how much gets stamped — spread
+//! evenly about the tile centre, half the extra to each side. Narrower
 //! than the frame and the rest of it goes transparent; wider and the stamps carry
 //! on past the frame's edges and the working picture grows to hold them, which
 //! is what lets a warp or a blur further down the stack find picture there
@@ -78,12 +79,14 @@ pub struct Tile {
     )]
     pub tile_height: f32,
 
-    /// px@comp: how wide the stamped area is, centred on the frame. Narrower
-    /// than the frame and the output is transparent outside it; the frame's own
-    /// width covers it exactly, which is the default (a nominal 1080p frame's,
-    /// with `instantiate_for_raster` writing the comp's own). **Wider than the
-    /// frame and the working picture grows** (K-542): the stamps carry on past
-    /// the frame's edges into a wider
+    /// px@comp: how wide the stamped area is, **centred on the tile centre**
+    /// (K-613) — half the extra to each side of the rectangle being stamped,
+    /// the way AE's Motion Tile spreads it. Narrower than the frame and the
+    /// output is transparent outside it; the frame's own width covers it
+    /// exactly, which is the default (a nominal 1080p frame's, with
+    /// `instantiate_for_raster` writing the comp's own). **Wider than the frame
+    /// and the working picture grows** (K-542): the stamps carry on past the
+    /// frame's edges into a wider
     /// raster, and every effect after this one in the stack runs on that raster,
     /// so the copies are real picture to them rather than transparency. The
     /// composite places the wider picture by the layer's own transform, so

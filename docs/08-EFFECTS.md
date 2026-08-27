@@ -2871,12 +2871,13 @@ Phase (dial, degrees, default 0), Horizontal phase shift (default off), Mix.
 raster that may be **larger** than the one it read:
 
 ```
-raster = (W, H) · max(output size ÷ (W, H), 1), capped at 8 192 a side   # K-542
+reach  = 2·|tile centre − (W, H)÷2| + output size            # K-613, see below
+raster = max(reach, (W, H)), capped at 8 192 a side          # K-542
 origin = (raster − (W, H)) ÷ 2, whole pixels                 # where the frame sits in it
 p      = the output pixel's position in the INCOMING frame's coordinates
 tile   = (tile_width, tile_height)                           # px@comp, already raster pixels
 window = (output_width, output_height)
-outside the window, centred on the frame → transparent
+outside the window, centred on the TILE CENTRE → transparent
 u  = (p − tile centre) ÷ tile + ½                            # position in tiles
     without Horizontal phase shift: u.x += floor(u.y)·phase ÷ 360
     with it:                        u.y += floor(u.x)·phase ÷ 360
@@ -2921,6 +2922,13 @@ Four notes:
   matte source's own stack, and a referenced layer's own stack. On those a Tile whose window
   is wider than the frame reads as the plain clipped tiling. A layer mask is grown into the same margin with
   nothing in it, so the copies Tile puts outside the layer are outside the mask.
+- **The output window is centred on the tile centre** (K-613), so raising Output width or
+  height spreads half the extra to each side of the stamped rectangle — left *and* right,
+  up *and* down, as AE's Motion Tile does. Centred on the frame instead, a tile cut from
+  anywhere but the middle grew only towards the further edge, which reads as the copies
+  arriving on one side. With the centre where a fresh Tile leaves it the two readings are
+  the same picture, which is why the default is untouched; the raster's own sizing carries
+  the offset (`reach`, above) so both ends of the window have room.
 - **Mirror edges flips alternate tiles** rather than butting copies together, which is what
   makes a tiled texture seamless without a seamless source. With Output width and height a
   little over 100 % this is the standard way to give a stabiliser or a warp material to eat

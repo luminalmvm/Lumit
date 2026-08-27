@@ -4,9 +4,10 @@
 //
 // The four per cents arrive as FRACTIONS of the raster rather than lengths,
 // because the kernel already knows the raster and the host does not. Outside the
-// output window the result is transparent; inside, the pixel's position within
-// its own tile picks the sample, mirrored on odd tile indices when Mirror edges
-// is on. Mix 0 is the bit-exact identity, and so are the shipped defaults —
+// output window — centred on the tile centre (K-613) — the result is
+// transparent; inside, the pixel's position within its own tile picks the
+// sample, mirrored on odd tile indices when Mirror edges is on.
+// Mix 0 is the bit-exact identity, and so are the shipped defaults —
 // a whole-frame tile cut from the frame's middle with no phase (K-542), which
 // this kernel answers by copying rather than by resampling, because the divide
 // and the multiply that undo one another do not always do so in fp32.
@@ -100,7 +101,10 @@ fn tile(@builtin(global_invocation_id) gid: vec3<u32>) {
                    inside);
 
     var v = vec4<f32>(0.0);
-    if (abs(px - cx) <= half_w && abs(py - cy) <= half_h) {
+    // The window is centred on the TILE CENTRE, not on the frame (K-613), as
+    // cpu::tile_into centres it: half the extra goes to each side of the
+    // stamped rectangle, which is AE's Motion Tile.
+    if (abs(px - p.centre_tile.x) <= half_w && abs(py - p.centre_tile.y) <= half_h) {
         var u = (px - p.centre_tile.x) / tw + 0.5;
         var t = (py - p.centre_tile.y) / th + 0.5;
         // The phase shift is applied along one axis using the OTHER axis's whole

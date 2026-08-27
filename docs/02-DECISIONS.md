@@ -18863,3 +18863,68 @@ to a glyph of the set bar the four painter-drawn, which is the gate that keeps t
 closed; `icon_crispness_test.dart` — no icon is shifted on its way to the screen, at any of
 four display ratios; and `timeline_panel_frb_test.dart` — a ticked row carries the `Tick`
 glyph and an unticked one carries nothing.
+
+## K-613 — Tile's output window is centred on the tile centre
+
+**Status: DECIDED (2026-08-27).** Amends [08-EFFECTS.md](08-EFFECTS.md) §3.39's algorithm
+sketch, which had the window centred on the frame; K-542's raster growth and its
+lands-as-identity default, and K-558's px@comp sizes, all stand.
+
+**What was wrong.** Output width and height say how far the stamped rectangle spreads.
+The window that carried them was centred on the **frame**, and the tile is cut from
+wherever Tile centre points — so the two shared a middle only while the tile sat in the
+middle of the frame. Move the centre, or land on a raster whose middle is not where the
+centre was written for, and raising Output width no longer put half the extra on each side
+of the tile: it put the whole of it towards the further edge. The report was of copies
+arriving only to the right and below the tile, which is exactly what a window growing about
+a point up and to the left of the tile looks like.
+
+**The rule now.** The window is centred on the tile centre. Half the extra goes left and
+half right, half up and half down, measured from the rectangle being stamped — which is
+what After Effects' Motion Tile does, and therefore what an imported `ADBE Tile` means. The
+importer is unchanged: it already carried Tile Center and the four sizes across (docs/11
+§5), and it is this reading of them that makes the carry faithful.
+
+**The raster follows.** `cpu::tile_raster` sizes the working picture the kernel writes and
+that picture stays centred on the frame (the composite's placement, K-542, depends on it),
+so a window centred somewhere else needs the raster to reach the further of its two edges:
+`2·|centre − frame middle| + output size`, still capped at `TILE_MAX_RASTER`. With the
+centre where a fresh Tile leaves it the offset is zero and the size is the plain output
+size, so nothing about the default, the identity short-circuit, or a centred tile's growth
+changes by one pixel.
+
+Regression tests: `tile_spreads_its_output_window_evenly_about_the_tile_centre`
+(`lumit-core`) — an off-centre tile reaching both sides of its own centre, and the raster
+sized to hold both ends; and an `off-centre` case added to
+`wgsl_tile_matches_the_cpu_oracle` (`lumit-gpu`), so the WGSL twin centres the window where
+the oracle does.
+
+
+## K-613 — The work-area handles are solid, and grabbing one does not scrub
+
+**Status: DECIDED (2026-08-27).** Two amendments to the drawn work-area handles, both from
+the owner's own word after desktop testing.
+
+1. **The tab is `animated` solid** — no alpha at rest and no step under the pointer. This
+   supersedes the strength half of [K-576](#k-576--the-work-area-handles-are-thicker-quieter-and-stop-under-the-clock)
+   (`animated` at 0.6, 0.8 hovered) and the "a step stronger than its edge, another step
+   under the pointer" ladder of K-529. Everything else K-576 settled stands: 4px wide, a 1px
+   corner, topping out 18px down the ruler, and the ten pixels either side of an edge still
+   grabbing across the ruler's whole height.
+2. **A press within a handle's reach does not move the playhead.** The ruler scrubs on
+   `onTapDown`, and `HitTestBehavior.opaque` on a handle stops the widgets *behind* it, not
+   the ruler it sits inside: the ruler's tap recogniser joins the arena from the same press
+   and fires on the press deadline whether or not it goes on to win. Taking hold of an edge
+   therefore threw the playhead to the pointer before the resize began. Only the scrub stands
+   down — the pair of clicks that gives the whole comp back is still counted, so a band too
+   narrow to have a middle can still be cleared.
+
+**Why solid.** A tab drawn through takes its colour from whatever it happens to be standing
+over — the clock, a tick, the band, the ground — so the two handles read as smudges of
+varying strength rather than as the two things you take hold of. There is nowhere above
+solid for a hover step to go, and none is wanted: the pointer already turns into the resize
+cursor over a handle, which is the affordance a hover brightening was standing in for.
+
+Tests: in Flutter, `timeline_alignment_test.dart` — the drawn tab's colour is `animated` at
+full alpha and stronger than the band's edge; and `timeline_panel_frb_test.dart` — a press
+on a work-area handle leaves the playhead where it was while the edge itself still moves.

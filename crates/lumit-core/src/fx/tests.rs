@@ -16193,6 +16193,70 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
     );
 }
 
+/// **The output window is centred on the tile centre** (K-613, docs/08 §3.39):
+/// Output width and height above the tile's own spread half the extra to each
+/// side of the stamped rectangle, left *and* right, up *and* down — AE's Motion
+/// Tile.
+///
+/// Centred on the frame instead, a tile cut from anywhere but the middle grew
+/// only towards the further edge: with the tile up and left of the middle, the
+/// copies appeared to the right and below it and nowhere else, which is the bug
+/// this test holds shut. The frame here is 32 × 24 with the tile cut from
+/// (8, 6) — one quarter in — and the window two tiles wide and tall, so a
+/// symmetric spread must put picture on both sides of the tile centre.
+#[test]
+fn tile_spreads_its_output_window_evenly_about_the_tile_centre() {
+    let (w, h) = (32u32, 24u32);
+    let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
+    t.tile_centre_x = 8.0;
+    t.tile_centre_y = 6.0;
+    t.tile_width = w as f32 * 0.25;
+    t.tile_height = h as f32 * 0.25;
+    t.output_width = w as f32 * 0.5;
+    t.output_height = h as f32 * 0.5;
+    let p = t.packed(w as f32, h as f32);
+
+    // An opaque frame, so "there is picture here" reads straight off alpha.
+    let img: Vec<f32> = (0..(w * h * 4))
+        .map(|i| if i % 4 == 3 { 1.0 } else { 0.5 })
+        .collect();
+    let (ow, oh) = cpu::tile_raster(w, h, &p);
+    assert_eq!(
+        (ow, oh),
+        (w, h),
+        "a window this side of the frame's own edges asks for no more raster"
+    );
+    let mut out = vec![0.0f32; (ow * oh * 4) as usize];
+    cpu::tile_into(&img, w, h, &mut out, ow, oh, &p);
+    let alpha = |x: u32, y: u32| out[((y * ow + x) * 4 + 3) as usize];
+
+    // The window is 16 x 12 about (8, 6): x from 0 to 16, y from 0 to 12. Both
+    // sides of the tile centre hold picture, and past the window there is none.
+    for (x, y) in [(2u32, 6u32), (14, 6), (8, 1), (8, 10)] {
+        assert!(
+            alpha(x, y) > 0.5,
+            "the window must reach ({x}, {y}), on its own side of the tile centre"
+        );
+    }
+    for (x, y) in [(20u32, 6u32), (30, 6), (8, 16), (8, 22)] {
+        assert!(
+            alpha(x, y) < 0.5,
+            "past the window at ({x}, {y}) there must be nothing"
+        );
+    }
+
+    // And the same rule sizes the raster: a window that reaches past the frame
+    // from an off-centre tile grows it far enough to hold both ends.
+    let mut wide = t;
+    wide.output_width = w as f32;
+    let (gw, _) = cpu::tile_raster(w, h, &wide.packed(w as f32, h as f32));
+    assert_eq!(
+        gw,
+        w + 16,
+        "the raster must reach the further edge of a window centred off the frame"
+    );
+}
+
 /// The corpus the K-546 spatial tests key against: a `w × h` frame that is the
 /// screen colour everywhere except a foreground block, in premultiplied RGBA.
 #[cfg(test)]

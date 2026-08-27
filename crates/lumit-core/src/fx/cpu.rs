@@ -2023,10 +2023,16 @@ pub const TILE_MAX_RASTER: u32 = 8192;
 /// The raster [`tile_into`] writes for an incoming `w × h` frame (K-542, docs/08
 /// §3.39).
 ///
-/// Output width and height above 100 % put copies *outside* the frame, so the
+/// An output window bigger than the frame puts copies *outside* it, so the
 /// working picture grows to hold them and every effect after Tile in the stack
-/// sees those copies instead of transparency. At or below 100 % nothing grows:
-/// the window only clips, which needs no more room than the frame already has.
+/// sees those copies instead of transparency. A window the frame already holds
+/// grows nothing: it only clips, which needs no more room than there is.
+///
+/// The window is centred on the **tile centre** (K-613) and this raster stays
+/// centred on the frame, so a tile cut from anywhere but the middle needs the
+/// raster to reach the further of the window's two edges — twice the centre's
+/// own offset, on top of the window. With the centre where it lands by default
+/// the offset is zero and this is the plain output size.
 #[must_use]
 pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
     // Mix 0 is the identity, and an identity that reallocated the raster would
@@ -2034,14 +2040,19 @@ pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
     if p.mix <= 0.0 {
         return (w, h);
     }
-    let grow = |n: u32, frac: f32| {
-        if frac <= 1.0 {
+    let grow = |n: u32, centre: f32, frac: f32| {
+        let side = n as f32;
+        let needed = 2.0 * (centre - side * 0.5).abs() + side * frac;
+        if needed <= side {
             n
         } else {
-            ((n as f32 * frac).round() as u32).clamp(n, TILE_MAX_RASTER.max(n))
+            (needed.round() as u32).clamp(n, TILE_MAX_RASTER.max(n))
         }
     };
-    (grow(w, p.output_frac[0]), grow(h, p.output_frac[1]))
+    (
+        grow(w, p.centre[0], p.output_frac[0]),
+        grow(h, p.centre[1], p.output_frac[1]),
+    )
 }
 
 /// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame,
@@ -2049,9 +2060,9 @@ pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
 ///
 /// `src` is the incoming `w × h` frame; `out` is the `ow × oh` raster
 /// [`tile_raster`] sized, with the frame sitting in the middle of it. Outside
-/// the output window the result is transparent; inside, the pixel's position
-/// within its tile picks the sample, mirrored on odd tiles when Mirror edges is
-/// on.
+/// the output window — which is centred on the tile centre (K-613) — the result
+/// is transparent; inside, the pixel's position within its tile picks the
+/// sample, mirrored on odd tiles when Mirror edges is on.
 ///
 /// **The default is the identity** (§1.2, K-542): a whole-frame tile centred on
 /// the frame with no phase samples every pixel at its own centre — but the
@@ -2091,7 +2102,13 @@ pub fn tile_into(src: &[f32], w: u32, h: u32, out: &mut [f32], ow: u32, oh: u32,
             } else {
                 [0.0f32; 4]
             };
-            let v = if (px - cx).abs() > half_w || (py - cy).abs() > half_h {
+            // The window is centred on the TILE CENTRE, not on the frame
+            // (K-613): Output width and height say how much of the picture the
+            // stamped rectangle spreads across, and half the extra goes to each
+            // side of it — AE's Motion Tile. Centred on the frame instead, a
+            // tile cut from anywhere but the middle grew only towards the
+            // further edge.
+            let v = if (px - p.centre[0]).abs() > half_w || (py - p.centre[1]).abs() > half_h {
                 [0.0f32; 4]
             } else {
                 let mut u = (px - p.centre[0]) / tw + 0.5;

@@ -7634,6 +7634,14 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let mut grown = tiled;
     grown.output_width = w as f32 * 2.0;
     grown.output_height = h as f32 * 1.5;
+    // A tile cut from a quarter in, with a window wider than it: the window is
+    // centred on the tile centre (K-613), so the kernels have to agree about
+    // where it reaches on both sides.
+    let mut off_centre = tiled;
+    off_centre.tile_centre_x = w as f32 * 0.25;
+    off_centre.tile_centre_y = h as f32 * 0.25;
+    off_centre.output_width = w as f32;
+    off_centre.output_height = h as f32;
     let mut off = tiled;
     off.mix = 0.0;
 
@@ -7678,6 +7686,7 @@ fn wgsl_tile_matches_the_cpu_oracle() {
         ("windowed", windowed),
         ("stretched", wide),
         ("grown", grown),
+        ("off-centre", off_centre),
         ("mix-zero", off),
     ] {
         let (ow, oh, cpu, gpu) = run(t);

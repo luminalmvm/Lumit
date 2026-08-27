@@ -6957,6 +6957,14 @@ with **Mirror edges** on, which folds the outer band back on itself and produces
 seamless border that did not exist in the footage. The stabiliser now has
 something to eat into.
 
+The extra area spreads **evenly about the tile centre**: half of it to the left and
+half to the right, half above and half below the rectangle being stamped. That is
+what "output width" has to mean for the stabiliser trick to work at all — a band
+on one side only is not a border — and it is what After Effects does. It used to
+be measured from the middle of the *frame* instead, which is the same thing while
+the tile is cut from the middle and is not the same thing at all once the tile
+centre is anywhere else: the copies then all arrived on one side.
+
 That only works if the extra material is *really there* for whatever comes next.
 So when Output width or height goes above 100 %, Tile now hands back a **bigger
 picture than it was given** — the original frame sitting in the middle of a wider
