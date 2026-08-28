@@ -2222,11 +2222,12 @@ void main() {
           reason: 'every number is nought times something');
     });
 
-    /// **A driven parameter says so** (K-471): a driver wired to it in the
-    /// Graph panel wins over its keyframes, so the row draws a hollow ring in
-    /// the wire's own colour, the word *driven*, and the driver's name in the
-    /// well — never a control you could drag while the wire decides the value.
-    testWidgets('a driven parameter names its driver instead of a control',
+    /// **A driven parameter says so in the stopwatch's column** (K-471,
+    /// K-627): a driver wired to it wins over its keyframes, so the hollow ring
+    /// and the word *driven* stand where the stopwatch and the key navigator
+    /// were — neither means anything on a row with no keys of its own — and the
+    /// value field keeps drawing the number while refusing every gesture on it.
+    testWidgets('a driven parameter marks the left of the row and goes deaf',
         (tester) async {
       final p = withLayer();
       p.layer.addEffect(name: 'blur');
@@ -2248,15 +2249,24 @@ void main() {
       );
       await mount(tester, p);
 
-      expect(find.byKey(ValueKey<String>('fx-driven-$effect-radius')),
-          findsOneWidget);
+      final mark = find.byKey(ValueKey<String>('fx-driven-$effect-radius'));
+      final field = find.byKey(ValueKey<String>('fx-float-$effect-radius'));
+      expect(mark, findsOneWidget);
       expect(find.text('driven'), findsOneWidget);
-      expect(find.text('Wiggle'), findsWidgets,
-          reason: 'the well names the driver the parameter is following');
-      expect(
-          find.byKey(ValueKey<String>('fx-float-$effect-radius')), findsNothing,
-          reason: 'the stored number is not what the picture uses any more, '
-              'so there is nothing here to drag');
+      expect(find.byKey(ValueKey<String>('kf-stopwatch-$effect-radius')),
+          findsNothing,
+          reason: 'a driven row has no keys of its own to switch on');
+      expect(find.byKey(ValueKey<String>('kf-toggle-$effect-radius')),
+          findsNothing,
+          reason: 'nor any to step between');
+      expect(tester.getTopLeft(mark).dx, lessThan(tester.getTopLeft(field).dx),
+          reason: 'the mark takes the column the stopwatch had, on the left');
+      expect(field, findsOneWidget,
+          reason: 'the number the row holds is still worth reading');
+      expect(find.ancestor(of: field, matching: find.byType(IgnorePointer)),
+          findsWidgets,
+          reason: 'but the wire decides the value, so the field takes no '
+              'gesture');
 
       // Unwire it and the ordinary control comes straight back. The staged
       // instance above was consumed by its own commit, so this reads a fresh

@@ -59,7 +59,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show graphNodeKey, graphNoStream;
+import 'graph_panel.dart' show drivenParamsOf;
 import 'camera_track_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
@@ -310,41 +310,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       if (_driven.isNotEmpty) setState(() => _driven = const {});
       return;
     }
-    final next =
-        <String, ({String driver, BridgePortType type, bool noStream})>{};
-    try {
-      final graph = layer.getGraph();
-      final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
-      for (final edge in graph.wiring.edges) {
-        if (edge.to case BridgeInputRef_Param(:final node, :final port)) {
-          if (node is! BridgeNodeRef_Effect) continue;
-          final (fromKey, fromPort) = switch (edge.from) {
-            BridgeOutputRef_Driver(node: final d, port: final p) => (
-                graphNodeKey(BridgeNodeRef.driver(d)),
-                p
-              ),
-            BridgeOutputRef_SourceMatte() => ('source', 'matte'),
-            // A points wire's source is a *stack effect* (K-492), so the
-            // row names the effect that hands the data over.
-            BridgeOutputRef_EffectData(:final effect, :final port) => (
-                graphNodeKey(BridgeNodeRef.effect(effect)),
-                port
-              ),
-          };
-          final source = byRef[fromKey];
-          if (source == null) continue;
-          final socket = source.outputs.where((o) => o.id == fromPort);
-          if (socket.isEmpty) continue;
-          next['${node.field0}/$port'] = (
-            driver: source.customName ?? engineLabel(source.label),
-            type: socket.first.portType,
-            noStream: graphNoStream(source),
-          );
-        }
-      }
-    } catch (_) {
-      // The layer has gone; the rows simply draw their own controls again.
-    }
+    // The Timeline's fold-out takes the same reading from the same helper, so
+    // a row cannot say *driven* in one panel and offer a spinner in the other.
+    final next = drivenParamsOf(layer);
     if (!mapEquals(next, _driven)) setState(() => _driven = next);
   }
 

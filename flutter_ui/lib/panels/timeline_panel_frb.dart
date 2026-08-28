@@ -74,6 +74,7 @@ import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
+import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
 import 'timeline_razor.dart';
@@ -371,22 +372,33 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // the rows rather than being asked for per rebuild (K-184).
     final flowParams = <String, BridgeFlowParams>{};
     final volumeDb = <String, BridgeScalar>{};
+    final driven = <String, Map<String, DrivenParam>>{};
     for (final entry in layers) {
       final id = entry.layer.internallayerId.toString();
       try {
         if (entry.info.flow) flowParams[id] = entry.layer.getFlowParams();
         if (_hasAudio[id] ?? false) volumeDb[id] = entry.layer.getVolumeDb();
+        // Which parameters a wire is deciding (K-471, K-627), so a fold-out
+        // row draws its *driven* mark where its stopwatch would be. Only a
+        // layer with an effect stack can have one, and the answer rides down
+        // on the row rather than being asked for per rebuild.
+        if (entry.info.effects.isNotEmpty) {
+          final wired = drivenParamsOf(entry.layer);
+          if (wired.isNotEmpty) driven[id] = wired;
+        }
       } catch (_) {
         // A layer gone between the model read and this: its rows go too.
       }
     }
     _flowParams = flowParams;
     _volumeDb = volumeDb;
+    _driven = driven;
   }
 
   /// Per-layer answers the fold rows carry (K-184) — see [_refreshBounds].
   Map<String, BridgeFlowParams> _flowParams = {};
   Map<String, BridgeScalar> _volumeDb = {};
+  Map<String, Map<String, DrivenParam>> _driven = {};
 
   /// The work area, held between document revisions — see the note in [_body].
   ({int start, int end, bool whole})? _workArea;
@@ -2612,6 +2624,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         sequenceExtra: _sequenceExtra,
         flowParams: _flowParams,
         volumeDb: _volumeDb,
+        driven: _driven,
         // The strip filters the whole comp; a single `U` filters only the
         // layers it revealed (K-622).
         animatedOnly: _animatedOnly ? everyLayerId : _revealedKeyed);

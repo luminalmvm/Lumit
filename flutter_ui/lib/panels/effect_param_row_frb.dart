@@ -197,11 +197,13 @@ class EffectParamRowFrb extends StatelessWidget {
   /// A **driver** is wired to this parameter in the Graph panel (K-471): the
   /// name it draws under, and what its wire carries.
   ///
-  /// The row then says *driven* and names the driver instead of offering a
-  /// control, because the stored value is exactly the thing the picture no
-  /// longer uses — a spinner you could still drag would be a lie about what is
-  /// in charge, the same reasoning `enabled` follows. The stopwatch stays: the
-  /// keyframes are still there, waiting under the wire.
+  /// **The mark sits on the left, where the stopwatch was** (K-627). A driven
+  /// parameter has no keyframes of its own to step between or key — the wire
+  /// decides the value — so the stopwatch and the key navigator are meaningless
+  /// on it, and their column is exactly the room the *driven* mark needs. The
+  /// value column keeps drawing the number so you can still read what the row
+  /// holds, but takes no gesture: a spinner you could drag would be a lie about
+  /// what is in charge, the same reasoning `enabled` follows.
   ///
   /// `noStream` is the hazard mark (K-509): the box at the other end reads a
   /// points stream and has none wired into it, so what arrives along this wire
@@ -265,31 +267,42 @@ class EffectParamRowFrb extends StatelessWidget {
     final id = effectId;
     final scalars = _animatableScalarsOf(value);
     // Only the interpolatable kinds animate; a choice or a file has nothing to
-    // blend between, so those rows carry no stopwatch at all.
-    final keyframes = scalars == null
+    // blend between, so those rows carry no stopwatch at all. **A driven row
+    // has none either** (K-627): the wire decides its value, so there is no key
+    // to add and no neighbour to step to, and the mark takes the column.
+    final keyframes = driven != null
+        ? _drivenMark(t, id)
+        : scalars == null
+            ? null
+            : KeyframeControlsFrb(
+                // One channel for a number, four for a colour — and one stopwatch
+                // over them either way.
+                scalars: scalars,
+                comp: comp,
+                playheadFrame: playheadFrame,
+                onSeek: onSeek,
+                rowKey: '$id-${param.id}',
+                // The panel's fixed columns (K-443); the Timeline's fold-out takes
+                // the other branch and keeps its narrow gutter.
+                fixedColumns: twoColumn && valueColumn == null,
+                onWrite: (next) => _set(next.length == 4
+                    ? BridgeEffectValue.colour(BridgeColour(
+                        r: next[0], g: next[1], b: next[2], a: next[3]))
+                    : BridgeEffectValue.float(next.single)),
+              );
+
+    // The driven mark is not greyed with the rest of the row: it is the one
+    // thing on it that is *in* charge, and it carries the driver's name in a
+    // tooltip an [IgnorePointer] would swallow.
+    final keyframeSlot = keyframes == null
         ? null
-        : KeyframeControlsFrb(
-            // One channel for a number, four for a colour — and one stopwatch
-            // over them either way.
-            scalars: scalars,
-            comp: comp,
-            playheadFrame: playheadFrame,
-            onSeek: onSeek,
-            rowKey: '$id-${param.id}',
-            // The panel's fixed columns (K-443); the Timeline's fold-out takes
-            // the other branch and keeps its narrow gutter.
-            fixedColumns: twoColumn && valueColumn == null,
-            onWrite: (next) => _set(next.length == 4
-                ? BridgeEffectValue.colour(BridgeColour(
-                    r: next[0], g: next[1], b: next[2], a: next[3]))
-                : BridgeEffectValue.float(next.single)),
-          );
+        : (driven != null ? keyframes : _greyed(keyframes));
 
     // The name is the row's handle for the graph editor, so it is built once
     // and drawn by whichever layout the row takes. A greyed row's name is
     // muted with it: half a row going quiet reads as a rendering fault rather
     // than as "this control is not the one in charge".
-    final labelStyle = !enabled
+    final labelStyle = _off
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
     final labelText = Text(
@@ -310,13 +323,8 @@ class EffectParamRowFrb extends StatelessWidget {
 
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`.
-    final control = driven != null
-        ? _drivenWell(t, id)
-        : _greyed(_withRiders(
-            t,
-            id,
-            withUnitRider(
-                t, param.unit, _control(context, t, id, value, frame))));
+    final control = _greyed(_withRiders(t, id,
+        withUnitRider(t, param.unit, _control(context, t, id, value, frame))));
 
     // **An Action is a button, and a button says its own name** (K-417). Drawn
     // in the value column with the name column left empty, rather than as a
@@ -338,7 +346,7 @@ class EffectParamRowFrb extends StatelessWidget {
       return fxTwoColumnRow(
         context: context,
         name: label,
-        keyframeControls: keyframes == null ? null : _greyed(keyframes),
+        keyframeControls: keyframeSlot,
         control: control,
       );
     }
@@ -347,7 +355,7 @@ class EffectParamRowFrb extends StatelessWidget {
       padding: rowPadding,
       child: Row(
         children: [
-          if (keyframes != null) _greyed(keyframes),
+          if (keyframeSlot != null) keyframeSlot,
           const SizedBox(width: 4),
           Expanded(child: label),
           if (valueColumn case final col?) ...[
@@ -380,64 +388,65 @@ class EffectParamRowFrb extends StatelessWidget {
   /// is worse than one that never changed. The dimming is gone — the label
   /// already carries `text_disabled`, and the value stays fully legible, so you
   /// can read what Focus distance *would* be. Being off is not being gone.
-  Widget _greyed(Widget child) => enabled ? child : IgnorePointer(child: child);
+  /// **A driven row is off for the same reason** (K-627): the wire decides the
+  /// value, so the field draws what the row holds and answers nothing.
+  bool get _off => !enabled || driven != null;
 
-  /// What a driven row shows in place of its control (the Nodes-workspace
-  /// drawing's Node panel rows): a hollow ring in the wire's own colour, the
-  /// word *driven* beside it, and the driver's name in the well.
+  Widget _greyed(Widget child) => _off ? IgnorePointer(child: child) : child;
+
+  /// What a driven row shows **in the stopwatch's column** (K-627): a hollow
+  /// ring in the wire's own colour with the word *driven* beside it, and the
+  /// driver's name in its tooltip.
   ///
   /// The ring is hollow because the value is not held here — it arrives along
   /// a wire, and a filled mark is what a socket uses to say a wire has landed.
-  Widget _drivenWell(LumitTheme t, UuidValue id) {
+  /// The name is a tooltip rather than a well because the column is 72 pixels
+  /// wide and a box's name is whatever the user called it; the mark itself has
+  /// to fit on a Timeline lane as well as in a panel.
+  Widget _drivenMark(LumitTheme t, UuidValue id) {
     final it = driven!;
     // The wire is honest about its type until it is dry: a source with no
     // stream behind it draws in the warning family, because what this row is
     // following is a no-op and not a measurement (K-509).
     final colour = it.noStream ? t.warning : portColour(t, it.type);
-    return Row(
-      key: ValueKey<String>('fx-driven-$id-${param.id}'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: colour),
-          ),
-        ),
-        const SizedBox(width: 8),
-        // The word is the state. A wire whose source has no stream is not
-        // *driven* by anything — it is following a documented no-op — so the
-        // row says which of the two it is in the slot the word already had,
-        // rather than growing a second mark a narrow panel has no room for.
-        Text(
-          it.noStream ? l10n.graphNoStream : l10n.graphDriven,
-          key: it.noStream
-              ? ValueKey<String>('fx-no-stream-$id-${param.id}')
-              : null,
-          style: t.kicker.copyWith(letterSpacing: 0.54, color: colour),
-        ),
-        const SizedBox(width: 8),
-        // Flexible, because a box's name is whatever the user called it and
-        // the Node panel is a narrow pane: a long name shortens rather than
-        // running off the end of the row.
-        Flexible(
-          child: Container(
-            height: 16,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            decoration: BoxDecoration(
-              color: t.surface0,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairline),
+    return LumitTooltip(
+      message: l10n.tipDrivenBy(it.driver),
+      // Bounded to the column it stands in, so the word shortens rather than
+      // running under the label — and so the mark is safe in the Timeline's
+      // gutter, which hands its children unbounded width.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: fxKeyColumnWidth),
+        child: Row(
+          key: ValueKey<String>('fx-driven-$id-${param.id}'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: colour),
+              ),
             ),
-            child: Text(it.driver,
-                style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
-                overflow: TextOverflow.ellipsis),
-          ),
+            const SizedBox(width: 4),
+            // The word is the state. A wire whose source has no stream is not
+            // *driven* by anything — it is following a documented no-op — so
+            // the row says which of the two it is in the slot the word already
+            // had, rather than growing a second mark there is no room for.
+            Flexible(
+              child: Text(
+                it.noStream ? l10n.graphNoStream : l10n.graphDriven,
+                key: it.noStream
+                    ? ValueKey<String>('fx-no-stream-$id-${param.id}')
+                    : null,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.kicker.copyWith(letterSpacing: 0.54, color: colour),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -1054,7 +1063,7 @@ class EffectParamRowFrb extends StatelessWidget {
         TurnsAndDegreesField(
           keyName: keyName,
           degrees: shown,
-          enabled: enabled,
+          enabled: !_off,
           onChanged: animated
               ? null
               : (v) =>
@@ -1068,7 +1077,7 @@ class EffectParamRowFrb extends StatelessWidget {
           size: fxRowHeight(ThemeScope.of(context).theme),
           degrees: shown,
           step: step,
-          enabled: enabled,
+          enabled: !_off,
           // A dial drag is a drag like any other: preview each tick, commit
           // the release. On a curve there is no live preview, for the same
           // reason the numbers have none — the value being previewed is not

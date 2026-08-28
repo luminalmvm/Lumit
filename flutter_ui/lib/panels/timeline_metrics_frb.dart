@@ -13,6 +13,7 @@ import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'graph_panel.dart' show DrivenParam;
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 
@@ -378,6 +379,7 @@ List<LayerRow> layerRows({
   Map<String, double> sequenceExtra = const {},
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
+  Map<String, Map<String, DrivenParam>> driven = const {},
   Set<String> animatedOnly = const {},
 }) {
   final out = <LayerRow>[];
@@ -389,7 +391,8 @@ List<LayerRow> layerRows({
         open: keyedOnly ? everyFoldPath : open,
         hasAudio: hasAudio[id] ?? false,
         flowParams: flowParams[id],
-        volumeDb: volumeDb[id]);
+        volumeDb: volumeDb[id],
+        driven: driven[id] ?? const {});
     final fold = keyedOnly ? animatedFoldRows(built) : built;
     final isOpen = keyedOnly ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(

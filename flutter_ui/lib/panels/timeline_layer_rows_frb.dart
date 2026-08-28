@@ -566,6 +566,10 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},
+      // The wire deciding this parameter, read once per revision by the panel
+      // (K-471, K-627): the mark replaces the row's stopwatch and the field
+      // stops taking a drag.
+      driven: row.driven,
       comp: widget.comp,
       ownerLayerId: widget.layer.internallayerId,
       ownerLayers: ui.model.layers,

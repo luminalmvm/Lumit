@@ -8938,6 +8938,16 @@
   "@graphDriven": {
     "description": "Effect controls: the word on a parameter row whose value comes from a driver wired to it in the Graph panel rather than from its own keyframes. Lower case."
   },
+  "tipDrivenBy": "Driven by {driver}",
+  "@tipDrivenBy": {
+    "description": "Tooltip on the driven mark that stands where a parameter row's stopwatch would be, in Effect controls, the Node panel and the Timeline fold-out. Names the driver box whose wire is deciding this parameter's value.",
+    "placeholders": {
+      "driver": {
+        "type": "String",
+        "example": "Wiggle"
+      }
+    }
+  },
   "exportGroupColour": "Colour",
   "@exportGroupColour": {
     "description": "Export dialog: the Colour section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."

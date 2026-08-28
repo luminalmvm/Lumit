@@ -19401,3 +19401,40 @@ cost falls from 4.0ms to 0.08ms.
 
 Tests: `graph_ground_budget_test`, which budgets the dot count across the whole zoom range
 and pairs each budget with the guard that the grid is still drawn at all.
+
+## K-627 — A driven parameter wears its mark where its stopwatch was, and its value goes deaf
+
+**Status: DECIDED (2026-08-28).** K-471 gave a driven parameter the word *driven*, a hollow
+ring in the wire's colour and the driver's name — all of it in the row's **value** column,
+in place of the control. That put the state on the wrong side of the row twice over. The
+stopwatch and the key navigator stayed lit beside it, offering to key and to step between
+keys a driven parameter does not use; and the number the row holds, which is still worth
+reading, was hidden behind the announcement.
+
+**The mark moves left, into the stopwatch's column, and the value column comes back
+disabled.** A driven parameter has no keyframes of its own in play — the wire decides the
+value — so the stopwatch and the navigator mean nothing on it, and their column is exactly
+the room the mark needs: the same hollow ring, the same word (*driven*, or *No stream*
+where the source is dry, K-509), in the same colours. The driver's name no longer has a
+well of its own and rides in the mark's tooltip instead, because the column is 72 pixels
+wide and a box's name is whatever the user called it. The value column draws the number the
+row holds and takes no gesture — the greying `enabled` already draws (deaf, not faded), for
+the same reason: a spinner you could drag would be a lie about what is in charge.
+
+**The number shown is the parameter's own, not the driver's output.** Sampling the wire per
+frame would be a bridge read on the rebuild path, which is the traffic
+`bridge_call_budget_test` exists to forbid; the honest cheap answer is the stored value,
+which is what the row would go back to the moment the wire were cut.
+
+**Every panel that draws a parameter row now knows.** Effect controls and the Node panel
+read the wiring already; the Timeline's fold-out did not, and drew a live spinner on a
+parameter a driver was deciding. All three take the same reading from one helper
+(`drivenParamsOf`), and the Timeline reads it once per document revision alongside its Flow
+and Volume reads (K-184), never from a build.
+
+Not covered: a two-parameter point row (`EffectPointRowFrb`) still has no driven state of
+its own, as it had none before.
+
+Tests: `effect_controls_frb_test` ("a driven parameter marks the left of the row and goes
+deaf"), `timeline_panel_frb_test` ("a driven parameter marks the fold-out row"),
+`node_panel_frb_test` ("a row driven by a streamless sample wears the warning").

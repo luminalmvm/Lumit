@@ -31,6 +31,7 @@ import 'package:lumit_flutter/src/rust/api/retime.dart';
 
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
+import 'graph_panel.dart' show DrivenParam;
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -75,8 +76,13 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// This parameter's current value, or null when the instance does not carry
   /// it (a schema newer than the saved document).
   final BridgeEffectValue? value;
+
+  /// The driver wired to this parameter (K-471), or null for the ordinary case.
+  /// Read once per document revision by the panel and carried here, like every
+  /// other answer on a fold row (K-184).
+  final DrivenParam? driven;
   const FoldEffectParamRow(this.info, this.param, this.value,
-      {required int depth})
+      {required int depth, this.driven})
       : super(depth);
 }
 
@@ -1139,6 +1145,7 @@ List<LayerFoldRow> layerFoldRows({
   required bool hasAudio,
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
+  Map<String, DrivenParam> driven = const {},
 }) {
   final id = entry.layer.internallayerId.toString();
   final info = entry.info;
@@ -1374,7 +1381,8 @@ List<LayerFoldRow> layerFoldRows({
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
           for (final param in cachedListParameters(fx.name)) {
-            rows.add(FoldEffectParamRow(fx, param, values[param.id], depth: 3));
+            rows.add(FoldEffectParamRow(fx, param, values[param.id],
+                depth: 3, driven: driven['${fx.id}/${param.id}']));
           }
         }
       }

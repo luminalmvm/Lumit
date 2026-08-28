@@ -38,6 +38,7 @@ import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
@@ -3153,6 +3154,49 @@ void main() {
           reason: "and so does the property's layer");
     });
 
+    /// **The fold-out says *driven* too** (K-471, K-627). The Timeline builds
+    /// the same parameter row Effect controls does, so a wire feeding a
+    /// parameter has to reach it here as well: the mark stands where the
+    /// stopwatch was, and the value field is deaf.
+    testWidgets('a driven parameter marks the fold-out row', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addEffect(name: 'blur');
+      final effect = layer.getEffects().single.id();
+      final made = layer.newDriver(name: 'wiggle');
+      layer.setGraph(
+        drivers: [made],
+        wiring: BridgeGraphWiring(
+          edges: [
+            BridgeGraphEdge(
+              from: BridgeOutputRef.driver(node: made.id(), port: 'value'),
+              to: BridgeInputRef.param(
+                  node: BridgeNodeRef.effect(effect), port: 'radius'),
+            ),
+          ],
+          layout: const [],
+          exposed: const [],
+        ),
+      );
+      await mount(tester, p);
+
+      await openFold(tester, layer.internallayerId, group: 'Effects');
+      await tester.tap(find.text('Gaussian blur'));
+      await tester.pump();
+
+      final mark = find.byKey(ValueKey<String>('fx-driven-$effect-radius'));
+      final field = find.byKey(ValueKey<String>('fx-float-$effect-radius'));
+      expect(mark, findsOneWidget);
+      expect(find.byKey(ValueKey<String>('kf-stopwatch-$effect-radius')),
+          findsNothing,
+          reason: 'the stopwatch has nothing to switch on here either');
+      expect(tester.getTopLeft(mark).dx, lessThan(tester.getTopLeft(field).dx),
+          reason: 'the mark is on the left of the lane, not in the value');
+      expect(find.ancestor(of: field, matching: find.byType(IgnorePointer)),
+          findsWidgets,
+          reason: 'and the number it shows cannot be dragged');
+    });
+
     /// **Any press that acts on a row selects it** (K-334): the stopwatch, the
     /// navigator, a value drag. Touching a row's controls is choosing it — and
     /// it is what puts the channel in the graph before a drag's first tick.
@@ -4655,8 +4699,8 @@ void main() {
       p.uiState.playheadFrame.value = 3;
       await tester.pump();
 
-      final gesture = await tester
-          .startGesture(tester.getCenter(find.byKey(const ValueKey('tl-work-end'))));
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('tl-work-end'))));
       // Past the press deadline, which is when the playhead used to jump.
       await tester.pump(const Duration(milliseconds: 300));
       expect(p.uiState.playheadFrame.value, 3,

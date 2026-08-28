@@ -158,6 +158,61 @@ String graphNodeKey(BridgeNodeRef node) => switch (node) {
       BridgeNodeRef_Driver(:final field0) => 'driver:$field0',
     };
 
+/// What a parameter row needs to know about the wire feeding it (K-471): the
+/// driver's name, the type the wire carries, and whether the source is a box
+/// reading a points stream that has none (K-509).
+typedef DrivenParam = ({String driver, BridgePortType type, bool noStream});
+
+/// Which of [layer]'s effect parameters a driver is wired to, by
+/// `effectId/paramId`. A wire's colour is its **source** port's type, which is
+/// what the parameter is now following.
+///
+/// **One read, held.** Every panel that draws parameter rows — Effect controls,
+/// the Node panel, the Timeline's fold-out — asks this at the moments the graph
+/// can change (the selection moves, the document commits) and keeps the answer;
+/// asking it from a build is exactly the traffic `bridge_call_budget_test`
+/// guards against (K-183). Empty for every layer that has never been wired,
+/// which is nearly all of them.
+Map<String, DrivenParam> drivenParamsOf(LayerReference layer) {
+  final out = <String, DrivenParam>{};
+  final BridgeLayerGraph graph;
+  try {
+    graph = layer.getGraph();
+  } catch (_) {
+    // The layer has gone; the rows simply draw their own controls again.
+    return out;
+  }
+  final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
+  for (final edge in graph.wiring.edges) {
+    if (edge.to case BridgeInputRef_Param(:final node, :final port)) {
+      if (node is! BridgeNodeRef_Effect) continue;
+      final (fromKey, fromPort) = switch (edge.from) {
+        BridgeOutputRef_Driver(node: final d, port: final p) => (
+            graphNodeKey(BridgeNodeRef.driver(d)),
+            p
+          ),
+        BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+        // A points wire's source is a *stack effect* (K-492), so the row names
+        // the effect that hands the data over.
+        BridgeOutputRef_EffectData(:final effect, :final port) => (
+            graphNodeKey(BridgeNodeRef.effect(effect)),
+            port
+          ),
+      };
+      final source = byRef[fromKey];
+      if (source == null) continue;
+      final socket = source.outputs.where((o) => o.id == fromPort);
+      if (socket.isEmpty) continue;
+      out['${node.field0}/$port'] = (
+        driver: source.customName ?? engineLabel(source.label),
+        type: socket.first.portType,
+        noStream: graphNoStream(source),
+      );
+    }
+  }
+  return out;
+}
+
 /// The effect this box stands for, or null for the other three kinds.
 UuidValue? _effectIdOf(BridgeNodeRef node) =>
     node is BridgeNodeRef_Effect ? node.field0 : null;

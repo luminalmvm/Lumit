@@ -1433,7 +1433,12 @@ measurement — the panel shows the numbers, it does not turn them on.
   group 3 (K-188), aligned to both its edges, so the numbers stack into one column wherever
   the groups are dragged. **An animated value stays editable** (K-189): the field shows the
   value under the playhead, and an edit writes the key sitting there — or plants a linear
-  one — never flattening the curve. A drag on one is **one undo step**, staged in Dart and
+  one — never flattening the curve. **A driven parameter is the one exception, in every
+  panel that draws a property row** (K-471, K-627): where a driver is wired to it, the
+  hollow ring and the word *driven* take the keyframe controls' place — there is no key to
+  plant and no neighbour to step to while the wire decides the value — the driver's name
+  rides in the mark's tooltip, and the value cell keeps showing the number the parameter
+  holds while refusing every gesture on it. A drag on one is **one undo step**, staged in Dart and
   committed on release (K-192). **Clicking a property's name selects it** (K-196): the
   name, not the whole row, so grabbing a value field or a stopwatch never re-aims the
   graph — though *editing* a value or keying the property selects it too. `Ctrl`/`Cmd`-click
