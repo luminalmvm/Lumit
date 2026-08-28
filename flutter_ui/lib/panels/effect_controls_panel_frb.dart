@@ -484,23 +484,26 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     LayerReference layer,
   ) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // The keyframe controls read the playhead — which key is under it, whether
-    // the diamond is filled — so the rows have to redraw when it moves. The
-    // read model repaints the panel when anything commits (K-184): an undo, a
-    // redo, or the same property dragged in the Timeline's fold-out.
-    return ValueListenableBuilder<int>(
-      valueListenable: ui.playheadFrame,
-      // Which effects are picked is the shell's (K-300) — the Timeline picks
-      // them too — so the headings redraw when that changes, wherever the click
-      // happened.
-      builder: (context, playhead, _) =>
-          ValueListenableBuilder<List<UuidValue>>(
-        valueListenable: ui.selectedEffects,
-        builder: (context, picked, _) => ListenableBuilder(
-          listenable: ui.model,
-          builder: (context, _) =>
-              _rows(context, comp, layer, playhead, picked),
-        ),
+    // **The panel does not listen to the playhead.** Every row that reads it —
+    // a value under the playhead, a diamond that fills on a key — carries its
+    // own `ValueListenableBuilder` on it, the way the Timeline's fold rows do,
+    // so a scrub redraws those rows and nothing else. Listening here instead
+    // rebuilt the whole panel on every frame of a scrub: measured at 312
+    // widgets per playhead move on a three-layer project, which is what made
+    // the playhead lag the pointer. The frame below is therefore a *snapshot*
+    // for the few rows that cannot listen for themselves, and those are wrapped
+    // in [_AtPlayhead] where they are built.
+    //
+    // Which effects are picked is the shell's (K-300) — the Timeline picks them
+    // too — so the headings redraw when that changes, wherever the click
+    // happened. The read model repaints the panel when anything commits
+    // (K-184): an undo, a redo, or the same property dragged in the Timeline.
+    return ValueListenableBuilder<List<UuidValue>>(
+      valueListenable: ui.selectedEffects,
+      builder: (context, picked, _) => ListenableBuilder(
+        listenable: ui.model,
+        builder: (context, _) =>
+            _rows(context, comp, layer, ui.playheadFrame.value, picked),
       ),
     );
   }
@@ -629,16 +632,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // sits, because that is what it is: how the source is
                       // *sampled* (K-088). It shows itself only when the layer's
                       // flow switch is on.
-                      FlowRowsFrb(
-                        key: ValueKey<String>(
-                            'flow-card-${layer.internallayerId}'),
-                        layer: layer,
-                        onChanged: ui.model.refresh,
-                        comp: comp,
-                        playheadFrame: playhead,
-                        onSeek: (frame) => ui.playheadFrame.value = frame,
-                        open: _isOpen('flow'),
-                        onToggle: () => _toggle('flow'),
+                      _AtPlayhead(
+                        builder: (context, at) => FlowRowsFrb(
+                          key: ValueKey<String>(
+                              'flow-card-${layer.internallayerId}'),
+                          layer: layer,
+                          onChanged: ui.model.refresh,
+                          comp: comp,
+                          playheadFrame: at,
+                          onSeek: (frame) => ui.playheadFrame.value = frame,
+                          open: _isOpen('flow'),
+                          onToggle: () => _toggle('flow'),
+                        ),
                       ),
                       _TransformSection(
                         key: ValueKey<String>('tf-card-${layer.internallayerId}'),
@@ -669,6 +674,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // from anybody who has not turned the layer cards on. It
                     // shows itself only where there is something to show: a
                     // layer that is not a Text layer has no letters to animate.
+                    // Its rows listen to the playhead one at a time, so the card
+                    // itself does not have to.
                     TextAnimatorRowsFrb(
                       key: ValueKey<String>('anim-card-${layer.internallayerId}'),
                       layer: layer,
@@ -798,6 +805,27 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       ],
     );
   }
+}
+
+/// Rebuild just this much of the panel when the playhead moves.
+///
+/// Most rows here listen to the playhead for themselves (`EffectParamRowFrb`,
+/// `KeyframeControlsFrb`, the transform rows). A few cannot: they sample a
+/// curve in their own `build`, or — like the levels trace — ask the engine for
+/// something new from `didUpdateWidget`, which only runs when the frame arrives
+/// as a *property*. Those are built through this, so they keep following a
+/// scrub without the panel above them following it too.
+class _AtPlayhead extends StatelessWidget {
+  const _AtPlayhead({required this.builder});
+
+  final Widget Function(BuildContext context, int frame) builder;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable:
+            Provider.of<LumitUiState>(context, listen: false).playheadFrame,
+        builder: (context, frame, _) => builder(context, frame),
+      );
 }
 
 /// The panel header: which layer is being edited, and Add effect.
@@ -1124,6 +1152,27 @@ class _EffectSection extends StatelessWidget {
     final id = info.id;
     final values = {for (final v in info.values) v.id: v.value};
 
+    // The effect's own display, read at `at` — the Levels histogram traces the
+    // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
+    // Whether there is a display at all is a question about the effect's name,
+    // never about the frame, so the `if` below may ask it at any frame.
+    Widget? displayAt(int at) => customEffectDisplay(
+          info.name,
+          effectId: id,
+          values: {
+            for (final p in info.values)
+              p.id: stagedValue(id, p.id) ?? p.value,
+          },
+          comp: comp,
+          layer: layer,
+          playheadFrame: at,
+          onWrite: onWrite,
+          onLive: onLive,
+          onChanged: onStackChanged,
+          pressed: pressed,
+          trackCorrected: trackCorrected,
+        );
+
     return FxSection(
       // The user's own name where one is set (K-321); the effect's label
       // otherwise.
@@ -1215,23 +1264,8 @@ class _EffectSection extends StatelessWidget {
                 detail: info.badgeDetail)
             case final badge?)
           badge,
-        if (customEffectDisplay(
-          info.name,
-          effectId: id,
-          values: {
-            for (final p in info.values) p.id: stagedValue(id, p.id) ?? p.value,
-          },
-          comp: comp,
-          layer: layer,
-          playheadFrame: playheadFrame,
-          onWrite: onWrite,
-          onLive: onLive,
-          onChanged: onStackChanged,
-          pressed: pressed,
-          trackCorrected: trackCorrected,
-        )
-            case final display?)
-          display,
+        if (displayAt(playheadFrame) != null)
+          _AtPlayhead(builder: (context, at) => displayAt(at)!),
         ..._paramRows(id, values),
       ],
     );
@@ -1770,12 +1804,16 @@ class _TransformSection extends StatelessWidget {
           // much room it has before it can clip it.
           if (isCamera)
             Expanded(
-              child: CameraLinkBadge(
-                key: ValueKey<String>('tf-link-${layer.internallayerId}'),
-                camera: layer,
-                playheadFrame: playheadFrame,
-                corrected: corrected,
-                onChanged: onChanged,
+              // Its own listener: the badge reads the solve under the playhead,
+              // and the card around it no longer redraws on a scrub.
+              child: _AtPlayhead(
+                builder: (context, at) => CameraLinkBadge(
+                  key: ValueKey<String>('tf-link-${layer.internallayerId}'),
+                  camera: layer,
+                  playheadFrame: at,
+                  corrected: corrected,
+                  onChanged: onChanged,
+                ),
               ),
             ),
         ],

@@ -14,10 +14,12 @@
 // usually left alone.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
@@ -221,6 +223,32 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     double max,
     ValueChanged<List<BridgeScalar>> write,
   ) {
+    // The playhead is listened to here, per row, rather than by the panel above
+    // — and only where a channel can actually move under it. A card that
+    // redrew whole on every frame of a scrub is what made the playhead lag.
+    final playhead =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    if (scalars.every((s) => s is BridgeScalar_Static)) {
+      return _numberRowAt(
+          context, label, keyName, scalars, min, max, write, playhead.value);
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: playhead,
+      builder: (context, at, _) =>
+          _numberRowAt(context, label, keyName, scalars, min, max, write, at),
+    );
+  }
+
+  Widget _numberRowAt(
+    BuildContext context,
+    String label,
+    String keyName,
+    List<BridgeScalar> scalars,
+    double min,
+    double max,
+    ValueChanged<List<BridgeScalar>> write,
+    int at,
+  ) {
     final t = ThemeScope.of(context).theme;
     // An animated channel shows what its curve reads at the playhead, sampled
     // engine-side — the same answer the render will use, rather than a second
@@ -228,13 +256,12 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     double shown(BridgeScalar s) => switch (s) {
           BridgeScalar_Static(:final field0) => field0,
           BridgeScalar_Keyframed() || BridgeScalar_Expression() =>
-            sampleScalar(scalar: s, time: timeOfFrame(comp, playheadFrame)),
+            sampleScalar(scalar: s, time: timeOfFrame(comp, at)),
         };
     void commit(int axis, num value) => write([
           for (var i = 0; i < scalars.length; i++)
             if (i == axis)
-              scalarWithValueAt(
-                  scalars[i], value.toDouble(), comp, playheadFrame)
+              scalarWithValueAt(scalars[i], value.toDouble(), comp, at)
             else
               scalars[i],
         ]);
@@ -245,7 +272,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         scalars: scalars,
         onWrite: write,
         comp: comp,
-        playheadFrame: playheadFrame,
+        playheadFrame: at,
         onSeek: onSeek,
         rowKey: keyName,
         // These rows only ever draw in the Effect controls panel, on its fixed

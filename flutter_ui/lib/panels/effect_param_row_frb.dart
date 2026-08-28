@@ -241,10 +241,23 @@ class EffectParamRowFrb extends StatelessWidget {
     // it, so it must follow a scrub.
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    // **A still row does not.** With every channel static there is no curve to
+    // sample and no key to sit on, so the row draws the same at every frame —
+    // and `scalarWithValueAt` ignores the frame when it writes one. Most rows in
+    // most stacks are still, so this is most of what a scrub used to cost here.
+    if (_still) return _build(context, playhead.value);
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, frame, _) => _build(context, frame),
     );
+  }
+
+  /// True when nothing this row draws can change as the playhead moves: every
+  /// channel static, or a kind that carries no curve at all — a choice, a
+  /// switch, a file. Those have no stopwatch and nothing to sample.
+  bool get _still {
+    final scalars = _animatableScalarsOf(value);
+    return scalars == null || scalars.every((s) => s is BridgeScalar_Static);
   }
 
   Widget _build(BuildContext context, int frame) {
@@ -1488,6 +1501,12 @@ class EffectPointRowFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    // Still on both axes: nothing here follows a scrub. See the note on
+    // `EffectParamRowFrb.build`.
+    if (_scalar(xValue) is BridgeScalar_Static &&
+        _scalar(yValue) is BridgeScalar_Static) {
+      return _build(context, playhead.value);
+    }
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, frame, _) => _build(context, frame),

@@ -8129,6 +8129,16 @@ behind it.
 - **No bridge calls in a rebuild path.** If mouse movement can trigger a rebuild,
   nothing in it may cross the bridge; the answer is computed once and held.
   Standing budget tests fail the build when crossings creep up (K-230, K-231).
+- **Nor may a panel listen to the playhead on behalf of its rows.** Crossing the
+  bridge is not the only way to make an interaction expensive: a panel that
+  listens for the playhead at its root rebuilds *every* widget inside it on
+  every frame of a scrub, and none of that costs a single bridge call. So the
+  listening is done as low as it can be — by the individual rows that show a
+  value under the playhead — and a row whose numbers are all still does not
+  listen at all, because nothing it draws can change. `rebuild_budget_test`
+  counts the widgets one interaction redraws (by reading Flutter's own
+  dirty-widget log) and is the standing trap for this, exactly as the bridge
+  budgets are for the other kind.
 - **A dragged value is a preview, not an edit.** The engine renders a copy of the
   project with one value replaced — no document write, no undo entry, no journal
   line, and the pixels are never cached. Release commits once (K-239, K-240).

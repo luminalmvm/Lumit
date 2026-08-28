@@ -29,6 +29,7 @@
 // v0's granular add/remove/shift ops, where a key drag that moved time *and*
 // value cost two.
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -323,13 +324,21 @@ class KeyframeControlsFrb extends StatelessWidget {
     // moment it scrubs away (docs/07 §4.3).
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    // **A still row does not listen.** With no keys there is no diamond to
+    // fill, no neighbour to step to and no curve to sample, so every frame
+    // draws the same controls — and a row that rebuilt them anyway was the bulk
+    // of what a scrub cost in Effect controls. The handlers below still read
+    // the *live* playhead, because pressing the stopwatch keys where the
+    // playhead is now, not where it was when this row last drew.
+    if (!_animated) return _build(context, playhead.value, playhead);
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
-      builder: (context, frame, _) => _build(context, frame),
+      builder: (context, frame, _) => _build(context, frame, playhead),
     );
   }
 
-  Widget _build(BuildContext context, int frame) {
+  Widget _build(
+      BuildContext context, int frame, ValueListenable<int> playhead) {
     final t = ThemeScope.of(context).theme;
     final onKey = _keyAt(frame) != null;
     final previous = _neighbour(frame, before: true);
@@ -344,7 +353,7 @@ class KeyframeControlsFrb extends StatelessWidget {
         // which the redesign spends on the filled action and the playhead.
         child: LumitIcon(LumitIcons.stopwatch,
             size: iconSize, colour: _animated ? t.animated : t.textMuted),
-        onPressed: () => _toggleAnimated(frame),
+        onPressed: () => _toggleAnimated(playhead.value),
       ),
     );
 
@@ -363,7 +372,7 @@ class KeyframeControlsFrb extends StatelessWidget {
           keyName: 'kf-toggle-$rowKey',
           child: LumitIcon(LumitIcons.addKey,
               size: iconSize, colour: onKey ? t.animated : t.textMuted),
-          onPressed: () => _toggleKeyHere(frame),
+          onPressed: () => _toggleKeyHere(playhead.value),
         ),
       ),
       _button(
@@ -587,13 +596,17 @@ class PathKeyframesFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final playhead =
         Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    // A still path draws the same row at every frame — see the note on
+    // [KeyframeControlsFrb.build].
+    if (!_animated) return _build(context, playhead.value, playhead);
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
-      builder: (context, frame, _) => _build(context, frame),
+      builder: (context, frame, _) => _build(context, frame, playhead),
     );
   }
 
-  Widget _build(BuildContext context, int frame) {
+  Widget _build(
+      BuildContext context, int frame, ValueListenable<int> playhead) {
     final t = ThemeScope.of(context).theme;
     final onKey = _frames.contains(frame);
     Widget button({
@@ -622,7 +635,7 @@ class PathKeyframesFrb extends StatelessWidget {
             keyName: 'kf-stopwatch-$rowKey',
             child: LumitIcon(LumitIcons.stopwatch,
                 size: iconSize, colour: _animated ? t.animated : t.textMuted),
-            onPressed: () => _toggleAnimated(frame),
+            onPressed: () => _toggleAnimated(playhead.value),
           ),
         ),
         if (_animated) ...[
@@ -640,7 +653,7 @@ class PathKeyframesFrb extends StatelessWidget {
               keyName: 'kf-toggle-$rowKey',
               child: LumitIcon(LumitIcons.addKey,
                   size: iconSize, colour: onKey ? t.animated : t.textMuted),
-              onPressed: () => _toggleKeyHere(frame),
+              onPressed: () => _toggleKeyHere(playhead.value),
             ),
           ),
           button(

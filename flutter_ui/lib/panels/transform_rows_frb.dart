@@ -423,7 +423,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     final keyframes = KeyframeControlsFrb(
       scalars: [for (final axis in group.axes) read(transform, axis.prop)],
       comp: widget.comp,
-      playheadFrame: widget.playheadFrame,
+      // The frame this build is *for*, not the one the panel above last handed
+      // down: the panel does not follow a scrub any more, this row does.
+      playheadFrame: frame,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
       // The Effect controls panel's fixed columns (K-443); the Timeline's
@@ -594,7 +596,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                       .field0);
             },
             comp: widget.comp,
-            frame: widget.playheadFrame,
+            frame: frame,
             layer: widget.layer),
       );
     }
