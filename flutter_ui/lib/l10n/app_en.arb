@@ -4295,6 +4295,10 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
+  "previewStopped": "The preview has stopped; reopen the project to start it again",
+  "@previewStopped": {
+    "description": "Status line notice, shown once when the engine's render worker has ended and no further frames will arrive — it could not build a renderer, or it failed repeatedly. The rest of the editor still works, so the wording says what to do rather than alarming."
+  },
   "audioChannels": "{count} ch",
   "@audioChannels": {
     "description": "A sound's channel count in the Project panel's preview card, for layouts with no everyday name — 6 ch, 8 ch. Abbreviated because it sits in a line of facts.",

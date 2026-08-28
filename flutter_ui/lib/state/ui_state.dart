@@ -1289,6 +1289,15 @@ class LumitUiState extends ChangeNotifier {
         case WorkerResponse_DeviceReset():
           state.postNotice(l10n.graphicsDeviceReset);
       }
+    }, onDone: () {
+      // The engine's render worker has finished for good — it could not build
+      // a renderer at all, or it faulted on every attempt at one. There will
+      // never be another frame on this stream, and *that* is what has to be
+      // said out loud: an editor whose preview has quietly stopped looks
+      // identical to one that is merely busy, and the opening card waits on the
+      // first reply for ever rather than admitting it is not coming.
+      state.previewReady();
+      state.postNotice(l10n.previewStopped);
     });
   }
 

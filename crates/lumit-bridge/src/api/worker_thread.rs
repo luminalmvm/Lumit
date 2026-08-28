@@ -2385,11 +2385,28 @@ fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStrea
         return;
     }
     note!("The graphics device was lost; rebuilding the renderer");
+    rebuild_renderer(state, stream);
+}
+
+/// Throw this worker's renderer away and build another in its place, then put
+/// the picture back.
+///
+/// **In plain terms.** Two different accidents leave the same wreckage — a
+/// graphics device taken away by the driver, and a turn of the loop that
+/// panicked partway through a frame — and both are mended the same way: the
+/// renderer, its device and everything the card was holding are dropped, and a
+/// fresh one is built on the road the worker used at startup. Mending in place
+/// is not on offer for either: after a device loss there is nothing left to
+/// mend, and after a panic the renderer is *half* through a frame, holding an
+/// open command batch that will never be closed — which is the exact shape of
+/// "the app is fine but the preview never updates again".
+#[frb(ignore)]
+fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     let Some(mut renderer) = build_viewer_renderer(&state.project, stream) else {
-        // No second device to be had, or the project has closed under us. The
-        // worker stops rather than spinning on a renderer it cannot rebuild;
-        // the editor stays usable, exactly as it does when the first build
-        // fails on a machine with no adapter.
+        // No second device to be had, or the project has closed under us.
+        // Nothing is replaced, so the worker keeps the renderer it has and the
+        // editor stays usable, exactly as it does when the first build fails on
+        // a machine with no adapter.
         return;
     };
     // A renderer replaced is not a renderer reset: the way the user was
@@ -2473,90 +2490,163 @@ fn worker_loop(
         pending_measure: None,
     };
 
+    // How many turns in a row have panicked. Reset by the first turn that
+    // finishes, so a fault every few minutes is nursed for ever while a fault
+    // that repeats immediately is given up on rather than spun on: rebuilding a
+    // renderer costs seconds of driver work, and a panic that recurs on every
+    // turn would spend the session doing nothing else.
+    let mut faults_in_a_row = 0u32;
     loop {
-        // Before anything else asks the renderer for anything: a device that
-        // has gone answers nothing, and every step below would fail one at a
-        // time until the session looked broken (K-585).
-        recover_lost_device(&mut state, &mut stream);
-        sync_caches(&mut state, &mut stream);
-
-        // While playing the worker has work of its own, so it must not block on
-        // the channel — it takes whatever has arrived and gets on with the next
-        // frame. Idle, it waits — indefinitely in spirit, but waking after a
-        // 200 ms lull to fill the cache around the playhead (docs/06 §5.5),
-        // then on a short leash while that filling is productive so it
-        // proceeds briskly yet yields to any request within one frame's
-        // render. With nothing left to fill the wake does no work at all, so
-        // an editor sitting still spins no core worth speaking of.
-        let request = if state.playback.is_some() {
-            match receiver.try_recv() {
-                Ok(request) => Some(request),
-                Err(std::sync::mpsc::TryRecvError::Empty) => None,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    note!("Receiver disconnected, stopping the worker");
+        // **The crash net.** Everything a turn does is inside it, because
+        // everything a turn does can panic: an effect kernel, a decoder, a
+        // wgpu call, an arithmetic overflow in a parameter nobody has typed a
+        // number that large into before. Without this, one panic ended the
+        // thread — leaving the editor perfectly responsive, the Viewer frozen
+        // for the rest of the session, and nobody told. See `rebuild_renderer`
+        // for why the renderer cannot simply carry on afterwards.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            one_turn(&mut state, &receiver, &mut stream)
+        }));
+        match outcome {
+            Ok(Turn::Continue) => faults_in_a_row = 0,
+            Ok(Turn::Stop) => return,
+            Err(payload) => {
+                faults_in_a_row += 1;
+                note!(
+                    "The render worker faulted ({}); rebuilding the renderer: {}",
+                    faults_in_a_row,
+                    panic_message(&*payload),
+                );
+                if faults_in_a_row > MAX_FAULTS_IN_A_ROW {
+                    note!("The render worker faulted on every attempt; it is stopping");
                     return;
                 }
+                rebuild_renderer(&mut state, &mut stream);
             }
-        } else {
-            // Idle work of any kind means come back soon; with none left, wait
-            // long enough that an idle editor costs nothing.
-            let wait = if state.fill_exhausted && state.backup_exhausted {
-                std::time::Duration::from_millis(200)
-            } else {
-                std::time::Duration::from_millis(2)
-            };
-            match receiver.recv_timeout(wait) {
-                Ok(request) => Some(request),
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    // A lens finished baking: the picture on screen was drawn
-                    // with the lens before it, so make it again (K-350). This
-                    // is what turns the old half-second freeze into a wait —
-                    // the frame the user is looking at keeps its old flare and
-                    // is replaced the moment the new optics are ready.
-                    republish_after_bake(&mut state, &mut stream);
-                    let lull =
-                        state.last_request.elapsed() >= std::time::Duration::from_millis(200);
-                    if lull {
-                        // The numbers for the frame on screen, if a tier served
-                        // it unmeasured (K-420) — before the fill, so the column
-                        // fills one idle turn after the picture.
-                        measure_pending(&mut state);
-                        if !state.fill_exhausted {
-                            idle_fill(&mut state, &mut stream);
-                        }
-                        // Alongside the fill, not after it. On a long
-                        // composition the fill has frames to make for as long as
-                        // the budget lasts, thus "when the fill is finished"
-                        // would mean "never" — and never is how long the disk
-                        // tier stayed empty.
-                        if !state.backup_exhausted {
-                            idle_backup(&mut state);
-                        }
-                    }
-                    None
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    note!("Receiver disconnected, stopping the worker");
-                    return;
-                }
-            }
-        };
-
-        if let Some(request) = request {
-            state.last_request = std::time::Instant::now();
-            // No second sync before serving. There used to be one, and it
-            // mattered: a commit landing while the worker was parked in `recv`
-            // retired every held frame, and the sync at the top of the turn had
-            // already run — so the request the commit provoked was answered from
-            // the caches that commit had just invalidated, and the Viewer kept
-            // the pre-edit picture until something else moved the playhead. With
-            // content-hash names there is no invalidation to be on the wrong side
-            // of: the edited document asks for different names and misses.
-            handle_requests(request, &receiver, &mut state, &mut stream);
         }
-
-        play_one_frame(&mut state, &mut stream);
     }
+}
+
+/// The most consecutive faulting turns to nurse before the worker gives up.
+/// Reaching it ends the thread, which closes the response stream — the
+/// frontend's `onDone` is what turns that into a visible preview failure rather
+/// than a silence.
+const MAX_FAULTS_IN_A_ROW: u32 = 3;
+
+/// Whether the worker loop should go round again.
+#[frb(ignore)]
+enum Turn {
+    Continue,
+    Stop,
+}
+
+/// Whatever a panic payload has to say for itself. Panics carry a `&str` or a
+/// `String` in practice; anything else is nameless, and saying so is better
+/// than saying nothing.
+#[frb(ignore)]
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        s
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s
+    } else {
+        "no message"
+    }
+}
+
+/// One turn of the worker loop: recover, sync, take a request if there is one,
+/// serve it, and play a frame if the transport is running.
+///
+/// Its own function so the loop above can put a panic net round the whole of it
+/// (see there); nothing else about it changed when it moved.
+#[frb(ignore)]
+fn one_turn(
+    state: &mut WorkerState,
+    receiver: &Receiver<WorkerRequest>,
+    stream: &mut WorkerResponseStream,
+) -> Turn {
+    // Before anything else asks the renderer for anything: a device that
+    // has gone answers nothing, and every step below would fail one at a
+    // time until the session looked broken (K-585).
+    recover_lost_device(state, stream);
+    sync_caches(state, stream);
+
+    // While playing the worker has work of its own, so it must not block on
+    // the channel — it takes whatever has arrived and gets on with the next
+    // frame. Idle, it waits — indefinitely in spirit, but waking after a
+    // 200 ms lull to fill the cache around the playhead (docs/06 §5.5),
+    // then on a short leash while that filling is productive so it
+    // proceeds briskly yet yields to any request within one frame's
+    // render. With nothing left to fill the wake does no work at all, so
+    // an editor sitting still spins no core worth speaking of.
+    let request = if state.playback.is_some() {
+        match receiver.try_recv() {
+            Ok(request) => Some(request),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                note!("Receiver disconnected, stopping the worker");
+                return Turn::Stop;
+            }
+        }
+    } else {
+        // Idle work of any kind means come back soon; with none left, wait
+        // long enough that an idle editor costs nothing.
+        let wait = if state.fill_exhausted && state.backup_exhausted {
+            std::time::Duration::from_millis(200)
+        } else {
+            std::time::Duration::from_millis(2)
+        };
+        match receiver.recv_timeout(wait) {
+            Ok(request) => Some(request),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // A lens finished baking: the picture on screen was drawn
+                // with the lens before it, so make it again (K-350). This
+                // is what turns the old half-second freeze into a wait —
+                // the frame the user is looking at keeps its old flare and
+                // is replaced the moment the new optics are ready.
+                republish_after_bake(state, stream);
+                let lull = state.last_request.elapsed() >= std::time::Duration::from_millis(200);
+                if lull {
+                    // The numbers for the frame on screen, if a tier served
+                    // it unmeasured (K-420) — before the fill, so the column
+                    // fills one idle turn after the picture.
+                    measure_pending(state);
+                    if !state.fill_exhausted {
+                        idle_fill(state, stream);
+                    }
+                    // Alongside the fill, not after it. On a long
+                    // composition the fill has frames to make for as long as
+                    // the budget lasts, thus "when the fill is finished"
+                    // would mean "never" — and never is how long the disk
+                    // tier stayed empty.
+                    if !state.backup_exhausted {
+                        idle_backup(state);
+                    }
+                }
+                None
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                note!("Receiver disconnected, stopping the worker");
+                return Turn::Stop;
+            }
+        }
+    };
+
+    if let Some(request) = request {
+        state.last_request = std::time::Instant::now();
+        // No second sync before serving. There used to be one, and it
+        // mattered: a commit landing while the worker was parked in `recv`
+        // retired every held frame, and the sync at the top of the turn had
+        // already run — so the request the commit provoked was answered from
+        // the caches that commit had just invalidated, and the Viewer kept
+        // the pre-edit picture until something else moved the playhead. With
+        // content-hash names there is no invalidation to be on the wrong side
+        // of: the edited document asks for different names and misses.
+        handle_requests(request, receiver, state, stream);
+    }
+
+    play_one_frame(state, stream);
+    Turn::Continue
 }
 
 /// One turn of the playback scheduler, if playback is running
@@ -4530,6 +4620,53 @@ mod tests {
             named_under_the_look,
             "the Viewer's look came across the rebuild: a device reset is not a view reset"
         );
+    }
+
+    /// A turn that panics must not take the worker down with it.
+    ///
+    /// This is the crash net in [`super::worker_loop`], and the fault it is
+    /// really for is the one nobody sees: a panic partway through a frame ends
+    /// the worker thread, and because the editor's interface is Dart it stays
+    /// perfectly responsive while the picture never changes again. The net
+    /// catches the panic, gives it a name in the log, and rebuilds the renderer
+    /// — the rebuild being the point, since a renderer abandoned mid-frame is
+    /// holding a command batch nothing will ever close.
+    #[test]
+    fn a_faulting_turn_is_caught_named_and_the_worker_draws_again() {
+        let (project, comp) = project_with_solid();
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let quality = still_quality(1.0);
+        let bgra = super::zero_copy_wants_bgra();
+
+        super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, true)
+            .expect("the frame before the fault");
+
+        // A turn that gives up partway, in the shape the loop wraps.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> super::Turn {
+            panic!("an effect kernel gave up mid-frame")
+        }));
+        let payload = outcome.err().expect("the net catches the fault");
+        assert_eq!(
+            super::panic_message(&*payload),
+            "an effect kernel gave up mid-frame",
+            "a caught fault must reach the log with its own words, or it is unfindable"
+        );
+
+        super::rebuild_renderer(&mut state, &mut stream);
+        assert!(
+            !state.renderer.device_lost(),
+            "the fault leaves a healthy renderer behind"
+        );
+        super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, true)
+            .expect("and the preview goes on after the fault");
     }
 
     /// A worker's state around a real renderer, built as `worker_loop` builds

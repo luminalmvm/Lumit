@@ -6125,6 +6125,49 @@ then draws the same picture and compares it pixel for pixel with the one from
 before the loss. What the test cannot say is *how long* recovery takes on a card
 that has genuinely fallen over; that number still needs a real device to lose.
 
+### The crash net around the render worker
+
+A device loss is the accident we planned for. The other one is a plain
+programming fault — an effect kernel meeting a number nobody expected, a decoder
+handed a file shaped differently from every other file of its kind — and in Rust
+that ends a thread. Not the program: the thread.
+
+That distinction is the whole reason this bug was so unpleasant. Lumit's
+interface is Dart and the picture is made in Rust, on the render worker's own
+thread, so when the worker died the interface did not. Panels kept opening,
+menus kept working, the playhead kept moving, and nothing whatever came back
+from the engine — a preview frozen on the last frame it managed, for the rest of
+the session, with no message anywhere. The right description of it is not "the
+app crashed" but "the app is fine and the picture has stopped", which is exactly
+what makes it so hard to report and so easy to disbelieve.
+
+Worse, the freeze outlived the fault by design. Every picture is drawn by
+recording a batch of commands and handing the whole batch to the card at the end
+— a round trip to the driver costs real time, so a frame pays for one rather
+than one per layer. A fault partway through a frame unwinds past the handover
+and leaves the batch **open**, and an open batch is never handed over. From then
+on every later frame is recorded into a batch that will never be submitted, so
+even a renderer that is otherwise perfectly healthy draws nothing anyone can
+see.
+
+So the worker's loop now works one *turn* at a time with a net under it. A turn
+is everything the worker does between two glances at its inbox: check the
+device, sync the caches, take a request if one has arrived, serve it, play a
+frame. If a turn falls over, the net catches it, writes what the fault said into
+the log so it can be found, and — because of the open batch — throws the
+renderer away and builds another, on the same road a lost device uses. The next
+turn starts clean and the picture comes back.
+
+Two limits keep that from becoming its own problem. A fault that repeats on
+every single turn is not being survived, it is being spun on, and a rebuild
+costs seconds of driver work; so after three consecutive faults the worker stops
+for real. And when it stops — here or because there was no graphics device to
+begin with — the frame stream it publishes closes, which the front end now
+listens for. That closing is what turns a silence into a sentence: the opening
+card stops waiting for a first frame that is not coming, and the status bar says
+the preview has stopped. An editor that has lost its preview is still an editor,
+but it should never be one that pretends otherwise.
+
 ### Finding the beat, without stopping everything else
 
 Beat detection is the same story one size up. Asking a composition where its
