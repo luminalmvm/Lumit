@@ -19480,3 +19480,26 @@ declared order and stop short of 1), `open_progress_frb_test` (the engine names 
 in order over a real open; the card is determinate from its first frame and reaches 1 before
 it comes down), `busy_overlay_test` (a fraction fills the bar and writes the percentage; no
 fraction keeps the sweep and writes no number).
+
+## K-629 — A coarser cache tier sits shorter, not merely fainter
+
+**Status: DECIDED (2026-08-28).** The two greens in the cache bar are not a bug and never
+were: mint is a frame held in memory or on the card (§6.3), and the step within that family
+is the preview divisor the held picture was actually made at — full strength for full size,
+70% for half, 40% for a third or a quarter (K-441). What makes them look random is that
+**moving the playhead is exactly what mixes them**: the realtime controller renders a scrub
+at a reduced resolution, so frames banked while dragging are the fainter mint and frames
+rendered at rest are the full one. The bar was telling the truth and nobody could read it.
+
+**Brightness alone was the mistake.** §6.3 always specified tiers differing in both
+brightness and fill height and deferred the height "until a dedicated tonal ramp"; §11's
+never-colour-alone rule meanwhile listed the cache bar as already differing in fill height.
+The code did neither. A 3px stripe is not where a 30% difference in alpha is legible, and
+for anyone with no colour vision the tone said nothing at all. **A coarser run now draws
+shorter as well as fainter** — full height, 70%, 45%, the same three steps in the same
+direction — bottom-aligned against the bar's floor, so the distinction has a shape.
+
+The steps stay locked to each other: whatever is fainter is never taller, which is what the
+regression asserts rather than the numbers themselves.
+
+Tests: `cache_bar_frb_test` ("a coarser tier is drawn shorter as well as fainter").

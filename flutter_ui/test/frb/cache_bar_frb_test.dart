@@ -105,6 +105,33 @@ void main() {
       expect(cacheTierOpacity(9), 0.4,
           reason: 'a divisor this build does not know is coarser, not finer');
     });
+
+    /// Never colour alone (docs/15 §11). A bar that said "coarser" with a
+    /// shade alone read as one green changing at random — the tone is a real
+    /// distinction, but a 3px stripe is not where a shade is legible. Coarser
+    /// draws shorter as well, and the two scales agree step for step: whatever
+    /// is fainter is never taller.
+    test('a coarser tier is drawn shorter as well as fainter', () {
+      expect(cacheTierHeight(1), 1.0, reason: 'a full frame fills the bar');
+      expect(cacheTierHeight(2), lessThan(cacheTierHeight(1)));
+      expect(cacheTierHeight(3), cacheTierHeight(4),
+          reason: 'a third is drawn as coarsely as a quarter, never finer');
+      expect(cacheTierHeight(9), cacheTierHeight(4),
+          reason: 'a divisor this build does not know is coarser, not finer');
+      for (final divisor in [1, 2, 3, 4, 9]) {
+        expect(cacheTierHeight(divisor), greaterThan(0),
+            reason: 'a held frame is always visible, however coarse');
+        expect(cacheTierHeight(divisor), lessThanOrEqualTo(1.0));
+      }
+      // The two readings of "coarser" must not disagree: a run drawn fainter
+      // and taller would say two different things at once.
+      for (final pair in [(1, 2), (2, 3), (2, 4)]) {
+        expect(cacheTierHeight(pair.$2), lessThan(cacheTierHeight(pair.$1)),
+            reason: 'divisor ${pair.$2} is coarser than ${pair.$1}');
+        expect(cacheTierOpacity(pair.$2), lessThan(cacheTierOpacity(pair.$1)),
+            reason: 'and fainter, in the same direction');
+      }
+    });
   });
 
   group('Cache bar against the engine', () {

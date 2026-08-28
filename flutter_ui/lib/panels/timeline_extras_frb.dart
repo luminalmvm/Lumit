@@ -2473,6 +2473,25 @@ double cacheTierOpacity(int divisor) => switch (divisor) {
       _ => 0.4,
     };
 
+/// How **tall** a run is drawn, as a share of the bar, by the same divisor
+/// (docs/15 §6.3 and §11's never-colour-alone rule).
+///
+/// The tiers used to differ in brightness alone, which is the one distinction
+/// somebody with no colour vision — or anybody at all glancing at a 3px stripe
+/// — cannot read: a bar mixing full and half-size frames looked like one green
+/// that changed shade at random. Coarser now also sits shorter, against the
+/// bar's floor, so the difference has a shape as well as a tone. §6.3 always
+/// specified this and deferred it; the deferral is what is ending, not the
+/// design.
+///
+/// The steps mirror [cacheTierOpacity] exactly, including the folding of a
+/// third in with a quarter and an unknown divisor.
+double cacheTierHeight(int divisor) => switch (divisor) {
+      1 => 1.0,
+      2 => 0.7,
+      _ => 0.45,
+    };
+
 class _CacheBarPainter extends CustomPainter {
   final Uint8List tiers;
   final CacheBarAxis axis;
@@ -2512,9 +2531,12 @@ class _CacheBarPainter extends CustomPainter {
       // does. A composition longer than the panel is wide in pixels reaches
       // exactly that case at its last frame.
       final right = axis.xOf(end).clamp(left, size.width);
+      // Coarser sits shorter, against the bar's floor, so the tier reads
+      // without relying on the shade alone (docs/15 §6.3).
+      final top = size.height * (1 - cacheTierHeight(cacheDivisorOf(byte)));
       canvas.drawRect(
           Rect.fromLTRB(
-              left, 0, max(right, min(left + 1, size.width)), size.height),
+              left, top, max(right, min(left + 1, size.width)), size.height),
           paint);
     }
   }

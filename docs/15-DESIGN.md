@@ -492,9 +492,11 @@ Mint reads as hot (playable now); the disk tier's cooler blue marks frames that 
 promotion away (docs/06 §5.6). The card's tier and memory's share one colour deliberately:
 they answer the same question — *does this frame play now?* — and a frame in memory is one
 upload from the screen. Which of the two holds it is the status line's cache meter's business,
-where each tier has its own bar. The fuller design — tiers differing in *both* brightness and
-fill height, so the bar reads without colour vision — lands with a dedicated tonal ramp; until
-then the mint/blue hue split plus the dimming carries the distinction.
+where each tier has its own bar. **Tiers differ in both brightness and fill height** (K-629):
+a coarser run sits shorter against the bar's floor — full height, 70%, 45%, the same three
+steps as the dimming — so the bar reads without colour vision and, just as usefully, reads at
+all on a 3px stripe. Brightness alone was legible in a swatch and not in the timeline: a
+mixture of full and half-size frames looked like one green changing shade at random.
 Per the no-punishment rule, **uncached is neutral, never alarming** — no amber, no
 red, no pulsing. An uncached timeline is the normal starting state of every project, not a
 failure.
