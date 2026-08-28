@@ -28,6 +28,7 @@
 // the bar and the bottom bar. This file re-exports the lot, so every name that
 // was reachable through it before the split still is.
 
+import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -774,46 +775,55 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   ///
   /// The stopwatch and the value well are not this gesture: they animate and
   /// they edit, and neither re-aims the selection (K-196).
-  void _selectProperty(String path) => setState(() {
-        final keys = HardwareKeyboard.instance;
-        if (keys.isControlPressed || keys.isMetaPressed) {
-          if (_selectedProperties.remove(path)) {
-            _laneKeySelection.removeAll(_keysOfProperty(path));
-          } else {
-            _selectedProperties.add(path);
-            _laneKeySelection.addAll(_keysOfProperty(path));
-          }
-        } else if (keys.isShiftPressed && _selectedProperties.isNotEmpty) {
-          final a = _visiblePropertyPaths.indexOf(_selectedProperties.last);
-          final b = _visiblePropertyPaths.indexOf(path);
-          if (a < 0 || b < 0) {
-            if (!_selectedProperties.contains(path)) {
-              _selectedProperties.add(path);
-            }
-            _laneKeySelection.addAll(_keysOfProperty(path));
-          } else {
-            for (var i = a < b ? a : b; i <= (a < b ? b : a); i++) {
-              if (!_selectedProperties.contains(_visiblePropertyPaths[i])) {
-                _selectedProperties.add(_visiblePropertyPaths[i]);
-              }
-              _laneKeySelection
-                  .addAll(_keysOfProperty(_visiblePropertyPaths[i]));
-            }
-          }
-        } else {
-          _selectedProperties
-            ..clear()
-            ..add(path);
-          _laneKeySelection
-            ..clear()
-            ..addAll(_keysOfProperty(path));
+  /// **Published, not `setState`.** A click on a name lights a row and fills
+  /// that row's diamonds, and nothing else on screen can say anything about
+  /// either — so the two halves of the table listen for their own share and
+  /// redraw that (measured: 1144 widgets down to a fraction of it). Graph view
+  /// is the exception, as it is for an effect picked over in the Effect
+  /// controls panel: the picked properties *are* its curves, so it has a new
+  /// picture to draw.
+  void _selectProperty(String path) {
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isMetaPressed) {
+      if (_selectedProperties.remove(path)) {
+        _laneKeySelection.removeAll(_keysOfProperty(path));
+      } else {
+        _selectedProperties.add(path);
+        _laneKeySelection.addAll(_keysOfProperty(path));
+      }
+    } else if (keys.isShiftPressed && _selectedProperties.isNotEmpty) {
+      final a = _visiblePropertyPaths.indexOf(_selectedProperties.last);
+      final b = _visiblePropertyPaths.indexOf(path);
+      if (a < 0 || b < 0) {
+        if (!_selectedProperties.contains(path)) {
+          _selectedProperties.add(path);
         }
-        _graphKeySelection.clear();
-        _highlighted = layerIdOfPath(path) ?? _highlighted;
-        _openRetimeInItsDefaultLens(path);
-        _publishEffectSelection();
-        _publishPropertySelection();
-      });
+        _laneKeySelection.addAll(_keysOfProperty(path));
+      } else {
+        for (var i = a < b ? a : b; i <= (a < b ? b : a); i++) {
+          if (!_selectedProperties.contains(_visiblePropertyPaths[i])) {
+            _selectedProperties.add(_visiblePropertyPaths[i]);
+          }
+          _laneKeySelection.addAll(_keysOfProperty(_visiblePropertyPaths[i]));
+        }
+      }
+    } else {
+      _selectedProperties
+        ..clear()
+        ..add(path);
+      _laneKeySelection
+        ..clear()
+        ..addAll(_keysOfProperty(path));
+    }
+    _graphKeySelection.clear();
+    _highlighted = layerIdOfPath(path) ?? _highlighted;
+    _openRetimeInItsDefaultLens(path);
+    _publishEffectSelection();
+    _publishPropertySelection();
+    _publishRowSelection();
+    _publishLaneKeys();
+    if (_graph) setState(() {});
+  }
 
   /// The other direction: an effect picked in the Effect controls panel lights
   /// its row here (K-300). A no-op when the selection is already what this
@@ -951,16 +961,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Editing a value or keying a property selects it too (docs/07 §4.3) —
   /// quietly: an already-selected property stays where it is in the order.
+  ///
+  /// Published rather than `setState` for the same reason [_selectProperty] is,
+  /// and it matters here as much: a plain click on a property's name *is* this
+  /// gesture first — the press picks the row before the tap does (K-334) — so
+  /// leaving it a panel-wide redraw would have left the click costing one
+  /// anyway.
   void _selectOnEdit(String path) {
     if (_selectedProperties.contains(path)) return;
-    setState(() {
-      _selectedProperties
-        ..clear()
-        ..add(path);
-      _graphKeySelection.clear();
-      _highlighted = layerIdOfPath(path) ?? _highlighted;
-    });
+    _selectedProperties
+      ..clear()
+      ..add(path);
+    _graphKeySelection.clear();
+    _highlighted = layerIdOfPath(path) ?? _highlighted;
     _publishPropertySelection();
+    _publishRowSelection();
+    if (_graph) setState(() {});
   }
 
   /// Which of the two views is up (K-529, §12A.1).
@@ -1197,6 +1213,34 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
   final Set<String> _laneKeySelection = {};
+
+  /// The same set, published for the lanes to listen to — the lane half's
+  /// [_rowSelection], and there for the same reason. Kept beside the field
+  /// rather than replacing it because every rule in this panel edits the set
+  /// in place.
+  ///
+  /// What it carries is a **view onto the live set**, not a copy of it: a key
+  /// drag captures the selection the instant the pointer goes down, after the
+  /// press has just added the key under it, and a copy taken at the last build
+  /// would be the selection as it stood before that press. So the lanes read
+  /// through to the set itself, and this only says *when* to look again.
+  late final ValueNotifier<Set<String>> _laneKeys =
+      ValueNotifier(UnmodifiableSetView(_laneKeySelection));
+
+  /// What was last published, so a publish that says the same thing can be
+  /// told from one that does not — a view onto the live set cannot compare
+  /// itself against the set it is a view of.
+  Set<String> _laneKeysPublished = const {};
+
+  /// Hand the lanes the key selection as it now stands. Silent when it says
+  /// the same thing, so a publish that changes nothing costs no repaint. A
+  /// fresh view each time, because a notifier holding the value it already has
+  /// tells nobody anything.
+  void _publishLaneKeys() {
+    if (setEquals(_laneKeysPublished, _laneKeySelection)) return;
+    _laneKeysPublished = Set<String>.of(_laneKeySelection);
+    _laneKeys.value = UnmodifiableSetView(_laneKeySelection);
+  }
 
   /// The layer drag in flight (K-208), read by both halves of the table. A
   /// notifier rather than panel state: a drag slides rows, and rebuilding the
@@ -2226,6 +2270,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _layerDrag.dispose();
     _renameRequest.dispose();
     _rowSelection.dispose();
+    _laneKeys.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _hLane.dispose();
@@ -2563,6 +2608,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // inside this build's own scope — and harmless, since the subtree is about
     // to be built anyway.
     _publishRowSelection(graphColours);
+    // And the same for the lanes, so every rule that still edits the key set
+    // inside a `setState` reaches them without saying so itself.
+    _publishLaneKeys();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3283,7 +3331,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       onRazor: (entry, frame) =>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
-                      selectedKeys: _laneKeySelection,
+                      selectedKeys: _laneKeys,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)
                           .project,

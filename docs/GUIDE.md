@@ -8152,6 +8152,20 @@ behind it.
   before and after and stay still when it is the same. And where a value already
   lives in a `ValueNotifier` that the interested parties watch, announcing it a
   second time to the whole application is pure cost.
+- **A gate decides when to redraw, not what to hand over.** Its comparison is
+  one row's share of the answer; what it passes down can still be the whole of
+  it. The Timeline's lanes are the case that makes the difference visible: a
+  lane draws only its own diamonds, but a keyframe drag started on one of them
+  carries every key in the selection, and those sit on rows in other layers —
+  so handing each layer only its own share would have made a drag across two
+  layers move one of them.
+- **Publish a view of the live value, not a photograph of it.** A snapshot
+  copied when the panel last drew is the answer as it stood *then*, and a
+  gesture that reads it the instant the pointer goes down — after the press has
+  already changed the selection — would read the answer it has just replaced.
+  So the Timeline publishes an unmodifiable *view* onto the set it keeps, and
+  the notifier's job is only to say "look again". The rule holds wherever a
+  published value is read from a gesture rather than from a build.
 - **A dragged value is a preview, not an edit.** The engine renders a copy of the
   project with one value replaced — no document write, no undo entry, no journal
   line, and the pixels are never cached. Release commits once (K-239, K-240).

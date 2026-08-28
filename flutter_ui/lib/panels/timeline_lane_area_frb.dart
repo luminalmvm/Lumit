@@ -204,7 +204,15 @@ class LayerArea extends StatelessWidget {
 
   /// The marquee's keyframe selection, as `rowId#index`, and where a new box
   /// reports what it caught.
-  final Set<String> selectedKeys;
+  ///
+  /// **Listened to, not handed down.** Clicking a property's name picks its
+  /// keyframes with it (K-500 §2.1), so a click changes this as well as the
+  /// outline's selection — and a panel-wide `setState` to say so redrew the
+  /// ruler, the bars and every lane to fill a handful of diamonds. Each
+  /// layer's lanes watch their own share of it instead ([_LayerKeys]), on the
+  /// same rule the outline's blocks follow. Everything outside a build reads
+  /// `.value`, which is where a gesture has always taken it from.
+  final ValueListenable<Set<String>> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
   /// A right-click on a lane key, by id and at the pointer in global
@@ -397,7 +405,7 @@ class LayerArea extends StatelessWidget {
   void _selectKey(String id, bool additive) {
     // A copy, never the live set: `onKeysSelected` clears it before it reads
     // what it was handed.
-    final next = <String>{...selectedKeys};
+    final next = <String>{...selectedKeys.value};
     if (additive) {
       if (!next.remove(id)) next.add(id);
     } else {
@@ -439,6 +447,7 @@ class LayerArea extends StatelessWidget {
   ///
   /// Ordered top to bottom, which is the order Stagger's *top down* means.
   List<SelectedKey> _selectedKeyPlaces() {
+    final held = selectedKeys.value;
     final out = <SelectedKey>[];
     var y = 0.0;
     for (final layer in rows) {
@@ -451,7 +460,7 @@ class LayerArea extends StatelessWidget {
         final rowId = foldRowPath(layer.id, row);
         final keys = laneKeysOf(row);
         for (var i = 0; i < keys.length; i++) {
-          if (!selectedKeys.contains('$rowId#$i')) continue;
+          if (!held.contains('$rowId#$i')) continue;
           out.add(SelectedKey(
             entry: layer.entry,
             row: row,
@@ -629,7 +638,10 @@ class LayerArea extends StatelessWidget {
                                 // this; the lanes were replace-only.
                                 onSelect: (rect, additive) => onKeysSelected(
                                     additive
-                                        ? {...selectedKeys, ..._keysIn(rect)}
+                                        ? {
+                                            ...selectedKeys.value,
+                                            ..._keysIn(rect)
+                                          }
                                         : _keysIn(rect)),
                                 // A click that caught nothing is a click on empty
                                 // lane space, which is the deselect gesture: the
@@ -777,22 +789,31 @@ class LayerArea extends StatelessWidget {
                                           // from the same list it builds: keyframe rows
                                           // draw their diamonds, the waveform row its
                                           // peaks (K-172), the rest leave their room.
+                                          // **The key selection is listened
+                                          // to here, one layer at a time** —
+                                          // the seam that keeps a click on a
+                                          // property's name off the layers it
+                                          // did not touch.
                                           if (rows[i].open)
-                                            Column(
-                                              key: ValueKey<String>(
-                                                  'tl-lanes-${rows[i].id}'),
-                                              children: [
-                                                for (final row
-                                                    in rows[i].drawnRows)
-                                                  SizedBox(
-                                                    height: t.density.laneRow,
-                                                    child: _lane(
-                                                        t,
-                                                        rows[i].entry,
-                                                        row,
-                                                        snap),
-                                                  ),
-                                              ],
+                                            _LayerKeys(
+                                              keys: selectedKeys,
+                                              layerId: rows[i].id,
+                                              builder: (context) => Column(
+                                                key: ValueKey<String>(
+                                                    'tl-lanes-${rows[i].id}'),
+                                                children: [
+                                                  for (final row
+                                                      in rows[i].drawnRows)
+                                                    SizedBox(
+                                                      height: t.density.laneRow,
+                                                      child: _lane(
+                                                          t,
+                                                          rows[i].entry,
+                                                          row,
+                                                          snap),
+                                                    ),
+                                                ],
+                                              ),
                                             ),
                                         ],
                                       ),
@@ -842,9 +863,15 @@ class LayerArea extends StatelessWidget {
                             // and over the seams that cross it (K-458): it is
                             // the one thing here that describes the *whole*
                             // selection, so anything drawn on top of it would
-                            // be drawn on top of the answer.
+                            // be drawn on top of the answer. It is also the one
+                            // thing here that cannot be gated per layer, for
+                            // the same reason — so it listens whole, being a
+                            // single overlay.
                             Positioned.fill(
-                                child: KeyBlockOverlay(
+                                child: ValueListenableBuilder<Set<String>>(
+                                    valueListenable: selectedKeys,
+                                    builder: (context, _, __) =>
+                                        KeyBlockOverlay(
                               places: _selectedKeyPlaces(),
                               axis: axis,
                               stretch: stretch,
@@ -857,7 +884,7 @@ class LayerArea extends StatelessWidget {
                               onChanged: onChanged,
                               onSelectKey: _selectKey,
                               onKeyMenu: onKeyMenu,
-                            )),
+                            ))),
                           ],
                         ),
                       ),
@@ -963,7 +990,12 @@ class LayerArea extends StatelessWidget {
         magnet: magnet,
         barShift: keyShiftOf(preview, id),
         snapTargets: snapTargets,
-        selectedKeys: selectedKeys,
+        // The **whole** selection, not this layer's share of it: a lane draws
+        // only its own diamonds from it, but a drag started here carries every
+        // key in hand, and those sit on rows this lane cannot see. What the
+        // per-layer gate above decides is when to rebuild, not what to hand
+        // over.
+        selectedKeys: selectedKeys.value,
         stretch: stretch,
         onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
         onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
@@ -972,4 +1004,72 @@ class LayerArea extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds one layer's lanes only when *that layer's* selected keyframes
+/// change — the lane half's `_LayerBlock`, and the same rule.
+///
+/// A `ValueListenableBuilder` here would not do: the selection is one set for
+/// the whole table, so it changes for every layer at once and every layer's
+/// lanes would redraw to fill one row's diamonds. The ids carry the row path,
+/// and a row path starts with its layer's id, so a layer's own share is a
+/// filter on that. The share is what this **compares**; what the lanes are
+/// handed is still the whole selection, because a key drag started on one row
+/// carries keys on rows this layer does not own.
+class _LayerKeys extends StatefulWidget {
+  const _LayerKeys({
+    required this.keys,
+    required this.layerId,
+    required this.builder,
+  });
+
+  final ValueListenable<Set<String>> keys;
+  final String layerId;
+  final WidgetBuilder builder;
+
+  @override
+  State<_LayerKeys> createState() => _LayerKeysState();
+}
+
+class _LayerKeysState extends State<_LayerKeys> {
+  late Set<String> _mine = _read();
+
+  Set<String> _read() => {
+        for (final id in widget.keys.value)
+          if (isUnderPath(widget.layerId, id)) id,
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    widget.keys.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LayerKeys old) {
+    super.didUpdateWidget(old);
+    if (old.keys != widget.keys) {
+      old.keys.removeListener(_follow);
+      widget.keys.addListener(_follow);
+    }
+    // The area is rebuilding anyway — an edit, a zoom — so this is the free
+    // moment to take the current share rather than hold one the notifier has
+    // moved past.
+    _mine = _read();
+  }
+
+  @override
+  void dispose() {
+    widget.keys.removeListener(_follow);
+    super.dispose();
+  }
+
+  void _follow() {
+    final next = _read();
+    if (setEquals(next, _mine)) return;
+    setState(() => _mine = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context);
 }

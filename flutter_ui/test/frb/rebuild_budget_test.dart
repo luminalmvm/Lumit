@@ -308,5 +308,114 @@ void main() {
             '${rebuilds.ranking()}',
       );
     });
+
+    /// The same interaction again, made **in the Timeline itself**: clicking a
+    /// property's name.
+    ///
+    /// It is the last of the three selection paths, and the one that was left
+    /// out of the first pass because it changes two things rather than one —
+    /// the picked rows *and* the lane keyframes that come with them (K-500
+    /// §2.1). Both halves of the table draw from it, so it stayed a `setState`
+    /// on the whole panel: measured at 1144 widgets for one click on a
+    /// two-layer project, the toolbar, the column headers, every bar and every
+    /// row redrawn so that one row could go from unlit to lit.
+    ///
+    /// It is *two* redraws to be rid of, not one, and that is why it looked
+    /// bigger than the outline's share: the press picks the row before the tap
+    /// does (K-334, `_selectOnEdit`), so a plain click on a name went through
+    /// the panel-wide `setState` twice over.
+    Future<({dynamic ui, dynamic comp, String path})> pickAProperty(
+        WidgetTester tester) async {
+      final p = await mount(tester);
+      final layer = p.comp.getLayers().first;
+      final id = layer.internallayerId.toString();
+      // Open the layer, then its Transform group, so a property row with a
+      // name to click is on screen. Only the first layer: the second is left
+      // shut, which is what makes it the layer that must *not* redraw.
+      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transform'));
+      await tester.pumpAndSettle();
+      // Read off the row itself rather than spelled out here, so the test says
+      // "the row that was clicked" and not "the path I expect it to have".
+      final path = tester
+          .widget<FoldRow>(find.ancestor(
+              of: find.text('Opacity'), matching: find.byType(FoldRow)))
+          .path;
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      await tester.tap(find.text('Opacity'));
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      return (ui: p.ui, comp: p.comp, path: path);
+    }
+
+    testWidgets('clicking a property row lights it without redrawing the panel',
+        (tester) async {
+      await pickAProperty(tester);
+
+      // ignore: avoid_print
+      print('PROPERTY CLICK REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
+      // The chrome above the rows knows nothing about which row is picked, so
+      // only a panel-wide `setState` reaches it. This is the trap for one
+      // coming back.
+      expect(
+        rebuilds.byName['ColumnHeader'] ?? 0,
+        0,
+        reason: 'the whole Timeline redrew for one property click:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Nor do the lane bars: a bar draws a layer's span, which a pick does
+      // not move.
+      expect(
+        rebuilds.byName['Bar'] ?? 0,
+        0,
+        reason: 'the lane bars redrew for one property click:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Measured at 426, against 1144 before: the one open layer's outline
+      // block — its row and every fold row under it — and that layer's lanes.
+      // The cap is roughly 2x, in the house style, so honest growth does not
+      // trip it; what must never come back is the four-figure count of a
+      // panel-wide redraw.
+      expect(
+        rebuilds.total,
+        lessThan(850),
+        reason: 'clicking a property redrew far too much:\n'
+            '${rebuilds.ranking()}',
+      );
+    });
+
+    /// The other half of the rule, again: the row that was clicked must
+    /// actually come up lit, or the budget above is met by a panel that has
+    /// gone deaf.
+    testWidgets('the clicked property row still shows as selected',
+        (tester) async {
+      final picked = await pickAProperty(tester);
+
+      final rows = tester
+          .widgetList<FoldRow>(find.byType(FoldRow))
+          .where((r) => r.path == picked.path);
+      expect(rows, isNotEmpty, reason: 'the Opacity row is on screen');
+      expect(
+        rows.first.selectedProperties,
+        contains(picked.path),
+        reason: 'the clicked row did not draw itself selected — the outline '
+            'stopped following the property selection',
+      );
+      expect(
+        rebuilds.byName['FoldRow'] ?? 0,
+        greaterThan(0),
+        reason: 'no property row redrew, so nothing on screen changed:\n'
+            '${rebuilds.ranking()}',
+      );
+      // And the shell heard it too (K-341): the Viewer outlines the layer a
+      // picked row belongs to.
+      expect(picked.ui.selectedProperties.value, contains(picked.path));
+    });
   }, skip: !engineAvailable);
 }
