@@ -156,7 +156,9 @@ abstract class BridgeLibApi extends BaseApi {
       {RustStreamSink<ScopedChange>? onChangeStream});
 
   Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
-      {required String path, RustStreamSink<ScopedChange>? onChangeStream});
+      {required String path,
+      RustStreamSink<ScopedChange>? onChangeStream,
+      RustStreamSink<OpenProgress>? onProgressStream});
 
   LayerReference crateApiTrackAddLayerAtPoints(
       {required LayerReference tracked,
@@ -1669,12 +1671,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   Future<ProjectReference?> crateApiStateLumitBridgeStateOpenProject(
-      {required String path, RustStreamSink<ScopedChange>? onChangeStream}) {
+      {required String path,
+      RustStreamSink<ScopedChange>? onChangeStream,
+      RustStreamSink<OpenProgress>? onProgressStream}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         sse_encode_opt_StreamSink_scoped_change_Sse(onChangeStream, serializer);
+        sse_encode_opt_StreamSink_open_progress_Sse(
+            onProgressStream, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 17, port: port_);
       },
@@ -1684,7 +1690,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiStateLumitBridgeStateOpenProjectConstMeta,
-      argValues: [path, onChangeStream],
+      argValues: [path, onChangeStream, onProgressStream],
       apiImpl: this,
     ));
   }
@@ -1692,7 +1698,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiStateLumitBridgeStateOpenProjectConstMeta =>
       const TaskConstMeta(
         debugName: "LumitBridgeState_open_project",
-        argNames: ["path", "onChangeStream"],
+        argNames: ["path", "onChangeStream", "onProgressStream"],
       );
 
   @override
@@ -10375,6 +10381,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  RustStreamSink<OpenProgress> dco_decode_StreamSink_open_progress_Sse(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
   RustStreamSink<ScopedChange> dco_decode_StreamSink_scoped_change_Sse(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -13117,6 +13130,31 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  OpenPhase dco_decode_open_phase(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return OpenPhase.values[raw as int];
+  }
+
+  @protected
+  OpenProgress dco_decode_open_progress(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return OpenProgress(
+      phase: dco_decode_open_phase(arr[0]),
+      fraction: dco_decode_f_64(arr[1]),
+    );
+  }
+
+  @protected
+  RustStreamSink<OpenProgress>? dco_decode_opt_StreamSink_open_progress_Sse(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_StreamSink_open_progress_Sse(raw);
+  }
+
+  @protected
   RustStreamSink<ScopedChange>? dco_decode_opt_StreamSink_scoped_change_Sse(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -13493,6 +13531,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     return LumitBridgeStateImpl.frbInternalSseDecode(
         sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+  }
+
+  @protected
+  RustStreamSink<OpenProgress> sse_decode_StreamSink_open_progress_Sse(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
   }
 
   @protected
@@ -16699,6 +16744,33 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  OpenPhase sse_decode_open_phase(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return OpenPhase.values[inner];
+  }
+
+  @protected
+  OpenProgress sse_decode_open_progress(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_phase = sse_decode_open_phase(deserializer);
+    var var_fraction = sse_decode_f_64(deserializer);
+    return OpenProgress(phase: var_phase, fraction: var_fraction);
+  }
+
+  @protected
+  RustStreamSink<OpenProgress>? sse_decode_opt_StreamSink_open_progress_Sse(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_StreamSink_open_progress_Sse(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   RustStreamSink<ScopedChange>? sse_decode_opt_StreamSink_scoped_change_Sse(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -17207,6 +17279,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
         (self as LumitBridgeStateImpl).frbInternalSseEncode(move: null),
+        serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_open_progress_Sse(
+      RustStreamSink<OpenProgress> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+        self.setupAndSerialize(
+            codec: SseCodec(
+          decodeSuccessData: sse_decode_open_progress,
+          decodeErrorData: sse_decode_AnyhowException,
+        )),
         serializer);
   }
 
@@ -19766,6 +19851,30 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       LumitMediaStatus self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_open_phase(OpenPhase self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_open_progress(OpenProgress self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_open_phase(self.phase, serializer);
+    sse_encode_f_64(self.fraction, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_StreamSink_open_progress_Sse(
+      RustStreamSink<OpenProgress>? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_StreamSink_open_progress_Sse(self, serializer);
+    }
   }
 
   @protected

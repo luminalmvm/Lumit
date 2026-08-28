@@ -168,6 +168,16 @@ other side of this boundary.
     only that subtree rebuilds. This is the whole difference from the previous
     transport, which returned a refreshed snapshot of the entire document after
     every edit.
+- **A long call says how far it has got, on a stream of its own.**
+    `LumitBridgeState::open_project(path, on_change_stream, on_progress_stream)`
+    takes an optional `StreamSink<OpenProgress>` and names each phase of the read
+    as it begins — `ReadingFile`, `ResolvingMedia`, `PreparingProject`,
+    `StartingPreview` — each carrying the share of the whole open behind it
+    (K-628). The engine stops at `StartingPreview`, because the last stretch is
+    the frontend's: the render worker starting and answering. The weights live in
+    Rust, so the frontend draws a number rather than deciding one, and the phases
+    are only the divisions the engine can honestly see — a deserialise has no
+    inside to report from, and none is invented.
 - **A capability is not document state, and reads as its own answer.** Most reads
     ask the document; a few ask the *machine*, and the two must not be conflated.
     `ProjectReference::anti_aliasing` returns what the project asks for;

@@ -66,4 +66,32 @@ void main() {
     expect(find.text('Detecting beats'), findsNothing);
     expect(busy.value, isNull);
   });
+
+  // The same card is what opening a project puts up, and *that* job can say how
+  // far it has got (K-628). A fraction fills the bar and writes the percentage
+  // beside the line; no fraction keeps the sweep and says no number at all,
+  // because a job that reports nothing has no honest one to show.
+  testWidgets('a fraction fills the bar and says the percentage',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+
+    await tester.pumpWidget(_harness(const OpeningOverlay(fraction: 0.4)));
+    await tester.pump();
+    expect(find.text('40%'), findsOneWidget);
+    expect(
+        tester
+            .widgetList<HouseProgressBar>(find.byType(HouseProgressBar))
+            .single
+            .fraction,
+        0.4);
+  });
+
+  testWidgets('a job that cannot say keeps the sweep and no percentage',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 600));
+
+    await tester.pumpWidget(_harness(const OpeningOverlay()));
+    await tester.pump();
+    expect(find.textContaining('%'), findsNothing);
+  });
 }

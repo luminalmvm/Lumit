@@ -350,6 +350,64 @@ pub(crate) type CallbackStream = StreamSink<ScopedChange>;
 
 pub type WorkerResponseStream = StreamSink<WorkerResponse>;
 
+/// Which part of opening a project is under way (K-628).
+///
+/// In plain terms: opening a `.lum` is a short run of jobs, and the card over
+/// the shell says which one is happening rather than sweeping a bar that knows
+/// nothing. These are the divisions the engine can honestly *see*. None of them
+/// is subdivided — reading a document is one unzip and one deserialise with no
+/// inside to report from, and a bar that pretended otherwise would be inventing
+/// numbers.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenPhase {
+    /// Unzipping the `.lum` and typing the document out of its JSON.
+    ReadingFile,
+    /// Pointing every footage reference at a file on this machine (docs/10 §2),
+    /// including the one walk of the project's folder a lost item costs.
+    ResolvingMedia,
+    /// Journal, store and registry: the document becoming *the* open project,
+    /// and the previous one being closed out of the way.
+    PreparingProject,
+    /// The engine's part is done. What is left belongs to the frontend: start
+    /// the render worker and wait for its first reply.
+    StartingPreview,
+}
+
+/// How far opening a project has got (K-628).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OpenProgress {
+    pub phase: OpenPhase,
+    /// Share of the whole open behind this phase's **start**, 0..=1. Weighted
+    /// rather than counted, and it only ever rises.
+    pub fraction: f64,
+}
+
+pub type OpenProgressStream = StreamSink<OpenProgress>;
+
+/// Where each phase begins on the bar. One table, so the weights cannot
+/// disagree between the two places that report them.
+fn phase_fraction(phase: OpenPhase) -> f64 {
+    match phase {
+        OpenPhase::ReadingFile => 0.0,
+        OpenPhase::ResolvingMedia => 0.4,
+        OpenPhase::PreparingProject => 0.7,
+        OpenPhase::StartingPreview => 0.9,
+    }
+}
+
+/// Say a phase has begun, if anyone is listening. A dropped report costs the
+/// bar one step and nothing else, so it is never worth failing an open over.
+fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
+    if let Some(sink) = sink {
+        let _ = sink.add(OpenProgress {
+            phase,
+            fraction: phase_fraction(phase),
+        });
+    }
+}
+
 // The open projects, and the change stream each one publishes to.
 //
 // Two registries rather than one struct, because the change observer needs the
@@ -614,10 +672,18 @@ impl LumitBridgeState {
     /// names, and on the UI isolate that froze the window for as long as it
     /// took. Async puts it on a worker thread, which is what lets Dart hold the
     /// previous document on screen behind a progress bar until this returns.
+    ///
+    /// `on_progress_stream` is how the opening card stops guessing (K-628): each
+    /// phase says it has begun, and the frontend draws the share of the whole
+    /// open that is behind it. Optional, because nothing about opening a project
+    /// depends on someone watching.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
+        on_progress_stream: Option<OpenProgressStream>,
     ) -> Result<Option<ProjectReference>, BridgeError> {
+        let progress = on_progress_stream.as_ref();
+        report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
         let Ok((doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
@@ -630,7 +696,8 @@ impl LumitBridgeState {
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream)?;
+        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream, progress)?;
+        report_phase(progress, OpenPhase::StartingPreview);
         Ok(Some(project))
     }
 }
@@ -661,10 +728,13 @@ pub(crate) fn adopt(
     saved_at: Option<PathBuf>,
     media_root: &Path,
     on_change_stream: Option<CallbackStream>,
+    on_progress: Option<&OpenProgressStream>,
 ) -> Result<(ProjectReference, Vec<String>), BridgeError> {
     let id = Uuid::now_v7();
 
+    report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
+    report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker
     // before a panel has had a chance to ask about any of them. Opening a
@@ -760,4 +830,36 @@ pub(crate) fn adopt(
     }
 
     Ok((ProjectReference::new(id), missing))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The order the phases are reported in is the order they are declared in,
+    /// and a progress bar may never go backwards — so the weights must rise
+    /// with the declaration. Reordering the enum without reordering the table
+    /// is the mistake this catches.
+    #[test]
+    fn phase_weights_rise_with_the_phases() {
+        let order = [
+            OpenPhase::ReadingFile,
+            OpenPhase::ResolvingMedia,
+            OpenPhase::PreparingProject,
+            OpenPhase::StartingPreview,
+        ];
+        assert_eq!(phase_fraction(order[0]), 0.0, "the first phase starts at 0");
+        for pair in order.windows(2) {
+            assert!(
+                phase_fraction(pair[0]) < phase_fraction(pair[1]),
+                "{:?} must sit before {:?} on the bar",
+                pair[0],
+                pair[1]
+            );
+        }
+        assert!(
+            phase_fraction(OpenPhase::StartingPreview) < 1.0,
+            "the engine never claims the whole open: the first frame is the frontend's half"
+        );
+    }
 }

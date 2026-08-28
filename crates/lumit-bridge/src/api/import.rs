@@ -169,7 +169,9 @@ impl LumitBridgeState {
 
         // The project is unsaved — an import is not a file (see above) — so the
         // media root is passed separately rather than derived from a path.
-        let (project, missing) = adopt(doc, None, &media_root, on_change_stream)?;
+        // No progress stream: an import runs behind its own card, and the one
+        // phased bar there is belongs to opening a `.lum` (K-628).
+        let (project, missing) = adopt(doc, None, &media_root, on_change_stream, None)?;
 
         for name in missing {
             if already.contains(&name) {

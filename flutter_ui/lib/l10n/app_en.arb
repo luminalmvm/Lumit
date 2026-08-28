@@ -716,6 +716,31 @@
   "@openingProject": {
     "description": "Card shown over the interface while a project file is being read from disk."
   },
+  "openingPercent": "{percent}%",
+  "@openingPercent": {
+    "description": "The percentage beside the phase line on the card shown while a project is being opened. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "openingReadingFile": "Reading the project file",
+  "@openingReadingFile": {
+    "description": "First phase line on the card shown while a project is being opened: the .lum is being unzipped and read."
+  },
+  "openingResolvingMedia": "Finding the media",
+  "@openingResolvingMedia": {
+    "description": "Second phase line on the card shown while a project is being opened: each footage item's file is being located on this machine."
+  },
+  "openingPreparingProject": "Preparing the project",
+  "@openingPreparingProject": {
+    "description": "Third phase line on the card shown while a project is being opened: the document is being made the open one."
+  },
+  "openingStartingPreview": "Starting the preview",
+  "@openingStartingPreview": {
+    "description": "Last phase line on the card shown while a project is being opened: waiting for the first frame of the new project."
+  },
   "couldNotOpenLink": "Could not open {url}",
   "@couldNotOpenLink": {
     "description": "Bottom-strip notice when a Help menu link could not be handed to the machine's browser. {url} is a web address and is not translated.",

@@ -5849,6 +5849,25 @@ on the first reply from the new project's render worker: any reply, not the
 frame alone, so a first render that fails cannot leave the shell covered for
 good.
 
+**The bar fills, and it is not guessing.** For a long time it swept back and
+forth instead, which was honest — nothing reported anything — and useless, since
+a sweep looks the same at the first second as at the tenth. The engine now says
+which part of the open it has reached, as it reaches it: reading the project
+file, finding the media, preparing the project, starting the preview. Each of
+those four carries a number — how much of the whole open sits behind it — and
+that is what the bar draws and the percentage says.
+
+Four steps, not a smooth crawl, and the reason is worth being plain about.
+Reading a `.lum` is one unzip and one call that turns a page of JSON into a
+document; there is no inside to that call to report from, so a bar that crept
+along during it would be an animation on a timer pretending to be progress.
+Between "moves in four honest steps" and "moves smoothly and is making it up",
+the first is the one you can act on: when it sticks, it sticks on a *named*
+thing. The weights live in Rust rather than in the interface, so the card draws
+a number rather than inventing one (K-628). An import shares the same card and
+reports nothing, so it keeps the old sweep — which is what a job with nothing to
+say should look like.
+
 There is a subtlety worth knowing, because it caused a bug. Opening a project
 clears the engine's registry of open projects, so **every handle Dart is holding
 dies at that moment** — including any question already asked and not yet

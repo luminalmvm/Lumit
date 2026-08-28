@@ -18,8 +18,8 @@ import 'project_item.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -62,11 +62,19 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// names, and on the UI isolate that froze the window for as long as it
   /// took. Async puts it on a worker thread, which is what lets Dart hold the
   /// previous document on screen behind a progress bar until this returns.
+  ///
+  /// `on_progress_stream` is how the opening card stops guessing (K-628): each
+  /// phase says it has begun, and the frontend draws the share of the whole
+  /// open that is behind it. Optional, because nothing about opening a project
+  /// depends on someone watching.
   static Future<ProjectReference?> openProject(
           {required String path,
-          RustStreamSink<ScopedChange>? onChangeStream}) =>
+          RustStreamSink<ScopedChange>? onChangeStream,
+          RustStreamSink<OpenProgress>? onProgressStream}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateOpenProject(
-          path: path, onChangeStream: onChangeStream);
+          path: path,
+          onChangeStream: onChangeStream,
+          onProgressStream: onProgressStream);
 }
 
 /// One effect's measured cost within its layer, in milliseconds.
@@ -521,6 +529,57 @@ class BridgeSharedFrameInfoLinux {
           drmFourcc == other.drmFourcc &&
           modifier == other.modifier &&
           tier == other.tier;
+}
+
+/// Which part of opening a project is under way (K-628).
+///
+/// In plain terms: opening a `.lum` is a short run of jobs, and the card over
+/// the shell says which one is happening rather than sweeping a bar that knows
+/// nothing. These are the divisions the engine can honestly *see*. None of them
+/// is subdivided — reading a document is one unzip and one deserialise with no
+/// inside to report from, and a bar that pretended otherwise would be inventing
+/// numbers.
+enum OpenPhase {
+  /// Unzipping the `.lum` and typing the document out of its JSON.
+  readingFile,
+
+  /// Pointing every footage reference at a file on this machine (docs/10 §2),
+  /// including the one walk of the project's folder a lost item costs.
+  resolvingMedia,
+
+  /// Journal, store and registry: the document becoming *the* open project,
+  /// and the previous one being closed out of the way.
+  preparingProject,
+
+  /// The engine's part is done. What is left belongs to the frontend: start
+  /// the render worker and wait for its first reply.
+  startingPreview,
+  ;
+}
+
+/// How far opening a project has got (K-628).
+class OpenProgress {
+  final OpenPhase phase;
+
+  /// Share of the whole open behind this phase's **start**, 0..=1. Weighted
+  /// rather than counted, and it only ever rises.
+  final double fraction;
+
+  const OpenProgress({
+    required this.phase,
+    required this.fraction,
+  });
+
+  @override
+  int get hashCode => phase.hashCode ^ fraction.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OpenProgress &&
+          runtimeType == other.runtimeType &&
+          phase == other.phase &&
+          fraction == other.fraction;
 }
 
 class ScopedChange {

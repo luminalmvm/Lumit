@@ -817,12 +817,19 @@ fn wire__crate__api__state__LumitBridgeState_open_project_impl(
                     flutter_rust_bridge::for_generated::SseCodec,
                 >,
             >>::sse_decode(&mut deserializer);
+            let api_on_progress_stream = <Option<
+                StreamSink<
+                    crate::api::state::OpenProgress,
+                    flutter_rust_bridge::for_generated::SseCodec,
+                >,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, BridgeError>((move || {
                     let output_ok = crate::api::state::LumitBridgeState::open_project(
                         &api_path,
                         api_on_change_stream,
+                        api_on_progress_stream,
                     )?;
                     Ok(output_ok)
                 })())
@@ -11216,6 +11223,16 @@ impl SseDecode
 }
 
 impl SseDecode
+    for StreamSink<crate::api::state::OpenProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
     for StreamSink<crate::api::state::ScopedChange, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -14729,6 +14746,50 @@ impl SseDecode for crate::api::footage::LumitMediaStatus {
             1 => crate::api::footage::LumitMediaStatus::Ready,
             _ => unreachable!("Invalid variant for LumitMediaStatus: {}", inner),
         };
+    }
+}
+
+impl SseDecode for crate::api::state::OpenPhase {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::state::OpenPhase::ReadingFile,
+            1 => crate::api::state::OpenPhase::ResolvingMedia,
+            2 => crate::api::state::OpenPhase::PreparingProject,
+            3 => crate::api::state::OpenPhase::StartingPreview,
+            _ => unreachable!("Invalid variant for OpenPhase: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::state::OpenProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_phase = <crate::api::state::OpenPhase>::sse_decode(deserializer);
+        let mut var_fraction = <f64>::sse_decode(deserializer);
+        return crate::api::state::OpenProgress {
+            phase: var_phase,
+            fraction: var_fraction,
+        };
+    }
+}
+
+impl SseDecode
+    for Option<
+        StreamSink<crate::api::state::OpenProgress, flutter_rust_bridge::for_generated::SseCodec>,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<StreamSink<
+                crate::api::state::OpenProgress,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
     }
 }
 
@@ -19195,6 +19256,47 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::footage::LumitMediaStatus>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::state::OpenPhase {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::ReadingFile => 0.into_dart(),
+            Self::ResolvingMedia => 1.into_dart(),
+            Self::PreparingProject => 2.into_dart(),
+            Self::StartingPreview => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::state::OpenPhase {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::state::OpenPhase>
+    for crate::api::state::OpenPhase
+{
+    fn into_into_dart(self) -> crate::api::state::OpenPhase {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::state::OpenProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.phase.into_into_dart().into_dart(),
+            self.fraction.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::state::OpenProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::state::OpenProgress>
+    for crate::api::state::OpenProgress
+{
+    fn into_into_dart(self) -> crate::api::state::OpenProgress {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::project::ProjectReference {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [self.id.into_into_dart().into_dart()].into_dart()
@@ -19379,6 +19481,15 @@ impl SseEncode
         let (ptr, size) = self.sse_encode_raw();
         <usize>::sse_encode(ptr, serializer);
         <i32>::sse_encode(size, serializer);
+    }
+}
+
+impl SseEncode
+    for StreamSink<crate::api::state::OpenProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
     }
 }
 
@@ -22017,6 +22128,49 @@ impl SseEncode for crate::api::footage::LumitMediaStatus {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::state::OpenPhase {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::state::OpenPhase::ReadingFile => 0,
+                crate::api::state::OpenPhase::ResolvingMedia => 1,
+                crate::api::state::OpenPhase::PreparingProject => 2,
+                crate::api::state::OpenPhase::StartingPreview => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::state::OpenProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::state::OpenPhase>::sse_encode(self.phase, serializer);
+        <f64>::sse_encode(self.fraction, serializer);
+    }
+}
+
+impl SseEncode
+    for Option<
+        StreamSink<crate::api::state::OpenProgress, flutter_rust_bridge::for_generated::SseCodec>,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <StreamSink<
+                crate::api::state::OpenProgress,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_encode(value, serializer);
+        }
     }
 }
 

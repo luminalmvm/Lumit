@@ -114,6 +114,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           dynamic raw);
 
   @protected
+  RustStreamSink<OpenProgress> dco_decode_StreamSink_open_progress_Sse(
+      dynamic raw);
+
+  @protected
   RustStreamSink<ScopedChange> dco_decode_StreamSink_scoped_change_Sse(
       dynamic raw);
 
@@ -878,6 +882,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitMediaStatus dco_decode_lumit_media_status(dynamic raw);
 
   @protected
+  OpenPhase dco_decode_open_phase(dynamic raw);
+
+  @protected
+  OpenProgress dco_decode_open_progress(dynamic raw);
+
+  @protected
+  RustStreamSink<OpenProgress>? dco_decode_opt_StreamSink_open_progress_Sse(
+      dynamic raw);
+
+  @protected
   RustStreamSink<ScopedChange>? dco_decode_opt_StreamSink_scoped_change_Sse(
       dynamic raw);
 
@@ -1042,6 +1056,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitBridgeState
       sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<OpenProgress> sse_decode_StreamSink_open_progress_Sse(
+      SseDeserializer deserializer);
 
   @protected
   RustStreamSink<ScopedChange> sse_decode_StreamSink_scoped_change_Sse(
@@ -1939,6 +1957,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitMediaStatus sse_decode_lumit_media_status(SseDeserializer deserializer);
 
   @protected
+  OpenPhase sse_decode_open_phase(SseDeserializer deserializer);
+
+  @protected
+  OpenProgress sse_decode_open_progress(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<OpenProgress>? sse_decode_opt_StreamSink_open_progress_Sse(
+      SseDeserializer deserializer);
+
+  @protected
   RustStreamSink<ScopedChange>? sse_decode_opt_StreamSink_scoped_change_Sse(
       SseDeserializer deserializer);
 
@@ -2118,6 +2146,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           LumitBridgeState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_open_progress_Sse(
+      RustStreamSink<OpenProgress> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_scoped_change_Sse(
@@ -3086,6 +3118,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_lumit_media_status(
       LumitMediaStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_open_phase(OpenPhase self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_open_progress(OpenProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_StreamSink_open_progress_Sse(
+      RustStreamSink<OpenProgress>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_scoped_change_Sse(

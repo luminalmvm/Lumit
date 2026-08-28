@@ -86,6 +86,27 @@ class LumitState extends ChangeNotifier {
   /// [previewReady] is what ends it.
   final ValueNotifier<bool> opening = ValueNotifier(false);
 
+  /// How far the open has got, or null before the engine has said anything
+  /// about it (K-628).
+  ///
+  /// The engine reports each phase of the read as it begins and hands over the
+  /// share of the whole open that sits behind it; the last stretch — the render
+  /// worker starting and answering — is the frontend's own, and [previewReady]
+  /// closes it at 1. Weighted phases, not a timer: the card would rather move
+  /// in four honest steps than sweep a bar that knows nothing.
+  final ValueNotifier<OpenProgress?> openProgress = ValueNotifier(null);
+
+  /// The open in progress reporting its phases, held so the next one can let
+  /// it go.
+  StreamSubscription<OpenProgress>? _openProgressWatch;
+
+  /// Take a phase report, but never let the bar go backwards — a late report
+  /// arriving behind a later one would otherwise pull the fill back.
+  void _reportOpenProgress(OpenProgress progress) {
+    final reached = openProgress.value?.fraction ?? -1;
+    if (progress.fraction >= reached) openProgress.value = progress;
+  }
+
   /// The line on the card shown over the shell while some other seconds-long
   /// job runs, or null when none is. Beat detection is the first of them.
   ///
@@ -103,7 +124,14 @@ class LumitState extends ChangeNotifier {
   /// leave the interface covered), and by the session restore when it fronts no
   /// composition, which is a project with no picture to wait for.
   void previewReady() {
-    if (opening.value) opening.value = false;
+    if (!opening.value) return;
+    // Full, then gone: the bar reaching its end is what "open" means, and a
+    // card that vanished at eighty per cent would read as one that gave up.
+    final last = openProgress.value;
+    if (last != null) {
+      openProgress.value = OpenProgress(phase: last.phase, fraction: 1);
+    }
+    opening.value = false;
   }
 
   Future<void> openProject(String path) async {
@@ -111,12 +139,35 @@ class LumitState extends ChangeNotifier {
     // opens in flight would have the second take the first's.
     if (opening.value) return;
     opening.value = true;
+    // Determinate from the first frame, before the engine has had a turn to
+    // say so: the card must not flip from a sweeping bar to a filling one a
+    // millisecond in. Nothing is claimed here — the fill is zero, and the
+    // engine's own first report replaces this as it starts reading.
+    openProgress.value =
+        OpenProgress(phase: OpenPhase.readingFile, fraction: 0);
+    // The engine's running commentary on the read (K-628). **Not cancelled when
+    // the call returns**: a phase report crosses to Dart on an event-loop turn
+    // of its own, so a subscription dropped the moment `openProject` resolved
+    // would take every report still in flight with it and leave the bar stuck
+    // at nought. It is let go at the start of the next open instead, by which
+    // time the engine has long finished talking about this one.
+    final progress = RustStreamSink<OpenProgress>();
+    // The call is *started* before the sink is listened to, and that order is
+    // not a style choice: a `RustStreamSink` has no stream until it has been
+    // handed to a call, and asking for one early throws. Handing it over is
+    // what opens the port; nothing is lost in between, because the stream
+    // buffers what arrives before the first listener (`listenAndBuffer`). The
+    // change sink beside it is attached the same way, after its own call.
+    final pending = LumitBridgeState.openProject(
+        path: path, onChangeStream: _changeSink(), onProgressStream: progress);
+    _openProgressWatch?.cancel();
+    _openProgressWatch = progress.stream.listen(_reportOpenProgress);
     // Null means the file would not open; the previous project stays loaded
     // rather than the app being left with none.
-    final opened = await LumitBridgeState.openProject(
-        path: path, onChangeStream: _changeSink());
+    final opened = await pending;
     if (opened == null) {
       postNotice(l10n.couldNotOpen(path), error: true);
+      openProgress.value = null;
       opening.value = false;
       return;
     }
@@ -155,6 +206,11 @@ class LumitState extends ChangeNotifier {
       // Unreadable folder: the engine's own refusal will say so.
     }
     opening.value = true;
+    // An import reports no phases, so its card sweeps rather than filling —
+    // and must not inherit the fill, or the live reports, of the last open.
+    _openProgressWatch?.cancel();
+    _openProgressWatch = null;
+    openProgress.value = null;
     final imported = await LumitBridgeState.importAeBundle(
         path: target, onChangeStream: _changeSink());
     if (imported == null) {

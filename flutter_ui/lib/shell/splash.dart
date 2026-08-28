@@ -11,7 +11,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
+import '../src/rust/api/state.dart' show OpenPhase;
 import '../widgets/controls.dart';
+
+/// The line the opening card shows for one phase of a project open (K-628).
+///
+/// The engine names the phase and Lumit says it in the reader's language — the
+/// engine sends no English here, which is why there is nothing for
+/// `engine_labels.dart` to carry.
+String openPhaseLabel(OpenPhase phase) => switch (phase) {
+      OpenPhase.readingFile => l10n.openingReadingFile,
+      OpenPhase.resolvingMedia => l10n.openingResolvingMedia,
+      OpenPhase.preparingProject => l10n.openingPreparingProject,
+      OpenPhase.startingPreview => l10n.openingStartingPreview,
+    };
 
 /// The fallback boot lines shown without an engine bridge (the F0 placeholder
 /// build). A live bridge replaces these with `app.bootLog()`.
@@ -30,8 +43,16 @@ const List<String> bootLines = [
 /// leaves whatever was on screen standing and covers it with this until the new
 /// project is adopted — one swap, no half-loaded interface.
 ///
-/// The bar is indeterminate: reading a `.lum` reports no progress, so it sweeps
-/// rather than claiming to know how far along it is.
+/// The bar fills when the job can say how far it has got and sweeps when it
+/// cannot. Opening a `.lum` can (K-628): the engine names each phase of the
+/// read as it begins, and [fraction] is the share of the whole open behind it,
+/// drawn as a percentage beside the phase's own line. A job that reports
+/// nothing passes null and gets the sweep, which claims nothing.
+///
+/// **A card keeps whichever bar it opened with.** The two are not swapped
+/// mid-life — a sweep that turned into a fill a moment after appearing would
+/// read as a stumble — so a caller that will report progress reports it from
+/// the first frame.
 ///
 /// [label] names what is being waited for. It defaults to opening a project,
 /// which is what the card was built for; a job that takes the same seconds and
@@ -40,7 +61,10 @@ const List<String> bootLines = [
 class OpeningOverlay extends StatefulWidget {
   final String? label;
 
-  const OpeningOverlay({super.key, this.label});
+  /// How far the job has got, 0..1, or null for one that cannot say.
+  final double? fraction;
+
+  const OpeningOverlay({super.key, this.label, this.fraction});
 
   @override
   State<OpeningOverlay> createState() => _OpeningOverlayState();
@@ -48,14 +72,25 @@ class OpeningOverlay extends StatefulWidget {
 
 class _OpeningOverlayState extends State<OpeningOverlay>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _sweep = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat();
+  /// Only ever built for the indeterminate card: a controller left repeating
+  /// under a bar that is being told its own fill would keep the tree from ever
+  /// settling, for an animation nothing draws.
+  AnimationController? _sweep;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.fraction == null) {
+      _sweep = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 900),
+      )..repeat();
+    }
+  }
 
   @override
   void dispose() {
-    _sweep.dispose();
+    _sweep?.dispose();
     super.dispose();
   }
 
@@ -81,14 +116,29 @@ class _OpeningOverlayState extends State<OpeningOverlay>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.label ?? l10n.openingProject,
-                    style: t.bodyPrimary),
-                const SizedBox(height: 12),
-                AnimatedBuilder(
-                  animation: _sweep,
-                  builder: (context, _) =>
-                      HouseProgressBar(fraction: _sweep.value),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(widget.label ?? l10n.openingProject,
+                          style: t.bodyPrimary),
+                    ),
+                    if (widget.fraction != null)
+                      Text(
+                        l10n.openingPercent(
+                            (widget.fraction!.clamp(0.0, 1.0) * 100).round()),
+                        style: t.small,
+                      ),
+                  ],
                 ),
+                const SizedBox(height: 12),
+                if (_sweep case final sweep?)
+                  AnimatedBuilder(
+                    animation: sweep,
+                    builder: (context, _) =>
+                        HouseProgressBar(fraction: sweep.value),
+                  )
+                else
+                  HouseProgressBar(fraction: widget.fraction ?? 0),
               ],
             ),
           ),

@@ -19438,3 +19438,45 @@ its own, as it had none before.
 Tests: `effect_controls_frb_test` ("a driven parameter marks the left of the row and goes
 deaf"), `timeline_panel_frb_test` ("a driven parameter marks the fold-out row"),
 `node_panel_frb_test` ("a row driven by a streamless sample wears the warning").
+
+## K-628 — The opening card counts the phases of the open rather than sweeping
+
+**Status: DECIDED (2026-08-28).** The card over the shell while a `.lum` is read carried an
+indeterminate bar, and its doc comment said why: reading a project reported no progress, so
+it swept rather than claiming to know how far along it was. That was honest and useless. A
+project with sixty-six precomps takes seconds, and a sweep says the same thing at the first
+second as at the last.
+
+**The engine now names each phase of the read as it begins**, on an optional
+`StreamSink<OpenProgress>` handed to `open_project`: `ReadingFile` (unzip and deserialise),
+`ResolvingMedia` (point every footage reference at a file on this machine, including the one
+folder walk a lost item costs), `PreparingProject` (journal, store, registry, and the
+previous project closed out of the way), and `StartingPreview`, which is the engine saying
+its part is done. Each carries the share of the whole open that sits behind it — 0, 0.4,
+0.7, 0.9 — and the card draws that as a fill and a percentage beside the phase's own line.
+The last stretch belongs to the frontend, and `previewReady` closes it at 1.
+
+**The weights are the engine's, not the interface's.** A frontend that decided how much a
+phase was worth would be a second opinion about work it cannot see, and the two would drift.
+
+**What is deliberately not reported: anything inside a phase.** The long pole is the unzip
+and the serde deserialise, and there is no cheap honest way to count through them — a
+document is typed in one call. A bar that filled smoothly there would be a timer pretending
+to be progress, which is worse than a sweep, because a sweep at least admits it knows
+nothing. Four honest steps is the trade. If the read is later split (a streaming
+deserialise, or a byte count over the inflate), the phase gains an inside and the weights
+stay as they are.
+
+Media resolution is likewise reported as one phase rather than *n* of *m* items: the probe
+that actually costs time is queued to a background worker and does not hold the open up, so
+counting the items here would put a precise number on the cheap part.
+
+An After Effects import shares the card and reports nothing, so it keeps the sweep. A card
+never swaps one bar for the other mid-life — an open is determinate from its first frame,
+before the engine has had a turn to speak.
+
+Tests: `lumit_bridge`'s `phase_weights_rise_with_the_phases` (the weights rise with the
+declared order and stop short of 1), `open_progress_frb_test` (the engine names every phase
+in order over a real open; the card is determinate from its first frame and reaches 1 before
+it comes down), `busy_overlay_test` (a fraction fills the bar and writes the percentage; no
+fraction keeps the sweep and writes no number).

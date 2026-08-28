@@ -1,7 +1,6 @@
 // The application widget, the boot gate, and the shell view that dispatches
 // keys and lays the panels out. Lifted out of main.dart unchanged.
 
-
 import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,8 +19,8 @@ import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
-import 'package:lumit_flutter/src/rust/api/shell.dart'
-    show bootLog;
+import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
+import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -269,8 +268,19 @@ class _LumitAppViewState extends State<LumitAppView> {
         // the shell behind it is still the previous project and swaps in one go.
         ValueListenableBuilder<bool>(
           valueListenable: state.opening,
-          builder: (context, opening, _) =>
-              opening ? const OpeningOverlay() : const SizedBox.shrink(),
+          builder: (context, opening, _) => opening
+              ? ValueListenableBuilder<OpenProgress?>(
+                  valueListenable: state.openProgress,
+                  // Null is the sweep: an import says nothing about how far it
+                  // has got, and opening a `.lum` says everything (K-628).
+                  builder: (context, progress, _) => OpeningOverlay(
+                    label: progress == null
+                        ? null
+                        : openPhaseLabel(progress.phase),
+                    fraction: progress?.fraction,
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
         // The same card for a job working on the document that is already open
         // — beat detection. The two never overlap: nothing can be started

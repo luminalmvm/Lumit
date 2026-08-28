@@ -1989,7 +1989,7 @@ class LayerReference {
           that: this, id: id, from: from, to: to);
 
   /// The frame to open this layer's nested composition on, entering it from
-  /// `outer_frame` on this comp's ruler (K-623).
+  /// `outer_frame` on this comp's ruler (K-624).
   ///
   /// `None` when the layer is not a Precomp layer, or when the comp it names
   /// has gone — the caller then opens wherever it was going to anyway.
