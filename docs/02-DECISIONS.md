@@ -19312,3 +19312,58 @@ Tests: `lumit-core`'s `entering_a_precomp_maps_the_playhead_through_the_retime`,
 and `..._never_lands_outside_the_nested_comp`; Flutter's
 `every comp comes back on the frame it was left on` and
 `a precomp opens on the frame the layer is showing`.
+
+## K-625 â€” An imported camera keeps its motion: orientation lands on the rotation lanes, and an After Effects expression is switched off rather than installed
+
+**Status: DECIDED (2026-08-28).** A tracked camera â€” the kind HLAE, SynthEyes or a 3D
+application's exporter writes into an `.aep` â€” is Position, Orientation and Zoom, keyed on
+every frame. None of the three used to survive an import intact, for three separate
+reasons, and this entry settles all three.
+
+**Orientation lands on the rotation lanes when they are free.** After Effects turns a 3D
+layer by *two* sets of angles, an Orientation and an X/Y/Z Rotation trio, and composes
+them; Lumit has the one trio (K-023). Where the layer's own rotations are still zero â€”
+which is every tracked camera and most hand-built ones â€” the orientation is exactly the
+rotation that trio describes, in the same axis order, so it is copied straight onto them,
+keyframes, eases and all. Where both carry angles, **nothing is invented**: two Euler
+triples do not add, so the rotations are what arrives and the orientation is reported
+(`orientation_not_carried`). The alternative, summing them, would be a camera pointing
+somewhere neither application ever pointed it, and a wrong number that looks like a right
+one is the one outcome an import may not produce.
+
+**The angles come out of the file's own `otda` records.** After Effects wraps an
+orientation in an `otst` container: the `tdbs` beside it carries the times and the eases,
+and the angles live one `otda` per keyframe in the `otky` list. Reading `tdbs` alone â€”
+which is what the direct `.aep` route did â€” gives a full row of keyframes whose every
+value is zero, which is worse than reading nothing.
+
+**An expression Lumit cannot run is switched off, not installed.** Imported expressions
+used to replace the property's animation outright whenever After Effects had them enabled.
+But Lumit's expressions are Rhai and After Effects' are JavaScript, so
+`valueAtTime(thisComp.layer("Dof Matte").timeRemap)` â€” the ordinary way an exporter
+time-remaps a camera â€” installed cleanly and then answered **-1 on every frame**, with the
+five thousand keyframes underneath it thrown away. The importer now asks
+`lumit_core::expression::is_runnable` first, which compiles the text *and* runs it once
+against a bare context, because a name the language has never heard of parses perfectly
+well and only fails when it is reached. An expression that fails either step is recorded
+as `expression_not_runnable` **with its source text in the report**, kept in the property's
+`ae` namespace, and the keyframes or the still value drive the property â€” which is what
+docs/11's fidelity matrix always said should happen. This is deliberately conservative in
+one direction: an expression that reads a neighbouring layer is judged unrunnable, because
+the trial has no comp behind it, and the keyframes underneath are the safer answer.
+
+**A two-node camera's point of interest is reported.** After Effects aims such a camera at
+a point rather than by its own angles, and Lumit's camera has no second node, so the
+import says so (`point_of_interest_not_carried`) instead of leaving the aim to be
+discovered. Baking the aim into per-key rotations was considered and rejected for now: it
+is a real conversion rather than a copy, and it belongs with the rest of the camera model
+rather than smuggled in beside a bug fix.
+
+Not carried, and still owed: the Camera Options group's **Depth of Field, Focus Distance,
+Aperture and Blur Level** are not read out of the `.aep` at all by the direct route, so
+they cannot even be reported yet; Lumit's camera has no equivalent for them either.
+
+Tests: `lumit-import`'s `a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom`,
+`a_camera_says_what_it_could_not_bring`,
+`an_expression_drives_the_property_only_when_it_was_switched_on`, and the golden
+`the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map`.

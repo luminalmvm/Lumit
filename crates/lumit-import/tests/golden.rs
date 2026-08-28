@@ -874,19 +874,20 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// **§5 row: the 3D layer, the two-node camera and the light — as far as they
 /// map.**
 ///
-/// What does come across: the 3D switch and the layer's Z, the camera's Zoom
+/// What does come across: the 3D switch and the layer's Z, the layer's
+/// **Orientation** on the rotation lanes (K-625 — the rotations here are
+/// zero, so the orientation is exactly what they describe), the camera's Zoom
 /// out of its options group, and the light's kind, colour, intensity and cone.
 /// Two of those convert — AE's intensity is a percentage where 100 is unity,
 /// and its cone angle is the *full* angle where Lumit's is the half.
 ///
 /// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
 ///
-/// - a 3D layer's **Orientation** (`[0, 30, 0]` on this card) has no Lumit
-///   field and, unlike everything else with none, raises no report row;
-/// - Material Options' **Casts Shadows** likewise;
+/// - Material Options' **Casts Shadows** has no Lumit field and, unlike
+///   everything else with none, raises no report row;
 /// - the camera's **Point of Interest** lands on the anchor-point lanes,
-///   because After Effects stores it under `ADBE Anchor Point`, and its
-///   two-node flag survives only in the `ae` namespace;
+///   because After Effects stores it under `ADBE Anchor Point` — its two-node
+///   flag survives in the `ae` namespace, and now says so in the report;
 /// - the camera's **Depth of Field, Aperture and Focus Distance** are dropped
 ///   without a row.
 #[test]
@@ -896,9 +897,11 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     let card = layer(c, "3d card");
     assert!(card.switches.three_d);
     assert_eq!(card.transform.position_z.value_at(0.0), -150.0);
-    // ROW NOT CARRIED: Orientation [0, 30, 0] is in the capture and nowhere in
-    // the document, and nothing in the report mentions it.
-    assert_eq!(card.transform.rotation_y.value_at(0.0), 0.0);
+    // Orientation [0, 30, 0] onto the rotation lanes, the layer's own
+    // rotations being zero (K-625).
+    assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
+    assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
+    assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
 
     let camera = layer(c, "camera");
     let LayerKind::Camera { zoom, .. } = &camera.kind else {
@@ -908,7 +911,11 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert_eq!(
         camera.extra.get("ae").and_then(|ae| ae.get("auto_orient")),
         Some(&serde_json::json!("CAMERA_OR_POINT_OF_INTEREST")),
-        "the two-node flag rides in the ae namespace and nowhere else"
+        "the two-node flag rides in the ae namespace"
+    );
+    assert!(
+        reported(|r| matches!(r, Reason::PointOfInterestNotCarried)),
+        "and the aim it stands for is reported as not carried"
     );
     // ROW NOT CARRIED: the Point of Interest arrives as the anchor point.
     assert_eq!(camera.transform.anchor_x.value_at(0.0), 320.0);
@@ -1133,8 +1140,10 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // One fewer Adjusted row since K-497: the guide flag is a switch
             // Lumit has now, so it crosses over instead of being reported.
             // One more since Invert joined the table: the fixture's Channel is
-            // Red, which is a row rather than a placeholder now.
-            adjusted: 59,
+            // Red, which is a row rather than a placeholder now. One more
+            // since K-625: the fixture's camera is a two-node one, and the
+            // point of interest that aims it is named rather than dropped.
+            adjusted: 60,
             placeholders: 1,
             skipped: 1,
         }

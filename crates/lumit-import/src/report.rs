@@ -187,6 +187,14 @@ pub enum Reason {
     TextStylingNotMapped,
     /// A light kind Lumit does not have; imported as the nearest.
     LightKindApproximated { ae_kind: String },
+    /// A 3D layer that turns by Orientation *and* by X/Y/Z Rotation. Lumit has
+    /// the one trio, and two Euler triples do not add, so the rotations are
+    /// what arrives and the orientation is named here (K-625).
+    OrientationNotCarried,
+    /// A two-node camera, which After Effects aims at its point of interest.
+    /// Lumit's camera is aimed by its own rotation, so the point of interest
+    /// is named rather than approximated (K-625).
+    PointOfInterestNotCarried,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -197,6 +205,11 @@ pub enum Reason {
     /// A disabled expression: the text is kept in the `ae` namespace, and the
     /// keyframes or the still value drive the property, exactly as in AE.
     ExpressionDisabledCarried,
+    /// An enabled expression written in After Effects' language, which Lumit's
+    /// (docs/12 §4) cannot run. The text is kept in the `ae` namespace and the
+    /// keyframes underneath drive the property, so the motion survives and the
+    /// expression is there to re-author (K-625).
+    ExpressionNotRunnable { source: String },
     /// A property After Effects itself could not read (a `CUSTOM_VALUE`
     /// blob — K-410).
     PropertyUnreadable { match_name: String },
@@ -388,6 +401,16 @@ impl std::fmt::Display for Reason {
                     "a {ae_kind} light has no equivalent — imported as the nearest kind"
                 )
             }
+            Self::OrientationNotCarried => write!(
+                f,
+                "the layer turns by orientation as well as by rotation — the rotation is what \
+                 arrives, and the orientation is not carried"
+            ),
+            Self::PointOfInterestNotCarried => write!(
+                f,
+                "a two-node camera aims at its point of interest — Lumit's camera aims by its own \
+                 rotation, so the point of interest is not carried"
+            ),
             Self::SpatialTangentsFlattened => write!(
                 f,
                 "the motion path's spatial tangents are not carried — each axis animates on its own"
@@ -404,6 +427,11 @@ impl std::fmt::Display for Reason {
                     "a switched-off expression — its text is kept, and it drives nothing"
                 )
             }
+            Self::ExpressionNotRunnable { source } => write!(
+                f,
+                "the expression does not run here and was switched off — its text is kept, and \
+                 the keyframes underneath drive the property: {source}"
+            ),
             Self::PropertyUnreadable { match_name } => write!(
                 f,
                 "After Effects could not read {match_name} itself, so there was nothing to import"

@@ -594,15 +594,30 @@ fn read_orientation(
         return unreadable_node(match_name, "an orientation property has no metadata record");
     };
     let mut leaf = read_leaf(match_name, tdbs, &[], ctx, skipped);
-    let angles: Option<Vec<f64>> = inside
+    // One `otda` per keyframe, in key order, and a single one when the
+    // property is still. The `tdbs` beside them carries the times and the
+    // eases but *not* the angles, so a keyframed orientation read from `tdbs`
+    // alone is a row of zeroes — the angles only exist here.
+    let angles: Vec<Vec<f64>> = inside
         .iter()
         .find(|chunk| chunk.is_list(b"otky"))
-        .and_then(|otky| otky.children().ok().find(|chunk| chunk.id == *b"otda"))
-        .map(|otda| doubles(otda.body));
-    if let Some(angles) = angles.filter(|a| a.len() >= 3) {
-        leaf.value = Some(json!(angles.get(..3).unwrap_or_default()));
+        .into_iter()
+        .flat_map(|otky| otky.children().flatten())
+        .filter(|chunk| chunk.id == *b"otda")
+        .map(|otda| doubles(otda.body))
+        .filter(|a| a.len() >= 3)
+        .collect();
+    if let Some(first) = angles.first() {
+        leaf.value = Some(json!(first.get(..3).unwrap_or_default()));
         leaf.value_type = Some("point3".to_string());
         leaf.unreadable = None;
+    }
+    if let Some(keys) = leaf.keyframes.as_mut() {
+        if keys.len() == angles.len() {
+            for (key, angle) in keys.iter_mut().zip(&angles) {
+                key.v = Some(json!(angle.get(..3).unwrap_or_default()));
+            }
+        }
     }
     leaf
 }

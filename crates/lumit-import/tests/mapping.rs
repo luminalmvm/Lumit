@@ -329,14 +329,23 @@ fn a_coupled_position_splits_into_lanes_and_reports_its_tangents() {
 fn an_expression_drives_the_property_only_when_it_was_switched_on() {
     let (doc, report) = mapped("synthetic.lum-bundle");
 
+    // Switched on, and written in After Effects' language: `wiggle` is not a
+    // word Lumit's expressions know, so installing it would answer the same
+    // wrong number on every frame. It is switched off instead (K-625), the
+    // text is kept, and the report says so.
     let clip = layer(comp(&doc, "Main"), "clip.mp4");
+    assert_eq!(clip.transform.opacity.animation, Animation::Static(100.0));
     assert_eq!(
-        clip.transform.opacity.animation,
-        Animation::Expression("wiggle(2, 30)".to_string())
+        clip.transform
+            .opacity
+            .extra
+            .get("ae")
+            .and_then(|ae| ae.get("expression")),
+        Some(&serde_json::json!("wiggle(2, 30)"))
     );
     assert!(reported(&report, |r| matches!(
         r,
-        Reason::ExpressionCarried
+        Reason::ExpressionNotRunnable { source } if source == "wiggle(2, 30)"
     )));
 
     let solid = layer(comp(&doc, "Nested"), "White Solid 1");
@@ -1059,10 +1068,7 @@ fn a_mapped_document_round_trips_through_a_saved_project() {
         Some(8.0),
         "the Retime is still the Retime"
     );
-    assert_eq!(
-        clip.transform.opacity.animation,
-        Animation::Expression("wiggle(2, 30)".to_string())
-    );
+    assert_eq!(clip.transform.opacity.animation, Animation::Static(100.0));
     let precomp = layer(main, "Nested");
     assert_eq!(
         precomp.kind,
@@ -1182,4 +1188,185 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
         None,
         "a clip in the same folder is still one file"
     );
+}
+
+/// **A tracked camera arrives with its motion** (docs/11 Â§3, K-625).
+///
+/// The camera every tracker writes â€” HLAE, SynthEyes, a 3D application's
+/// exporter â€” keys three things and only three: Position, Orientation and
+/// Zoom. Two of them used to be lost. Orientation had nowhere to go, because
+/// Lumit turns a layer by its X/Y/Z rotations and After Effects turns it by
+/// *both* those and an orientation; and the whole lot was thrown away
+/// wholesale whenever the exporter had also hung an expression on the
+/// property, which is how a time-remapped camera is written.
+///
+/// So this is the shape of a real tracked camera, keyframe for keyframe: the
+/// orientation onto the rotation lanes it exactly describes, the zoom out of
+/// the options group, and the After Effects expression switched off with its
+/// text kept, so what drives the camera is the motion that was tracked.
+#[test]
+fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
+    let (doc, report) = map_capture(&camera_capture());
+    let camera = layer(comp(&doc, "Track"), "Camera");
+
+    // Position, three axes off one After Effects property.
+    assert_eq!(keys(&camera.transform.position_x).len(), 3);
+    assert_eq!(keys(&camera.transform.position_z).len(), 3);
+    assert_eq!(keys(&camera.transform.position_x)[1].value, 20.0);
+    assert_eq!(keys(&camera.transform.position_z)[2].value, 300.0);
+
+    // Orientation, onto the rotation lanes â€” the layer's own rotations are
+    // zero, so the two say the same thing.
+    let pitch = keys(&camera.transform.rotation_x);
+    assert_eq!(pitch.len(), 3);
+    assert_eq!(pitch[0].value, 10.0);
+    assert_eq!(pitch[2].value, 30.0);
+    assert_eq!(pitch[0].interp_out, SideInterp::Linear);
+    assert_eq!(keys(&camera.transform.rotation_y)[1].value, 45.0);
+    assert_eq!(keys(&camera.transform.rotation)[2].value, 3.0);
+    // The middle key is held in After Effects, and held here.
+    assert_eq!(
+        keys(&camera.transform.rotation_y)[1].interp_out,
+        SideInterp::Hold
+    );
+
+    // Zoom, out of the options group rather than the transform.
+    let LayerKind::Camera { zoom, .. } = &camera.kind else {
+        panic!("a camera");
+    };
+    let zoom = keys(zoom);
+    assert_eq!(zoom.len(), 3);
+    assert_eq!(zoom[0].value, 1000.0);
+    assert_eq!(zoom[2].value, 1400.0);
+
+    // The exporter's expression is After Effects' own language, so it drives
+    // nothing and is named in the report with its text.
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::ExpressionNotRunnable { source } if source.contains("thisComp")
+    )));
+    assert_eq!(
+        camera
+            .transform
+            .position_x
+            .extra
+            .get("ae")
+            .and_then(|ae| ae.get("expression"))
+            .and_then(serde_json::Value::as_str)
+            .map(|e| e.contains("thisComp")),
+        Some(true)
+    );
+}
+
+/// **What a camera cannot bring with it is said out loud** (docs/11 Â§3).
+///
+/// A camera that turns by orientation *and* by its own rotations is asking for
+/// two Euler triples where Lumit has one, and they do not add: the rotations
+/// are what arrives and the orientation is reported. A two-node camera is
+/// aimed by a point of interest Lumit's camera has no second node for, and
+/// that is reported as well.
+#[test]
+fn a_camera_says_what_it_could_not_bring() {
+    let mut capture = camera_capture();
+    let ae_layer = &mut capture.comps[0].layers[0];
+    ae_layer.auto_orient = Some("CAMERA_OR_POINT_OF_INTEREST".to_string());
+    // A Z rotation of its own, beside the orientation.
+    ae_layer.properties[0]
+        .group
+        .as_mut()
+        .expect("the transform group")
+        .push(
+            serde_json::from_value(serde_json::json!({
+                "match_name": "ADBE Rotate Z",
+                "value_type": "float",
+                "value": 12.0
+            }))
+            .expect("the property parses"),
+        );
+
+    let (doc, report) = map_capture(&capture);
+    let camera = layer(comp(&doc, "Track"), "Camera");
+
+    assert_eq!(
+        camera.transform.rotation.value_at(0.0),
+        12.0,
+        "the layer's own rotation is what arrives"
+    );
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::OrientationNotCarried
+    )));
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::PointOfInterestNotCarried
+    )));
+}
+
+/// A tracked camera as an exporter writes one: keyed Position, Orientation and
+/// Zoom, each carrying the same After Effects expression.
+fn camera_capture() -> lumit_import::capture::Capture {
+    const EXPRESSION: &str = r#"valueAtTime(thisComp.layer("Remap").timeRemap)"#;
+    let key = |t: f64, v: serde_json::Value, out: &str| serde_json::json!({ "t": t, "v": v, "in_interp": "LINEAR", "out_interp": out });
+    serde_json::from_value(serde_json::json!({
+        "items": [{ "id": 1, "kind": "comp", "name": "Track" }],
+        "comps": [{
+            "id": 1,
+            "width": 1920,
+            "height": 1080,
+            "fps": 25.0,
+            "duration": 4.0,
+            "layers": [{
+                "index": 1,
+                "name": "Camera",
+                "kind": "camera",
+                "in_point": 0.0,
+                "out_point": 4.0,
+                "auto_orient": "NO_AUTO_ORIENT",
+                "properties": [
+                    {
+                        "match_name": "ADBE Transform Group",
+                        "group": [
+                            {
+                                "match_name": "ADBE Position",
+                                "value_type": "point3",
+                                "expression": EXPRESSION,
+                                "expression_enabled": true,
+                                "keyframes": [
+                                    key(0.0, serde_json::json!([10.0, 100.0, 200.0]), "LINEAR"),
+                                    key(1.0, serde_json::json!([20.0, 110.0, 250.0]), "LINEAR"),
+                                    key(2.0, serde_json::json!([30.0, 120.0, 300.0]), "LINEAR")
+                                ]
+                            },
+                            {
+                                "match_name": "ADBE Orientation",
+                                "value_type": "point3",
+                                "expression": EXPRESSION,
+                                "expression_enabled": true,
+                                "keyframes": [
+                                    key(0.0, serde_json::json!([10.0, 40.0, 1.0]), "LINEAR"),
+                                    key(1.0, serde_json::json!([20.0, 45.0, 2.0]), "HOLD"),
+                                    key(2.0, serde_json::json!([30.0, 50.0, 3.0]), "LINEAR")
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "match_name": "ADBE Camera Options Group",
+                        "group": [{
+                            "match_name": "ADBE Camera Zoom",
+                            "value_type": "float",
+                            "expression": EXPRESSION,
+                            "expression_enabled": true,
+                            "keyframes": [
+                                key(0.0, serde_json::json!(1000.0), "LINEAR"),
+                                key(1.0, serde_json::json!(1200.0), "LINEAR"),
+                                key(2.0, serde_json::json!(1400.0), "LINEAR")
+                            ]
+                        }]
+                    }
+                ]
+            }]
+        }]
+    }))
+    .expect("the capture parses")
 }

@@ -8958,6 +8958,57 @@ per-frame path is run tens of thousands of times a second, so the question is
 never "is this fast enough once", it is "what is this multiplied by sixty, by
 the number of layers".
 
+### An expression from somebody else's application
+
+An imported After Effects project brings expressions with it, and they are
+written in JavaScript, where Lumit's are written in Rhai. The two look similar
+enough to be dangerous. `time * 2` means the same thing in both. But
+`wiggle(2, 30)`, or `thisComp.layer("Remap").timeRemap`, means nothing here —
+and the trouble is what "nothing" turns into. An expression Lumit cannot work
+out does not stop the frame; it answers **-1**, every frame, quietly. Put that
+on a tracked camera's position and the camera sits at -1 for the whole shot,
+with the five thousand keyframes underneath it discarded because an expression
+had taken over.
+
+So the importer asks a question first — `is_runnable` in
+`crates/lumit-core/src/expression.rs`. It does two things, because one is not
+enough. It **compiles** the text, which catches anything that is not even the
+right shape. Then it **runs** it once, because a name the language has never
+heard of compiles perfectly well and only falls over when it is reached:
+`wiggle` is a valid-looking function call right up until something tries to
+call it. Only an expression that survives both is installed and allowed to
+drive its property. Everything else is switched off, its text kept beside the
+property and named in the conversion report, and the keyframes underneath go on
+driving the motion — which is the honest outcome: the animation survives, and
+the user is told exactly which lines need re-writing and where.
+
+The trial run has no composition and no layers behind it, so an expression that
+reaches for a neighbouring layer is judged unrunnable even if it is written in
+Lumit's own language. That is the safe way round for an import: the worst case
+is a line the user switches back on by hand, rather than a shot that silently
+plays wrong.
+
+### Two ways to turn a layer, and only one set of dials
+
+After Effects gives a 3D layer two separate sets of angles: an **Orientation**,
+and an **X/Y/Z Rotation** trio. They stack — the layer ends up turned by both.
+Lumit has one trio.
+
+Most of the time this costs nothing, because only one of the two is ever used.
+A camera written by a tracker keys Orientation and leaves the rotations at
+zero; a camera turned by hand in the Timeline usually does the opposite. When
+the rotations are sitting at zero, the orientation *is* the rotation — same
+axes, same order — so the import copies it straight onto the rotation lanes,
+keyframes and eases intact.
+
+When both carry angles, the import does not try. It is tempting to add them,
+and adding them is wrong: rotations are not numbers you can sum, they are
+turns applied one after another, and thirty degrees of yaw followed by forty of
+pitch does not land where seventy of anything lands. So the layer's own
+rotations are what arrives, and the orientation is named in the conversion
+report — a stated gap, rather than a camera pointing somewhere neither
+application ever pointed it.
+
 ### Words that follow a curve
 
 Type sits on a straight line because a line of type is laid the obvious way: put

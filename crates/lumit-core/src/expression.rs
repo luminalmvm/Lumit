@@ -171,6 +171,26 @@ fn eval_dynamic(
 
 const MAXIMUM_DEPTH: u32 = 100;
 
+/// Whether this text is an expression Lumit can actually run — it parses in
+/// Lumit's language, and every name in it exists.
+///
+/// **In plain terms.** An expression imported from another application is
+/// written in *that* application's language, and pasting it here would not
+/// error in the user's face: it would quietly answer the same wrong number on
+/// every frame. So the importer asks this first, and files away anything the
+/// engine cannot run instead of letting it drive a property (docs/11 §3).
+///
+/// It is a compile *and* a trial run, because a name the language has never
+/// heard of parses perfectly well and only fails when it is reached. The trial
+/// runs against [`ExpressionContext::detached`], so `time` and the maths are
+/// there but no comp and no layer are: an expression that reaches for a
+/// neighbouring layer answers "no" here. That is the safe way round for an
+/// import, where the keyframes underneath are still there to drive the
+/// property either way.
+pub fn is_runnable(expression: &str) -> bool {
+    eval_dynamic(expression, Some(Arc::new(ExpressionContext::detached()))).is_ok()
+}
+
 pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f64 {
     convert_result(eval_dynamic(expression, context))
 }

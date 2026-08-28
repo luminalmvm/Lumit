@@ -202,7 +202,20 @@ fn layer_kind(
 
     match kind {
         "camera" => LayerKind::Camera {
-            zoom: scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0),
+            zoom: {
+                // A two-node camera is aimed by its point of interest rather
+                // than by its own angles, and Lumit's camera has no such
+                // second node, so an imported one keeps its place and loses
+                // its aim — which is worth saying out loud.
+                if ae.auto_orient.as_deref() == Some("CAMERA_OR_POINT_OF_INTEREST") {
+                    conv.report.row(
+                        path.clone(),
+                        Outcome::Adjusted,
+                        Reason::PointOfInterestNotCarried,
+                    );
+                }
+                scalar(conv, path, props, "ADBE Camera Zoom", 0, 1000.0)
+            },
             // An imported camera is the file's own; nothing has been solved,
             // so there is no link and no correction lane to zero.
             solve_link: None,
@@ -339,7 +352,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         Some(group) => group.children(),
         None => return TransformGroup::default(),
     };
-    TransformGroup {
+    let mut out = TransformGroup {
         anchor_x: scalar(conv, path, props, "ADBE Anchor Point", 0, 0.0),
         anchor_y: scalar(conv, path, props, "ADBE Anchor Point", 1, 0.0),
         position_x: scalar(conv, path, props, "ADBE Position", 0, 0.0),
@@ -357,7 +370,51 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         // faithful either way, because both editors store them per axis.
         axis_modes: lumit_core::model::AxisModes::default(),
         extra: serde_json::Map::new(),
+    };
+    orientation(conv, path, props, &mut out);
+    out
+}
+
+/// After Effects gives a 3D layer *two* sets of angles — Orientation and the
+/// X/Y/Z Rotation trio — and composes them. Lumit has the one trio (K-023), so
+/// an orientation has somewhere to go only when the rotations are still sitting
+/// at zero, which is the ordinary case and every tracked camera's case: an
+/// orientation on its own is exactly the rotation the trio describes, in the
+/// same axis order.
+///
+/// When both carry angles the sum of two Euler triples is not the rotation
+/// either of them meant, so nothing is invented: the rotations stay as they
+/// are and the orientation is reported (K-625).
+fn orientation(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property], out: &mut TransformGroup) {
+    let Some(node) = child(props, "ADBE Orientation") else {
+        return;
+    };
+    // A layer that has simply never been turned: read nothing, report nothing.
+    let still_zero = node.keyframes.as_ref().is_none_or(Vec::is_empty)
+        && node.expression.is_none()
+        && (0..3).all(|axis| still(props, "ADBE Orientation", axis).unwrap_or(0.0) == 0.0);
+    if still_zero {
+        return;
     }
+    if [&out.rotation_x, &out.rotation_y, &out.rotation]
+        .into_iter()
+        .all(is_still_zero)
+    {
+        out.rotation_x = from_node(conv, path, node, 0, 0.0);
+        out.rotation_y = from_node(conv, path, node, 1, 0.0);
+        out.rotation = from_node(conv, path, node, 2, 0.0);
+        return;
+    }
+    conv.report.row(
+        path.property(display_name(node, "ADBE Orientation")),
+        Outcome::Adjusted,
+        Reason::OrientationNotCarried,
+    );
+}
+
+/// A property that holds a flat zero and nothing else.
+fn is_still_zero(property: &LumProperty) -> bool {
+    matches!(property.animation, lumit_core::anim::Animation::Static(v) if v == 0.0)
 }
 
 /// The layer's audio level, in decibels, out of `ADBE Audio Group`.

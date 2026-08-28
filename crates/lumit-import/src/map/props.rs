@@ -149,7 +149,9 @@ pub(crate) fn from_node(
     // An enabled expression drives the property in After Effects too, so it
     // drives it here; the keys underneath are the bundle's to keep.
     if let Some(source) = node.expression.as_deref().filter(|s| !s.trim().is_empty()) {
-        if node.expression_enabled == Some(true) {
+        let reason = if node.expression_enabled != Some(true) {
+            Reason::ExpressionDisabledCarried
+        } else if lumit_core::expression::is_runnable(source) {
             conv.report.row(
                 path.property(name),
                 Outcome::Adjusted,
@@ -159,12 +161,17 @@ pub(crate) fn from_node(
                 animation: Animation::Expression(source.to_string()),
                 extra: ae_extra("expression", serde_json::json!(source)),
             };
-        }
-        conv.report.row(
-            path.property(name),
-            Outcome::Adjusted,
-            Reason::ExpressionDisabledCarried,
-        );
+        } else {
+            // After Effects' own language. Installing it would answer -1 on
+            // every frame and throw away the keys underneath, which on a
+            // tracked camera is the whole shot; switching it off keeps the
+            // motion and leaves the text to re-author.
+            Reason::ExpressionNotRunnable {
+                source: source.to_string(),
+            }
+        };
+        conv.report
+            .row(path.property(name), Outcome::Adjusted, reason);
     }
 
     let expression_extra = node

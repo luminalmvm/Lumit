@@ -7917,6 +7917,14 @@
       }
     }
   },
+  "aeOrientationNotCarried": "the layer turns by orientation as well as by rotation — the rotation is what arrives, and the orientation is not carried",
+  "@aeOrientationNotCarried": {
+    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
+  },
+  "aePointOfInterestNotCarried": "a two-node camera aims at its point of interest — Lumit's camera aims by its own rotation, so the point of interest is not carried",
+  "@aePointOfInterestNotCarried": {
+    "description": "Import report row reason, lower case. After Effects' two-node camera is aimed by a point of interest Lumit has no equivalent for."
+  },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {
     "description": "Import report row reason, lower case. After Effects curves a position through space; Lumit animates x and y separately."
@@ -7928,6 +7936,15 @@
   "aeExpressionDisabledCarried": "a switched-off expression — its text is kept, and it drives nothing",
   "@aeExpressionDisabledCarried": {
     "description": "Import report row reason, lower case. After Effects keeps a disabled expression's text, and so does the import."
+  },
+  "aeExpressionNotRunnable": "the expression does not run here and was switched off — its text is kept, and the keyframes underneath drive the property: {source}",
+  "@aeExpressionNotRunnable": {
+    "description": "Import report row reason, lower case. An expression written in After Effects' language, which Lumit cannot run; the placeholder is the expression's source text.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
   },
   "aePropertyUnreadable": "After Effects could not read {matchName} itself, so there was nothing to import",
   "@aePropertyUnreadable": {

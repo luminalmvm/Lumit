@@ -17,8 +17,8 @@ golden bundle, and `crates/lumit-import/tests/golden.rs` asserts every §5 check
 row through the mapped document, alongside the hand-written bundles that document the
 schema and the awkward half. One thing §5 asks for is still owed — the golden-frame
 tests of every mapped conversion, which need After Effects *renders* of the fixture —
-along with two checklist rows the sitting showed do not come across (a roving key and a
-3D layer's Orientation), and §9's row navigation and its persistence in the project
+along with one checklist row the sitting showed does not come across (a roving key —
+a 3D layer's Orientation now does, K-625), and §9's row navigation and its persistence in the project
 (docs/TODO.md). This document implements K-060 (import strategy), and leans on
 K-025 (AE-compatible keyframe maths) and K-021 (Retime) in [02-DECISIONS.md](02-DECISIONS.md). Terminology follows
 [01-GLOSSARY.md](01-GLOSSARY.md) exactly; After Effects' own feature names appear in quotes
@@ -287,12 +287,12 @@ The centrepiece. Four grades:
 | AE built-in effects with a Lumit equivalent | mapped | Via the match-name table (§5); parameters and keyframes carried; pixel output near-identical, not bit-identical |
 | AE built-in effects without an equivalent | placeholder | Full parameter dump preserved; §6 |
 | Third-party effects (Twixtor, RSMB, Sapphire, Deep Glow, …) | placeholder | Always — internals never map (K-060). The user MAY apply the vendor's OFX build manually alongside; parameters do not transfer automatically because AE and OFX builds do not share parameter layouts |
-| Expressions | mapped | Imported as source text; run when they use only the implemented API subset ([12-PLUGINS.md](12-PLUGINS.md) §4), else disabled with a badge and listed in the report |
+| Expressions | mapped | Imported as source text; run when Lumit's own language can run them ([12-PLUGINS.md](12-PLUGINS.md) §4), else **switched off and listed in the report with their text** (K-625), so the keyframes underneath keep driving the property rather than an expression that answers the same wrong number on every frame. The importer decides by trying it: an expression that neither parses nor evaluates against a bare context is After Effects' own language and is not installed |
 | Text layers — source text + styling | mapped | Font fallback differences possible; missing fonts flagged |
 | Text animators + range selectors | mapped | Core animators map; unsupported selector modes become placeholders on the animator |
 | Shape layers — paths, fills, strokes, groups | lossless | |
 | Shape path operations | mapped | Trim Paths, Repeater, Offset, Round Corners, Zig Zag map; Merge Paths modes and Wiggle Paths flagged where semantics differ |
-| Cameras, lights, 3D layer flags | mapped | → Lumit 2.5D (K-023); depth of field mapped; renderer-specific shading differs |
+| Cameras, lights, 3D layer flags | mapped | → Lumit 2.5D (K-023); renderer-specific shading differs. A camera's Position, **Orientation** and Zoom carry with their keyframes (K-625), which is the whole of a tracked camera; depth of field is not read out of the Camera Options group yet, and a **two-node camera's point of interest** is reported rather than approximated — Lumit's camera aims by its own rotation |
 | "Advanced 3D" / "CINEMA 4D" renderer features (extrusion, 3D models, environment lights) | unsupported | Layers import flat with a report entry; C4D-renderer comps flagged prominently |
 | Layer styles | placeholder | Until Lumit ships equivalents |
 | "Roto Brush" / "Refine Edge" strokes | unsupported | DOM does not expose strokes; the effect imports as a placeholder so the layer keeps its slot |
