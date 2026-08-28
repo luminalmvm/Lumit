@@ -8963,9 +8963,9 @@
   "@graphDriven": {
     "description": "Effect controls: the word on a parameter row whose value comes from a driver wired to it in the Graph panel rather than from its own keyframes. Lower case."
   },
-  "tipDrivenBy": "Driven by {driver}",
+  "tipDrivenBy": "{driver}",
   "@tipDrivenBy": {
-    "description": "Tooltip on the driven mark that stands where a parameter row's stopwatch would be, in Effect controls, the Node panel and the Timeline fold-out. Names the driver box whose wire is deciding this parameter's value.",
+    "description": "Tooltip on the driven mark that stands where a parameter row's stopwatch would be, in Effect controls, the Node panel and the Timeline fold-out. It is the driver box's own name and nothing else: the row already carries the word 'driven' beside the mark, so the tooltip names the box the way any other tooltip names its control.",
     "placeholders": {
       "driver": {
         "type": "String",
