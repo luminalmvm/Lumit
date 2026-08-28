@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:crypto/crypto.dart';
@@ -24,6 +25,19 @@ typedef ViewerLook = ({double stops, bool toneMap});
 
 /// Neither control engaged: the picture is the export.
 const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
+
+/// Where the user was in one composition when they last left it (K-624): the
+/// playhead frame, the Timeline's magnification, and how far through its
+/// scrollable range the lanes were scrolled (0 at the left, 1 at the right —
+/// a fraction rather than a pixel offset so the view comes back to the same
+/// stretch of time whatever width the panel has since been dragged to).
+///
+/// A record for the same reason [ViewerLook] is: three numbers with no
+/// behaviour, compared by value.
+typedef CompView = ({int frame, double zoom, double scroll});
+
+/// A comp nobody has been in yet: frame one, fitted, at the left.
+const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
 
 /// The per-project session the egui shell restores on open (its `SavedSession`,
 /// crates/lumit-ui/src/app_state/mod.rs): which compositions are open, which is
@@ -58,6 +72,14 @@ class SavedSession {
   /// the whole frame — the default — are simply absent.
   final Map<String, List<double>> regionsOfInterest;
 
+  /// Where the user was in each composition, by id (K-624) — the playhead and
+  /// the Timeline's view. Session state for the same reason the looks are:
+  /// standing somewhere in a comp is not an edit to it, so it never reaches an
+  /// op and Ctrl+Z never undoes a scrub. The comp fronted when the session was
+  /// written is also in [frame], which stays the answer for a session written
+  /// by a build that had none of this.
+  final Map<String, CompView> compViews;
+
   /// How the panels were arranged for this project, as [DockSplit.toJson]
   /// (K-245) — the arrangement itself, not the name of a preset, because the
   /// sizes and positions a user drags to are the arrangement.
@@ -78,6 +100,7 @@ class SavedSession {
     this.viewerLooks = const {},
     this.previewResolutions = const {},
     this.regionsOfInterest = const {},
+    this.compViews = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -92,6 +115,14 @@ class SavedSession {
         },
         'preview_resolutions': previewResolutions,
         'regions_of_interest': regionsOfInterest,
+        'comp_views': {
+          for (final e in compViews.entries)
+            e.key: {
+              'frame': e.value.frame,
+              'zoom': e.value.zoom,
+              'scroll': e.value.scroll,
+            },
+        },
       };
 
   /// The per-comp resolutions out of a session's JSON, dropping anything that
@@ -143,6 +174,7 @@ class SavedSession {
         viewerLooks: _looksFromJson(j['viewer_looks']),
         previewResolutions: _resolutionsFromJson(j['preview_resolutions']),
         regionsOfInterest: _regionsFromJson(j['regions_of_interest']),
+        compViews: _compViewsFromJson(j['comp_views']),
       );
 
   /// The arrangement compared by value. Encoding is the cheap deep compare
@@ -160,6 +192,7 @@ class SavedSession {
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
       other._regionKey == _regionKey &&
+      mapEquals(other.compViews, compViews) &&
       listEquals(other.openComps, openComps);
 
   @override
@@ -177,6 +210,9 @@ class SavedSession {
             Object.hash(e.key, e.value),
         ]),
         _regionKey,
+        Object.hashAll([
+          for (final e in compViews.entries) Object.hash(e.key, e.value),
+        ]),
       );
 
   /// The regions compared (and hashed) as text: a map of *lists* compares by
@@ -187,6 +223,31 @@ class SavedSession {
       : jsonEncode({
           for (final e in regionsOfInterest.entries) e.key: e.value,
         });
+}
+
+/// The per-comp views out of a session's JSON, keeping only entries that carry
+/// a frame — a session from another build, or a hand-edited one, leaves the
+/// comp at its default rather than stopping the project from opening. The zoom
+/// is held at or above 1 (fit-to-panel is as far out as the Timeline goes) and
+/// the scroll inside 0..1, so a nonsense number cannot strand the lanes
+/// somewhere the user cannot scroll back from.
+Map<String, CompView> _compViewsFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, CompView>{};
+  for (final e in raw.entries) {
+    final k = e.key;
+    final v = e.value;
+    if (k is! String || v is! Map || v['frame'] is! num) continue;
+    final zoom = v['zoom'] is num ? (v['zoom'] as num).toDouble() : 1.0;
+    final scroll = v['scroll'] is num ? (v['scroll'] as num).toDouble() : 0.0;
+    if (!zoom.isFinite || !scroll.isFinite) continue;
+    out[k] = (
+      frame: max(0, (v['frame'] as num).toInt()),
+      zoom: zoom < 1.0 ? 1.0 : zoom,
+      scroll: scroll.clamp(0.0, 1.0),
+    );
+  }
+  return out;
 }
 
 /// The per-comp regions out of a session's JSON, keeping only entries that are

@@ -3390,6 +3390,53 @@ impl LayerReference {
             .map(|item| crate::api::project_item::item_reference(self.project_id, item)))
     }
 
+    /// The frame to open this layer's nested composition on, entering it from
+    /// `outer_frame` on this comp's ruler (K-624).
+    ///
+    /// `None` when the layer is not a Precomp layer, or when the comp it names
+    /// has gone — the caller then opens wherever it was going to anyway.
+    ///
+    /// Here rather than in Dart because the answer is the engine's own: it runs
+    /// through the layer's start offset and Retime map, and the two comps may
+    /// keep different frame rates, so an outer frame and an inner frame are not
+    /// the same count of anything (docs/14 §2).
+    #[frb(sync)]
+    pub fn nested_entry_frame(&self, outer_frame: i64) -> Result<Option<i64>, BridgeError> {
+        use lumit_core::model::LayerKind;
+        use lumit_core::time::{CompTime, Rational};
+
+        let layer = self.item()?;
+        let LayerKind::Precomp { comp: nested } = layer.kind else {
+            return Ok(None);
+        };
+        let outer = self.composition()?;
+
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = proj.store.snapshot();
+        let Some(inner) = doc.comp(nested) else {
+            return Ok(None);
+        };
+
+        let t = outer
+            .frame_rate
+            .time_of_frame(outer_frame)
+            .map_err(|_| BridgeError::InvalidComp)?;
+        let entry = layer.entry_time(t.0.to_f64(), inner.duration.0.to_f64());
+        let grid = Rational::from_f64_on_grid(entry, Rational::FLICK_DEN)
+            .map_err(|_| BridgeError::InvalidComp)?;
+        // `duration_frames` counts one past the last frame the transport can
+        // reach, so the end of the nested comp is the frame before it.
+        let last = inner
+            .frame_rate
+            .frame_at(CompTime(inner.duration.0))
+            .saturating_sub(1)
+            .max(0);
+        Ok(Some(
+            inner.frame_rate.frame_at(CompTime(grid)).clamp(0, last),
+        ))
+    }
+
     /// What kind of source this layer has.
     #[frb(sync)]
     pub fn get_kind(&self) -> Result<BridgeLayerKind, BridgeError> {

@@ -183,6 +183,14 @@ other side of this boundary.
     `CompositionReference::time_of_frame`/`frame_at_time` exist so no frontend
     has to do that arithmetic itself: at 29.97 fps a frame is 1001/30000 s, and a
     keyframe placed in floating point does not land on the frame it was set on.
+    Crossing between **two comps' clocks** is the engine's job for the same reason:
+    `LayerReference::nested_entry_frame(outer_frame)` answers which frame of a Precomp
+    layer's nested composition that layer is showing (K-624), running the outer frame
+    through the layer's `start_offset` and its Retime property and out at the nested
+    comp's own rate. `None` when the layer is not a Precomp layer or the comp it names has
+    gone. One sync call, made when a layer is double-clicked and never in a rebuild
+    (K-184) — a frontend working this out itself would be a second implementation of what
+    the renderer already decides.
 - **Keyframe times cross on the composition's clock (K-213).** The engine keys every
     animatable property in the layer's **own** time — comp time less its `start_offset` —
     which is what makes a layer's animation travel with it when it is moved. The frontend

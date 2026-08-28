@@ -1120,7 +1120,13 @@ the band's own row at the ruler's floor — the **cache bar**; then layer lanes.
 *open* comp — fronting a comp opens its tab, its × closes only the tab, and closing the
 fronted tab fronts its nearest neighbour. The strip is in the user's order, not the
 project's: a tab dragged onto another takes its place, and the order rides along in the
-session. Right-clicking a tab opens **Composition settings…** for that comp, the same
+session. **Fronting a comp puts you back where you were in it** (K-624): the playhead
+returns to the frame it was left on and the lanes to the magnification and scroll they
+had, so a comp reopened from the strip is a return rather than a fresh start at frame zero
+fully zoomed out. Like the Viewer's exposure (K-314), the preview resolution (K-357) and
+the region of interest (K-362), this is session state — it rides in the session blob and
+so in the `.lum`'s `ui_state` (K-245), never in an op, so a scrub never lands on the undo
+stack or makes the project dirty. Right-clicking a tab opens **Composition settings…** for that comp, the same
 dialog the Project panel's context menu opens, reached from the comp being worked in. Below them the outline carries two header rows
 of its own: the **toolbar** (the playhead as `HH:MM:SS:FF` timecode plus a zero-based
 frame readout `f72` — both in **fixed-width slots** and both **click-to-type**, per K-287:
@@ -1198,6 +1204,12 @@ falls back to the label.
 **Opening a layer (K-243).** Double-clicking a layer in the Timeline outline opens it the
 same way: a **Precomp** layer fronts the comp it draws, and every other kind will open in a
 Viewer of its own once there is one to open — until then a double-click on one does nothing.
+Entering a precomp this way lands the playhead on **the frame that layer is showing**
+(K-624): the moment is mapped through the layer's start offset and its Retime, so a
+half-speed precomp opens on the frame on screen rather than on the outer ruler's count.
+Standing before the layer's span opens the nested comp at its start; at or past its end,
+at its end. Its remembered magnification and scroll still come back — only the playhead is
+overridden.
 It is never a rename; `Enter` is (§15) — and an inline rename commits when the pointer goes
 down anywhere else, not only on `Enter`.
 

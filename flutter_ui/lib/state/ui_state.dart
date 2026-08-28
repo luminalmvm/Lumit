@@ -22,7 +22,8 @@ import 'package:lumit_flutter/src/rust/api/audio.dart' show setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef, BridgeNodeRef_Source;
+import 'package:lumit_flutter/src/rust/api/graph.dart'
+    show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -1378,21 +1379,89 @@ class LumitUiState extends ChangeNotifier {
   /// can put them back where they came from rather than somewhere arbitrary.
   UuidValue? _previousComp;
 
-  void setSelectedComp(CompositionReference? reference) {
+  /// Where the user was in each composition, by id (K-624): the playhead, and
+  /// the Timeline's magnification and scroll. Not in the document — standing
+  /// somewhere in a comp is not an edit to it — so this rides in the session
+  /// blob (see [session]) beside the looks, and never in an op.
+  ///
+  /// Written by two owners, each saying only what it knows: this class holds
+  /// the playhead, the Timeline panel holds its own view. See
+  /// [rememberCompView].
+  final Map<String, CompView> compViews = {};
+
+  /// Write down part of where the user is in a comp. Fields left null keep
+  /// whatever was already recorded, so neither owner can wipe the other's half.
+  void rememberCompView(String id, {int? frame, double? zoom, double? scroll}) {
+    final was = compViews[id] ?? newCompView;
+    compViews[id] = (
+      frame: frame ?? was.frame,
+      zoom: zoom ?? was.zoom,
+      scroll: scroll ?? was.scroll,
+    );
+  }
+
+  /// Front a composition, landing the playhead where the user left it (K-624).
+  ///
+  /// [atFrame] overrides that: opening a **Precomp layer** enters the nested
+  /// comp at the moment that layer is showing, which the engine works out
+  /// (`LayerReference.nestedEntryFrame`) because it runs through the layer's
+  /// start offset and Retime map. Coming in any other way — the tab strip, the
+  /// Project panel, the palette — is a return, and a return goes back to where
+  /// you were.
+  void setSelectedComp(CompositionReference? reference, {int? atFrame}) {
     if (reference != null && !openComps.contains(reference.internalid)) {
       openComps.add(reference.internalid);
     }
-    if (reference?.internalid != _selectedComp?.internalid) {
-      _previousComp = _selectedComp?.internalid;
+    final leaving = _selectedComp?.internalid;
+    final arriving = reference?.internalid;
+    final moved = arriving != leaving;
+    if (moved) {
+      _previousComp = leaving;
+      // The comp being left keeps its place. Only the playhead is written
+      // here; the Timeline writes its own half when it notices the change.
+      if (leaving != null) {
+        rememberCompView(leaving.toString(), frame: playheadFrame.value);
+      }
     }
     _selectedComp = reference;
     model.bind(reference);
+    if (moved && arriving != null) {
+      final want = atFrame ?? compViews[arriving.toString()]?.frame ?? 0;
+      // A comp shortened since it was last left must not open past its end.
+      final last = model.durationFrames - 1;
+      playheadFrame.value = last <= 0 ? 0 : want.clamp(0, last);
+    }
     // Each comp is looked at its own way (K-314), so fronting one is what puts
     // its exposure and tone map back on the engine's renderer — which holds
     // exactly one view, for whatever the Viewer is showing.
     pushViewerLook();
     rememberSession();
     notifyListeners();
+  }
+
+  /// Open the composition a Precomp layer draws, landing on the frame that
+  /// layer is showing (K-624).
+  ///
+  /// The mapping is the engine's (`LayerReference.nestedEntryFrame`): it runs
+  /// the playhead through the layer's start offset and Retime map, so a
+  /// half-speed precomp opens on the frame that is on screen. Standing off the
+  /// layer's span there is no such frame, and it opens at the nested comp's
+  /// start or end accordingly.
+  ///
+  /// Only for a layer in the **fronted** comp: the Hierarchy panel can show a
+  /// layer several comps down, whose ruler the playhead is not on at all, and
+  /// mapping through it would answer for the wrong clock. Those open where
+  /// they were last left, like any other way in.
+  void openNestedComp(LayerReference layer, CompositionReference comp) {
+    int? at;
+    if (layer.internalcompId == _selectedComp?.internalid) {
+      try {
+        at = layer.nestedEntryFrame(outerFrame: playheadFrame.value);
+      } catch (_) {
+        // A layer that has gone under us: open it where it was left.
+      }
+    }
+    setSelectedComp(comp, atFrame: at);
   }
 
   // --- How the Viewer is looking (K-314) -----------------------------------
@@ -1708,10 +1777,24 @@ class LumitUiState extends ChangeNotifier {
 
   /// Where the user is, as the thing that gets written down: the tab strip, the
   /// fronted comp, the playhead, the selection, and how the panels are arranged.
-  SavedSession session() => SavedSession(
-        openComps: [for (final id in openComps) id.toString()],
-        activeComp: _selectedComp?.internalid.toString(),
+  SavedSession session() {
+    // The fronted comp's own record is only written when it is left, so the
+    // live playhead is folded in here: a session written mid-work has to say
+    // where the user actually is, not where they last arrived from.
+    final front = _selectedComp?.internalid.toString();
+    final views = Map.of(compViews);
+    if (front != null) {
+      views[front] = (
         frame: playheadFrame.value,
+        zoom: views[front]?.zoom ?? newCompView.zoom,
+        scroll: views[front]?.scroll ?? newCompView.scroll,
+      );
+    }
+    return SavedSession(
+        openComps: [for (final id in openComps) id.toString()],
+        activeComp: front,
+        frame: playheadFrame.value,
+        compViews: views,
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
         viewerLooks: Map.of(viewerLooks),
@@ -1720,8 +1803,8 @@ class LumitUiState extends ChangeNotifier {
         },
         regionsOfInterest: {
           for (final e in regionsOfInterest.entries) e.key: List.of(e.value),
-        },
-      );
+        });
+  }
 
   /// The same thing as JSON, for the copy that goes inside the `.lum` so it
   /// travels with a project shared with someone else (K-245).
@@ -1794,6 +1877,9 @@ class LumitUiState extends ChangeNotifier {
       // first front tell it everything, the grid included.
       _pushedView = null;
       setSelectedComp(null);
+      // After the unfronting, not before it: letting go of a comp writes down
+      // where it was, and that note belongs to the project just closed.
+      compViews.clear();
 
       final path = project?.path();
       if (path == null) return;
@@ -1835,14 +1921,31 @@ class LumitUiState extends ChangeNotifier {
           regionsOfInterest[e.key] = List.of(e.value);
         }
       }
+      // Where the user was in each comp (K-624), same rule again.
+      compViews.addEntries(
+        session.compViews.entries.where((e) => known.containsKey(e.key)),
+      );
       for (final id in session.openComps) {
         final comp = known[id];
         if (comp != null) openComps.add(comp.internalid);
       }
       final front = known[session.activeComp] ??
           (openComps.isEmpty ? null : known[openComps.first.toString()]);
+      // A session written before the per-comp record existed still says where
+      // the fronted comp's playhead was, and that answer is not thrown away.
+      final activeComp = session.activeComp;
+      if (activeComp != null &&
+          known.containsKey(activeComp) &&
+          !compViews.containsKey(activeComp)) {
+        rememberCompView(activeComp,
+            frame: session.frame < 0 ? 0 : session.frame);
+      }
+      // Which puts the playhead back itself.
       setSelectedComp(front);
-      playheadFrame.value = session.frame < 0 ? 0 : session.frame;
+      // Unless there is no comp left to be in: no comp remembers the frame,
+      // but the frame the user was on is still the frame.
+      if (front == null)
+        playheadFrame.value = session.frame < 0 ? 0 : session.frame;
 
       final wanted = session.selectedLayer;
       if (front == null || wanted == null) return;

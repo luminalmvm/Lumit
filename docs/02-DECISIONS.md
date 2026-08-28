@@ -19263,3 +19263,52 @@ ships, and a broken or empty override is ignored rather than obeyed.
 sixty-two original rows through `map_effect` and asserts the Lumit effect each becomes,
 the two deliberate placeholders included — the move could not quietly change one. Five
 more tests assert the new rows parameter for parameter and the report rows each promised.
+
+## K-624 — A composition remembers where you were, and a precomp opens on the frame it is showing
+
+**Status: DECIDED (2026-08-28).** Every composition keeps a **view**: the playhead frame,
+the Timeline's magnification, and how far the lanes are scrolled. Fronting a comp — the
+tab strip, the Project panel, the Hierarchy, the palette — puts that view back, so coming
+back to a comp is a return rather than a fresh start at frame zero, fully zoomed out.
+
+Opening a **Precomp layer** is the one exception: it enters the nested comp at the moment
+that layer is showing, mapped through the layer's start offset and its Retime, so a
+half-speed precomp opens on the frame that is on screen. Standing before the layer's span
+opens the nested comp at its start; standing at or past its end opens it at its end. The
+nested comp's remembered **zoom and scroll still come back** — only the playhead is
+overridden, because the mapped frame is the whole point of entering there and the
+magnification is not.
+
+**Where it lives: the session, not the document.** This follows K-314 (the Viewer's
+exposure), K-357 (preview resolution) and K-362 (the region of interest) exactly, and for
+the same reason: standing somewhere in a comp is a way of working on it, not an edit to
+it. It rides in the session blob — `SavedSession.compViews`, and so in the `.lum`'s opaque
+`ui_state` (K-245) — so scrubbing never enters an op, never lands on the undo stack, and
+never makes a project dirty. It survives closing and reopening the project, which is what
+the fronted comp's playhead already did; per-comp is simply the same promise kept for
+every comp rather than one.
+
+**Where it lives: Flutter, not Rust.** The engine holds no fronted comp and no playhead —
+every render call carries its frame as an argument — and every neighbour of this state
+(the open tabs, the fronted comp, the selection, the looks, the resolutions, the regions)
+is already in `LumitUiState` and `SavedSession`. Putting one of the six in the engine
+would split one idea across two homes and add a bridge crossing to a navigation path for
+nothing. The **mapping** is the opposite case and does go to the engine: it runs through
+`lumit_core::time::layer_time` and the layer's Retime property, the two comps may keep
+different frame rates, and an answer computed in Dart would be a second implementation of
+what the renderer already decides. `Layer::entry_time` is that one answer;
+`LayerReference::nested_entry_frame` is its one crossing, made on a double-click and never
+in a rebuild (K-184).
+
+**The panel and the shell each write their own half.** The playhead is not the Timeline's
+alone (K-262), so `LumitUiState` holds it; the magnification and the scroll are, so the
+Timeline panel writes those. `rememberCompView` takes named fields and leaves absent ones
+alone, so neither owner can wipe the other's. The scroll is stored as a **fraction** of
+the scrollable range rather than as a pixel offset, because the panel may be a different
+width when the user comes back and what they want back is the stretch of time.
+
+Tests: `lumit-core`'s `entering_a_precomp_maps_the_playhead_through_the_retime`,
+`..._from_before_its_span_lands_on_its_start`, `..._from_after_its_span_lands_on_its_end`
+and `..._never_lands_outside_the_nested_comp`; Flutter's
+`every comp comes back on the frame it was left on` and
+`a precomp opens on the frame the layer is showing`.

@@ -1913,15 +1913,22 @@ class LayerReference {
 
   /// Whether this layer's source actually carries sound.
   ///
-  /// What decides whether the Audio group appears under a layer at all
-  /// (docs/07 §4.3): every layer *has* a Volume property in the model, but on
-  /// a solid or a title it can never be heard, and a control that cannot do
-  /// anything is worse than no control. Footage is the case that matters, and
-  /// the answer is the container's own: a file with an audio stream.
+  /// What decides whether the Audio group and the mute switch appear under a
+  /// layer at all (docs/07 §4.3): every layer *has* a Volume property in the
+  /// model, but on a solid or a title it can never be heard, and a control
+  /// that cannot do anything is worse than no control.
+  ///
+  /// **The mixer's own answer, at any depth.** A Precomp layer over footage
+  /// that sings is audible — `walk` mixes it — and asking only whether *this*
+  /// layer is Footage said no, so a converted precomp came up with no mute
+  /// switch and no volume. [`AudioJobsBuilder::layer_has_audio`] is the one
+  /// that decides what gets mixed, so it is the one asked here: the panel and
+  /// the mixer cannot disagree about what makes a sound.
   ///
   /// Probing opens the file with FFmpeg, so this is deliberately **not**
-  /// `#[frb(sync)]`. A layer whose media cannot be resolved answers false —
-  /// a missing file is not a reason to offer a volume control.
+  /// `#[frb(sync)]`, and the document lock is let go of before any probing.
+  /// A layer whose media cannot be resolved answers false — a missing file is
+  /// not a reason to offer a volume control.
   Future<bool> hasAudio() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceHasAudio(
         that: this,
@@ -1980,6 +1987,20 @@ class LayerReference {
           required BridgeRational to}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceMoveShapePathKey(
           that: this, id: id, from: from, to: to);
+
+  /// The frame to open this layer's nested composition on, entering it from
+  /// `outer_frame` on this comp's ruler (K-623).
+  ///
+  /// `None` when the layer is not a Precomp layer, or when the comp it names
+  /// has gone — the caller then opens wherever it was going to anyway.
+  ///
+  /// Here rather than in Dart because the answer is the engine's own: it runs
+  /// through the layer's start offset and Retime map, and the two comps may
+  /// keep different frame rates, so an outer frame and an inner frame are not
+  /// the same count of anything (docs/14 §2).
+  PlatformInt64? nestedEntryFrame({required PlatformInt64 outerFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceNestedEntryFrame(
+          that: this, outerFrame: outerFrame);
 
   /// A new driver of the built-in named `name`, **uncommitted**.
   ///

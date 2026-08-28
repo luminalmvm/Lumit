@@ -123,7 +123,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
                 }),
         onOpenComp: nested == null
             ? null
-            : () => setState(() => ui.setSelectedComp(nested)),
+            : () => setState(() => ui.openNestedComp(layer, nested)),
       ));
 
       if (nested != null && open) {

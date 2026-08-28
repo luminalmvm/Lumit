@@ -2013,6 +2013,31 @@ impl Layer {
             None => lt,
         }
     }
+
+    /// Where the playhead lands inside this layer's nested comp when the user
+    /// opens it from here, standing at outer comp time `t` (K-624).
+    ///
+    /// Over the layer's span the answer is the moment the layer is actually
+    /// showing, so it runs through the same two steps the renderer takes — the
+    /// start offset, then the Retime map — rather than through arithmetic of
+    /// its own. A precomp slowed to half speed therefore opens on the frame on
+    /// screen, not on the frame the outer ruler reads.
+    ///
+    /// Off the span there is no such moment: before it the nested comp has not
+    /// begun, so the answer is its start; after it, it has finished, so the
+    /// answer is `inner_duration`. Both are the ends the caller would clamp to
+    /// anyway, said here so every caller says them the same way.
+    pub fn entry_time(&self, t: f64, inner_duration: f64) -> f64 {
+        let end = inner_duration.max(0.0);
+        if t < self.in_point.0.to_f64() {
+            return 0.0;
+        }
+        if t >= self.out_point.0.to_f64() {
+            return end;
+        }
+        let lt = crate::time::layer_time(t, self.start_offset.0);
+        self.source_time_at(lt).clamp(0.0, end)
+    }
 }
 
 /// The chain of parent layer ids above `layer` in `comp`, nearest first
@@ -2681,6 +2706,71 @@ mod tests {
     fn a_frozen_frame_is_a_retime_however_it_is_written() {
         let frozen = Property::fixed(1.5);
         assert!(!Layer::is_identity_retime(&frozen));
+    }
+
+    /// A Precomp layer sitting at 2..6 s on the outer ruler, whose four
+    /// seconds show its nested comp's first two — half speed.
+    fn half_speed_precomp() -> Layer {
+        let mut map =
+            Layer::identity_retime(Rational::new(0, 1).unwrap(), Rational::new(4, 1).unwrap());
+        if let crate::anim::Animation::Keyframed(keys) = &mut map.animation {
+            keys.last_mut().unwrap().value = 2.0;
+        }
+        Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "nested".into(),
+            kind: LayerKind::Precomp {
+                comp: Uuid::now_v7(),
+            },
+            in_point: secs(2),
+            out_point: secs(6),
+            start_offset: secs(2),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: Some(map),
+            interpolation: Default::default(),
+            parked_flow: None,
+            blend: BlendMode::Normal,
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// **Opening a precomp lands on the frame it is showing** (K-624). Standing
+    /// four seconds into the outer comp is two seconds into a layer that starts
+    /// at two, and a half-speed map shows the nested comp's first second there.
+    #[test]
+    fn entering_a_precomp_maps_the_playhead_through_the_retime() {
+        assert!((half_speed_precomp().entry_time(4.0, 10.0) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn entering_a_precomp_from_before_its_span_lands_on_its_start() {
+        assert_eq!(half_speed_precomp().entry_time(1.0, 10.0), 0.0);
+    }
+
+    #[test]
+    fn entering_a_precomp_from_after_its_span_lands_on_its_end() {
+        assert_eq!(half_speed_precomp().entry_time(7.0, 10.0), 10.0);
+        // The out point is exclusive, so the first moment off the end is the end.
+        assert_eq!(half_speed_precomp().entry_time(6.0, 10.0), 10.0);
+    }
+
+    /// A map may reach past the nested comp (overrun, glossary §4); the
+    /// playhead may not.
+    #[test]
+    fn entering_a_precomp_never_lands_outside_the_nested_comp() {
+        assert_eq!(half_speed_precomp().entry_time(4.0, 0.5), 0.5);
     }
 
     /// `BlendMode::ALL` must list every variant exactly once (the layer

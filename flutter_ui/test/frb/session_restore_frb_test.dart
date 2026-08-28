@@ -91,6 +91,81 @@ void main() {
     expect(workspace.recentProjects, contains(path));
   });
 
+  /// **Each comp remembers where you were** (K-624). Coming back to a comp
+  /// through the tab strip is a return, not a fresh start: the playhead goes
+  /// back to the frame it was left on rather than to zero, and it survives the
+  /// project being closed and opened again.
+  testWidgets('every comp comes back on the frame it was left on',
+      (tester) async {
+    final dir = Directory.systemTemp.createTempSync('lumit-comp-views');
+    final path = '${dir.path}/views.lum';
+    final workspace = Workspace();
+
+    final state = LumitState()..newProject();
+    final ui = LumitUiState(state, workspace: workspace);
+    final project = state.project!;
+    final scene = project.newComposition(name: 'Scene');
+    final titles = project.newComposition(name: 'Titles');
+
+    project.save(path: path);
+    await settleFrb(tester, until: () => File(path).existsSync());
+
+    ui.setSelectedComp(scene);
+    ui.playheadFrame.value = 40;
+    ui.setSelectedComp(titles);
+    expect(ui.playheadFrame.value, 0,
+        reason: 'a comp nobody has been in opens at its start');
+    ui.playheadFrame.value = 7;
+
+    ui.setSelectedComp(scene);
+    expect(ui.playheadFrame.value, 40, reason: 'Scene was left on 40');
+    ui.setSelectedComp(titles);
+    expect(ui.playheadFrame.value, 7, reason: 'Titles was left on 7');
+
+    // The Timeline's own half of the record, written where the panel writes it.
+    ui.rememberCompView(scene.internalid.toString(), zoom: 4, scroll: 0.5);
+    ui.rememberSession();
+
+    final adopted = state.project;
+    state.newProject();
+    state.comps();
+    state.openProject(path);
+    await settleFrb(tester, until: () => !identical(state.project, adopted));
+
+    expect(ui.selectedComp?.internalid, titles.internalid);
+    expect(ui.playheadFrame.value, 7);
+    final view = ui.compViews[scene.internalid.toString()];
+    expect(view?.frame, 40, reason: 'the comp not fronted kept its frame too');
+    expect(view?.zoom, 4);
+    expect(view?.scroll, 0.5);
+  });
+
+  /// Opening a **Precomp layer** is the exception: it enters the nested comp
+  /// at the moment that layer is showing, which the engine maps through the
+  /// layer's start offset and Retime (K-624).
+  testWidgets('a precomp opens on the frame the layer is showing',
+      (tester) async {
+    final state = LumitState()..newProject();
+    final ui = LumitUiState(state, workspace: Workspace());
+    final project = state.project!;
+    final outer = project.newComposition(name: 'Outer');
+    final inner = project.newComposition(name: 'Inner');
+    final layer = outer.addPrecompLayer(comp: inner);
+
+    ui.setSelectedComp(outer);
+    ui.playheadFrame.value = 30;
+    ui.openNestedComp(layer, inner);
+    expect(ui.selectedComp?.internalid, inner.internalid);
+    expect(ui.playheadFrame.value, 30,
+        reason: 'an unmoved, unretimed precomp maps frame for frame');
+
+    // Standing past the layer's end opens the nested comp at its own end.
+    ui.setSelectedComp(outer);
+    ui.playheadFrame.value = outer.durationFrames() - 1;
+    ui.openNestedComp(layer, inner);
+    expect(ui.playheadFrame.value, inner.durationFrames() - 1);
+  });
+
   testWidgets('a session naming things that have gone falls back quietly',
       (tester) async {
     final dir = Directory.systemTemp.createTempSync('lumit-session-stale');
@@ -158,8 +233,8 @@ void main() {
 
     final adopted = otherState.project;
     otherState.openProject(path);
-    await settleFrb(
-        tester, until: () => !identical(otherState.project, adopted));
+    await settleFrb(tester,
+        until: () => !identical(otherState.project, adopted));
 
     expect(layoutOf(other), arranged,
         reason: 'the arrangement came out of the file');
@@ -210,7 +285,8 @@ void main() {
   /// happens inside that unmount. Reporting progress and simply ending is the
   /// whole assertion — without that, this reports a pending timer, which is how
   /// `cache_bar_frb_test` failed on the Linux runner while passing on Windows.
-  testWidgets('a mounted panel leaves no progress timer behind', (tester) async {
+  testWidgets('a mounted panel leaves no progress timer behind',
+      (tester) async {
     final p = freshProject();
     await tester.pumpWidget(hostPanel(
       state: p.state,

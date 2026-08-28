@@ -2413,6 +2413,60 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     ));
   }
 
+  /// The comp the zoom and the scroll offset currently belong to, so a change
+  /// of front can be told from an ordinary rebuild.
+  UuidValue? _shownComp;
+
+  /// This panel's half of "a composition remembers where you were" (K-624):
+  /// the magnification and how far the lanes are scrolled. The shell holds the
+  /// other half, the playhead, because that is not the Timeline's alone.
+  ///
+  /// Called from `build`, which is the one moment both comps are known and
+  /// nothing has moved yet: the controllers still hold the outgoing comp's
+  /// view, so it is written down exactly as it was left. Putting the incoming
+  /// one back has to wait for layout — twice. The zoom's ceiling and the
+  /// lanes' scrollable range are both worked out from the new comp's length,
+  /// which is not known until it has been laid out once; and the zoom itself
+  /// changes that range again, so the offset can only be trusted after the
+  /// layout the zoom causes.
+  void _noticeFrontedComp(LumitUiState ui, CompositionReference? comp) {
+    final now = comp?.internalid;
+    if (now == _shownComp) return;
+    final was = _shownComp;
+    _shownComp = now;
+    if (was != null) {
+      final position = positionOf(_hLane);
+      final extent = position?.maxScrollExtent ?? 0;
+      ui.rememberCompView(
+        was.toString(),
+        zoom: _zoomMotion.target,
+        // A fraction of the scrollable range rather than a pixel offset: the
+        // panel may be a different width when the user comes back, and it is
+        // the stretch of time they were looking at that they want back.
+        scroll: extent > 0 ? (position!.pixels / extent).clamp(0.0, 1.0) : 0.0,
+      );
+    }
+    if (now == null) return;
+    final view = ui.compViews[now.toString()];
+    if (view == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _shownComp != now) return;
+      // Not "the zoom before a fit": that belonged to the comp just left.
+      _zoomBeforeFit = null;
+      _setZoom(view.zoom.clamp(1.0, _maxZoom), fly: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _shownComp != now) return;
+        final position = positionOf(_hLane);
+        if (position == null) return;
+        // The zoom's own anchor has been spent by the layout just done; let
+        // go of any that is somehow still pending rather than have it pull
+        // the offset back off the restored one.
+        _hLane.release();
+        _hLane.jumpTo(view.scroll * position.maxScrollExtent);
+      });
+    });
+  }
+
   /// Which layer index a Project-panel drop landed on. The stack starts below
   /// the pinned toolbar and column header and scrolls under them, so the drop
   /// is measured in stack space; the slot is then read back as an index into
@@ -2469,6 +2523,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // look it up as the pointer moves over the bar.
     _chromeLabels = ui.workspace.interface.chromeLabels;
     final comp = ui.selectedComp;
+    _noticeFrontedComp(ui, comp);
     if (comp == null) {
       // Footage dropped with nothing open offers to make the composition it
       // would go in — the same gesture the Project panel's New composition

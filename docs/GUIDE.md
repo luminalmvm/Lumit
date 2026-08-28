@@ -7806,6 +7806,54 @@ you are free to drag about, so a ticked name could claim a layout the panels no
 longer match. Click a name and the tick — and the write-back — come straight
 back.
 
+### A composition remembers where you were (K-624)
+
+Work on a title, hop to the master comp to see it in place, hop back — and the
+title comp used to greet you at frame zero, fully zoomed out, as if you had
+never been there. Every composition now keeps a small note of **where you were
+in it**: the frame the playhead sat on, how far the Timeline was magnified, and
+how far along the lanes were scrolled. Fronting a comp puts that note back, so
+returning to a comp is a return.
+
+Three things are worth saying about it.
+
+**It is not an edit, so it is nowhere near undo.** Standing somewhere in a comp
+is a way of working on it, not a change to it. The note therefore lives in the
+*session* — the same place the Viewer's exposure, the preview resolution and the
+region of interest already live — which travels with the project in a blob the
+engine stores but never reads. Scrubbing the playhead does not make a project
+dirty, and Ctrl+Z never undoes a scrub. That is a deliberate line: anything in
+the document is undoable and dirties the file, and a note about where you were
+looking has no business doing either.
+
+**Two owners write it, and neither can wipe the other.** The playhead is not the
+Timeline's alone — the Effect controls panel previews a drag at the playhead too
+— so the shell holds that number. The magnification and the scroll *are* the
+Timeline's, so the Timeline panel holds those. Both write into the same note
+through one function that only touches the fields it is given, so the panel
+saving its zoom cannot flatten the shell's frame, or the other way round. The
+scroll is stored as a *fraction* of how far the lanes can go rather than as a
+number of pixels, because the panel may be a different width when you come back
+and what you want back is the stretch of time, not the pixel.
+
+**Opening a precomp is the exception, and the interesting part.** Double-click a
+Precomp layer and you are not returning — you are following the picture inwards,
+and the frame you want is the frame that layer is *showing right now*. Getting
+there is not subtraction. The layer may start anywhere on the outer timeline,
+and it may be retimed: slowed to half speed, reversed, frozen. Four seconds into
+the outer comp might be one second into the nested one. So the frontend does not
+work it out; it asks the engine, which runs the moment through exactly the two
+steps the renderer runs it through when drawing that frame — the layer's start
+offset, then its Retime map — and hands back a frame counted on the *nested*
+comp's own frame rate, which may not be the outer comp's. One question, one
+answer, and the picture you double-clicked is the picture you land on.
+
+If you are standing somewhere the layer is not on screen at all, there is no such
+moment: before it, the nested comp opens at its start; at or past its end, at its
+end. Its remembered zoom and scroll still come back — only the playhead is
+overridden, because the mapped frame is the whole reason you went in that way.
+
+
 ### The safe triangle under a submenu (K-318)
 
 Open a menu, hover a row with an arrow on it, and a second menu flies out to the

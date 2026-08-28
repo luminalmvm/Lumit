@@ -30,10 +30,12 @@ import 'timeline_outline_frb.dart';
 /// The blend-mode names, fetched once per session: the list is static for the
 /// life of the process, and every outline row was re-fetching it per rebuild.
 List<String>? _blendModes;
+
 /// The label-colour dot beside a layer's name — the mockup's own 6px bullet
 /// (K-451), drawn round whatever the shape is: this is a colour swatch, not a
 /// control, and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
+
 class OutlineRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
@@ -641,7 +643,8 @@ class _OutlineRowState extends State<OutlineRow> {
     }
     final comp = _sourceComp();
     if (comp == null) return;
-    Provider.of<LumitUiState>(context, listen: false).setSelectedComp(comp);
+    Provider.of<LumitUiState>(context, listen: false)
+        .openNestedComp(layer, comp);
   }
 
   /// The name, or the rename editor `Enter` turns it into. Submitting commits;
