@@ -4,6 +4,7 @@
 // Split out of timeline_panel_frb.dart; one outline row is
 // timeline_outline_row_frb.dart.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -605,6 +606,137 @@ class KeyReadoutRow extends StatelessWidget {
   }
 }
 
+/// What the outline's rows draw a selection from, published by the panel
+/// rather than handed down as three separate values.
+///
+/// **Why it is published.** Picking a property — or an effect, picked over in
+/// the Effect controls panel — used to be a `setState` on the whole Timeline:
+/// the toolbar, the column headers, every picker, every bar and every one of
+/// the rows redrew so that one row could go from unlit to lit. Measured at 858
+/// widgets for a single click on a two-layer project, and it grows with the
+/// stack, which is what made selecting feel slow. The panel now sets this
+/// instead, and each layer's block listens for its **own** slice of it, so a
+/// click repaints the rows whose selectedness actually changed and nothing
+/// else. Same rule as the playhead's (see `rebuild_budget_test`).
+class TimelineSelection {
+  const TimelineSelection({
+    this.properties = const [],
+    this.highlighted,
+    this.colours = const {},
+  });
+
+  /// The selected properties' fold paths, in selection order.
+  final List<String> properties;
+
+  /// The layer whose fold-out was last touched.
+  final String? highlighted;
+
+  /// Each selected path's graph line colours, for tinting its label.
+  final Map<String, List<Color>> colours;
+}
+
+/// One layer's share of [TimelineSelection] — everything its row and its fold
+/// rows draw, and nothing another layer's selection can change.
+class LayerSelection {
+  const LayerSelection({
+    required this.highlighted,
+    required this.properties,
+    required this.colours,
+  });
+
+  final bool highlighted;
+  final List<String> properties;
+  final Map<String, List<Color>> colours;
+
+  static LayerSelection of(TimelineSelection all, String layerId) {
+    final mine = [
+      for (final path in all.properties)
+        if (isUnderPath(layerId, path)) path,
+    ];
+    return LayerSelection(
+      // A layer marks itself when its fold was last touched, and when a
+      // selected property is one of its own (docs/07 §4.3).
+      highlighted: all.highlighted == layerId || mine.isNotEmpty,
+      properties: mine,
+      colours: {
+        for (final path in mine)
+          if (all.colours[path] case final line?) path: line,
+      },
+    );
+  }
+
+  /// Whether this row would draw itself exactly as [other] does. The colours
+  /// are compared as well as the paths: a curve's colour is its place in the
+  /// whole selection, so picking a row on one layer can re-colour another's.
+  bool sameAs(LayerSelection other) {
+    if (highlighted != other.highlighted) return false;
+    if (!listEquals(properties, other.properties)) return false;
+    if (colours.length != other.colours.length) return false;
+    for (final entry in colours.entries) {
+      if (!listEquals(entry.value, other.colours[entry.key])) return false;
+    }
+    return true;
+  }
+}
+
+/// Rebuilds one layer's block only when that layer's own slice of the
+/// selection changes.
+class _LayerBlock extends StatefulWidget {
+  const _LayerBlock({
+    required this.selection,
+    required this.layerId,
+    required this.builder,
+  });
+
+  final ValueListenable<TimelineSelection> selection;
+  final String layerId;
+  final Widget Function(BuildContext context, LayerSelection mine) builder;
+
+  @override
+  State<_LayerBlock> createState() => _LayerBlockState();
+}
+
+class _LayerBlockState extends State<_LayerBlock> {
+  late LayerSelection _mine = _read();
+
+  LayerSelection _read() =>
+      LayerSelection.of(widget.selection.value, widget.layerId);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.selection.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LayerBlock old) {
+    super.didUpdateWidget(old);
+    if (old.selection != widget.selection) {
+      old.selection.removeListener(_follow);
+      widget.selection.addListener(_follow);
+    }
+    // The panel is rebuilding for some other reason — a document edit, a
+    // column resize — so this is the free moment to take the current slice
+    // rather than hold one the notifier moved past.
+    _mine = _read();
+  }
+
+  @override
+  void dispose() {
+    widget.selection.removeListener(_follow);
+    super.dispose();
+  }
+
+  void _follow() {
+    final next = _read();
+    if (next.sameAs(_mine)) return;
+    setState(() => _mine = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _mine);
+}
+
 /// The left column: one row per layer, with its switches and columns.
 class Outline extends StatelessWidget {
   final CompositionReference comp;
@@ -627,15 +759,10 @@ class Outline extends StatelessWidget {
   /// asking "am I selected?" is then one set lookup rather than a walk of the
   /// list per row per paint.
   final Set<UuidValue> selectedIds;
-  final String? highlighted;
 
-  /// The selected properties' fold paths, in selection order: each is a
-  /// curve in the graph, its row draws selected, and every row containing
-  /// one highlights (docs/07 §4.3, §5).
-  final List<String> selectedProperties;
-
-  /// Each selected path's graph line colours, for tinting its label.
-  final Map<String, List<Color>> graphColours;
+  /// Which rows are picked and which layer is marked — listened to rather than
+  /// read, so a click repaints the rows it changed. See [TimelineSelection].
+  final ValueListenable<TimelineSelection> selection;
   final ValueChanged<String> onSelectProperty;
   final ValueChanged<String> onEditProperty;
 
@@ -663,9 +790,7 @@ class Outline extends StatelessWidget {
     required this.widths,
     required this.matteToggles,
     required this.selectedIds,
-    required this.highlighted,
-    required this.selectedProperties,
-    required this.graphColours,
+    required this.selection,
     required this.onSelectProperty,
     required this.onEditProperty,
     this.onOpenSequence,
@@ -699,7 +824,13 @@ class Outline extends StatelessWidget {
             drag: layerDrag,
             heights: blockHeights,
             index: i,
-            child: Column(
+            // **The selection is listened to here, one layer at a time.** A
+            // click that lights a row must not redraw the layers it did not
+            // touch, and this is the seam that decides that.
+            child: _LayerBlock(
+              selection: selection,
+              layerId: rows[i].id,
+              builder: (context, mine) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 OutlineRow(
@@ -716,10 +847,7 @@ class Outline extends StatelessWidget {
                   // A local compare, not a bridge call: both ids already sit here.
                   selected:
                       selectedIds.contains(rows[i].entry.layer.internallayerId),
-                  // A layer marks itself when its fold was last touched, and when
-                  // a selected property is one of its own (docs/07 §4.3).
-                  highlighted: highlighted == rows[i].id ||
-                      selectedProperties.any((p) => isUnderPath(rows[i].id, p)),
+                  highlighted: mine.highlighted,
                   open: rows[i].open,
                   hasAudio: rows[i].hasAudio,
                   hasPicture: rows[i].hasPicture,
@@ -761,8 +889,8 @@ class Outline extends StatelessWidget {
                       timingsColumn: timingsColumn,
                       baseIndent: baseIndent,
                       path: foldRowPath(rows[i].id, row),
-                      selectedProperties: selectedProperties,
-                      graphColours: graphColours,
+                      selectedProperties: mine.properties,
+                      graphColours: mine.colours,
                       onSelectProperty: onSelectProperty,
                       onEditProperty: onEditProperty,
                       playheadFrame: playheadFrame,
@@ -773,6 +901,7 @@ class Outline extends StatelessWidget {
                     ),
                   ),
               ],
+              ),
             ),
           ),
       ],

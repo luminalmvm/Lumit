@@ -24,6 +24,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
@@ -201,6 +203,108 @@ void main() {
         rebuilds.byName['KeyframeControlsFrb'] ?? 0,
         greaterThan(0),
         reason: 'the keyed row stopped showing the value under the playhead:\n'
+            '${rebuilds.ranking()}',
+      );
+    });
+
+    /// The second interaction the same rule is about: **picking an effect**.
+    ///
+    /// It is felt in two panels at once — the heading lights in Effect
+    /// controls, the row lights in the Timeline — and both used to redraw
+    /// themselves whole to do it. Measured at 1167 widgets for one click on a
+    /// two-layer, three-effect project: 858 of it the Timeline's `setState`,
+    /// 306 the Effect controls panel listening at its root, and the rest the
+    /// shell-wide `notifyListeners` that fanned out to every other panel too.
+    /// Nothing about a pick reaches the engine, so the whole of it was Dart
+    /// redrawing things a selection cannot change.
+    ///
+    /// The layer whose effect is picked really does redraw — that is the next
+    /// test, and it is what stops this one being passed by a panel that has
+    /// gone deaf.
+    Future<({dynamic ui, dynamic comp, LayerReference layer, UuidValue effect})>
+        pickAnEffect(WidgetTester tester) async {
+      final p = await mount(tester);
+      // The layer Effect controls is showing, so the heading that lights is on
+      // screen to be counted as well as the Timeline row.
+      final LayerReference layer = p.ui.selectedLayer.value;
+      final effect = layer.getEffects().first.id();
+      rebuilds
+        ..reset()
+        ..counting = true;
+      p.ui.setEffectSelection(layer, <UuidValue>[effect]);
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      return (ui: p.ui, comp: p.comp, layer: layer, effect: effect);
+    }
+
+    testWidgets('picking an effect redraws the rows it lights and little else',
+        (tester) async {
+      await pickAnEffect(tester);
+
+      // ignore: avoid_print
+      print('EFFECT SELECT REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
+      // The Timeline's chrome cannot say anything about which effect is
+      // picked, so it must not redraw for one. This is the widget that catches
+      // a panel-wide `setState` coming back: it is drawn once, above the rows,
+      // and only a rebuild of the whole panel reaches it.
+      expect(
+        rebuilds.byName['ColumnHeader'] ?? 0,
+        0,
+        reason: 'the whole Timeline redrew for one pick:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Nor do the lane bars: a bar draws a layer's span, which a pick does
+      // not move.
+      expect(
+        rebuilds.byName['Bar'] ?? 0,
+        0,
+        reason: 'the lane bars redrew for one pick:\n${rebuilds.ranking()}',
+      );
+      // Measured at 372, against 1169 before: one outline row, one effect
+      // card, and the widgets inside those two. The cap is roughly 2x, in the
+      // house style, so honest growth does not trip it; what must never come
+      // back is the four-figure count of a panel-wide redraw.
+      expect(
+        rebuilds.total,
+        lessThan(750),
+        reason: 'picking an effect redrew far too much:\n'
+            '${rebuilds.ranking()}',
+      );
+    });
+
+    /// The other half of the rule: the rows that a pick *does* change must
+    /// still change. A budget met by a panel that stopped listening would be
+    /// an editor in which nothing ever lights up.
+    testWidgets('the picked effect still lights its row and its heading',
+        (tester) async {
+      final picked = await pickAnEffect(tester);
+
+      // The Timeline: the layer the effect belongs to is marked, and it was
+      // redrawn to say so.
+      final row = tester.widgetList<OutlineRow>(find.byType(OutlineRow)).where(
+          (r) =>
+              r.entry.layer.internallayerId == picked.layer.internallayerId);
+      expect(row, isNotEmpty, reason: 'the layer has a row on screen');
+      expect(
+        row.first.highlighted,
+        isTrue,
+        reason: "the picked effect's layer did not light up — the Timeline "
+            'stopped following the effect selection',
+      );
+      expect(
+        rebuilds.byName['OutlineRow'] ?? 0,
+        greaterThan(0),
+        reason: 'no outline row redrew, so nothing on screen changed:\n'
+            '${rebuilds.ranking()}',
+      );
+      // Effect controls: exactly the headings whose answer flipped redrew —
+      // the heading of the effect just picked, and no more than a couple.
+      expect(
+        rebuilds.byName['_WhenPicked'] ?? 0,
+        greaterThan(0),
+        reason: 'no effect heading redrew, so none of them lit:\n'
             '${rebuilds.ranking()}',
       );
     });

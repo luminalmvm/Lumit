@@ -8139,6 +8139,19 @@ behind it.
   counts the widgets one interaction redraws (by reading Flutter's own
   dirty-widget log) and is the standing trap for this, exactly as the bridge
   budgets are for the other kind.
+- **The same goes for a selection.** Clicking something is the other interaction
+  that happens constantly, and it changes almost nothing on screen: one row goes
+  from unlit to lit. A `setState` on the panel — or a shell-wide "something
+  changed" announcement — redraws all of it anyway, and that is what made
+  picking an effect feel slow. So a selection is *published* as a value the rows
+  listen to, and each row watches only its own share of it: a row whose
+  selectedness has not changed does not redraw, even though the selection did.
+  A plain listener is not enough for that, because the selection changes for
+  every row at once; the small gate widgets (`_LayerBlock` in the Timeline's
+  outline, `_WhenPicked` in Effect controls) exist to compare one row's answer
+  before and after and stay still when it is the same. And where a value already
+  lives in a `ValueNotifier` that the interested parties watch, announcing it a
+  second time to the whole application is pure cost.
 - **A dragged value is a preview, not an edit.** The engine renders a copy of the
   project with one value replaced — no document write, no undo entry, no journal
   line, and the pixels are never cached. Release commits once (K-239, K-240).

@@ -39,7 +39,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, mapEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -498,13 +498,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // too — so the headings redraw when that changes, wherever the click
     // happened. The read model repaints the panel when anything commits
     // (K-184): an undo, a redo, or the same property dragged in the Timeline.
-    return ValueListenableBuilder<List<UuidValue>>(
-      valueListenable: ui.selectedEffects,
-      builder: (context, picked, _) => ListenableBuilder(
-        listenable: ui.model,
-        builder: (context, _) =>
-            _rows(context, comp, layer, ui.playheadFrame.value, picked),
-      ),
+    return ListenableBuilder(
+      listenable: ui.model,
+      builder: (context, _) =>
+          _rows(context, comp, layer, ui.playheadFrame.value),
     );
   }
 
@@ -531,7 +528,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     CompositionReference comp,
     LayerReference layer,
     int playhead,
-    List<UuidValue> picked,
   ) {
     final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -715,13 +711,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       )
                     else
                       for (var index = 0; index < info.effects.length; index++)
-                        _EffectSection(
+                        _WhenPicked(
+                          key: ValueKey<String>('fx-pick-$index'),
+                          picked: ui.selectedEffects,
+                          id: info.effects[index].id,
+                          builder: (context, selected) => _EffectSection(
                           key: ValueKey<String>('fx-card-$index'),
                           info: info.effects[index],
                           open: _isOpen('fx-${info.effects[index].id}'),
-                          onToggle: () =>
-                              _toggleEffect(info.effects[index].id, picked),
-                          selected: picked.contains(info.effects[index].id),
+                          onToggle: () => _toggleEffect(
+                              info.effects[index].id, ui.selectedEffects.value),
+                          selected: selected,
                           driven: _driven,
                           renaming: _renamingEffect == info.effects[index].id,
                           onRenamed: (name) {
@@ -796,6 +796,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             setState(() => _actionPressed += 1);
                           },
                         ),
+                        ),
                   ],
                 ),
               ),
@@ -805,6 +806,70 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       ],
     );
   }
+}
+
+/// Whether *this* effect is one of the picked ones — the heading's own
+/// listener, in the same spirit as [_AtPlayhead].
+///
+/// **The panel does not listen to the effect selection either.** It used to,
+/// at its root, so picking a heading rebuilt every card and every parameter row
+/// in the panel to light one word: measured at 306 widgets for a single click
+/// on a three-effect layer, growing with the stack. A heading is the only thing
+/// a pick changes, so a heading is what listens, and this rebuilds only when
+/// **its own** answer flips — a `ValueListenableBuilder` here would still redraw
+/// every card, because the list changes for all of them at once.
+class _WhenPicked extends StatefulWidget {
+  const _WhenPicked({
+    super.key,
+    required this.picked,
+    required this.id,
+    required this.builder,
+  });
+
+  final ValueListenable<List<UuidValue>> picked;
+  final UuidValue id;
+  final Widget Function(BuildContext context, bool selected) builder;
+
+  @override
+  State<_WhenPicked> createState() => _WhenPickedState();
+}
+
+class _WhenPickedState extends State<_WhenPicked> {
+  late bool _selected = widget.picked.value.contains(widget.id);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.picked.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WhenPicked old) {
+    super.didUpdateWidget(old);
+    if (old.picked != widget.picked) {
+      old.picked.removeListener(_follow);
+      widget.picked.addListener(_follow);
+    }
+    // The card at this place in the stack may be a different effect now — an
+    // undo, a reorder, a delete — so the answer is taken afresh while the
+    // panel is rebuilding anyway.
+    _selected = widget.picked.value.contains(widget.id);
+  }
+
+  @override
+  void dispose() {
+    widget.picked.removeListener(_follow);
+    super.dispose();
+  }
+
+  void _follow() {
+    final next = widget.picked.value.contains(widget.id);
+    if (next == _selected) return;
+    setState(() => _selected = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _selected);
 }
 
 /// Rebuild just this much of the panel when the playhead moves.

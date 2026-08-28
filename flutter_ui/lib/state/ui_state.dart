@@ -815,7 +815,6 @@ class LumitUiState extends ChangeNotifier {
     selectedEffectsLayer = layer;
     selectedEffects.value = List.unmodifiable(effects);
     _followSelectionWithChip();
-    notifyListeners();
   }
 
   /// Pick [id] by click: plain replaces, Ctrl toggles, Shift extends the run
@@ -868,7 +867,6 @@ class LumitUiState extends ChangeNotifier {
     if (selectedEffects.value.isEmpty) return;
     selectedEffects.value = const [];
     _followSelectionWithChip();
-    notifyListeners();
   }
 
   /// Add [layer] to the selection, or take it out again — Shift-click.

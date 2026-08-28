@@ -30,6 +30,7 @@
 
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -631,6 +632,51 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// §5). Each is a coloured curve in the graph editor.
   final List<String> _selectedProperties = [];
 
+  /// The same two answers, published for the rows to listen to
+  /// ([TimelineSelection]). Kept beside the fields rather than replacing them
+  /// because every rule in this panel reads and edits the list in place; this
+  /// is the snapshot the outline watches, and it is what makes a click repaint
+  /// the rows whose selectedness changed instead of the whole Timeline.
+  final ValueNotifier<TimelineSelection> _rowSelection =
+      ValueNotifier(const TimelineSelection());
+
+  /// Each selected path's graph line colours, keyed by path.
+  Map<String, List<Color>> _colourOfChannels(List<GraphChannel> channels) {
+    final t = ThemeScope.of(context).theme;
+    final out = <String, List<Color>>{};
+    for (final channel in channels) {
+      (out[channel.path] ??= [])
+          .add(t.curve[channel.colourIndex % t.curve.length]);
+    }
+    return out;
+  }
+
+  /// Hand the rows the selection as it now stands. Silent when nothing they
+  /// draw has changed, so a publish that says the same thing costs no repaint.
+  void _publishRowSelection([Map<String, List<Color>>? colours]) {
+    final next = TimelineSelection(
+      properties: List<String>.unmodifiable(_selectedProperties),
+      highlighted: _highlighted,
+      colours: colours ?? _colourOfChannels(_channelsNow()),
+    );
+    final held = _rowSelection.value;
+    if (held.highlighted == next.highlighted &&
+        listEquals(held.properties, next.properties) &&
+        _sameColours(held.colours, next.colours)) {
+      return;
+    }
+    _rowSelection.value = next;
+  }
+
+  static bool _sameColours(
+      Map<String, List<Color>> a, Map<String, List<Color>> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!listEquals(entry.value, b[entry.key])) return false;
+    }
+    return true;
+  }
+
   /// The graph editor's selected keyframes, as `channelId#index` — owned here
   /// so the bottom bar's buttons and the shortcuts act on the same set.
   final Set<String> _graphKeySelection = {};
@@ -788,13 +834,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             .every((same) => same)) {
       return;
     }
-    setState(() {
-      _selectedProperties
-        ..clear()
-        ..addAll(wanted);
-      _graphKeySelection.clear();
-      if (owner != null) _highlighted = owner;
-    });
+    _selectedProperties
+      ..clear()
+      ..addAll(wanted);
+    _graphKeySelection.clear();
+    if (owner != null) _highlighted = owner;
+    // **Published, not `setState`.** An effect picked over in the Effect
+    // controls panel changes which rows are lit and nothing else, so the rows
+    // whose lighting changed are what redraws (measured: 858 widgets down to a
+    // handful). Graph view is the exception — the picked properties *are* its
+    // curves, so it has a new picture to draw.
+    _publishRowSelection();
+    if (_graph) setState(() {});
   }
 
   /// Hand the effect headings among the selected rows to the shell (K-300), so
@@ -2174,6 +2225,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _barDrag.dispose();
     _layerDrag.dispose();
     _renameRequest.dispose();
+    _rowSelection.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _hLane.dispose();
@@ -2505,11 +2557,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // ([layerDropSlot]) and [LayerDragSlide] slides one block by the ones it
     // passes — all three want every height, not this row's.
     final blockHeights = [for (final row in rows) row.height];
-    final graphColours = <String, List<Color>>{};
-    for (final channel in channels) {
-      (graphColours[channel.path] ??= [])
-          .add(t.curve[channel.colourIndex % t.curve.length]);
-    }
+    final graphColours = _colourOfChannels(channels);
+    // The rows read the selection off the notifier, so it has to be current
+    // before they build. Marking a descendant dirty from here is legal — it is
+    // inside this build's own scope — and harmless, since the subtree is about
+    // to be built anyway.
+    _publishRowSelection(graphColours);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2858,9 +2911,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     widths: groupWidths,
                                     matteToggles: matteToggles,
                                     selectedIds: ui.selectedLayerIds,
-                                    highlighted: _highlighted,
-                                    selectedProperties: _selectedProperties,
-                                    graphColours: graphColours,
+                                    selection: _rowSelection,
                                     onSelectProperty: _selectProperty,
                                     onEditProperty: _selectOnEdit,
                                     onToggle: _toggle,
@@ -2868,8 +2919,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     onSeek: ui.scrubTo,
                                     onSelect: (l) =>
                                         _selectLayer(ui, l, among: layers),
-                                    onHighlight: (id) =>
-                                        setState(() => _highlighted = id),
+                                    // The dimmer mark that follows the fold-out
+                                    // last touched: one row's shade, so one
+                                    // row's repaint.
+                                    onHighlight: (id) {
+                                      _highlighted = id;
+                                      _publishRowSelection();
+                                    },
                                     onChanged: ui.model.refresh,
                                   ),
                                 ),
@@ -3198,7 +3254,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       comp: comp,
                       rows: rows,
                       barNames: _barNames,
-                      selectedProperties: _selectedProperties,
                       selectedIds: ui.selectedLayerIds,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,

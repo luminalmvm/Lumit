@@ -258,10 +258,6 @@ class LayerArea extends StatelessWidget {
   /// are left alone, so they still reach the scrollable.
   final void Function(PointerScrollEvent event, double contentX) onWheel;
 
-  /// The picked properties' fold paths — the same list the outline draws
-  /// from, so a row lit on one side is lit on the other.
-  final List<String> selectedProperties;
-
   /// Settings ▸ Interface ▸ Panels ▸ *Layer names on lane bars* (K-514), off
   /// by default. Read once by the panel and handed down, never looked up in a
   /// bar's own build.
@@ -271,7 +267,6 @@ class LayerArea extends StatelessWidget {
     required this.comp,
     required this.rows,
     this.barNames = false,
-    this.selectedProperties = const [],
     required this.selectedIds,
     this.onOpenSequence,
     this.onGraphHeight,
