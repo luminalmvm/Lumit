@@ -12529,3 +12529,43 @@ The rule is kept by a test rather than by discipline:
 fails the build if a plain `println!` has crept back in. Test code is exempt — a test is run from
 a terminal that is listening — as are the two command-line programs (the benchmark runner and the
 OFX broker) whose printed output is the whole point of them.
+
+## 36. Why a background can cost more than the thing in front of it, in plain terms
+
+The Graph panel draws a field of faint dots behind the nodes, one wherever the canvas's
+own grid crosses. Nothing about that sounds expensive, and at 100% it is not: a panel-sized
+canvas holds around 1,350 of them. But the dots belong to the *canvas*, not to the screen,
+so zooming out does not shrink the grid — it brings more of the grid into view. At a third
+of full size there are ten times as many, and the panel got noticeably heavier the further
+out you scrolled, which is exactly backwards from what anyone expects.
+
+The fix is the one every map does. When the scale would push the dots closer together than
+they are meant to look, the grid **skips every other line**. The dots that remain are dots
+that were always there; the ones between them simply are not drawn, and the spacing on
+screen stays roughly what it was. Halve the zoom, double the spacing on the canvas, and the
+picture on screen looks the same while the amount of drawing stays flat. Mapmakers call the
+idea a level of detail: what you draw depends on how far away you are, not on how much
+exists.
+
+There were two other things making it slow, both worth knowing because they come up all
+over a drawing program.
+
+The first is that **asking for one thing a thousand times costs more than asking for a
+thousand things once**. Each dot used to be its own "draw a small circle here" instruction,
+and every instruction carries paperwork: a shape to describe, a brush to set up, a
+round-trip to the graphics layer. Handing over a plain list of coordinates and saying "put
+a dot at each of these" is one instruction with a big attachment, and the drawing system
+can then do the whole field in a single pass. At the worst zoom that turned 13,824
+instructions into one, and the time to draw the ground from four milliseconds into eight
+hundredths of one.
+
+The second is **who redraws when**. Flutter, like most interface toolkits, redraws in
+regions: if anything inside a region changes, the whole region is repainted. The dots and
+the wires were in the same region, so every hover, every dragged wire, every selection —
+none of which move a single dot — repainted the entire dot field along with them. Putting
+the background behind what Flutter calls a *repaint boundary* gives it a region of its own,
+which is kept as a finished picture and simply stamped down again while nothing about it
+changes. The wires above it can be redrawn sixty times a second and the dots are not
+touched. Boundaries are not free — each one is another picture to keep and to compose — so
+they earn their place where the thing behind is expensive to draw and rarely changes, which
+describes a background almost by definition.

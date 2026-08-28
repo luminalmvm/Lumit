@@ -29,6 +29,8 @@
 // it to the token.
 
 import 'dart:math' as math;
+import 'dart:typed_data' show Float32List;
+import 'dart:ui' show PointMode;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart'
@@ -1565,6 +1567,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
+                    // The ground is its own layer: it changes with the pan and
+                    // the zoom and with nothing else, so the wires above it may
+                    // redraw on every pointer move without it.
+                    Positioned.fill(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          key: const ValueKey('graph-ground'),
+                          painter: _GroundPainter(
+                            pan: _pan,
+                            zoom: _zoom,
+                            grid: t.surface2,
+                            ground: t.surface0,
+                          ),
+                        ),
+                      ),
+                    ),
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _GraphPainter(
@@ -1574,8 +1592,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           dropWire: _dropWire,
                           pan: _pan,
                           zoom: _zoom,
-                          grid: t.surface2,
-                          ground: t.surface0,
                           theme: t,
                           dragged: t.textPrimary,
                         ),
@@ -2149,7 +2165,79 @@ Path _dash(Path path) {
   return out;
 }
 
-/// The canvas ground and every wire on it.
+/// The canvas ground: `surface_0` under its dot grid (docs/15 §12).
+///
+/// **In plain terms.** The dots are drawn where the canvas's own grid lines
+/// cross, so zooming out used to bring more of them into view — at the smallest
+/// zoom, eleven times as many as at 100%, each one its own little circle, which
+/// is the whole of the panel's zoomed-out lag. Two things fix it, and neither
+/// changes what the ground looks like at 100%:
+///
+/// * The grid **thins as it shrinks**. Whenever the zoom would push the dots
+///   closer together on screen than the pitch they are drawn at, the grid skips
+///   every other line — twice the canvas spacing, the same spacing on screen —
+///   so the number of dots on screen stays put however far out the canvas goes.
+/// * They are drawn in **one call**, as points, rather than one circle apiece.
+///
+/// It is also its own painter behind its own [RepaintBoundary], because it
+/// answers to nothing but the pan, the zoom and the theme: hovering a node or
+/// dragging a wire redraws every wire above it and leaves the ground alone.
+class _GroundPainter extends CustomPainter {
+  final Offset pan;
+  final double zoom;
+  final Color grid;
+  final Color ground;
+
+  const _GroundPainter({
+    required this.pan,
+    required this.zoom,
+    required this.grid,
+    required this.ground,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = ground);
+    var pitch = graphDotGrid * zoom;
+    if (pitch <= 0) return;
+    while (pitch < graphDotGrid) {
+      pitch *= 2;
+    }
+    // `%` on a positive divisor is never negative, so the first dot of each run
+    // sits in [0, pitch) and the counts below are exactly the dots on screen.
+    final startX = pan.dx % pitch;
+    final startY = pan.dy % pitch;
+    final columns = math.max(0, ((size.width - startX) / pitch).ceil());
+    final rows = math.max(0, ((size.height - startY) / pitch).ceil());
+    if (columns == 0 || rows == 0) return;
+    final points = Float32List(columns * rows * 2);
+    var i = 0;
+    for (var c = 0; c < columns; c++) {
+      final x = startX + c * pitch;
+      for (var r = 0; r < rows; r++) {
+        points[i++] = x;
+        points[i++] = startY + r * pitch;
+      }
+    }
+    canvas.drawRawPoints(
+      PointMode.points,
+      points,
+      Paint()
+        ..color = grid
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroundPainter old) =>
+      old.pan != pan ||
+      old.zoom != zoom ||
+      old.grid != grid ||
+      old.ground != ground;
+}
+
+/// Every wire on the canvas.
 class _GraphPainter extends CustomPainter {
   final _Layout layout;
   final List<BridgeGraphEdge> edges;
@@ -2159,8 +2247,6 @@ class _GraphPainter extends CustomPainter {
   final BridgeGraphEdge? dropWire;
   final Offset pan;
   final double zoom;
-  final Color grid;
-  final Color ground;
   final Color dragged;
   final LumitTheme theme;
 
@@ -2171,8 +2257,6 @@ class _GraphPainter extends CustomPainter {
     required this.dropWire,
     required this.pan,
     required this.zoom,
-    required this.grid,
-    required this.ground,
     required this.dragged,
     required this.theme,
   });
@@ -2181,8 +2265,6 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _paintGrid(canvas, size);
-
     // The image chain's wires are not stored anywhere: they *are* the effect
     // list, read left to right. Drawing them from the box order is what makes
     // the stack view impossible to contradict.
@@ -2210,20 +2292,6 @@ class _GraphPainter extends CustomPainter {
 
     if (flight case final f?) {
       _wire(canvas, f.from.at, f.to, dragged, dashes: true);
-    }
-  }
-
-  void _paintGrid(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = ground);
-    final pitch = graphDotGrid * zoom;
-    if (pitch < 6) return;
-    final dot = Paint()..color = grid;
-    final startX = pan.dx % pitch;
-    final startY = pan.dy % pitch;
-    for (var x = startX; x < size.width; x += pitch) {
-      for (var y = startY; y < size.height; y += pitch) {
-        canvas.drawCircle(Offset(x, y), 1, dot);
-      }
     }
   }
 

@@ -19367,3 +19367,37 @@ Tests: `lumit-import`'s `a_tracked_cameras_keyframes_arrive_on_the_rotation_lane
 `a_camera_says_what_it_could_not_bring`,
 `an_expression_drives_the_property_only_when_it_was_switched_on`, and the golden
 `the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map`.
+
+## K-626 — The graph's dot grid thins as the canvas zooms out
+
+**Status: DECIDED (2026-08-28).** The Graph panel's ground is `surface_0` under a dot grid
+one step lighter (docs/15 §12), and the dots sit where the canvas's own 20px grid crosses.
+That is fine at 100% and unaffordable below it: the grid is drawn in *canvas* units, so
+zooming out pulls ever more of it into view. On a 900x600 canvas at 100% that is 1,350
+dots; at 31% it is 13,824, and below about 28% the old code gave up and drew no grid at
+all, so the panel got heavier and heavier as it was zoomed out and then the ground blinked
+empty.
+
+**The grid's spacing on screen is what is held constant, not its spacing on the canvas.**
+Whenever the zoom would bring the dots closer together on screen than the 20px they are
+drawn at, the grid skips every other line — twice the canvas spacing, so the dots that
+remain are dots that were always there, and the ones between them are simply not drawn.
+The screen pitch therefore stays between 20 and 40 pixels at every zoom the panel offers,
+and the dot count stays between about 500 and 1,350 rather than growing without bound. The
+grid never disappears now, at any zoom.
+
+Deliberately a power-of-two ladder with no cross-fade between rungs. A fade was considered
+and left out: the dots are `surface_2` on `surface_0`, a step so quiet that the change of
+rung is barely visible mid-scroll, and a fade means drawing both rungs — which is the cost
+this entry exists to remove. The rung boundary is only ever crossed while the zoom is
+already moving.
+
+**The ground is its own layer.** It answers to the pan, the zoom and the theme and to
+nothing else, so it is painted by its own painter behind its own repaint boundary and a
+hover, a wire drag or a selection — each of which redraws every wire on the canvas — leaves
+it untouched. And the whole grid is one `drawRawPoints` call rather than a `drawCircle` per
+dot: at 31% zoom that is one draw operation where there were 13,824, and the ground's paint
+cost falls from 4.0ms to 0.08ms.
+
+Tests: `graph_ground_budget_test`, which budgets the dot count across the whole zoom range
+and pairs each budget with the guard that the grid is still drawn at all.

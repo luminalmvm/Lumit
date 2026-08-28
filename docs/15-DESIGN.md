@@ -1561,7 +1561,10 @@ carries the model and the work packages. Binding rules beyond the drawings thems
 - A **filled socket is wired, a hollow one is not**; a dragged wire is dashed. A
   **bypassed node draws its border dashed** (and its `B` badge is the one place `error`'s
   family appears on the canvas); the **selected node's border is `animated`** (K-473).
-- The canvas ground is `surface_0` under a dot grid one step lighter; nodes are
+- The canvas ground is `surface_0` under a dot grid one step lighter, whose dots stay
+  20–40px apart **on screen** at every zoom: the grid skips every other line each time
+  the zoom would crowd them closer than the 20px they are drawn at, so it thins as the
+  canvas shrinks instead of multiplying (K-626). Nodes are
   `surface_1` cards with `surface_2` header strips and kicker-cased names — panel
   grammar, not a foreign look.
 - **Auto-wire and Heal are `HouseToggle`s** in the panel header (on in `animated`,
