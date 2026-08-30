@@ -20253,3 +20253,56 @@ Regression test: `a scrub repaints the playhead and not the lanes` in
 repainted — the render tree asked what it did, rather than inferred. It carries its guard: a
 lane area that had stopped drawing entirely would satisfy the first assertion, so the
 playhead's own layer must be shown to have redrawn.
+
+## K-650 — The Custom shader's rows are read from its own text, once per source, and are ordinary schema rows
+
+**Status: DECIDED** (2026-08-30). Implements [impl/custom-shader.md](impl/custom-shader.md)
+CS1's engine half; K-642 commissioned it and stands unchanged. Five things that note left
+open, settled small, because each of them is a place where the obvious answer is wrong.
+
+**The derived rows are `&'static [ParamSchema]`, from a session-lived parse cache keyed by
+the source hash.** `ParamSchema` holds `&'static str`, and a shader's rows are read from text
+somebody typed — so either the rows become an owned mirror type that every downstream reader
+has to convert from, or the strings live as long as the session. The mirror was the wrong
+trade: it would have meant a second parameter vocabulary, a conversion at the resolve seam, a
+second one at the bridge, and a second one at the panel, all to avoid leaking a few hundred
+bytes per distinct shader source. So `EffectDef::derived(&inst)` answers `&'static
+[ParamSchema]`, the parse is memoised per distinct source, and the leak is the honest spelling
+of "lives as long as the session" — the same one a plugin's schema already uses (K-593). The
+render path therefore costs a hash and a map lookup rather than a parse, which is what let the
+derived rows go through `resolve_into_arena`'s **existing** loop rather than a second one:
+they animate, they resolve through the declared `Unit` arms, and `ResolvedStack::rescale_
+spatial` moves a shader's `@unit(px)` radius exactly as it moves a declared one. Recorded
+limit: the cache never evicts. Bound it if a heap profile ever asks, and the owned mirror is
+what that costs.
+
+**The frame key folds the whole `extra.shader` block, minus `origin` — not a parse of it.**
+custom-shader.md §2.4 asked for two terms, the source hash and the derived *shape*. The shape
+is a pure function of the source, so hashing the block covers both, and it additionally covers
+the stored graph (§4) that the cached source can drift from. One term, one rule, and no parse
+inside the key walk. `origin` is where the file came from, which moves no pixel.
+
+**The assembler lives in `lumit-core`, beside the reader, and the prologue and epilogue are
+`.wgsl` files there.** docs/05 puts WGSL kernels in `lumit-gpu`, and this is a deliberate
+exception rather than a drift: the generated `Params` struct is a *product of the parse*, and
+`lumit-gpu` only dev-depends on `lumit-core`, so an assembler on the GPU side could not see
+the parse it needs. These two files are not kernels — they are the wrapper a parse writes —
+and `lumit-gpu` is handed a finished module string. The cost is that the epilogue's bindings
+and the bind-group layout are one truth in two crates, which is the "two registries, one
+truth" trap the registry note already names, and which
+`the_assembled_module_validates` and the round-trip GPU test are the gate for.
+
+**An empty `Params` block gets one `_unused` member.** WGSL has no empty struct, so a shader
+that declares no parameters cannot have a literally empty one; the generated text declares a
+sixteen-byte placeholder and the buffer is sixteen bytes. Nothing reads it.
+
+**The compile is synchronous in this wave, and the last-good fallback is an engine-level
+policy that is off by default.** custom-shader.md §3.2 wants the compile on a worker, coalesced
+per source hash and carrying an epoch token. There is no editor yet to type into it, so
+building that queue now would be a queue with nothing in it; the compile happens on first use
+and is cached by source hash, which is correct and is what the tests exercise. What *is* built
+is the half that cannot be added later without changing behaviour: `FxEngine::allow_stale_
+shaders` decides whether a broken source falls back to that instance's last good pipeline, and
+it is **false** unless the interactive realiser turns it on — so export and headless never fall
+back, and a frame drawn from a stale pipeline is never entered into any cache tier. Moving the
+compile off the render path is CS3's work, arriving with the surface that makes it necessary.

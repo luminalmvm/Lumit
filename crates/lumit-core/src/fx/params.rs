@@ -502,6 +502,12 @@ struct Op {
     /// keeps meaning.
     lt: f64,
     span: Range<u32>,
+    /// The rows this **instance** declared beyond its schema's — a Custom
+    /// shader's own uniforms (docs/impl/custom-shader.md §1.5), empty for every
+    /// other effect. Held so [`ResolvedStack::rescale_spatial`] can find a
+    /// derived parameter's unit; without it a shader's `@unit(px)` radius would
+    /// be left behind when a stack resolved at one raster is reused at another.
+    derived: &'static [ParamSchema],
 }
 
 /// Everything one layer's effect stack resolved to at one frame.
@@ -541,7 +547,17 @@ impl ResolvedStack {
             instance,
             lt,
             span: start..start,
+            derived: &[],
         });
+    }
+
+    /// Tell the op most recently begun which rows its **instance** declared
+    /// beyond its schema's (docs/impl/custom-shader.md §1.5). Ignored before the
+    /// first `begin`, exactly as [`Self::push`] is.
+    pub fn set_derived(&mut self, rows: &'static [ParamSchema]) {
+        if let Some(op) = self.ops.last_mut() {
+            op.derived = rows;
+        }
     }
 
     /// Add a resolved parameter to the op most recently begun. Silently ignored
@@ -623,6 +639,7 @@ impl ResolvedStack {
                 let spatial = schema
                     .params
                     .iter()
+                    .chain(op.derived)
                     .find(|p| ParamId::new(p.id) == slot.0)
                     .is_some_and(|p| p.unit.is_spatial());
                 if spatial {
@@ -692,6 +709,7 @@ impl ResolvedFx<'_> {
 }
 
 use super::registry::EffectDef;
+use super::schema::ParamSchema;
 
 impl std::fmt::Debug for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

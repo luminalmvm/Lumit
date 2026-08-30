@@ -466,7 +466,15 @@ pub(super) fn resolve_into_arena(
     drivers: &ResolvedDrivers,
 ) {
     bags.begin_at(def, e.id, lt);
-    for p in def.schema().params {
+    // The rows this *instance* declares beyond its schema's — a shader's own
+    // uniforms (docs/impl/custom-shader.md §1.5), and nothing at all for every
+    // other effect. They resolve through the identical loop below, which is
+    // what makes a derived parameter animate, rescale and cache exactly as a
+    // declared one does; the arena is told about them so that
+    // [`ResolvedStack::rescale_spatial`] can move the spatial ones too.
+    let derived = def.derived(e);
+    bags.set_derived(derived);
+    for p in def.schema().params.iter().chain(derived) {
         let driven = if drivers.is_empty() {
             None
         } else {

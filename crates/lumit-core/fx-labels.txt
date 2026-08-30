@@ -120,6 +120,7 @@ Count
 Create corner pin
 Curves
 Custom
+Custom shader
 Cut
 Cyan
 Cyans
@@ -173,6 +174,7 @@ Edge colour
 Edge sharpness
 Edge type
 Edges
+Edit shader…
 Element 1
 Element 10
 Element 11
@@ -364,6 +366,7 @@ Linear
 Linear burn
 Linear light
 Linear wipe
+Load from file…
 Low
 Lower left x
 Lower left y
@@ -548,6 +551,7 @@ Screen pre-blur
 Screen shrink/grow
 Screen softness
 Scribble
+Second input
 Seed
 Segment length
 Segments

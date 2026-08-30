@@ -52,6 +52,7 @@ use super::effects::{
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     curves::{Curves, CurvesDef},
+    custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
@@ -275,6 +276,10 @@ crate::catalogue![
     VenetianBlindsDef => VenetianBlinds,
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
+    // The one effect whose program the user writes (K-650), appended at the
+    // Utility family's end: it is a picture operation like any other, and the
+    // only thing unusual about it is where its arithmetic came from.
+    CustomShaderDef => CustomShader,
     // The Controls family (K-414), last in the catalogue and so last in the
     // Add-effect menu, which groups by first appearance here (K-137). The order
     // inside it is After Effects' own Expression Controls order, which is what

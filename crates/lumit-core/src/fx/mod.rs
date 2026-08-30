@@ -50,6 +50,9 @@ pub mod reference;
 mod registry;
 mod resolved;
 mod schema;
+/// The Custom shader's text side: the declaration grammar, the assembler and
+/// the uniform layout (docs/impl/custom-shader.md, K-650).
+pub mod shader;
 mod temporal;
 
 /// CPU reference implementations (docs/08 §1.6): identical semantics to the

@@ -12819,8 +12819,9 @@ the other — and interleaved halves of two messages are worse than either alone
 Every effect in Lumit is a small program that runs on the graphics card, and every one of
 them so far was written by us. The **Custom shader** effect is the one that lets somebody
 else write one — a person with an idea and twenty lines of code, who does not want to build
-a plugin, learn Rust, or ask us first. It is designed but not built;
-`docs/impl/custom-shader.md` is the plan and this section is the plain-English half of it.
+a plugin, learn Rust, or ask us first. `docs/impl/custom-shader.md` is the plan and this
+section is the plain-English half of it; the effect, its grammar and its pipeline are built,
+and the editor surface and the box canvas below are the parts still to come.
 
 ### What it looks like to use
 
@@ -12899,6 +12900,23 @@ different ways, and Lumit's whole caching story depends on that never happening.
 checks the shader's answer for the arithmetic equivalent of nonsense (the value you get from
 dividing zero by zero) and replaces it with black, because one such pixel spreads: it poisons
 every effect above it, turns the composition black, and gives you nothing to go on.
+
+### Lining the numbers up
+
+One piece of arithmetic in here is worth knowing about, because it is invisible when it goes
+wrong. The numbers a shader's controls hold are sent to the graphics card as one block of
+bytes, and the card expects each number to start at a particular place in that block: a plain
+number every four bytes, a pair of numbers on a multiple of eight, a colour on a multiple of
+sixteen. If Lumit and the card disagree by a single position, every number after the
+disagreement reads its neighbour's value — the Radius slider moves the Tint, say — and
+nothing anywhere reports an error. So Lumit works the positions out in one place, writes the
+gaps into the generated code as *named* fields you can see rather than gaps you have to infer,
+and a test pins the whole table down.
+
+That is also why a three-number field is refused rather than accepted. In this corner of the
+language a group of three numbers quietly occupies the space of four, and every person who
+has written a shader has been caught by it at least once. Saying "use four" with a sentence
+explaining why is kinder than accepting it and being wrong later.
 
 ### Why this is not a plugin
 

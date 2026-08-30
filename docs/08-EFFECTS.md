@@ -6037,6 +6037,66 @@ reproduced**: what that plug-in does with an unchosen source is not documented a
 project could check, and Lumit will not copy behaviour it has only guessed at, so the
 import reports such a channel and leaves it at its identity default (§11 §5).
 
+### 3.95 Custom shader — the one effect whose program the user writes
+
+**Parameters:** **Second input** (layer, unset), **Edit shader…** (action), **Load from
+file…** (action), **Mix** (0–100 %, default 100), plus the injected Blend and Matte rows —
+and **every parameter the shader itself declares** (K-650,
+[impl/custom-shader.md](impl/custom-shader.md)).
+
+A **Utility** effect, `Heavy` cost, `FullFrame` ROI, temporal window `{0}`. Drop it on a
+layer and it renders identity, because it has no program yet; type one into the editor
+surface, or load a `.wgsl` somebody sent you, and the layer does whatever the program says.
+
+**The controls come from the program.** The user declares a `struct Params` block with a
+short note over each field, and those turn into ordinary rows in Effect controls — sliders,
+dials, counters, switches, dropdowns, colours, points and seeds — that keyframe, animate,
+carry expressions and cache exactly as a built-in effect's rows do (§1.2). Nothing about
+them is second class. The declaration grammar is one struct and one annotation per line and
+is pinned in the note's §1.4; the type chooses the family and the annotation refines it, so
+a field with no note at all is still a working parameter. `vec3<f32>` is refused rather
+than silently padded, because it occupies sixteen bytes in a uniform block and reads back
+wrong the moment anybody assumes it occupies twelve.
+
+**The derived rows are offered, never adopted.** A source edit that stops mentioning a
+uniform leaves that row and the expression reading it alive, and a source edit that adds one
+does not change the document until the user says so — nothing re-derives a parameter list
+while a frame is rendering ([impl/effect-registry.md](impl/effect-registry.md) §4).
+
+**The source is not a parameter.** It lives on the instance under `extra.shader`, which
+rides through save, load, undo, copy/paste, a `.lumfx` preset and an older reader with no
+format work at all (K-065, K-129). A parameter must animate, and two shader sources cannot
+be interpolated.
+
+**`FullFrame` and `Heavy` are statements about a program nobody has read.** A shader may
+sample anywhere in its input, so no padding is honest; and its cost is unknowable, so it
+declares the class that makes the governor cautious. An ROI declaration that is wrong is a
+wrong picture; a cost declaration that is wrong is a dropped frame, and only one of those is
+recoverable.
+
+**Nothing varies that the host did not hand in.** WGSL has no clock and no random-number
+generator, so the *only* sources of variation are the two the host puts in the header: the
+layer time, and a seed derived from the instance id and constant for that instance's life.
+No adapter name, no wall clock, no render index. That is what makes a shader from a stranger
+safe in a way a plugin binary is not — a `.lumfx` from a stranger is data, never code, and
+it can address nothing but its own bind group. The host also sanitises: a NaN or an infinity
+coming back from the user's function is replaced before it is stored, in host code the user
+cannot remove, because one poisoned pixel becomes a black composition three effects later.
+
+**A shader that does not compile does not stop the composition.** The badge (K-593) carries
+the compiler's own sentence with the line numbers remapped to the user's own text, and the
+picture is the effect's input unchanged. Interactively the last pipeline that *did* compile
+keeps drawing under that badge — being syntactically broken is the state a person is in for
+most of the time they are typing, and black-framing on every keystroke is the punishment UI
+[15-DESIGN.md](15-DESIGN.md) forbids — but such a frame is shown and discarded, never
+cached, and an export never falls back at all: it renders identity and puts the error in the
+log, because an export that silently used yesterday's shader would be worse than one that
+says the shader is broken.
+
+**There is no CPU reference**, for the LUT's reason (§3.11): the effect *is* a GPU program,
+and there is no second implementation of somebody else's arithmetic to hold it to. The
+degradation ladder's CPU rung renders it as a passthrough.
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)

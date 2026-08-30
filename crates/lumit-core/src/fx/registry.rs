@@ -252,6 +252,28 @@ pub trait EffectDef: Sync + Send + 'static {
     /// nothing else. The default pushes nothing, which is every effect but a few.
     fn resolve_derived(&self, _cx: &ResolveCx<'_>, _push: &mut dyn FnMut(ParamId, Value)) {}
 
+    /// The parameters **this instance** has beyond its schema's
+    /// (docs/impl/effect-registry.md §4, docs/impl/custom-shader.md §1.5).
+    ///
+    /// # In plain terms
+    ///
+    /// Almost every effect's controls are the same on every layer they are
+    /// dropped on, because somebody here wrote them down. One is not: the
+    /// Custom shader's controls come from the shader *this copy of it* holds,
+    /// so they are a fact about the instance rather than about the effect.
+    ///
+    /// The rows come back in declaration order and are treated exactly as the
+    /// schema's own by everything downstream: the resolve walk evaluates them
+    /// through the same loop, the preview rescale moves the spatial ones, and
+    /// the panel draws them with the same widgets. They are `&'static` because
+    /// the one implementation caches its parse for the session — so this costs
+    /// a hash and a lookup on the render path, not a parse.
+    ///
+    /// The default is none, which is every effect but one.
+    fn derived(&self, _inst: &EffectInstance) -> &'static [super::schema::ParamSchema] {
+        &[]
+    }
+
     /// Whether this effect has an image operation at all. `false` for the
     /// orchestration-only effects, which the render path skips and the
     /// registry-agreement test excuses from needing a GPU entry.
