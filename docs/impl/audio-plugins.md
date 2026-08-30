@@ -127,6 +127,15 @@ store plain values — convert at the boundary via the controller's
 `plainParamToNormalized`, and never cache the conversion across a state load (plugins
 re-scale ranges from state).
 
+The row's **id is spelled from that number**: a CLAP parameter `1234` becomes the schema
+row `p1234` (K-692). It is not pretty and it is not the parameter's name, because the name
+is not stable — a vendor rewording a label would otherwise silently orphan a keyframed
+value in every saved project. VST3 mints the same shape from its own `ParamID`.
+
+Latency is asked for **only while the plugin is active**: CLAP's `latency.get` is an
+active-state call and a describe never activates, so a descriptor records *whether* a
+plugin reports latency and the chain reads the number off the live instance.
+
 **Delivery**: keyframed values are baked per block — one value at each 512-frame block
 start (~10.7 ms control rate, the same rate the Volume envelope already uses, K-172) —
 as CLAP `CLAP_EVENT_PARAM_VALUE` events / VST3 `IParameterChanges` queue points, sorted

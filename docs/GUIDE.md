@@ -13479,3 +13479,114 @@ question for `UU`.
 And unlike `U`, a menu row is not a cycle. You chose it deliberately and it says what it
 does, so choosing it twice does not shut what it just opened.
 
+
+## 43. Hosting somebody else's audio effect, in plain terms
+
+A compressor, an equaliser, a reverb: the ones people already own are not Lumit's, they are
+separate pieces of software written by other people and installed on the machine. Lumit is
+learning to run them. This section is about the first half of that — finding one, loading
+it, and getting sound through it — because the second half, putting the result into the
+mix, comes later.
+
+### What a plugin actually is
+
+Two standards matter. **CLAP** is the newer one, and it is free for anyone to use. **VST3**
+is Steinberg's, and it is available to Lumit under its open-source licence. Lumit is doing
+CLAP first, for one reason that decides everything: a CLAP plugin is a plain library file
+with **one** agreed-on thing inside it, and everything beyond that is negotiated. The host
+asks "do you have parameters?", "do you have saveable settings?", "do you know how far
+behind you run?", and a plugin that says no to one of those still works — it just does
+less. That means a host can be *finished* while implementing five of those conversations,
+rather than *partial*. The five Lumit speaks are: what sound do you want, what knobs do you
+have, save and restore yourself, how far behind do you run, and is this a preview or an
+export.
+
+### The five steps, and where each one lives
+
+**Find it.** There are two folders on Windows that every CLAP installer writes into — one
+shared, one per-user — plus whatever an environment variable adds. Lumit reads them, sorted,
+so the same machine offers the same list in the same order every time.
+
+**Open it.** A `.clap` file is a library, and opening a library means running the code in
+it. There is no safe way to do that; the answer is not care but distance, and the distance
+(running plugins in a separate program of their own) is the next package. For now the
+plugin is loaded into Lumit, which is fine for tests and is honestly written down as not
+the shipping arrangement.
+
+**Ask what it is.** A plugin will not answer questions about its knobs until it has been
+*made*, so describing one means making one, asking, and throwing it away. Three answers get
+a plugin politely turned away, each as one line in a report rather than a dialogue box: it
+has no sound input at all (that is an instrument, not an effect), its input or output is not
+two channels, or it will not say what it wants. Turning one away never costs the others in
+the same file.
+
+**Turn its knobs into Lumit's.** This is the part that makes a plugin feel native. Every
+control the plugin declares becomes an ordinary Lumit property — the same kind of row a
+built-in blur's Radius is — so it keyframes, it takes an expression, it can be driven by a
+wire from the node graph, and it sits in the Timeline with everything else. There is no
+second kind of control and no separate audio-effects panel: an audio plugin is an entry in
+the layer's ordinary effect stack, which is why the drawing that decided this says *the
+stack is the rack*.
+
+One small ugliness is deliberate and worth explaining, because it is the kind of thing that
+looks like a mistake. A plugin's control is named in Lumit by a number rather than by its
+label: the Gain knob becomes a row called `p1`. That is because the *label* is not
+something a plugin promises to keep. Vendors rename knobs between versions. The number is
+the thing they promise never to change. If Lumit stored your keyframes under the name, then
+the day a vendor decided "Dry/wet" should read "Mix", every project that automated it would
+open with the automation gone and nothing to explain why. So the file stores the number, and
+the label you see on screen is whatever the plugin currently calls it.
+
+### Sound goes through in small fixed pieces
+
+Plugins do not take a whole song. They take a short run of samples and hand back the same
+length, processed. Lumit's run is **512 samples at 48,000 a second** — about eleven
+milliseconds — and it never varies. It never varying is what makes two exports of the same
+project come out identical: where a piece begins is a fact about the layer, not about where
+the playhead happened to be when you pressed play.
+
+Two shapes of the same sound meet at the boundary. Lumit carries stereo the way files and
+sound cards do — left, right, left, right, alternating. Both plugin standards want the
+opposite: all the lefts in one list, all the rights in another. So sound is unzipped on the
+way in and zipped back up on the way out, into buffers built once when the plugin opens and
+never grown after. The input and the output are always two separate buffers, never one
+reused, because plugins are allowed to say they can work in one buffer and that claim is
+where their bugs live.
+
+There is also a small piece of processor housekeeping. Numbers extremely close to zero — the
+tail of a reverb fading out — are handled by a special slow path in the processor, sometimes
+a hundred times slower than ordinary arithmetic, and a reverb generates thousands of them.
+Both standards assume the host has switched that behaviour off before calling, so Lumit
+switches it off around every piece of sound and puts it back afterwards. It is two
+instructions, and skipping it is the classic mystery slowdown nobody can find.
+
+### The order is the whole thing
+
+More than anything else, hosting a plugin is doing things in the right order. Wrong order,
+and plugins that are perfectly well written break. So Lumit's order is written down in one
+place as a list, and the test plugin that ships with the repository **records every call it
+receives** and compares the recording against that list, word for word:
+
+make it → start it → hand it its saved settings → set the project's values over the top →
+switch it on → begin playing → sound, sound, sound → stop playing → switch it off →
+destroy it.
+
+Two of those are easy to get backwards. The saved settings go in while the plugin is
+switched *off*, because a plugin reads its own knob ranges out of them and doing that
+mid-stream is undefined. And the project's values go in **after** the saved settings, not
+before — a saved blob is last year's answer and your keyframes are this year's. Load them
+the other way round and a keyframed cutoff silently reverts to whatever a preset had, with
+nothing on screen to say so.
+
+### The test plugin
+
+A host cannot be tested against nothing, and it should not be tested only against somebody
+else's plugin: a commercial one cannot be shipped in a repository, and a free one changes
+underneath the tests. So Lumit ships eight tiny plugins of its own, in one file, each of
+which is a genuinely valid CLAP plugin doing one awkward thing: one multiplies by a number
+so the sound can be checked sample for sample, one writes down every call the host made,
+one claims to run behind, one dies partway through, one never returns, one hands back
+whatever settings it was given, one writes down the automation it received, and one has no
+sound input so it gets turned away. The two dangerous ones are disarmed unless an
+environment variable arms them, because a plugin that hangs while being *described* would
+hang the scan that describes it.

@@ -21570,3 +21570,46 @@ magnet engaging inside its slop and not outside it, the two axes deciding separa
 making/moving/deleting a guide by drag, and the session's JSON round trip;
 `viewer_panel_frb_test.dart` — the rulers insetting the picture and a guide dragged out of
 the strip riding the comp's session; `menu_rows_frb_test.dart` — the three View rows.
+## K-692 — A plugin parameter's row is named by the plugin's own id, and the CLAP host is a crate of its own
+
+**Status: DECIDED (2026-08-30, AP1 — the CLAP host core).** Binding note:
+[impl/audio-plugins.md](impl/audio-plugins.md) §1, §4, §7; spec pointer:
+[12-PLUGINS.md](12-PLUGINS.md) §4a. Implements K-683; reverses nothing.
+
+**The row id is `p` and the plugin's own stable parameter number.** CLAP's persistent key
+for a parameter is a `u32`, not a name (§4: "the stable parameter id is the key, never the
+index"), so `schema_of` mints `p1234` for parameter 1234 and that string is what a `.lum`
+stores, what an expression addresses, and what `ParamId` hashes. The obvious alternative —
+sanitising the parameter's *name* into a snake_case id, the way the OFX host uses the OFX
+parameter name — is wrong here for a reason that only shows up later: OFX's name **is** its
+stable key, and CLAP's is not. A vendor rewording "Dry/wet" to "Mix" would silently orphan
+every keyframe on that row in every saved project. Ugly and stable beats readable and
+lossy. VST3 mints the same shape from its `ParamID` when AP4 lands, which is what keeps one
+`AudioEffectDef` honest.
+
+**Latency is an active-state question.** CLAP marks `latency.get` `[main-thread &
+active_state]`, and a describe never activates, so `PluginDescriptor` records
+`reports_latency: bool` and the number is read off the live instance after
+`start_processing`. `HOST_ACTIONS` pins that position.
+
+**The crates are `lumit-aplug` and `lumit-aplug-testplug`**, mirroring `lumit-ofx` /
+`lumit-ofx-testplug` — the architecture reused, the code not shared (§5). `clap-sys`
+(MIT/Apache-2.0) supplies the declarations rather than a hand-written binding: the headers
+move, and a second copy of somebody else's ABI is a second thing to get wrong. AP1 ships
+the `LocalHost` driver only; the plugin runs in this process, which is **not** the shipping
+arrangement (docs/12 §1) — AP2's broker is, and the `AudioHost` seam exists now so nothing
+above it changes when it arrives.
+
+Three mapping choices, recorded so they are not re-derived: a CLAP parameter's closed
+`min`…`max` is a `ParamKind::Slider` (a Float would offer a box to type a number the plugin
+will clamp); every row is `Unit::Raw`, because CLAP carries no unit metadata at all and a
+wrong unit rider is worse than none; and the effect's category is `FxCategory::Utility`
+until AP5 lands the audio category, rather than growing a catalogue variant for a menu
+nothing yet lists.
+
+Pinned in `lumit-aplug`'s `the_order_of_actions_is_the_one_written_down` (the plugin's own
+recording of every host call, compared against `HOST_ACTIONS` verbatim),
+`a_gain_plugin_multiplies_every_sample_exactly`, `a_state_blob_round_trips_byte_identical`,
+`properties_win_over_a_stale_state`, `a_param_sweep_arrives_as_sorted_per_block_events`,
+`only_automatable_visible_parameters_become_rows` and
+`an_instrument_is_refused_with_a_reason`.

@@ -470,6 +470,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
+
+[[package]]
 name = "clap_builder"
 version = "4.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1560,6 +1566,25 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+
+[[package]]
+name = "lumit-aplug"
+version = "0.2.0"
+dependencies = [
+ "clap-sys",
+ "libloading",
+ "lumit-aplug-testplug",
+ "lumit-core",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "lumit-aplug-testplug"
+version = "0.2.0"
+dependencies = [
+ "clap-sys",
+]
 
 [[package]]
 name = "lumit-audio"

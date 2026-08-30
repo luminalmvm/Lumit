@@ -1,0 +1,359 @@
+//! A described plugin, as an entry in the effect catalogue, and the driver
+//! that actually plays sound through it.
+//!
+//! # In plain terms
+//!
+//! [`schema`](crate::schema) wrote a plugin's *declaration* in Lumit's words;
+//! this writes its *behaviour*. Two halves, and they are deliberately apart:
+//!
+//! * [`AudioEffectDef`] is the catalogue entry — one value implementing the
+//!   same [`EffectDef`] trait every built-in implements (K-593), so nothing
+//!   downstream can tell an EQ plugin from a Gaussian blur except by what it
+//!   does. **Both plugin standards collapse into this one type**: when VST3
+//!   arrives (AP4) it mints the same declaration and nothing after describe
+//!   changes.
+//! * [`AudioHost`] is where the sound goes. One method per thing the chain
+//!   worker needs — a block, the latency, the blob to save — and two
+//!   implementations behind it: [`LocalHost`], which loads the plugin into this
+//!   process and is for tests, and the broker host AP2 lands, which is what
+//!   ships. The seam exists now so that the shipping one drops in without
+//!   anything above it noticing (the OFX lesson, K-589).
+//!
+//! # Why the lock is not a lock across FFI
+//!
+//! [`LocalHost`] keeps its instance behind a mutex because a `&self` method has
+//! to reach a plugin that CLAP insists is single-threaded. That mutex is held
+//! across a call into somebody else's code, which docs/14 §7 forbids **where
+//! the plugin can call back and want the same lock**. It cannot: the only host
+//! functions a CLAP plugin can reach from inside `process` are the three
+//! request flags, and those are atomics
+//! ([`HostFlags`](crate::instance::HostFlags)) that take nothing. The host
+//! offers no extensions at all in v1, so there is no second door.
+//!
+//! It is also uncontended by construction — one instance is processed by one
+//! chain worker, and parallelism is across layers
+//! (docs/impl/audio-plugins.md §5).
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
+
+use lumit_core::fx::{EffectDef, EffectSchema, ParamId};
+
+use crate::describe::PluginDescriptor;
+use crate::instance::{HostError, Instance};
+use crate::module::Module;
+use crate::process::{Block, ParamEvent, INTERLEAVED_LEN};
+use crate::schema::{value_routes, ValueRoute};
+
+/// What one live plugin is brought up with.
+///
+/// The **order** these are applied in is the whole point of the struct, and it
+/// is the one in [`crate::HOST_ACTIONS`]: the state first, because it is the
+/// plugin's own memory of itself, then the parameters, because they are the
+/// project's — **properties win over stale state**
+/// (docs/impl/audio-plugins.md §4).
+#[derive(Clone, Debug, Default)]
+pub struct InstanceSetup {
+    /// Which plugin inside the module.
+    pub plugin_id: String,
+    /// The blob the `.lum` saved, if this instance has been here before.
+    pub state: Option<Vec<u8>>,
+    /// The values the project holds, by the plugin's own stable parameter id.
+    pub params: Vec<(u32, f64)>,
+    /// Whether this is an export. Offline means no deadline and the plugin may
+    /// take its slower, better path (§3).
+    pub offline: bool,
+}
+
+/// Where an audio plugin's blocks actually come from.
+///
+/// **Never called with any lock held**, and never from a rebuild path: a block
+/// may block on somebody else's code.
+pub trait AudioHost: Send + Sync {
+    /// One block. `input` and `output` are Lumit's **interleaved** stereo,
+    /// [`INTERLEAVED_LEN`] samples each; the de-interleaving happens inside.
+    ///
+    /// `events` need not be sorted — the boundary sorts them, because CLAP
+    /// calls an unsorted list undefined and real plugins crash on one.
+    /// `steady` is the running frame count since the chain started.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the plugin refused. A caller turns that into one dry block and
+    /// a strike (§3), never into a stopped mix.
+    fn process(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        events: &[ParamEvent],
+        steady: i64,
+    ) -> Result<(), HostError>;
+
+    /// The latency the plugin reports, in samples.
+    fn latency(&self) -> u32;
+
+    /// The blob to write into the `.lum`. Never parsed, always round-tripped.
+    ///
+    /// # Errors
+    ///
+    /// [`HostError::NoExtension`] for a plugin that saves nothing, which is a
+    /// perfectly ordinary plugin.
+    fn save(&self) -> Result<Vec<u8>, HostError>;
+}
+
+/// A plugin loaded into **this** process.
+///
+/// For tests, and for anything Lumit itself ships. The shipping arrangement for
+/// third-party code is the broker (AP2): a plugin that dies must cost one block
+/// rather than the session, and no amount of care in this file achieves that.
+pub struct LocalHost {
+    running: Mutex<Running>,
+    latency: u32,
+    warning: Option<String>,
+}
+
+/// The plugin and its scratch, together because a block needs both.
+struct Running {
+    instance: Instance,
+    block: Block,
+}
+
+impl LocalHost {
+    /// Bring one plugin up, in the order [`crate::HOST_ACTIONS`] pins.
+    ///
+    /// # Errors
+    ///
+    /// The plugin refused to be created, to initialise, to activate, or to
+    /// start processing. A refused **state blob** or a plugin with no
+    /// parameters at all is not an error: it degrades to a
+    /// [`LocalHost::warning`] and the plugin still plays, which is CLAP's whole
+    /// design and docs/12 §1's rule about losing nothing.
+    pub fn open(module: Arc<Module>, setup: &InstanceSetup) -> Result<Self, HostError> {
+        let mut instance = Instance::create(module, &setup.plugin_id)?;
+        let mut warning = None;
+
+        if let Some(bytes) = &setup.state {
+            if let Err(error) = instance.load_state(bytes) {
+                warning = Some(error.to_string());
+            }
+        }
+
+        let events: Vec<ParamEvent> = setup
+            .params
+            .iter()
+            .map(|(id, value)| ParamEvent {
+                time: 0,
+                id: *id,
+                value: *value,
+            })
+            .collect();
+        if !events.is_empty() {
+            if let Err(error) = instance.flush_params(&events) {
+                warning = Some(error.to_string());
+            }
+        }
+
+        if setup.offline {
+            instance.set_offline(true);
+        }
+
+        instance.activate()?;
+        instance.start_processing()?;
+        let latency = instance.latency();
+
+        Ok(Self {
+            running: Mutex::new(Running {
+                instance,
+                block: Block::new(),
+            }),
+            latency,
+            warning,
+        })
+    }
+
+    /// What went wrong bringing this plugin up that did not stop it coming up.
+    ///
+    /// Read as a **key** by the seam that badges the layer, never shown
+    /// verbatim.
+    #[must_use]
+    pub fn warning(&self) -> Option<&str> {
+        self.warning.as_deref()
+    }
+
+    /// The three flags the plugin has raised since it was created.
+    ///
+    /// `restart` is how CLAP says "my latency changed"; AP3's chain worker acts
+    /// on it by re-activating and re-placing.
+    #[must_use]
+    pub fn wants_restart(&self) -> bool {
+        self.with(|running| {
+            running
+                .instance
+                .host_flags()
+                .restart
+                .load(std::sync::atomic::Ordering::Relaxed)
+        })
+    }
+
+    /// Run `body` with the instance in hand.
+    fn with<T>(&self, body: impl FnOnce(&mut Running) -> T) -> T {
+        let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
+        body(&mut running)
+    }
+}
+
+impl AudioHost for LocalHost {
+    fn process(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        events: &[ParamEvent],
+        steady: i64,
+    ) -> Result<(), HostError> {
+        self.with(|running| {
+            running.block.load(input);
+            running.block.set_events(events);
+            running.instance.process(&mut running.block, steady)?;
+            running.block.store(output);
+            Ok(())
+        })
+    }
+
+    fn latency(&self) -> u32 {
+        self.latency
+    }
+
+    fn save(&self) -> Result<Vec<u8>, HostError> {
+        // Saving is a main-thread call that CLAP forbids while processing
+        // (§9), so the plugin steps out of the stream and back into it. Once
+        // per project save, never per block.
+        self.with(|running| {
+            running.instance.stop_processing();
+            let saved = running.instance.save_state();
+            let restarted = running.instance.start_processing();
+            match (saved, restarted) {
+                (Ok(bytes), Ok(())) => Ok(bytes),
+                (Ok(bytes), Err(_)) => Ok(bytes),
+                (Err(error), _) => Err(error),
+            }
+        })
+    }
+}
+
+/// The length of the interleaved buffers [`AudioHost::process`] takes.
+pub const BLOCK_SAMPLES: usize = INTERLEAVED_LEN;
+
+/// An audio plugin, as an entry in the effect catalogue (K-593).
+///
+/// One type for both standards: CLAP fills it today, VST3 fills the same one in
+/// AP4, and nothing downstream of describe knows which standard a plugin
+/// speaks.
+pub struct AudioEffectDef {
+    schema: &'static EffectSchema,
+    routes: Vec<ValueRoute>,
+    defaults: Vec<(u32, f64)>,
+    module: PathBuf,
+    plugin_id: String,
+}
+
+impl AudioEffectDef {
+    /// Build the definition for one described plugin.
+    ///
+    /// `schema` is the leaked declaration [`crate::schema::schema_of`] made
+    /// from the same descriptor; the two are passed separately rather than
+    /// derived here because the scan already has the schema in hand and leaking
+    /// a second copy of it would be a second answer to the same question.
+    #[must_use]
+    pub fn new(
+        descriptor: &PluginDescriptor,
+        schema: &'static EffectSchema,
+        module: &Path,
+    ) -> Self {
+        Self {
+            schema,
+            routes: value_routes(descriptor),
+            defaults: descriptor.defaults(),
+            module: module.to_path_buf(),
+            plugin_id: descriptor.id.clone(),
+        }
+    }
+
+    /// Give this definition the `'static` lifetime the catalogue holds.
+    ///
+    /// The leak is the honest spelling of that lifetime: an effect discovered
+    /// at scan time lives as long as the session. Registering it is the
+    /// caller's next move and is deliberately not done here — the catalogue
+    /// entry and the mix seam have to arrive together (AP3), and a definition
+    /// that registered itself would make half of that pair happen out of the
+    /// composition root's sight.
+    #[must_use]
+    pub fn leak(self) -> &'static dyn EffectDef {
+        Box::leak(Box::new(self))
+    }
+
+    /// Every row's route back to the plugin's own parameter id.
+    #[must_use]
+    pub fn routes(&self) -> &[ValueRoute] {
+        &self.routes
+    }
+
+    /// The plugin parameter one schema row addresses.
+    #[must_use]
+    pub fn clap_id(&self, row: ParamId) -> Option<u32> {
+        self.routes
+            .iter()
+            .find(|route| route.id == row)
+            .map(|route| route.param)
+    }
+
+    /// What a fresh instance of this effect holds, by plugin parameter id.
+    #[must_use]
+    pub fn defaults(&self) -> &[(u32, f64)] {
+        &self.defaults
+    }
+
+    /// The `.clap` file this came out of.
+    #[must_use]
+    pub fn module(&self) -> &Path {
+        &self.module
+    }
+
+    /// The plugin's own id inside that file.
+    #[must_use]
+    pub fn plugin_id(&self) -> &str {
+        &self.plugin_id
+    }
+
+    /// The setup that opens this effect with the values given, by row.
+    #[must_use]
+    pub fn setup(&self, state: Option<Vec<u8>>, values: &[(ParamId, f64)]) -> InstanceSetup {
+        let mut params = self.defaults.clone();
+        for (row, value) in values {
+            if let Some(id) = self.clap_id(*row) {
+                if let Some(slot) = params.iter_mut().find(|(known, _)| *known == id) {
+                    slot.1 = *value;
+                } else {
+                    params.push((id, *value));
+                }
+            }
+        }
+        InstanceSetup {
+            plugin_id: self.plugin_id.clone(),
+            state,
+            params,
+            offline: false,
+        }
+    }
+}
+
+impl EffectDef for AudioEffectDef {
+    fn schema(&self) -> &'static EffectSchema {
+        self.schema
+    }
+
+    /// An audio effect touches no picture at all, so the render path skips it
+    /// and the registry-agreement test excuses it from needing a GPU entry.
+    fn is_image_op(&self) -> bool {
+        false
+    }
+}

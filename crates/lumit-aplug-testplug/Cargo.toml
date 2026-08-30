@@ -1,0 +1,29 @@
+[package]
+name = "lumit-aplug-testplug"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+# `cdylib` is what a CLAP host loads — a `.clap` is a plain DLL exporting one
+# symbol. `rlib` exists only so `lumit-aplug` can name this package as a
+# dev-dependency and have Cargo build the cdylib before its tests run; the
+# tests never call into the rlib, because the statics that record what the
+# host did live in the loaded copy, not in this one.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The C declarations, so the plugin side and the host side cannot drift.
+clap-sys = "0.5"
+
+# A plugin is the other side of a C ABI; same override as the host crate.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"

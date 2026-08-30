@@ -1,0 +1,44 @@
+[package]
+name = "lumit-aplug"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The effect declaration a described plugin becomes. An audio plugin is an
+# entry in the layer's ordinary effect stack — "the stack is the rack"
+# (docs/impl/audio-plugins.md §2) — so its rows are the same schema rows a
+# built-in declares. The edge runs one way only: nothing in the engine depends
+# on the plugin host.
+lumit-core = { path = "../lumit-core" }
+# The CLAP C declarations, MIT/Apache-2.0. A hand-written binding would be a
+# second copy of somebody else's headers, and the headers move (1.2.2 today).
+clap-sys = "0.5"
+# A `.clap` is a plain DLL/dylib opened at run time; libloading is the portable
+# `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
+libloading = "0.8"
+thiserror = "2"
+
+[dev-dependencies]
+# The minimal CLAP plugin the host is tested against. Declared here so a plain
+# `cargo test -p lumit-aplug` builds the cdylib the tests load.
+lumit-aplug-testplug = { path = "../lumit-aplug-testplug" }
+tempfile = "3"
+
+# The plugin hosts cannot inherit the workspace's `unsafe_code = "deny"`: the
+# CLAP API is a C ABI of raw pointers and function tables, which is unsafe by
+# construction (docs/14 §7 permits it here and requires the SAFETY comments and
+# layout tests that go with it). The clippy denies from the workspace are kept,
+# so no-panic/no-unwrap discipline still holds.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints.rust]
+unsafe_code = "allow"
