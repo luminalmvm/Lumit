@@ -26,6 +26,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -372,7 +373,16 @@ Future<void> main() async {
   // ruler carrying forty flags cannot show a comp marker as a different thing.
   var beats = 0;
   for (final sensitivity in [50, 30, 18, 10, 5]) {
-    beats = await comp.detectBeats(sensitivityPercent: sensitivity);
+    final found = await comp.detectBeats(
+        options: BridgeBeatOptions(
+      sourceLayer: '',
+      sensitivityPercent: sensitivity,
+      workAreaOnly: false,
+      minSpacingMs: 0,
+      bpmOverride: 0,
+      phaseMs: 0,
+    ));
+    beats = found.placed;
     // ignore: avoid_print
     print('BEATS $beats at $sensitivity');
     if (beats <= 14) break;
