@@ -335,9 +335,7 @@ pub fn hash64(bytes: &[u8]) -> u64 {
 /// profile; the fix is an owned mirror of `ParamSchema`, which is why it was not
 /// done first.
 pub fn program_for(source: &str) -> Result<&'static ShaderProgram, ShaderRefusal> {
-    static CACHE: OnceLock<RwLock<HashMap<u64, Result<&'static ShaderProgram, ShaderRefusal>>>> =
-        OnceLock::new();
-    let cache = CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+    let cache = cache();
     let key = hash64(source.as_bytes());
     if let Ok(map) = cache.read() {
         if let Some(hit) = map.get(&key) {
@@ -349,6 +347,34 @@ pub fn program_for(source: &str) -> Result<&'static ShaderProgram, ShaderRefusal
         map.insert(key, built.clone());
     }
     built
+}
+
+/// Every source this session has read, by its hash. Written once per distinct
+/// text and read on every frame that draws one.
+type ProgramCache = RwLock<HashMap<u64, Result<&'static ShaderProgram, ShaderRefusal>>>;
+
+fn cache() -> &'static ProgramCache {
+    static CACHE: OnceLock<ProgramCache> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// The program **already read** under this source hash, or `None`.
+///
+/// How the assembled text reaches the GPU pass without the document following it
+/// there. The resolved bag carries plain numbers by design — it holds nothing
+/// owned and nothing borrowed — so a kilobyte of shader cannot ride in it; what
+/// rides instead is the source's hash, pushed at resolve time
+/// ([`EffectDef::resolve_derived`](crate::fx::EffectDef::resolve_derived)), and
+/// the resolve step is also what put the program in this cache. The two happen in
+/// that order for every frame that draws, so the render side asks by hash and
+/// gets the very text the document says.
+///
+/// `None` is the documented passthrough: an unset shader, a refused one, or —
+/// were the order ever broken — an effect that renders its input unchanged
+/// rather than faulting.
+#[must_use]
+pub fn program_by_hash(source_hash: u64) -> Option<&'static ShaderProgram> {
+    cache().read().ok()?.get(&source_hash)?.clone().ok()
 }
 
 /// Read and wrap one source, without the cache. `program_for` is what callers

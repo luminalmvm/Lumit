@@ -446,6 +446,35 @@ fn feed_effect_stack(
         if !e.sample_temporally {
             h.update(b"no-temporal-sample/");
         }
+        // **The Custom shader's own text** (K-650, custom-shader.md §2.4). The
+        // loop below hashes every stored parameter, which covers a shader's
+        // derived controls for free; what it does not cover is the shader
+        // itself, which lives in `extra` and which this walk has never looked
+        // at. Without this line, editing a shader would change the picture and
+        // not its name, and the Viewer would show a cached frame of the previous
+        // source with no indication anything was wrong — the single most
+        // dangerous sentence in that note.
+        //
+        // The whole block is fed rather than a parse of it. The derived *shape*
+        // the note asks for is a pure function of the source, so the source
+        // covers it; and the block additionally carries the inner graph, which
+        // is master when it is there and which the cached source can drift
+        // from. `origin` is left out for the reason a node's canvas position is:
+        // where a file came from moves no pixel. The map is a `BTreeMap`, so
+        // the walk is in key order on every machine.
+        if let Some(serde_json::Value::Object(shader)) = e.extra.get("shader") {
+            h.update(b"shader/");
+            for (name, value) in shader {
+                if name == "origin" {
+                    continue;
+                }
+                let text = value.to_string();
+                h.update(&(name.len() as u64).to_le_bytes());
+                h.update(name.as_bytes());
+                h.update(&(text.len() as u64).to_le_bytes());
+                h.update(text.as_bytes());
+            }
+        }
         for p in &e.params {
             h.update(p.id.as_bytes());
             use lumit_core::model::EffectValue;
@@ -2431,6 +2460,62 @@ mod tests {
         let mut bypassed = with_plugin.clone();
         bypassed.layers[0].effects[0].enabled = false;
         assert_eq!(base, key(&doc, &bypassed, 1.0));
+    }
+
+    /// The Custom shader's source is content and its origin is not (K-650,
+    /// custom-shader.md §2.4).
+    #[test]
+    fn the_frame_key_changes_with_the_source_and_not_with_where_it_came_from() {
+        use lumit_core::model::EffectInstance;
+        let doc = Document::new();
+        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
+
+        let shader = |source: &str, origin: Option<&str>| {
+            let mut inst: EffectInstance =
+                lumit_core::fx::instantiate("custom_shader").expect("the effect exists");
+            let mut block = serde_json::Map::new();
+            block.insert("language".into(), "wgsl".into());
+            block.insert("source".into(), source.into());
+            if let Some(path) = origin {
+                block.insert("origin".into(), path.into());
+            }
+            inst.extra
+                .insert("shader".into(), serde_json::Value::Object(block));
+            inst
+        };
+        let one = "fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv); }";
+        let two = "fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv) * 2.0; }";
+
+        let mut with_shader = plain.clone();
+        with_shader.layers[0].effects.push(shader(one, None));
+        let base = key(&doc, &with_shader, 1.0);
+
+        // One character of the source, and the frame is a different frame.
+        let mut edited = plain.clone();
+        edited.layers[0].effects.push(shader(two, None));
+        assert_ne!(
+            base,
+            key(&doc, &edited, 1.0),
+            "editing a shader must rename every frame it draws"
+        );
+
+        // Where the text was loaded from is a memory, not a picture.
+        let mut travelled = plain.clone();
+        travelled.layers[0]
+            .effects
+            .push(shader(one, Some("C:/somewhere/warp.wgsl")));
+        assert_eq!(
+            base,
+            key(&doc, &travelled, 1.0),
+            "the origin path moves no pixel"
+        );
+
+        // And an effect with no shader block at all keys as it always did.
+        let mut empty = plain.clone();
+        empty.layers[0]
+            .effects
+            .push(lumit_core::fx::instantiate("custom_shader").expect("the effect exists"));
+        assert_ne!(base, key(&doc, &empty, 1.0));
     }
 
     /// The effect stack is content (docs/08): adding a live effect changes

@@ -9,7 +9,27 @@ precedent for entering a shader), K-593 (a definition that can fail wears a calm
 K-129/K-065 (`.lumfx` preset files), K-031 (preview equals export).
 **Feeds:** [08-EFFECTS.md](../08-EFFECTS.md), [12-PLUGINS.md](../12-PLUGINS.md),
 [06-RENDER-PIPELINE.md](../06-RENDER-PIPELINE.md).
-**Status: design only. Nothing here is built.** No code lands with this note.
+**Status: CS1's engine half is built** (K-650, 2026-08-30) — the catalogue entry, the §1.4
+grammar and its derived rows, the §1.3 assembler, naga validation and the §2.2 refusals, the
+§2.3 NaN epilogue, the source-hash pipeline cache and the §3.2 last-good rule, and the §2.4
+frame-key term. CS2 (the bridge), CS3 (the editor surface), CS4 (the inner graph) and CS5
+(entry) are not. Four things K-650 settled where this note left a choice open, and which the
+rest of the note should be read against:
+
+- **The derived rows are `&'static [ParamSchema]`** from a session-lived parse cache keyed by
+  the source hash, not owned records. §1.5's four rules are unchanged; what changed is that
+  the rows go through the *existing* resolve loop rather than a second one.
+- **The frame key folds the whole `extra.shader` block minus `origin`**, which covers §2.4's
+  two terms with one and no parse. The source hash additionally rides in the resolved bag
+  (pushed by `resolve_derived`), which is also how the assembled text reaches the GPU pass —
+  and which puts the source in the K-421 per-effect cache key for free.
+- **The prologue, the epilogue and the assembler live in `lumit-core/src/fx/shader/`**, not in
+  `lumit-gpu`: the generated `Params` struct is a product of the parse, and `lumit-gpu` only
+  dev-depends on `lumit-core`. An empty `Params` gets one placeholder member, WGSL having no
+  empty struct.
+- **The compile is synchronous** and §3.2's coalesced worker job is not built; there is no
+  editor to feed it yet. The half that could not be added later is: the last-good fallback is
+  off unless an interactive renderer turns it on, so export and headless never fall back.
 
 ## In plain terms
 

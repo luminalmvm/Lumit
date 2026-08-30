@@ -75,6 +75,14 @@ pub enum AuxKind {
 pub struct AuxSlot<'a> {
     data: AuxData<'a>,
     matte: Option<&'a Tex>,
+    /// This op's matte **whatever its role** — including the generic strength
+    /// one, whose texture is spent in the dissolve beside the dispatch and so
+    /// never reaches a kernel (K-395). One effect wants it anyway: the Custom
+    /// shader binds it, because a shader that wants to read its matte should be
+    /// able to. It does not get to switch the dissolve off; a shader that reads
+    /// the matte *and* is dissolved by it applies it twice, which is the user's
+    /// own arithmetic, visible in their own code.
+    matte_all: Option<&'a Tex>,
     layer: Option<&'a Tex>,
     paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
@@ -122,6 +130,7 @@ impl<'a> AuxSlot<'a> {
     pub fn new(
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
+        matte_all: Option<&'a Tex>,
         layer: Option<&'a Tex>,
         paths: &'a [lumit_core::mask::MaskPolyline],
         schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
@@ -131,6 +140,7 @@ impl<'a> AuxSlot<'a> {
         Self {
             data,
             matte,
+            matte_all,
             layer,
             paths,
             schedule,
@@ -213,6 +223,12 @@ impl<'a> AuxSlot<'a> {
     /// always took.
     pub fn matte(self) -> Option<&'a Tex> {
         self.matte
+    }
+
+    /// This op's matte **whatever its role** — see [`AuxSlot::matte_all`]. Every
+    /// effect but the Custom shader reads [`AuxSlot::matte`] instead, and should.
+    pub fn matte_whatever_its_role(self) -> Option<&'a Tex> {
+        self.matte_all
     }
 
     /// This op's cube. `None` for a missing slot *and* for a slot of the wrong
@@ -307,6 +323,7 @@ pub trait GpuEffect: Sync + 'static {
 /// menu reads the catalogue, not this), so it follows the catalogue's for the
 /// benefit of anyone reading the two side by side.
 static GPU_EFFECTS: &[&dyn GpuEffect] = &[
+    &CustomShader,
     &Blur,
     &DirectionalBlur,
     &RadialBlur,
@@ -673,6 +690,136 @@ impl GpuEffect for SpriteFlare {
                 streak_angle_deg: s.streak_angle_deg,
                 mix: s.mix,
             },
+        )
+    }
+}
+
+/// Custom shader (docs/08 §3.95, docs/impl/custom-shader.md, K-650): the one
+/// effect whose kernel arrives with the document rather than with the build.
+///
+/// Everything unusual about it has already happened by the time this wrapper
+/// runs. `lumit-core` read the user's text, wrapped it, and put the result in
+/// its own cache; the resolve walk pushed the source's hash into the bag, which
+/// is how a page of text reaches a place that carries only numbers. What is left
+/// is what every other wrapper does: read the bag, fill the buffers, ask the
+/// engine.
+struct CustomShader;
+
+impl CustomShader {
+    /// The `ShaderHeader` bytes for one op — the *entire* source of variation a
+    /// shader has (§2.3), because WGSL itself has no clock and no random-number
+    /// generator.
+    #[allow(clippy::too_many_arguments)]
+    fn header(
+        w: u32,
+        h: u32,
+        comp_scale: f32,
+        lt: f64,
+        seed: u32,
+        mix: f32,
+        matte_on: bool,
+        input2_on: bool,
+    ) -> Vec<u8> {
+        let head = lumit_core::fx::shader::ShaderHeader {
+            roi_offset: [0, 0],
+            roi_size: [w, h],
+            comp_scale,
+            time: lt as f32,
+            seed,
+            mix_amt: mix,
+            matte_on: f32::from(u8::from(matte_on)),
+            input2_on: f32::from(u8::from(input2_on)),
+            _pad0: 0,
+            _pad1: 0,
+        };
+        // Field by field rather than `bytes_of`: the header has padding, and a
+        // byte of uninitialised memory in a uniform is the kind of difference
+        // that reproduces on one machine only.
+        let mut out = Vec::with_capacity(lumit_core::fx::shader::HEADER_SIZE);
+        for v in [
+            head.roi_offset[0],
+            head.roi_offset[1],
+            head.roi_size[0],
+            head.roi_size[1],
+        ] {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        out.extend_from_slice(&head.comp_scale.to_le_bytes());
+        out.extend_from_slice(&head.time.to_le_bytes());
+        out.extend_from_slice(&head.seed.to_le_bytes());
+        out.extend_from_slice(&head.mix_amt.to_le_bytes());
+        out.extend_from_slice(&head.matte_on.to_le_bytes());
+        out.extend_from_slice(&head.input2_on.to_le_bytes());
+        out.extend_from_slice(&head._pad0.to_le_bytes());
+        out.extend_from_slice(&head._pad1.to_le_bytes());
+        out
+    }
+}
+
+impl GpuEffect for CustomShader {
+    fn match_name(&self) -> &'static str {
+        "custom_shader"
+    }
+
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::custom_shader as cs;
+        // No source, a refused one, or a walk that somehow drew before it
+        // resolved: the identity passthrough, which is exactly what a fresh
+        // instance renders. Never a fault (14-ENGINEERING-RULES §4).
+        let Some(program) = cs::hash_in(p).and_then(lumit_core::fx::shader::program_by_hash) else {
+            return tex.clone();
+        };
+        let (instance, lt) = aux.op();
+        let (pipeline, _stale) = match fx.shader_pipeline(
+            ctx,
+            instance.as_u128(),
+            program.source_hash,
+            &program.assembled,
+        ) {
+            Ok(ok) => ok,
+            // A shader that will not compile renders its input unchanged,
+            // with the compiler's own sentence remapped to the user's own
+            // lines. The badge that shows it is the panel's business; this
+            // side's job is to keep the composition moving.
+            Err(_why) => return tex.clone(),
+        };
+        // The instance's own seed (§2.3): constant for the life of that
+        // instance, and deliberately not a frame counter — a value that changed
+        // per frame would make two renders of one frame disagree and would put a
+        // different picture behind a cache key that had not moved.
+        let seed = (instance.as_u128() as u64 ^ (instance.as_u128() >> 64) as u64) as u32;
+        let matte = aux.matte_whatever_its_role();
+        let layer_input = aux.layer_input();
+        let header = Self::header(
+            w,
+            h,
+            p.float(cs::COMP_SCALE, 1.0),
+            lt,
+            seed,
+            (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0),
+            matte.is_some(),
+            layer_input.is_some(),
+        );
+        fx.custom_shader(
+            ctx,
+            &pipeline,
+            tex,
+            tex,
+            matte,
+            layer_input,
+            w,
+            h,
+            &header,
+            &program.pack(p),
         )
     }
 }

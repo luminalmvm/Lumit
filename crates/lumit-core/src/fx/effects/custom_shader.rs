@@ -27,12 +27,24 @@
 //! degradation ladder's CPU rung renders a Custom shader as a passthrough —
 //! exactly what an unset one renders anyway.
 
-use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamSchema};
+use crate::fx::{EffectDef, EffectMetadata, EffectSchema, ParamId, ParamSchema, ResolveCx, Value};
 use crate::model::EffectInstance;
 use lumit_fx_macros::Effect;
 
 /// The `extra` key the shader block lives under (§1.2).
 pub const EXTRA_KEY: &str = "shader";
+
+/// The top half of this instance's source hash, pushed into the bag at resolve
+/// time — how the render side finds the assembled text (see
+/// [`crate::fx::shader::program_by_hash`]).
+pub const HASH_HI: ParamId = ParamId::new("derived.shader_hash_hi");
+
+/// The bottom half of it.
+pub const HASH_LO: ParamId = ParamId::new("derived.shader_hash_lo");
+
+/// Raster pixels per px@comp at this frame — the header's `comp_scale`, which
+/// nothing downstream of the resolve otherwise knows.
+pub const COMP_SCALE: ParamId = ParamId::new("derived.shader_comp_scale");
 
 /// The Custom shader's declared controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -125,4 +137,36 @@ impl EffectDef for CustomShaderDef {
     fn derived(&self, inst: &EffectInstance) -> &'static [ParamSchema] {
         program_of(inst).map_or(&[], |p| p.params)
     }
+
+    /// Two things the render side cannot work out for itself (§2.4a's hook, put
+    /// to the use it was written for).
+    ///
+    /// **Which shader this is**, as the hash of its source. The bag carries plain
+    /// numbers by design — nothing owned, nothing borrowed — so a page of text
+    /// cannot ride in it; the hash can, and the render asks
+    /// [`crate::fx::shader::program_by_hash`] for the assembled module. The
+    /// resolve walk that pushes this is the same walk that read the source, so
+    /// the program is always there by the time the picture is drawn. It also
+    /// means the source is in the per-effect cache key for free, since that key
+    /// is the bag: editing a shader renames its intermediate as well as its
+    /// frame.
+    ///
+    /// **The preview factor**, which the header hands the shader as
+    /// `comp_scale` so a distance can be written in px@comp and be right at every
+    /// resolution.
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
+        let hash = program_of(cx.inst).map_or(0, |p| p.source_hash);
+        push(HASH_HI, Value::Int((hash >> 32) as u32 as i32));
+        push(HASH_LO, Value::Int(hash as u32 as i32));
+        push(COMP_SCALE, Value::Float(cx.px_scale));
+    }
+}
+
+/// The source hash a resolved bag carries, or `None` for an op with no shader.
+#[must_use]
+pub fn hash_in(p: crate::fx::Params<'_>) -> Option<u64> {
+    let hi = p.int(HASH_HI, 0) as u32;
+    let lo = p.int(HASH_LO, 0) as u32;
+    let hash = (u64::from(hi) << 32) | u64::from(lo);
+    (hash != 0).then_some(hash)
 }

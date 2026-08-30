@@ -20292,6 +20292,28 @@ and the bind-group layout are one truth in two crates, which is the "two registr
 truth" trap the registry note already names, and which
 `the_assembled_module_validates` and the round-trip GPU test are the gate for.
 
+**The assembled text reaches the GPU pass by hash, through the bag — no parallel list.** A
+shader is a page of text and the resolved arena carries plain numbers by design: nothing
+owned, nothing borrowed, `Copy` throughout. So the effect's `resolve_derived` pushes the
+source's *hash*, and the render side asks `shader::program_by_hash` for the module the resolve
+walk already read and cached. The alternative was a `Vec<Option<String>>` running beside the
+stack, the way the LUT files and the flare prescriptions do — a field on four draw structs, a
+builder, a threading counter and a slot kind, all to carry something the bag can name in
+sixty-four bits. Two gains beside the smaller diff: the source is then in the **K-421
+per-effect cache key** for free, since that key is the bag, so editing a shader renames its
+intermediate as well as its frame; and the ordering that makes it work — resolve reads the
+source before the draw asks for it — is the ordering every frame already has. A hash the
+cache does not know is the documented passthrough, never a fault.
+
+**The matte is bound for the shader to read, and is still dissolved by the seam.** K-395 splits
+one matte texture two ways so that it is spent exactly once: an effect that claims it gets the
+texture, an effect on the generic strength semantic gets the dissolve instead. The Custom
+shader declares the generic role, as custom-shader.md §1.1 says it should — its schema cannot
+know what an arbitrary program means by "amount" — but §1.3 also binds the matte so a shader
+*may* read it. So `AuxSlot` gained one accessor that answers whatever the role is, used by this
+one effect. A shader that reads the matte and is also dissolved by it applies it twice; that is
+the user's own arithmetic, visible in their own code, and not a seam the host can get wrong.
+
 **An empty `Params` block gets one `_unused` member.** WGSL has no empty struct, so a shader
 that declares no parameters cannot have a literally empty one; the generated text declares a
 sixteen-byte placeholder and the buffer is sixteen bytes. Nothing reads it.

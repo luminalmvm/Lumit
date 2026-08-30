@@ -741,6 +741,24 @@ impl HeadlessRenderer {
             .is_some()
     }
 
+    /// Let a Custom shader that will not compile keep drawing with the last
+    /// pipeline that did (K-650, custom-shader.md §3.2).
+    ///
+    /// **Off unless an interactive surface turns it on**, which is why it is a
+    /// call rather than a default: editing a shader means being syntactically
+    /// broken most of the time, and a Viewer that went black on every keystroke
+    /// would be unusable — but a frame drawn that way is a picture with a badge
+    /// over it, not a fact about the project, so it is shown and discarded. An
+    /// export renderer is a renderer of its own on a device of its own, and
+    /// never calls this: it renders a broken shader as identity and puts the
+    /// error in the log, because an export that silently used yesterday's shader
+    /// would be worse than one that says the shader is broken.
+    pub fn allow_stale_shaders(&self, on: bool) {
+        if let Some(parts) = self.parts.as_ref() {
+            parts.fx.allow_stale_shaders(on);
+        }
+    }
+
     /// The project's colour state, for the seam that reports it.
     #[must_use]
     pub fn colour(&self) -> &crate::colour::ColourState {

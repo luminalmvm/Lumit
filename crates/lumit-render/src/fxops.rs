@@ -700,6 +700,7 @@ pub fn run_ops(
                 AuxSlot::new(
                     data,
                     own_matte,
+                    matte.as_ref(),
                     fitted_layer_input.as_ref(),
                     mask_paths_of_op,
                     schedule,
@@ -1128,6 +1129,99 @@ mod tests {
         let mut c = FxCache::default();
         c.keep_outputs(true);
         std::cell::RefCell::new(c)
+    }
+
+    /// One custom-shader instance holding `source`, resolved as the walk
+    /// resolves it.
+    fn shader_stack(source: &str) -> lumit_core::fx::ResolvedStack {
+        let mut inst = lumit_core::fx::instantiate("custom_shader").expect("a built-in");
+        let mut block = serde_json::Map::new();
+        block.insert("source".into(), source.into());
+        inst.extra
+            .insert("shader".into(), serde_json::Value::Object(block));
+        lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            1000.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        )
+    }
+
+    /// The whole carriage, end to end (K-650): the document holds a shader, the
+    /// resolve walk reads it and puts its name in the bag, and the picture that
+    /// comes out is the one the shader describes — with no parallel list, no new
+    /// aux kind and nothing owned in the arena.
+    #[test]
+    fn a_custom_shader_in_a_stack_draws_what_its_text_says() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let plain = run(&fx, &ctx, &shader_stack(""), &warm_cache(), 7);
+        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("read");
+        assert_eq!(
+            plain, before,
+            "an instance with no program renders its input unchanged"
+        );
+
+        // Half the colour, alpha untouched.
+        let halved = run(
+            &fx,
+            &ctx,
+            &shader_stack(
+                "fn shade(uv: vec2<f32>) -> vec4<f32> {
+                     let c = lumit_sample(uv);
+                     return vec4<f32>(c.rgb * 0.5, c.a);
+                 }
+",
+            ),
+            &warm_cache(),
+            7,
+        );
+        for i in (0..halved.len()).step_by(4) {
+            assert!(
+                (halved[i] - before[i] * 0.5).abs() < 2e-3,
+                "pixel {i}: {} vs {}",
+                halved[i],
+                before[i] * 0.5
+            );
+            assert!((halved[i + 3] - before[i + 3]).abs() < 2e-3);
+        }
+    }
+
+    /// The source is in the per-effect cache key, because it is in the bag
+    /// (K-421, K-650): editing a shader must rename its output, or the walk
+    /// would serve the previous shader's picture out of the intermediate cache
+    /// with nothing to say anything was wrong.
+    #[test]
+    fn editing_a_shaders_source_renames_its_output() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let cache = warm_cache();
+        let half = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                     return vec4<f32>(c.rgb * 0.5, c.a); }";
+        let quarter = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                        return vec4<f32>(c.rgb * 0.25, c.a); }";
+        let first = run(&fx, &ctx, &shader_stack(half), &cache, 7);
+        assert_eq!(cache.borrow().counts(), (1, 0), "a cold walk runs it");
+        let again = run(&fx, &ctx, &shader_stack(half), &cache, 7);
+        assert_eq!(
+            cache.borrow().counts().1,
+            1,
+            "the same source is the same picture, served from the cache"
+        );
+        assert_eq!(first, again);
+        let edited = run(&fx, &ctx, &shader_stack(quarter), &cache, 7);
+        assert_eq!(
+            cache.borrow().counts().1,
+            1,
+            "and an edited one is a miss, not a stale hit"
+        );
+        assert_ne!(first, edited, "which is what makes the picture right");
     }
 
     /// **Editing the last effect re-runs only that one** (K-421) — and the

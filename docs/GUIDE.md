@@ -12899,10 +12899,20 @@ explicitly and the boxes go away.
 keyframed and that get copied around by the thousand every frame, and a page of text is
 neither of those. So it is kept as a piece of extra baggage on the effect — a place the file
 format already has, and already carries through saving, undo, copy/paste and old versions of
-Lumit without any new work. The catch, which is written down in big letters in the note, is
-that this baggage is currently *invisible* to the thing that names cached frames. Left alone,
-editing your shader would change the picture without changing its name, and Lumit would keep
-showing you the old one out of the cache. So the name has to be taught to include it.
+Lumit without any new work. The catch, written down in big letters in the note, is that this
+baggage is invisible by default to the thing that names cached frames: left alone, editing
+your shader would change the picture without changing its name, and Lumit would keep showing
+you the old one out of the cache. So the naming walk reads it too.
+
+That leaves one puzzle, and its answer is worth knowing because it explains a piece of code
+that otherwise looks odd. The list of numbers a frame is rendered from is deliberately tiny
+and plain — numbers only, nothing borrowed, nothing owned — so a page of shader text cannot
+travel in it. What travels instead is the text's **fingerprint**: a single number worked out
+from the characters, which the graphics side uses to look the text up in a shelf both halves
+can reach. The shelf is filled when the frame's numbers are worked out, which always happens
+before anything is drawn, so the lookup always finds what the project actually says. And
+because the fingerprint is one of the numbers, the shader is automatically part of the frame's
+name, which is the catch above answering itself.
 
 **Typing is broken most of the time.** Half-written code does not compile. If the composition
 went black on every keystroke the editor would be unusable, so instead the last version that
