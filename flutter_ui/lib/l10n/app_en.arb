@@ -3878,10 +3878,6 @@
   "@menuCreateShapesFromText": {
     "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer whose picture is the outlines of its letters as editable vector shapes."
   },
-  "menuCropCompToWorkArea": "Crop comp to work area",
-  "@menuCropCompToWorkArea": {
-    "description": "Menu item."
-  },
   "menuCut": "Cut",
   "@menuCut": {
     "description": "Menu item."
@@ -3960,7 +3956,7 @@
   },
   "menuHistory": "History",
   "@menuHistory": {
-    "description": "Menu item."
+    "description": "The Edit menu row that opens the History window, and that window's own title."
   },
   "menuImport": "Import…",
   "@menuImport": {
@@ -4222,7 +4218,7 @@
   },
   "menuTrimCompToWorkArea": "Trim comp to work area",
   "@menuTrimCompToWorkArea": {
-    "description": "Menu item."
+    "description": "The Composition menu row that makes the composition as long as its work area, and the name of that edit in the Edit > History window."
   },
   "menuUndo": "Undo",
   "@menuUndo": {
@@ -9570,7 +9566,7 @@
   },
   "useProxy": "Use proxy",
   "@useProxy": {
-    "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original."
+    "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original. Also names that edit in the Edit > History window."
   },
   "clearProxy": "Clear proxy",
   "@clearProxy": {
@@ -10643,5 +10639,245 @@
   "menuRowTicked": "Ticked",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
+  },
+  "historyOrigin": "Before the first step",
+  "@historyOrigin": {
+    "description": "The first row of the Edit > History window, above every edit: the state the list begins at, before anything on it was done."
+  },
+  "histAddItem": "Add item",
+  "@histAddItem": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histDeleteItem": "Delete item",
+  "@histDeleteItem": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histRelinkFootage": "Relink footage",
+  "@histRelinkFootage": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetProxy": "Set proxy",
+  "@histSetProxy": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histUseProxies": "Use proxies",
+  "@histUseProxies": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histRenameItem": "Rename item",
+  "@histRenameItem": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetItemColour": "Set item colour",
+  "@histSetItemColour": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histAddLayer": "Add layer",
+  "@histAddLayer": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histDeleteLayer": "Delete layer",
+  "@histDeleteLayer": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histMoveLayer": "Move layer",
+  "@histMoveLayer": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histTrimLayer": "Trim layer",
+  "@histTrimLayer": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histRenameLayer": "Rename layer",
+  "@histRenameLayer": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditMasks": "Edit masks",
+  "@histEditMasks": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histPaint": "Paint",
+  "@histPaint": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditShape": "Edit shape",
+  "@histEditShape": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditEffects": "Edit effects",
+  "@histEditEffects": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditDrivers": "Edit drivers",
+  "@histEditDrivers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histFxSwitch": "Fx switch",
+  "@histFxSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "hist3dSwitch": "3D switch",
+  "@hist3dSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditClips": "Edit clips",
+  "@histEditClips": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histChangeLayerKind": "Change layer kind",
+  "@histChangeLayerKind": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histAdjustmentSwitch": "Adjustment switch",
+  "@histAdjustmentSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histAudibleSwitch": "Audible switch",
+  "@histAudibleSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histVisibleSwitch": "Visible switch",
+  "@histVisibleSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSoloSwitch": "Solo switch",
+  "@histSoloSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histMotionBlurSwitch": "Motion blur switch",
+  "@histMotionBlurSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histAcceptsLightsSwitch": "Accepts lights switch",
+  "@histAcceptsLightsSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histShySwitch": "Shy switch",
+  "@histShySwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histGuideSwitch": "Guide switch",
+  "@histGuideSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histLockSwitch": "Lock switch",
+  "@histLockSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLayerColour": "Set layer colour",
+  "@histSetLayerColour": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histCollapseSwitch": "Collapse switch",
+  "@histCollapseSwitch": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histCompMotionBlur": "Composition motion blur",
+  "@histCompMotionBlur": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histCompBackground": "Composition background",
+  "@histCompBackground": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditText": "Edit text",
+  "@histEditText": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetWorkArea": "Set work area",
+  "@histSetWorkArea": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditCompMarkers": "Edit composition markers",
+  "@histEditCompMarkers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditLayerMarkers": "Edit layer markers",
+  "@histEditLayerMarkers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetBlendMode": "Set blend mode",
+  "@histSetBlendMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetParent": "Set parent",
+  "@histSetParent": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditTransform": "Edit transform",
+  "@histEditTransform": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAxisMode": "Set axis mode",
+  "@histSetAxisMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetCameraZoom": "Set camera zoom",
+  "@histSetCameraZoom": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histLinkCameraToSolve": "Link camera to solve",
+  "@histLinkCameraToSolve": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditVolume": "Edit volume",
+  "@histEditVolume": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditRetime": "Edit Retime",
+  "@histEditRetime": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetInterpolation": "Set interpolation",
+  "@histSetInterpolation": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histMoveIntoFolder": "Move into folder",
+  "@histMoveIntoFolder": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAutomaticFolder": "Set automatic folder",
+  "@histSetAutomaticFolder": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetCacheLocation": "Set cache location",
+  "@histSetCacheLocation": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetAntiAliasing": "Set anti-aliasing",
+  "@histSetAntiAliasing": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditSwatches": "Edit swatches",
+  "@histEditSwatches": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetColourManagement": "Set colour management",
+  "@histSetColourManagement": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetFootageColourSpace": "Set footage colour space",
+  "@histSetFootageColourSpace": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditSolid": "Edit solid",
+  "@histEditSolid": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "menuCropCompToRegion": "Crop comp to region of interest",
+  "@menuCropCompToRegion": {
+    "description": "The Composition menu row that makes the composition's frame the rectangle swept on the Viewer, and the name of that edit in the Edit > History window."
+  },
+  "histSeveralChanges": "Several changes",
+  "@histSeveralChanges": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditPan": "Edit pan",
+  "@histEditPan": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histMoveMasterFader": "Move master fader",
+  "@histMoveMasterFader": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   }
 }

@@ -56,6 +56,7 @@ import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
 import 'fx_console_frb.dart';
+import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -785,7 +786,10 @@ List<MenuSection> lumitMenus(
         MenuEntry(l10n.menuRedo,
             (history?.canRedo ?? false) ? () => redoFrb(app) : null,
             action: 'edit.redo'),
-        MenuEntry.todo(l10n.menuHistory),
+        // The journal as a list you can read and click (K-688). Undo and redo
+        // above it walk the same list one step at a time.
+        MenuEntry(l10n.menuHistory,
+            project == null ? null : () => showHistoryFrb(context, app)),
         MenuEntry.divider(),
         // Copy takes the finest thing that is selected (K-300): the keyframes a
         // panel has claimed, else the picked effects, else the selected layer
@@ -848,8 +852,23 @@ List<MenuSection> lumitMenus(
         MenuEntry(l10n.compositionSettingsEllipsis,
             comp == null ? null : () => _compSettings(context, app),
             action: 'comp.settings'),
-        MenuEntry.todo(l10n.menuTrimCompToWorkArea),
-        MenuEntry.todo(l10n.menuCropCompToWorkArea),
+        // Make the comp be the stretch you marked (K-686), and the frame be
+        // the rectangle you swept (K-687). Each is greyed until there is one:
+        // a comp with no work area is already its own work area (K-203), and
+        // with no region there is no rectangle to crop to.
+        MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
+        MenuEntry(
+            l10n.menuCropCompToRegion,
+            comp == null || ui.regionOfInterest == null
+                ? null
+                : () {
+                    comp.cropToRegion(region: ui.regionOfInterest!);
+                    // The comp *is* the region now, so the region has nothing
+                    // left to say; leaving it set would window the new frame
+                    // down to a corner of what was just cropped.
+                    ui.setRegionOfInterest(null);
+                    app.notifyDocumentChanged();
+                  }),
         MenuEntry.divider(),
         // "Export", never "render", for anything the user sees (glossary §9).
         // Adding to the queue is what the export dialog does, so this opens
@@ -1488,6 +1507,27 @@ VoidCallback? _pasteAction(
     case null:
       return null;
   }
+}
+
+/// **Trim comp to work area** (K-686), offered only when there is a work area
+/// to trim to: a comp nobody has narrowed is already its own work area (K-203),
+/// so the row would promise a change it could not make.
+///
+/// The read is inside the menu's own `items()` closure, so it costs one call on
+/// a deliberate press rather than one per rebuild of the bar — and it is
+/// guarded, like the bar's other engine reads, so a reference that has just
+/// gone dead greys the row instead of taking the menu down with it.
+VoidCallback? _trimAction(LumitState app, CompositionReference? comp) {
+  if (comp == null) return null;
+  try {
+    if (comp.getWorkArea() == null) return null;
+  } catch (_) {
+    return null;
+  }
+  return () {
+    comp.trimToWorkArea();
+    app.notifyDocumentChanged();
+  };
 }
 
 /// Razor the selected layer at the playhead. Only Sequence layers hold clips,

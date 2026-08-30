@@ -57,6 +57,17 @@ Set<String> _engineLabels() {
       in RegExp(r'KeyContext::\w+\s*=>\s*"([^"]+)"').allMatches(keymapSrc)) {
     labels.add(m.group(1)!);
   }
+  // Edit -> History: what each edit calls itself (K-688). `Op::name` is one
+  // match arm per operation — `Op::AddLayer { .. } => "Add layer"` — and an op
+  // added to the engine brings a phrase with it, which is the same silent
+  // failure the keymap's descriptions have: the row would simply read English
+  // inside a translated window.
+  final ops = File('../crates/lumit-core/src/ops.rs');
+  expect(ops.existsSync(), isTrue);
+  for (final m in RegExp(r'Op::\w+\s*\{\s*\.\.\s*\}\s*=>\s*"([^"]+)"')
+      .allMatches(ops.readAsStringSync())) {
+    labels.add(m.group(1)!);
+  }
 
   return labels;
 }

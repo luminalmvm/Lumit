@@ -213,6 +213,28 @@ other side of this boundary.
     volume curve, a staged `BridgeEffectInstance` — carries the same conversion. Read raw,
     every key on a layer that had been moved drew at the start of the composition.
 
+### The History list crosses as named rows and one index (K-688)
+
+`ProjectReference::history_entries` returns the journal as rows — `{name, undone}`,
+those applied oldest first, then those undone in the order redoing would put them
+back — and `applied_steps` says where the two halves meet.
+`jump_history(applied)` takes the document to a point on that list.
+
+Three things follow the rules above rather than restating them. The **name is the
+engine's**, in English, translated on arrival like every other engine word
+(§"Display text crosses the bridge in English"): `Op::name` knows which op ran and
+the frontend does not, so a second table of op kinds never has to be kept in step.
+The **jump is undo and redo in a loop**, not a state to restore — so the seam
+carries an index, never a document, and the list can reach no state the keyboard
+could not. And the list is **read on purpose**, when the window opens and after
+each jump, never in a rebuild (K-184).
+
+The two composition commands beside it cross the same way: `trim_to_work_area`
+takes nothing at all, because the work area is in the document (K-686), and
+`crop_to_region` takes the Viewer's own `[u0, v0, u1, v1]` comp fractions and
+converts them to pixels at the seam, because the region of interest is session
+state that must never reach a file (K-362, K-687).
+
 ### The Project panel's item reads (K-451)
 
 An item handle answers what the redesigned panel draws, and each is one call because each is
