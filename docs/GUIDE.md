@@ -13829,3 +13829,38 @@ Volume always hears the mix as it would be **before any ducking** — every laye
 keyframed volume. One level of ducking is heard; a duck can never be driven by a duck.
 That rule is also what makes the whole thing deterministic: preview, export and the beat
 detector all bake the same envelope from the same sound (the K-031 promise, again).
+
+## 46. The mixing desk, and bars that move without waking the panel, in plain terms
+
+The Audio workspace fronts a **Mixer**: one strip per layer that can make a sound, in the
+order the Timeline lists them, and a **Master** strip at the right for the whole mix. A
+strip is the classic drawing — the layer's name underlined in its own label colour, a pan
+pot, a fader, two thin meters, a dB readout, mute and solo. Nothing on it is new data:
+the fader is the layer's Volume property wearing different clothes, the pot is Pan, mute
+and solo are the Timeline's own switches. Move any of them in either place and the other
+follows, because there is only one document underneath.
+
+### Where the bars come from
+
+While sound plays, the engine's audio callback writes down — about a hundred times a
+second — how loud each strip just was. The panel side runs one small timer that asks for
+those numbers roughly thirty times a second and hands them straight to the *painters*
+that draw the bars. That wording is deliberate: the bars are repainted, but no widget is
+rebuilt. Each meter lives inside its own repaint boundary, so a tick of the timer
+redraws a few pixels of bar and touches nothing else on screen — the same discipline
+that keeps a scrub from rebuilding the Timeline (the K-681 gates), and there is a test
+that fails if a meter tick ever starts repainting the panel around it.
+
+The thin line that rests above each bar for three seconds — the **peak hold** — is the
+panel's own bookkeeping, not the engine's: it is a reading aid, like a high-water mark
+drawn on a gauge. The **LIM** lamp on the Master strip is different: that one is the
+engine's sticky clip flag, lit the moment anything hits the ceiling and staying lit
+until you click it, because a light that cleared itself would only ever report an
+overload to somebody who happened to be looking at it.
+
+### The LUFS dash
+
+The Master strip shows "LUFS —" where a loudness number will one day go. Loudness
+measurement (the number YouTube and Spotify normalise to) is planned for export; until
+it is really measured, the readout stays a dash rather than inventing a number with
+decimals on it.
