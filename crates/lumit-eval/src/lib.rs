@@ -1628,6 +1628,7 @@ mod tests {
         let wiggle_id = wiggle.id;
 
         let wired = LayerGraph {
+            groups: Vec::new(),
             nodes: vec![wiggle.clone()],
             edges: vec![Edge {
                 from: OutputRef::Driver {
@@ -1739,6 +1740,7 @@ mod tests {
         let (producer_id, blur_id, sampler_id) = (producer.id, blur.id, sampler.id);
 
         let wired = LayerGraph {
+            groups: Vec::new(),
             nodes: vec![sampler.clone()],
             edges: vec![
                 Edge {
@@ -1864,6 +1866,7 @@ mod tests {
             let mut l = text_layer("reader", 0.0, 5.0, 0.0);
             l.effects = vec![consumer.clone()];
             l.graph = LayerGraph {
+                groups: Vec::new(),
                 nodes: vec![node],
                 edges: vec![Edge {
                     from: OutputRef::Driver {
@@ -1939,6 +1942,7 @@ mod tests {
             let mut node = smooth.clone();
             set(&mut node, "time", time);
             LayerGraph {
+                groups: Vec::new(),
                 nodes: vec![node],
                 edges: vec![Edge {
                     from: OutputRef::Driver {

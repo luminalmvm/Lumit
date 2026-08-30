@@ -5202,6 +5202,7 @@ surfaces:
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
+                    groups: Vec::new(),
                     nodes: vec![wiggle],
                     edges: vec![Edge {
                         from: OutputRef::Driver {
@@ -5351,6 +5352,7 @@ surfaces:
             if let Some(enabled) = graph {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
+                    groups: Vec::new(),
                     nodes: vec![remap],
                     edges: vec![Edge {
                         from: OutputRef::Driver {
@@ -5720,6 +5722,7 @@ surfaces:
         let sampler_id = sampler.id;
 
         let graph = LayerGraph {
+            groups: Vec::new(),
             nodes: vec![sampler],
             edges: vec![
                 Edge {
