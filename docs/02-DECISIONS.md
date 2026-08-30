@@ -20482,3 +20482,52 @@ exactly as playback honours them (K-031), and a guide layer stays reference-only
 depth, its sound no more delivered than its picture (K-497). What lapses is only the
 override — an audio-only export cannot be asked to ignore solos, because ignoring solos is
 a statement about a drawing it never makes.
+
+---
+
+## K-655 — A third-party After Effects effect imports as the vendor's own OFX plug-in when it is installed, and otherwise as the closest Lumit effect
+
+**Status:** DECIDED (owner, 2026-08-30) · supersedes K-060's "third-party effects are
+always a placeholder" for the rows the table names; K-593 is what makes the first road
+possible; K-623's data/code division is unchanged
+
+K-060 ruled every third-party effect a placeholder, on the sound ground that nobody
+outside the vendor can re-implement the vendor's internals. That is still true, and it is
+still why an *equivalent* is never on offer. What has changed since is that Lumit hosts
+OFX (K-593) and a scanned plug-in is an ordinary catalogue entry, so a project full of
+Sapphire and Lenscare now meets a host that may already have the very plug-in the After
+Effects layer was using. The owner's ruling: **map to the closest Lumit effect — unless
+the user has the same effect installed as an OFX plug-in, in which case map directly to
+the plug-in.**
+
+So a third-party row in `ae-effect-map.toml` has two roads, and which one it takes is a
+fact about the importing machine rather than about the table:
+
+- **Direct.** The row lists the plug-in identifiers this After Effects effect *is*
+  (`ofx = [...]`); a list rather than one string because a vendor renames its identifier
+  between eras — GenArts to Boris FX — and both eras are the same effect. If one of them
+  answers in the catalogue this session, the effect maps to it. **The match rule is
+  equality with a discovered identifier, never a resemblance between labels**: two
+  products with similar names are two products, and a resemblance mapped to a render is
+  somebody else's picture with our name on it. An identifier the table has wrong therefore
+  matches nothing, and the row falls to the second road exactly as on a machine without
+  the plug-in — a wrong row is a road not taken, never a wrong picture.
+- **Nearest.** No installed build, so `conversion = "nearest"` puts the closest Lumit
+  effect in the stack, in the right place and switched on or off as it was, **at its own
+  defaults**. No dial is guessed across a vendor boundary: the vendor's numbers mean the
+  vendor's algorithm, and a guessed dial is a silently wrong picture where a default is a
+  visible one that is dialled in once.
+
+Parameters carry on the direct road only, and by **displayed name**, folded to letters and
+digits — After Effects numbers a third-party effect's parameters (`S_Glow-0004`) where OFX
+keeps the plug-in's own, so the match names cannot be compared and the labels are what the
+two builds genuinely share. The type has to agree as well; a control named alike and shaped
+unlike is reported rather than coerced. A **point** is deliberately not carried at all:
+After Effects measures one in pixels and OFX in whichever canonical space the plug-in
+declared, so the same two numbers are two different places.
+
+Both roads report (K-303): `EffectAsPlugin` says which plug-in and how many of its controls
+came across, `EffectNearest` says which Lumit effect is standing in and that it is at its
+defaults. The rule K-060 was protecting survives untouched — **nothing is ever silently
+something else**; what lapses is only the claim that a placeholder was the sole honest
+outcome when the real plug-in is sitting in the catalogue.

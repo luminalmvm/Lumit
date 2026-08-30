@@ -2463,6 +2463,37 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   table: Timewarp, because retiming is a whole feature of Lumit's rather than an effect,
   and Remove Grain, because removing grain is its own programme. Those import as
   placeholders, and the report says what to use instead.
+
+  **Somebody else's effects are the interesting case.** A real project is full of them —
+  Sapphire's glows and shakes, Lenscare's defocus — and none of them can be re-implemented,
+  because the maths inside them belongs to the company that sold them. For a long time the
+  only honest answer was a placeholder: an empty slot holding all the numbers, saying "this
+  was here". That is still the answer for an effect nobody has thought about. But two better
+  answers exist now, and which one applies depends on the computer doing the import rather
+  than on anything in the file.
+
+  The first is the good case. Those same companies also sell an **OFX** build of the very
+  same plug-in, and Lumit can run OFX plug-ins (that is what `lumit-ofx` is for). So if the
+  user already has S_Glow installed as an OFX plug-in, the After Effects S_Glow does not
+  need a stand-in — it *is* that plug-in, and it imports as it. The two builds are matched
+  by the plug-in's identifier, a long unique name like a web address backwards, and the
+  match has to be exactly equal. Deliberately not "these two have similar names": two
+  products with similar names are two different products, and rendering one while claiming
+  it is the other would put somebody else's picture on screen under our name. Their controls
+  are then copied across by the name printed beside them — After Effects renames a
+  third-party effect's controls internally to things like `S_Glow-0004`, so the printed
+  labels are the only thing the two builds genuinely share — and only where the two agree on
+  what kind of control it is. A number goes onto a number; a colour onto a colour; anything
+  named alike but shaped differently is written into the report rather than forced.
+
+  The second is the fallback. No such plug-in installed, so Lumit's **closest** effect goes
+  in instead — its own Glow standing in for S_Glow — in the right position in the stack, on
+  or off exactly as it was, and set to Lumit's own default settings. Not one of the vendor's
+  numbers is copied over, and that restraint is the whole point: their "brightness 4" was
+  computed by their formula, and putting 4 into ours produces a picture that *looks*
+  deliberate and is wrong. A default looks obviously untouched, so the user dials it in once
+  and knows they have. Either way the report says what happened, which is the rule the whole
+  importer is built on — something may arrive different, but never *silently* different.
 - `crates/lumit-media/` — **reading media files** (via FFmpeg, the industry-standard
   media library). Two jobs so far: the *probe* (a file's vital statistics — resolution,
   frame rate, duration — shown under each item in the Project panel) and the *frame

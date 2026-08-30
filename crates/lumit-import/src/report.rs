@@ -268,6 +268,20 @@ pub enum Reason {
     /// frame (docs/08 §2.3). Nothing was approximated — the same length is
     /// spelled differently.
     EffectParamRebased { effect: String, param: String },
+    /// A third-party effect the user also has as an OFX plug-in: it imported
+    /// **as that plug-in**, which is the same effect rather than a likeness
+    /// (K-655). `carried` of `controls` dials came across by name.
+    EffectAsPlugin {
+        match_name: String,
+        plugin: String,
+        carried: usize,
+        controls: usize,
+    },
+    /// A third-party effect with no OFX build installed: the closest Lumit
+    /// effect stands in for it, at its own defaults (K-655). Nobody outside the
+    /// vendor can carry the dials across, so the effect is in the right place
+    /// in the stack and is dialled once.
+    EffectNearest { match_name: String, instead: String },
 }
 
 impl std::fmt::Display for Reason {
@@ -483,6 +497,24 @@ impl std::fmt::Display for Reason {
                 f,
                 "{effect}'s {param} was measured in After Effects' units — imported as the same \
                  length in Lumit's"
+            ),
+            Self::EffectAsPlugin {
+                match_name,
+                plugin,
+                carried,
+                controls,
+            } => write!(
+                f,
+                "{match_name} imported as the {plugin} plug-in you have installed, which is the \
+                 same effect — {carried} of its {controls} controls carried across by name"
+            ),
+            Self::EffectNearest {
+                match_name,
+                instead,
+            } => write!(
+                f,
+                "{match_name} is somebody else's effect — {instead} is the closest in Lumit and \
+                 imported in its place, at its own defaults"
             ),
         }
     }

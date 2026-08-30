@@ -59,6 +59,23 @@ pub(crate) struct Row {
     /// job in Lumit instead.
     #[serde(default)]
     pub suggest: Option<String>,
+    /// The OFX plugin identifiers that are **this same effect** — the vendor's
+    /// own OFX build of the plug-in the After Effects match name belongs to
+    /// (docs/11 §5, K-655).
+    ///
+    /// If one of them is in the catalogue this session — the user has the
+    /// plug-in installed — the effect maps straight to it rather than to
+    /// Lumit's nearest likeness, because the plug-in *is* the effect. The rule
+    /// is **equality with a discovered identifier**, never a resemblance
+    /// between labels: two products with similar names are two products. A
+    /// list rather than one string because a vendor renames its identifier
+    /// between eras (GenArts to Boris FX) and both eras are the same effect.
+    ///
+    /// An identifier this file has wrong fails the safe way: nothing matches
+    /// it, and the effect takes the `lumit`/`conversion` road below, exactly as
+    /// on a machine without the plug-in.
+    #[serde(default)]
+    pub ofx: Vec<String>,
     /// The match name is the famous one rather than an audited one (K-414).
     /// Carried for the record; nothing in the import branches on it, because a
     /// name that turns out to be wrong claims nothing and the effect becomes a
@@ -142,6 +159,16 @@ mod tests {
         let table = Table::parse(SHIPPED).expect("the shipped table parses");
         for row in table.rows() {
             assert!(!row.name.is_empty(), "{} has no AE name", row.ae);
+            // An OFX identifier is a reverse-domain name compared for equality
+            // (K-655). A blank or bare word would either match nothing or, far
+            // worse, look like it had been checked.
+            for id in &row.ofx {
+                assert!(
+                    id.contains('.') && !id.starts_with("ofx:"),
+                    "{}'s OFX identifier \"{id}\" is not a plug-in identifier",
+                    row.ae
+                );
+            }
             match &row.suggest {
                 Some(instead) => {
                     assert!(!instead.is_empty(), "{} suggests nothing", row.ae);

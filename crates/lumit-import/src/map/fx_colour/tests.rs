@@ -1258,20 +1258,24 @@ fn curves_imports_as_a_placeholder_with_its_unreadable_named() {
 #[test]
 fn an_effects_topic_headings_are_not_reported_as_lost_properties() {
     let heading = AeProp {
-        match_name: Some("S_Glow-0001".to_string()),
-        name: Some("Glow".to_string()),
+        match_name: Some("Trapcode Particular-0001".to_string()),
+        name: Some("Emitter".to_string()),
         value_type: Some("group".to_string()),
         unreadable: Some("an effect topic heading, which carries no value of its own".to_string()),
         ..AeProp::default()
     };
     let blob = AeProp {
-        match_name: Some("S_Glow-0520".to_string()),
+        match_name: Some("Trapcode Particular-0520".to_string()),
         name: Some("Preset".to_string()),
         value_type: Some("custom_blob".to_string()),
         unreadable: Some("arbitrary data: 1033 bytes carried undecoded".to_string()),
         ..AeProp::default()
     };
-    let ran = run(&effect("S_Glow", "S_Glow", vec![heading, blob]));
+    let ran = run(&effect(
+        "Trapcode Particular",
+        "Particular",
+        vec![heading, blob],
+    ));
 
     assert!(!ran.mapped);
     let unreadable: Vec<&str> = ran
@@ -1285,7 +1289,7 @@ fn an_effects_topic_headings_are_not_reported_as_lost_properties() {
         .collect();
     assert_eq!(
         unreadable,
-        vec!["S_Glow-0520"],
+        vec!["Trapcode Particular-0520"],
         "the blob is named and the heading is not"
     );
 }
@@ -1310,6 +1314,237 @@ fn the_two_deliberate_placeholders_name_what_to_use_instead() {
             "{match_name} should suggest what to use instead"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Third-party effects: the two roads (K-655, docs/11 §5a)
+// ---------------------------------------------------------------------------
+
+/// A definition that arrived at run time, the way a scanned OFX plug-in's does
+/// (K-593). Declared here rather than driven by a real bundle because what is
+/// under test is the *importer's* half of the seam: given a catalogue entry
+/// under a plug-in identifier, does an After Effects match name find it.
+struct PluginDef(&'static lumit_core::fx::EffectSchema);
+
+impl lumit_core::fx::EffectDef for PluginDef {
+    fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+        self.0
+    }
+}
+
+/// Register a plug-in under `identifier`, as the OFX host does when it finds
+/// one, and answer nothing — the catalogue is a process-global, so this is
+/// idempotent across a test binary that runs its tests in one process.
+fn a_discovered_plugin(identifier: &'static str, label: &'static str) {
+    use lumit_core::fx::{
+        CostClass, EffectTraits, FxCategory, MatteRole, ParamKind, ParamSchema, Roi, Unit,
+    };
+    let match_name: &'static str = Box::leak(format!("ofx:{identifier}").into_boxed_str());
+    if lumit_core::fx::schema(match_name).is_some() {
+        return;
+    }
+    let schema: &'static lumit_core::fx::EffectSchema =
+        Box::leak(Box::new(lumit_core::fx::EffectSchema {
+            match_name,
+            label,
+            version: 1,
+            category: FxCategory::Utility,
+            traits: EffectTraits {
+                cost: CostClass::Heavy,
+                roi: Roi::FullFrame,
+                temporal: &[0],
+                premultiplied: true,
+                seeded: false,
+                beat_input: false,
+            },
+            params: &[
+                ParamSchema {
+                    id: "brightness",
+                    label: "Brightness",
+                    kind: ParamKind::Float {
+                        default: 1.0,
+                        slider: (0.0, 4.0),
+                        hard: (None, None),
+                    },
+                    unit: Unit::Raw,
+                },
+                ParamSchema {
+                    id: "centre_x",
+                    label: "Centre",
+                    kind: ParamKind::Float {
+                        default: 0.5,
+                        slider: (0.0, 1.0),
+                        hard: (None, None),
+                    },
+                    unit: Unit::Raw,
+                },
+            ],
+            groups: &[],
+            enabled_when: &[],
+            matte: MatteRole::None,
+        }));
+    assert!(
+        lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(PluginDef(schema)))),
+        "the plug-in registered"
+    );
+}
+
+/// One After Effects leaf of a third-party effect: a numbered match name, which
+/// is why the *displayed* name is what the two builds share.
+fn vendor_leaf(match_name: &str, name: &str, kind: &str, value: serde_json::Value) -> AeProp {
+    AeProp {
+        match_name: Some(match_name.to_string()),
+        name: Some(name.to_string()),
+        value_type: Some(kind.to_string()),
+        value: Some(value),
+        ..AeProp::default()
+    }
+}
+
+/// **The user has the vendor's own OFX build installed, so the effect imports
+/// as that plug-in** — the same effect rather than a likeness (K-655). The
+/// controls the two builds share by displayed name come across; the one named
+/// alike and shaped unlike is reported rather than coerced.
+#[test]
+fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
+    a_discovered_plugin("com.genarts.sapphire.Lighting.S_Glow", "S_Glow");
+
+    let ran = run(&effect(
+        "S_Glow",
+        "S_Glow",
+        vec![
+            vendor_leaf("S_Glow-0004", "Brightness", "float", serde_json::json!(2.5)),
+            // Named alike, shaped unlike: a colour where the plug-in declares a
+            // number. Said out loud, never coerced.
+            vendor_leaf(
+                "S_Glow-0009",
+                "Centre",
+                "colour",
+                serde_json::json!([1.0, 0.0, 0.0, 1.0]),
+            ),
+        ],
+    ));
+
+    assert!(ran.mapped, "an installed plug-in is a mapped effect");
+    assert_eq!(
+        ran.inst.effect.match_name, "ofx:com.genarts.sapphire.Lighting.S_Glow",
+        "it is the plug-in itself, not Lumit's nearest likeness"
+    );
+    assert_eq!(ran.inst.effect.namespace, EffectNamespace::Ofx);
+    assert_eq!(
+        ran.inst
+            .params
+            .iter()
+            .find(|p| p.id == "brightness")
+            .map(|p| p.value.clone()),
+        Some(EffectValue::Float(LumProperty::fixed(2.5))),
+        "the control both builds name Brightness carried across"
+    );
+    assert!(
+        ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectAsPlugin { match_name, carried, controls, .. }
+                if match_name == "S_Glow" && *carried == 1 && *controls == 2
+        )),
+        "the report says which plug-in, and one of its two controls carried"
+    );
+    assert!(
+        ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectParamNotCarried { param, .. } if param == "Centre"
+        )),
+        "the mismatched control is named rather than coerced"
+    );
+}
+
+/// **No installed build, so the closest Lumit effect stands in, at its own
+/// defaults** (K-655). The vendor's numbers mean the vendor's algorithm, so not
+/// one of them is guessed across — the report names both sides so the single
+/// dial-in is findable.
+#[test]
+fn a_third_party_effect_with_no_plugin_installed_takes_the_tables_nearest_row() {
+    let amount = 42.0;
+    let ran = run(&effect(
+        "S_Shake",
+        "S_Shake",
+        vec![vendor_leaf(
+            "S_Shake-0004",
+            "Amplitude",
+            "float",
+            serde_json::json!(amount),
+        )],
+    ));
+
+    assert!(ran.mapped, "the nearest effect is a mapped effect");
+    assert_eq!(ran.inst.effect.match_name, "shake");
+    assert_eq!(ran.inst.effect.namespace, EffectNamespace::Builtin);
+    // Every control is at Lumit's own default — no vendor number is guessed
+    // across. A Seed is the one exception and is not a counter-example: it is
+    // drawn fresh per instance by design (docs/08 §3.4), so the two differ for
+    // the same reason two freshly applied Shakes do.
+    let fresh = lumit_core::fx::instantiate("shake").expect("Shake ships");
+    let dials = |inst: &EffectInstance| {
+        inst.params
+            .iter()
+            .filter(|p| !matches!(p.value, EffectValue::Seed(_)))
+            .map(|p| (p.id.clone(), p.value.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        dials(&ran.inst),
+        dials(&fresh),
+        "every control is at Lumit's own default — no vendor number is guessed across"
+    );
+    assert!(
+        ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectNearest { match_name, .. } if match_name == "S_Shake"
+        )),
+        "the report says which Lumit effect is standing in"
+    );
+}
+
+/// **A third-party match name the table does not name is untouched by both
+/// roads** (K-655): the closest guess is offered only where §5 has named one,
+/// so everything else keeps §6's placeholder with every parameter preserved.
+#[test]
+fn an_unmapped_third_party_effect_still_becomes_a_placeholder() {
+    let ran = run(&effect(
+        "Trapcode Particular",
+        "Particular",
+        vec![vendor_leaf(
+            "Trapcode Particular-0004",
+            "Particles/sec",
+            "float",
+            serde_json::json!(120.0),
+        )],
+    ));
+
+    assert!(!ran.mapped, "no row, so no guess");
+    assert_eq!(ran.inst.effect.namespace, EffectNamespace::Placeholder);
+    assert!(
+        ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectPlaceholder { match_name } if match_name == "Trapcode Particular"
+        )),
+        "it reports as a placeholder, not as a nearest or a plug-in"
+    );
+    assert!(
+        !ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectNearest { .. } | Reason::EffectAsPlugin { .. }
+        )),
+        "neither third-party road may fire on a name the table does not claim"
+    );
+    assert_eq!(
+        ran.inst
+            .params
+            .iter()
+            .find(|p| p.id == "Trapcode Particular-0004")
+            .map(|p| p.value.clone()),
+        Some(EffectValue::Float(LumProperty::fixed(120.0))),
+        "and the parameter is kept"
+    );
 }
 
 // ---------------------------------------------------------------------------

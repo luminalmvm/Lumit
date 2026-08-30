@@ -1037,6 +1037,13 @@ String? importReason(String key, Map<String, String> args) {
     case 'effect_param_rebased':
       return l10n.aeEffectParamRebased(a('effect'), a('param'));
 
+    // Third-party effects, the two roads (K-655).
+    case 'effect_as_plugin':
+      return l10n.aeEffectAsPlugin(
+          a('match_name'), a('plugin'), a('carried'), a('controls'));
+    case 'effect_nearest':
+      return l10n.aeEffectNearest(a('match_name'), a('instead'));
+
     default:
       return null;
   }

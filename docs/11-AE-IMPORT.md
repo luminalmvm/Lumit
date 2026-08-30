@@ -286,7 +286,8 @@ The centrepiece. Four grades:
 | Markers (comp + layer) | lossless | |
 | AE built-in effects with a Lumit equivalent | mapped | Via the match-name table (§5); parameters and keyframes carried; pixel output near-identical, not bit-identical |
 | AE built-in effects without an equivalent | placeholder | Full parameter dump preserved; §6 |
-| Third-party effects (Twixtor, RSMB, Sapphire, Deep Glow, …) | placeholder | Always — internals never map (K-060). The user MAY apply the vendor's OFX build manually alongside; parameters do not transfer automatically because AE and OFX builds do not share parameter layouts |
+| Third-party effects the §5 table names (Sapphire's S_Glow, S_Shake, S_DistortChroma; Lenscare's two defocus effects, …) | **mapped as the plug-in, else nearest** | Two roads (K-655, §5a). The user has the vendor's own **OFX build** installed → the effect maps straight to it, matched by plug-in identifier equality, with controls carried by displayed name where the types agree; points are not carried and the report counts what was. No installed build → the **closest Lumit effect at its own defaults**, in the right place in the stack, no dial guessed across the vendor boundary. Internals still never map (K-060) — an equivalent is never claimed, and both roads say what they did |
+| Third-party effects the table does not name (Twixtor, RSMB, Deep Glow, Particular, …) | placeholder | Full parameter dump preserved; §6. The closest guess is offered only where §5 has named one |
 | Expressions | mapped | Imported as source text; run when Lumit's own language can run them ([12-PLUGINS.md](12-PLUGINS.md) §4), else **switched off and listed in the report with their text** (K-625), so the keyframes underneath keep driving the property rather than an expression that answers the same wrong number on every frame. The importer decides by trying it: an expression that neither parses nor evaluates against a bare context is After Effects' own language and is not installed |
 | Text layers — source text + styling | mapped | Font fallback differences possible; missing fonts flagged |
 | Text animators + range selectors | mapped | Core animators map; unsupported selector modes become placeholders on the animator |
@@ -336,6 +337,50 @@ edited file can leave the importer no worse than it found it. A row naming a con
 this build does not have, or a Lumit effect it does not ship, goes unclaimed and its
 effect becomes a placeholder — an edited table can never make the importer do something
 it has no code for.
+
+### 5a. Third-party effects have two roads (K-655)
+
+K-060 ruled every third-party effect a placeholder, and its ground still holds: nobody
+outside the vendor can re-implement the vendor's internals, so an *equivalent* is never on
+offer. What has changed is that Lumit hosts OFX (K-593) and a scanned plug-in is an
+ordinary catalogue entry — so the machine doing the import may already have the very
+plug-in the After Effects layer was using. The owner's ruling (2026-08-30) is that a
+third-party effect maps to the **closest** Lumit effect, *unless* the user has the same
+effect installed as an OFX plug-in, in which case it maps **directly** to the plug-in.
+Which road a row takes is therefore a fact about the importing machine, not about the
+table:
+
+- **Direct.** The row's `ofx` field lists the plug-in identifiers this After Effects effect
+  *is* — a list rather than one string because a vendor renames its identifier between eras
+  (GenArts to Boris FX) and both eras are the same effect. If one of them answers in the
+  catalogue this session, the effect maps to it, because the plug-in **is** the effect
+  rather than a likeness of it. **The match rule is equality with a discovered identifier,
+  never a resemblance between labels**: two products with similar names are two products,
+  and a resemblance mapped to a render is somebody else's picture with our name on it. An
+  identifier this table has wrong therefore matches nothing and the row falls to the second
+  road, exactly as on a machine without the plug-in — a wrong row is a road not taken,
+  never a wrong picture.
+- **Nearest.** No installed build, so the row's `conversion = "nearest"` puts the closest
+  Lumit effect in the stack, in the right place and switched on or off as it was, **at its
+  own defaults**. No dial is guessed across a vendor boundary: the vendor's numbers mean the
+  vendor's algorithm, and a guessed dial is a silently wrong picture where a default is a
+  visible one that is dialled in once.
+
+**Controls carry on the direct road only, and by displayed name** — folded to letters and
+digits. After Effects numbers a third-party effect's parameters (`S_Glow-0004`) where OFX
+keeps the plug-in's own, so the match names cannot be compared and the labels are what the
+two builds genuinely share. The type has to agree as well: a number onto a number, a colour
+onto a colour, and a control named alike but shaped unlike is named in the report rather
+than coerced. A **point** is deliberately not carried at all — After Effects measures one in
+pixels and OFX in whichever canonical space the plug-in declared, so the same two numbers
+are two different places; the report's carried-of-total count is where that shows.
+
+Both roads report (§9): `effect_as_plugin` says which plug-in it became and how many of its
+controls came across, `effect_nearest` says which Lumit effect is standing in and that it is
+at its defaults. A third-party match name with **no row here** is untouched by all of this
+and takes the placeholder road of §6 with every parameter kept — the closest guess is
+offered only where this table has named one. The rule K-060 was protecting survives intact:
+nothing is ever *silently* something else.
 
 Seeded with the montage staples:
 

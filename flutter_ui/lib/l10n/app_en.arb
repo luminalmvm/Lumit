@@ -8175,6 +8175,36 @@
       }
     }
   },
+  "aeEffectAsPlugin": "{matchName} imported as the {plugin} plug-in you have installed, which is the same effect — {carried} of its {controls} controls carried across by name",
+  "@aeEffectAsPlugin": {
+    "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project is one the user also has installed as an OFX plug-in, so it imported as that plug-in rather than as Lumit's closest likeness. matchName is After Effects' internal name for the effect, plugin is the installed plug-in's own name, and the two numbers are how many of its controls carried across out of how many the After Effects effect had.",
+    "placeholders": {
+      "matchName": {
+        "type": "String"
+      },
+      "plugin": {
+        "type": "String"
+      },
+      "carried": {
+        "type": "String"
+      },
+      "controls": {
+        "type": "String"
+      }
+    }
+  },
+  "aeEffectNearest": "{matchName} is somebody else's effect — {instead} is the closest in Lumit and imported in its place, at its own defaults",
+  "@aeEffectNearest": {
+    "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project has no OFX build installed, so the closest Lumit effect stands in for it, at Lumit's own default settings rather than with the vendor's numbers guessed across. matchName is After Effects' internal name for the effect; instead is the Lumit effect that took its place.",
+    "placeholders": {
+      "matchName": {
+        "type": "String"
+      },
+      "instead": {
+        "type": "String"
+      }
+    }
+  },
   "trackNotAnalysed": "Not analysed yet",
   "@trackNotAnalysed": {
     "description": "Camera track status line in Effect controls, before Analyse has ever been pressed."

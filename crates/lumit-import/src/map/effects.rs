@@ -17,7 +17,26 @@
 //! name neither claims takes the placeholder road. That fall-through is the
 //! rule rather than a gap — docs/11 §5 is explicit that an unmapped match name
 //! becomes a placeholder and **never the closest guess**.
+//!
+//! **A third-party effect is the one exception, and it has two roads** (K-655,
+//! docs/11 §5). Somebody else's plug-in has internals nobody here can
+//! re-implement, so an equivalent is never on offer — but two lesser things
+//! are, and which one applies is a fact about the machine doing the import:
+//!
+//! * The user has the **vendor's own OFX build** of the same plug-in installed.
+//!   Then it is not a likeness, it is the effect: the row names the plug-in's
+//!   identifier, [`direct`] looks it up in the catalogue, and the controls carry
+//!   across by name wherever the two sides agree on the type.
+//! * They do not. Then the row names the **closest Lumit effect**, and
+//!   [`nearest`] puts it in the stack at its own defaults. No dial is guessed
+//!   across a vendor boundary, because a guessed dial is a silently wrong
+//!   picture where a default is a visible one — the report says which effect it
+//!   is standing in for, and it is dialled once.
+//!
+//! Both roads report. The rule that survives untouched is the one that matters:
+//! nothing is ever *silently* something else.
 
+use lumit_core::fx::ParamKind;
 use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
 use uuid::Uuid;
 
@@ -25,6 +44,7 @@ use crate::capture::Property;
 use crate::report::{ItemPath, Outcome, Reason};
 
 use super::props::{ae_map, display_name, from_node, match_name_of};
+use super::table::Row;
 use super::Conv;
 
 /// What became of one effect instance.
@@ -75,10 +95,196 @@ pub fn map_effect(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Mapp
 /// collide with the other; each is asked in turn and the first to claim the
 /// name wins.
 fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
+    // The two third-party roads come first, and in this order: the vendor's own
+    // plug-in beats Lumit's nearest likeness, because it is the effect itself
+    // (K-655). Neither road can fire on a row that names neither an `ofx`
+    // identifier nor the `nearest` conversion, so Adobe's own effects reach
+    // the two halves below exactly as they always have.
+    if let Some(row) = super::table::table().row(match_name_of(node)) {
+        if let Some(mapped) = direct(conv, path, node, row) {
+            return Some(mapped);
+        }
+        if row.conversion == "nearest" {
+            return nearest(conv, path, node, row);
+        }
+    }
     if let Some(mapped) = super::fx_colour::claim(conv, path, node) {
         return Some(mapped);
     }
     super::fx_distort::claim(conv, path, node)
+}
+
+/// **The vendor's own OFX build of this same plug-in, if it is installed**
+/// (K-655, docs/11 §5).
+///
+/// The match rule is equality: the row lists the plug-in identifiers this After
+/// Effects effect *is*, and one of them either answers in the catalogue this
+/// session or does not. Nothing here compares labels or looks for a
+/// resemblance — two products with similar names are two products, and a
+/// resemblance mapped to a render is somebody else's picture with our name on
+/// it. An identifier the table has wrong therefore matches nothing, and the row
+/// takes [`nearest`] instead, exactly as on a machine without the plug-in.
+fn direct(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &Row,
+) -> Option<EffectInstance> {
+    let (plugin, schema) = row.ofx.iter().find_map(|id| {
+        let name = format!("ofx:{id}");
+        lumit_core::fx::schema(&name).map(|schema| (name, schema))
+    })?;
+    let mut inst = lumit_core::fx::instantiate(&plugin)?;
+    // An effect switched off in After Effects imports switched off.
+    inst.enabled = node.enabled.unwrap_or(true);
+
+    let here = path.property(display_name(node, match_name_of(node)));
+    let mark = conv.report.rows.len();
+    let mut carried = 0usize;
+    let mut controls = 0usize;
+    carry(
+        conv,
+        path,
+        &here,
+        node,
+        schema,
+        &mut inst,
+        &mut carried,
+        &mut controls,
+    );
+    conv.report.fold_unreadable_since(mark, here.clone());
+
+    conv.report.row(
+        here,
+        Outcome::Adjusted,
+        Reason::EffectAsPlugin {
+            match_name: match_name_of(node).to_string(),
+            plugin: schema.label.to_string(),
+            carried,
+            controls,
+        },
+    );
+    Some(inst)
+}
+
+/// One AE parameter leaf onto the plug-in's control of the same name.
+///
+/// "The same name" is the *displayed* name on both sides, folded to letters and
+/// digits: After Effects numbers a third-party effect's parameters
+/// (`S_Glow-0004`) where OFX keeps the plug-in's own, so the match names cannot
+/// be compared and the labels are what the two builds genuinely share. The
+/// type has to agree as well — a number onto a number, a colour onto a colour —
+/// and a control whose type does not agree is named in the report rather than
+/// coerced.
+///
+/// A point is deliberately **not** carried: After Effects measures one in
+/// pixels and OFX in whichever canonical space the plug-in declared, so the
+/// same two numbers are two different places.
+/// ponytail: no point carriage until an OFX build's coordinate space is read
+/// off a live installation rather than assumed; the report's carried-of-total
+/// count is what shows it missing.
+#[allow(clippy::too_many_arguments)]
+fn carry(
+    conv: &mut Conv<'_>,
+    at: &ItemPath,
+    here: &ItemPath,
+    node: &Property,
+    schema: &'static lumit_core::fx::EffectSchema,
+    inst: &mut EffectInstance,
+    carried: &mut usize,
+    controls: &mut usize,
+) {
+    for leaf in node.children() {
+        if leaf.group.is_some() {
+            carry(conv, at, here, leaf, schema, inst, carried, controls);
+            continue;
+        }
+        // A topic heading is not a control (the same exception the placeholder
+        // road draws): counting them would make every plug-in look half-carried.
+        let kind = leaf.value_type.as_deref().unwrap_or_default();
+        if kind.is_empty() || kind == "group" {
+            continue;
+        }
+        *controls = controls.saturating_add(1);
+
+        let id = match_name_of(leaf);
+        let name = display_name(leaf, id);
+        let Some(param) = schema
+            .params
+            .iter()
+            .find(|p| folded(p.label) == folded(name) || folded(p.id) == folded(name))
+        else {
+            continue;
+        };
+        let value = match (kind, &param.kind) {
+            (
+                "float",
+                ParamKind::Float { .. }
+                | ParamKind::Slider { .. }
+                | ParamKind::Int { .. }
+                | ParamKind::Angle { .. },
+            ) => EffectValue::Float(from_node(conv, at, leaf, 0, 0.0)),
+            ("colour", ParamKind::Colour { .. }) => EffectValue::Colour([
+                from_node(conv, at, leaf, 0, 0.0),
+                from_node(conv, at, leaf, 1, 0.0),
+                from_node(conv, at, leaf, 2, 0.0),
+                from_node(conv, at, leaf, 3, 1.0),
+            ]),
+            // Named alike, shaped unlike: said out loud rather than coerced.
+            _ => {
+                conv.report.row(
+                    here.clone(),
+                    Outcome::Adjusted,
+                    Reason::EffectParamNotCarried {
+                        effect: schema.label.to_string(),
+                        param: name.to_string(),
+                    },
+                );
+                continue;
+            }
+        };
+        if let Some(p) = inst.params.iter_mut().find(|p| p.id == param.id) {
+            p.value = value;
+            *carried = carried.saturating_add(1);
+        }
+    }
+}
+
+/// A name reduced to what two builds of one plug-in genuinely share: its
+/// letters and digits, in lower case.
+fn folded(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// **The closest Lumit effect, at its own defaults** (K-655, docs/11 §5).
+///
+/// For a third-party effect with no OFX build installed. The effect arrives in
+/// the stack, in the right place, switched on or off as it was — and dialled to
+/// Lumit's defaults, because the vendor's numbers mean the vendor's algorithm
+/// and carrying them over would be a picture that looks deliberate and is not.
+/// The report names both sides so the one dial-in is somewhere the reader can
+/// find it.
+fn nearest(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &Row,
+) -> Option<EffectInstance> {
+    let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
+    inst.enabled = node.enabled.unwrap_or(true);
+    conv.report.row(
+        path.property(display_name(node, match_name_of(node))),
+        Outcome::Adjusted,
+        Reason::EffectNearest {
+            match_name: match_name_of(node).to_string(),
+            instead: lumit_core::fx::schema(&row.lumit)
+                .map_or_else(|| row.lumit.clone(), |s| s.label.to_string()),
+        },
+    );
+    Some(inst)
 }
 
 /// An inert instance that keeps everything (docs/11 §6).
