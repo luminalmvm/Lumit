@@ -48,6 +48,20 @@ with no output at all is the calm terminal no-device state of §3.1: no sound, n
 the picture on its own clock. Changing the device closes the open stream (a cpal stream
 cannot be moved), so sound stops until the next play.
 
+**What the mix is doing** is read off that same callback (K-690). Once per buffer — about
+ten milliseconds — it publishes, for every **mixer strip** and for the master, the loudest
+sample it just wrote (peak) and the root-mean-square of it (RMS), plus a sticky flag saying
+something reached the ceiling and the limiter had to hold it. A strip is **a row of the
+composition being mixed**: a footage layer is its own, and everything arriving through one
+Precomp layer folds onto that layer's row, because that is the row the mixer draws and the
+fader that would move it. A strip reads **pre-master** (how loud that layer is), the master
+reads what the device is handed. The numbers are a fixed bank of plain atomics the callback
+overwrites — never a queue that can fill up — so the panel loads the newest reading whenever
+it repaints and a missed buffer is ten milliseconds of a bar that is about to move again.
+Peak *hold* — the line resting above the bar for a few seconds — is the panel's, not the
+engine's; the clip flag is cleared by hand, because a light that cleared itself would report
+an overload only to somebody who happened to be looking.
+
 Output runs through **cpal** into the OS device (WASAPI on Windows). During preview the
 **audio clock is the master**: the video system schedules frames against the audio
 device's sample position, not a wall-clock timer. The audio callback MUST be real-time

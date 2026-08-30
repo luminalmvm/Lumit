@@ -78,10 +78,11 @@ enum Device {
     /// state. Playback has no sound; nothing retries.
     Unavailable,
     /// A live engine on its thread: the command channel, the shared clock,
-    /// and the device rate media decodes at.
+    /// the mixer's meters, and the device rate media decodes at.
     Ready {
         tx: Sender<Cmd>,
         clock: lumit_audio::ClockHandle,
+        meters: Arc<lumit_audio::meter::Meters>,
         rate: u32,
     },
 }
@@ -124,6 +125,10 @@ struct AudioState {
     /// Decoded sources at the device rate, shared into every plan (`Arc`s, so
     /// a swap re-places without re-decoding).
     decoded: HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
+    /// Which layer each meter slot of the installed plan belongs to, in the
+    /// order the mixer draws its strips (K-690). Replaced with the plan, so
+    /// a poll can never name a strip the sound is not on.
+    meter_strips: Vec<Uuid>,
 }
 
 impl AudioState {
@@ -140,6 +145,7 @@ impl AudioState {
             pending_prepare: None,
             jobs: AudioJobsBuilder::new(),
             decoded: HashMap::new(),
+            meter_strips: Vec::new(),
         }
     }
 }
@@ -205,13 +211,19 @@ fn hash_animation(
 /// in `decoded` (a failed or oversized decode) contributes nothing; the same
 /// placement + Volume bake the egui preview and the exporter use, so playback
 /// sounds identical everywhere.
+/// Which mixer strip each meter slot belongs to — [`strips`]'s answer, and
+/// what a plan's `meter` indices point into.
 pub(crate) fn build_plan(
     jobs: &[AudioJob],
     decoded: &HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
     rate: u32,
     duration_s: f64,
-) -> Arc<MixPlan> {
+) -> (Arc<MixPlan>, Vec<Uuid>) {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
+    // Meter slots in first-sounding order, one per strip (K-690): several
+    // jobs from one Precomp layer share its slot, and past the bank's size
+    // the extras play unmetered rather than being dropped.
+    let mut strips: Vec<Uuid> = Vec::new();
     let clips = jobs
         .iter()
         .filter_map(|job| {
@@ -224,6 +236,13 @@ pub(crate) fn build_plan(
                 rate,
             )?;
             let (gain, envelope) = lumit_render::export::volume_bake(job, start_frame, len, rate);
+            let slot = match strips.iter().position(|s| *s == job.layer) {
+                Some(at) => at,
+                None => {
+                    strips.push(job.layer);
+                    strips.len() - 1
+                }
+            };
             Some(lumit_audio::mix::PlacedClip {
                 buffer: Arc::clone(buffer),
                 start_frame,
@@ -231,13 +250,64 @@ pub(crate) fn build_plan(
                 len,
                 gain,
                 envelope: envelope.map(Arc::new),
+                meter: u8::try_from(slot)
+                    .ok()
+                    .filter(|s| usize::from(*s) < lumit_audio::meter::MAX_STRIPS)
+                    .unwrap_or(lumit_audio::mix::NO_METER),
             })
         })
         .collect();
-    Arc::new(MixPlan {
-        clips,
-        total_frames,
-    })
+    strips.truncate(lumit_audio::meter::MAX_STRIPS);
+    (
+        Arc::new(MixPlan {
+            clips,
+            total_frames,
+        }),
+        strips,
+    )
+}
+
+/// One strip's bars, or the master's — see [`meters`].
+pub(crate) struct Strip {
+    /// The layer whose row this is; `None` for the master.
+    pub layer: Option<Uuid>,
+    pub reading: lumit_audio::meter::MeterReading,
+}
+
+/// What the mix is doing right now: one entry per sounding strip in the order
+/// the mixer draws them, then the master.
+///
+/// Polled at UI rate, so it takes the state lock for a moment and reads
+/// lock-free atomics — no allocation beyond the answer itself, and nothing
+/// the audio callback can wait on. With no device or nothing loaded the list
+/// is empty, which is a mixer with no strips rather than a fault.
+pub(crate) fn meters() -> Vec<Strip> {
+    let st = lock();
+    let Device::Ready { meters, .. } = &st.device else {
+        return Vec::new();
+    };
+    let mut out: Vec<Strip> = st
+        .meter_strips
+        .iter()
+        .enumerate()
+        .map(|(slot, layer)| Strip {
+            layer: Some(*layer),
+            reading: meters.read(slot),
+        })
+        .collect();
+    out.push(Strip {
+        layer: None,
+        reading: meters.read(lumit_audio::meter::MASTER),
+    });
+    out
+}
+
+/// Put every clip light out (docs/09 §3.1): the desk's "I have seen it".
+pub(crate) fn reset_clip() {
+    let st = lock();
+    if let Device::Ready { meters, .. } = &st.device {
+        meters.reset_clip();
+    }
 }
 
 /// Resolve the audio device, building the engine on its own thread on first
@@ -265,7 +335,11 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
     std::thread::spawn(move || {
         let engine = match lumit_audio::AudioEngine::new_on(wanted.as_deref()) {
             Ok(engine) => {
-                let _ = ready_tx.send(Some((engine.clock(), engine.device_rate())));
+                let _ = ready_tx.send(Some((
+                    engine.clock(),
+                    engine.meters(),
+                    engine.device_rate(),
+                )));
                 engine
             }
             Err(_) => {
@@ -296,7 +370,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
         }
     });
     match ready_rx.recv() {
-        Ok(Some((clock, rate))) => {
+        Ok(Some((clock, meters, rate))) => {
             let mut st = lock();
             // The choice moved again while this stream was opening: let the
             // fresh one win rather than installing a stale engine over it.
@@ -306,6 +380,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
             st.device = Device::Ready {
                 tx: tx.clone(),
                 clock,
+                meters,
                 rate,
             };
             Some((tx, rate, generation))
@@ -378,6 +453,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
             send(&st, Cmd::Unload);
             st.loaded_comp = None;
             st.loaded_sig = None;
+            st.meter_strips.clear();
         }
         return;
     };
@@ -404,6 +480,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
             send(&st, Cmd::Unload);
             st.loaded_comp = None;
             st.loaded_sig = None;
+            st.meter_strips.clear();
         }
         return;
     }
@@ -450,7 +527,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         }
     }
 
-    let plan = build_plan(&jobs, &decoded, rate, duration_s);
+    let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s);
 
     // Install: swap keeps the clock and play state (the instant-edit
     // contract); a fresh load applies the pending start and transport intent.
@@ -474,6 +551,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
     }
     st.loaded_comp = Some(comp);
     st.loaded_sig = Some(sig);
+    st.meter_strips = strips;
     trim_decoded(&mut st, &jobs);
 }
 
@@ -521,6 +599,7 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
         send(&st, Cmd::Unload);
         st.loaded_comp = None;
         st.loaded_sig = None;
+        st.meter_strips.clear();
     }
     st.pending_start = Some(start.max(0.0));
     kick_prepare(&mut st, comp, doc);
@@ -599,6 +678,7 @@ pub(crate) fn set_device(id: Option<String>) {
     st.playing = false;
     st.loaded_comp = None;
     st.loaded_sig = None;
+    st.meter_strips.clear();
     st.pending_start = None;
     // Untried rather than Unavailable even when the last attempt found nothing:
     // choosing a device is exactly the moment to look again.
@@ -629,8 +709,10 @@ mod tests {
     use std::path::PathBuf;
 
     fn job(path: &str, in_s: f64, out_s: f64, offset_s: f64) -> AudioJob {
+        let item = Uuid::now_v7();
         AudioJob {
-            item: Uuid::now_v7(),
+            item,
+            layer: item, // one job, one strip: the test's own layer identity
             path: PathBuf::from(path),
             in_s,
             out_s,
@@ -690,7 +772,13 @@ mod tests {
                 samples: vec![0.25; 4 * rate as usize * 2], // 4 s of quiet tone
             }),
         );
-        let plan = build_plan(&[placed.clone(), missing], &decoded, rate, 5.0);
+        let (plan, strips) = build_plan(&[placed.clone(), missing], &decoded, rate, 5.0);
+        assert_eq!(
+            strips,
+            vec![placed.layer],
+            "only the job that actually sounds claims a meter slot"
+        );
+        assert_eq!(plan.clips[0].meter, 0);
         assert_eq!(plan.total_frames, 5 * rate as usize);
         assert_eq!(plan.clips.len(), 1, "the undecoded job contributes nothing");
         // The layer starts at comp second 1 and sounds for its 2-second span.
@@ -717,8 +805,73 @@ mod tests {
                 samples: vec![0.5; 44_100 * 2],
             }),
         );
-        let plan = build_plan(&[j], &decoded, rate, 1.0);
+        let (plan, strips) = build_plan(&[j], &decoded, rate, 1.0);
         assert!(plan.clips.is_empty());
+        assert!(strips.is_empty());
+    }
+
+    /// Two rows of the comp are two slots; a Precomp row's several sources
+    /// share one, because that is the one strip the mixer draws (K-690).
+    /// Past the bank's size the extras still sound and simply have no bar.
+    #[test]
+    fn meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded() {
+        let rate = 48_000u32;
+        let tone = || {
+            Arc::new(lumit_media::AudioBuffer {
+                rate,
+                samples: vec![0.25; rate as usize * 2],
+            })
+        };
+        // Two jobs sharing a strip (one Precomp row), then a strip of its own.
+        let a = job("a.wav", 0.0, 1.0, 0.0);
+        let mut b = job("b.wav", 0.0, 1.0, 0.0);
+        b.layer = a.layer;
+        let c = job("c.wav", 0.0, 1.0, 0.0);
+        let mut decoded = HashMap::new();
+        for j in [&a, &b, &c] {
+            decoded.insert(j.item, tone());
+        }
+        let (plan, strips) = build_plan(&[a.clone(), b, c.clone()], &decoded, rate, 1.0);
+        assert_eq!(strips, vec![a.layer, c.layer], "one slot per strip");
+        assert_eq!(
+            plan.clips.iter().map(|c| c.meter).collect::<Vec<_>>(),
+            vec![0, 0, 1],
+            "the shared row's two sources meter onto the one slot"
+        );
+
+        // More strips than the bank holds: the first MAX_STRIPS are metered,
+        // the rest play with no bar rather than being dropped from the mix.
+        let many: Vec<AudioJob> = (0..lumit_audio::meter::MAX_STRIPS + 3)
+            .map(|_| job("x.wav", 0.0, 1.0, 0.0))
+            .collect();
+        let mut decoded = HashMap::new();
+        for j in &many {
+            decoded.insert(j.item, tone());
+        }
+        let (plan, strips) = build_plan(&many, &decoded, rate, 1.0);
+        assert_eq!(plan.clips.len(), many.len(), "every source still sounds");
+        assert_eq!(strips.len(), lumit_audio::meter::MAX_STRIPS);
+        assert_eq!(
+            plan.clips
+                .iter()
+                .filter(|c| c.meter == lumit_audio::mix::NO_METER)
+                .count(),
+            3,
+            "the three past the bank have no bar"
+        );
+    }
+
+    /// The meter poll before any engine exists is the calm empty state — a
+    /// mixer with no strips, which is what a device-less CI machine reads
+    /// forever, and resetting the clip lights there is a no-op not a fault.
+    #[test]
+    fn meters_read_empty_before_any_engine_exists() {
+        reset_clip();
+        let strips = meters();
+        // Another test on this shared state may have opened a device; only
+        // assert what is invariant — the master is always the last row when
+        // there is a device at all, and nothing panics either way.
+        assert!(strips.is_empty() || strips.last().is_some_and(|s| s.layer.is_none()));
     }
 
     /// The clock poll before any engine exists is the calm zero state — the

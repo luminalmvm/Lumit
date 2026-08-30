@@ -6494,7 +6494,7 @@ a music track that has never shown anything. Each row now shows only the
 switches its layer can actually use. A control that does nothing when you click
 it is worse than no control, because you have to click it to find out.
 
-### The bouncing bars beside a fader (K-683)
+### The bouncing bars beside a fader (K-690)
 
 A mixing desk has a column of little bars next to every fader. They add nothing
 to the sound. What they do is answer, instantly and without you having to listen

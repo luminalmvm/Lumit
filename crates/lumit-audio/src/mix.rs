@@ -10,6 +10,8 @@
 //! buffer. It is pure arithmetic — no sound card, no decoding — so every
 //! rule here is a plain deterministic test.
 
+use crate::meter;
+
 /// Master safety ceiling: −0.3 dBFS as a linear sample amplitude
 /// (`10^(−0.3/20) = 0.966050…`). docs/09-AUDIO.md §3.1 asks for a hard safety
 /// clip so a hot sum leaves headroom below full scale and never reaches the
@@ -181,7 +183,17 @@ pub struct PlacedClip {
     /// frames (0 = this clip's first audible frame). Shared so plan clones
     /// stay cheap; callback-safe (read-only, allocation-free).
     pub envelope: Option<std::sync::Arc<GainEnvelope>>,
+    /// Which mixer strip this clip's level is metered into
+    /// ([`crate::meter`]), or [`NO_METER`] for a clip with no bar of its own.
+    /// Several clips may share a strip — a Precomp layer's whole contents
+    /// meter as the one row the mixer actually shows.
+    pub meter: u8,
 }
+
+/// [`PlacedClip::meter`] for a clip that is not metered: past
+/// [`crate::meter::MAX_STRIPS`] sounding strips, or a plan built by
+/// something with no mixer to draw.
+pub const NO_METER: u8 = u8::MAX;
 
 /// A comp's audio as a *plan* rather than a baked buffer: the placed clips
 /// and the strip length. The realtime callback sums the covering clips per
@@ -223,6 +235,49 @@ impl MixPlan {
             l.clamp(-MASTER_CEILING, MASTER_CEILING),
             r.clamp(-MASTER_CEILING, MASTER_CEILING),
         )
+    }
+
+    /// The `(left, right)` of output frame `i`, as [`Self::frame_at`], with
+    /// each clip's own contribution folded into its strip's accumulator and
+    /// the limited output into [`crate::meter::MASTER`].
+    ///
+    /// The metering is the same arithmetic the bars need and none that they
+    /// do not: two compares and two multiply-adds per clip per frame, on the
+    /// callback's own stack. Nothing is published until the buffer is done,
+    /// so a frame of sound costs no atomic traffic at all.
+    ///
+    /// A strip reads **pre-master**, which is what a strip's bar means: it
+    /// says how loud that layer is, not how loud the fader has left it. The
+    /// master slot reads what the device is actually handed.
+    #[must_use]
+    pub fn frame_metered(&self, i: usize, acc: &mut [meter::MeterAcc; meter::SLOTS]) -> (f32, f32) {
+        let (mut l, mut r) = (0.0f32, 0.0f32);
+        for clip in &self.clips {
+            let Ok(idx) = usize::try_from(i as i64 - clip.start_frame) else {
+                continue;
+            };
+            if idx >= clip.len {
+                continue;
+            }
+            let s = (clip.src_start + idx) * 2;
+            if let (Some(&sl), Some(&sr)) =
+                (clip.buffer.samples.get(s), clip.buffer.samples.get(s + 1))
+            {
+                let g = clip.envelope.as_ref().map_or(clip.gain, |e| e.gain_at(idx));
+                let (cl, cr) = (sl * g, sr * g);
+                if let Some(strip) = acc.get_mut(clip.meter as usize) {
+                    strip.add(cl, cr, MASTER_CEILING);
+                }
+                l += cl;
+                r += cr;
+            }
+        }
+        let (l, r) = (
+            l.clamp(-MASTER_CEILING, MASTER_CEILING),
+            r.clamp(-MASTER_CEILING, MASTER_CEILING),
+        );
+        acc[meter::MASTER].add(l, r, MASTER_CEILING);
+        (l, r)
     }
 
     /// Timeline waveform peaks straight off the plan — no whole-comp buffer
@@ -472,6 +527,7 @@ mod tests {
                 len: 4,
                 gain: 1.0,
                 envelope: Some(Arc::new(env)),
+                meter: 0,
             }],
             total_frames: 4,
         };
@@ -642,6 +698,7 @@ mod tests {
                     len: 6,
                     gain: 1.0,
                     envelope: None,
+                    meter: 0,
                 },
                 PlacedClip {
                     buffer: b,
@@ -650,6 +707,7 @@ mod tests {
                     len: 4,
                     gain: 1.0,
                     envelope: None,
+                    meter: 0,
                 },
             ],
             total_frames: 10,
@@ -678,6 +736,7 @@ mod tests {
                 len: 2,
                 gain: 1.0,
                 envelope: None,
+                meter: 0,
             }],
             total_frames: 4,
         };
@@ -688,6 +747,73 @@ mod tests {
         let peaks = trimmed.waveform_peaks(2);
         assert_eq!(peaks.len(), 2);
         assert!((peaks[0].1 - 0.4).abs() < 1e-6);
+    }
+
+    /// Metering is an observation, never a change: `frame_metered` returns
+    /// exactly what `frame_at` does, each clip's own contribution lands on
+    /// its own strip **before** the sum, and the master slot reads the
+    /// limited output — which is what makes a strip's bar say how loud that
+    /// layer is rather than how loud the mix ended up.
+    #[test]
+    fn metering_reads_each_strip_pre_sum_and_the_master_post_limiter() {
+        use std::sync::Arc;
+        let buf = |v: f32| {
+            Arc::new(lumit_media::AudioBuffer {
+                rate: 48_000,
+                samples: vec![v; 8],
+            })
+        };
+        let clip = |v: f32, strip: u8| PlacedClip {
+            buffer: buf(v),
+            start_frame: 0,
+            src_start: 0,
+            len: 4,
+            gain: 1.0,
+            envelope: None,
+            meter: strip,
+        };
+        // Two loud layers on their own strips: each is under the ceiling, the
+        // sum is not.
+        let plan = MixPlan {
+            clips: vec![clip(0.8, 0), clip(0.5, 1)],
+            total_frames: 4,
+        };
+        let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        for i in 0..4 {
+            assert_eq!(
+                plan.frame_metered(i, &mut acc),
+                plan.frame_at(i),
+                "frame {i}: metering must not change the sound"
+            );
+        }
+        let meters = meter::Meters::default();
+        meters.publish(&acc);
+
+        let a = meters.read(0);
+        assert!((a.peak[0] - 0.8).abs() < 1e-6, "the strip's own level");
+        assert!((a.rms[0] - 0.8).abs() < 1e-6, "a constant tone's RMS is it");
+        assert!(!a.clipped, "0.8 is under the ceiling on its own");
+        assert!((meters.read(1).peak[0] - 0.5).abs() < 1e-6);
+
+        let master = meters.read(meter::MASTER);
+        assert!(
+            (master.peak[0] - MASTER_CEILING).abs() < 1e-6,
+            "the master reads what the device is handed — 1.3 held at the ceiling"
+        );
+        assert!(master.clipped, "and says the limiter had to hold it");
+
+        // A clip with no strip is still heard and simply has no bar.
+        let unmetered = MixPlan {
+            clips: vec![clip(0.6, NO_METER)],
+            total_frames: 4,
+        };
+        let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        let (l, _) = unmetered.frame_metered(0, &mut acc);
+        assert!((l - 0.6).abs() < 1e-6);
+        let meters = meter::Meters::default();
+        meters.publish(&acc);
+        assert_eq!(meters.read(0), meter::MeterReading::default());
+        assert!((meters.read(meter::MASTER).peak[0] - 0.6).abs() < 1e-6);
     }
 
     #[test]

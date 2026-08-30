@@ -21326,7 +21326,7 @@ mix-graph seam, VST3 host, panel surface — each with its test plan, an in-tree
 test plugin, and a free dual-API conformance bench (Airwindows Consolidated, Surge XT
 Effects).
 
-## K-683 — The mix meters itself, one strip per row of the comp, on the callback that makes the sound
+## K-690 — The mix meters itself, one strip per row of the comp, on the callback that makes the sound
 
 **Status: DECIDED (2026-08-30).** Builds the engine half of the approved AudioWorkspace
 board's Mixer and its Levels section. Extends docs/09 §3.1; nothing is reversed.

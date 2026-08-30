@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub mod beat;
+pub mod meter;
 pub mod mix;
 pub mod peaks;
 
@@ -36,6 +37,10 @@ struct Shared {
     /// Frames consumed since load/seek — the clock.
     playhead: AtomicUsize,
     playing: AtomicBool,
+    /// What the mix is doing, published once per callback for the mixer's
+    /// bars (docs/09 §3.1). Written only here; read by anyone holding the
+    /// `Arc`, which is why it is beside the clock rather than inside the plan.
+    meters: Arc<meter::Meters>,
 }
 
 /// A whole buffer as a trivial plan: one clip covering the strip 1:1.
@@ -49,6 +54,7 @@ fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
             len: frames,
             gain: 1.0,
             envelope: None,
+            meter: 0,
         }],
         total_frames: frames,
     })
@@ -172,6 +178,7 @@ impl AudioEngine {
             plan: RwLock::new(None),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
+            meters: Arc::new(meter::Meters::default()),
         });
         let cb = shared.clone();
 
@@ -266,6 +273,14 @@ impl AudioEngine {
             device_rate: self.device_rate,
         }
     }
+
+    /// The mixer's meters, for the same reason [`Self::clock`] exists: the
+    /// engine cannot leave its thread, but a panel on another one still has
+    /// to read what the callback is publishing. Reads are lock-free.
+    #[must_use]
+    pub fn meters(&self) -> Arc<meter::Meters> {
+        Arc::clone(&self.shared.meters)
+    }
 }
 
 /// A read-only, `Send + Sync` view of an [`AudioEngine`]'s playback clock —
@@ -300,22 +315,27 @@ impl ClockHandle {
 fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
     out.fill(0.0);
     if !shared.playing.load(Ordering::Relaxed) {
+        shared.meters.silence();
         return;
     }
     let Some(guard) = shared.plan.try_read() else {
         return; // plan being swapped: one quiet buffer beats a glitch
     };
     let Some(plan) = guard.as_ref() else {
+        shared.meters.silence();
         return;
     };
     let total = plan.total_frames;
     let mut playhead = shared.playhead.load(Ordering::Relaxed);
+    // On the stack, so a buffer's worth of metering costs no atomics and no
+    // allocation; published once, below.
+    let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
     for frame in out.chunks_exact_mut(channels) {
         if playhead >= total {
             shared.playing.store(false, Ordering::Relaxed);
             break;
         }
-        let (l, r) = plan.frame_at(playhead);
+        let (l, r) = plan.frame_metered(playhead, &mut acc);
         frame[0] = l;
         if channels > 1 {
             frame[1] = r;
@@ -323,6 +343,7 @@ fn fill(shared: &Shared, out: &mut [f32], channels: usize) {
         playhead += 1;
     }
     shared.playhead.store(playhead, Ordering::Relaxed);
+    shared.meters.publish(&acc);
 }
 
 #[cfg(test)]
@@ -408,6 +429,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(1000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(false),
+            meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![1.0f32; 256 * 2];
 
@@ -439,6 +461,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(100)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![0.0f32; 64];
         fill(&shared, &mut out, 1);
@@ -453,6 +476,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(48_000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            meters: Arc::new(meter::Meters::default()),
         });
         let handle = ClockHandle {
             shared: shared.clone(),
@@ -479,6 +503,7 @@ mod tests {
             plan: RwLock::new(Some(plan_of(tone(1000)))),
             playhead: AtomicUsize::new(0),
             playing: AtomicBool::new(true),
+            meters: Arc::new(meter::Meters::default()),
         };
         let mut out = vec![0.0f32; 128 * 2];
         fill(&shared, &mut out, 2);

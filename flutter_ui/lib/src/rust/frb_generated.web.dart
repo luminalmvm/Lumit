@@ -292,6 +292,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAudioDevices dco_decode_bridge_audio_devices(dynamic raw);
 
   @protected
+  BridgeAudioMeter dco_decode_bridge_audio_meter(dynamic raw);
+
+  @protected
   BridgeAudioPeaks dco_decode_bridge_audio_peaks(dynamic raw);
 
   @protected
@@ -742,6 +745,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeAudioDevice> dco_decode_list_bridge_audio_device(dynamic raw);
+
+  @protected
+  List<BridgeAudioMeter> dco_decode_list_bridge_audio_meter(dynamic raw);
 
   @protected
   List<BridgeAutosave> dco_decode_list_bridge_autosave(dynamic raw);
@@ -1317,6 +1323,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeAudioMeter sse_decode_bridge_audio_meter(SseDeserializer deserializer);
+
+  @protected
   BridgeAudioPeaks sse_decode_bridge_audio_peaks(SseDeserializer deserializer);
 
   @protected
@@ -1825,6 +1834,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeAudioDevice> sse_decode_list_bridge_audio_device(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeAudioMeter> sse_decode_list_bridge_audio_meter(
       SseDeserializer deserializer);
 
   @protected
@@ -2465,6 +2478,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAudioDevices self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_audio_meter(
+      BridgeAudioMeter self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_audio_peaks(
       BridgeAudioPeaks self, SseSerializer serializer);
 
@@ -3035,6 +3052,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_audio_device(
       List<BridgeAudioDevice> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_audio_meter(
+      List<BridgeAudioMeter> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_autosave(

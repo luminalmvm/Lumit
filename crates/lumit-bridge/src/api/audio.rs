@@ -124,6 +124,70 @@ pub fn audio_clock() -> BridgeAudioClock {
     }
 }
 
+/// One mixer strip's bars, or the master's (docs/09 §3.1, K-690).
+///
+/// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
+/// a bar that wants dB converts where it is drawn, once, rather than the
+/// engine guessing which scale the drawing wanted. 1.0 is full scale.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeAudioMeter {
+    /// The layer this row belongs to, or an empty string for the master. A
+    /// Precomp layer's row covers everything inside it — the mixer draws the
+    /// rows of the comp in front of you.
+    pub layer: String,
+    /// Loudest sample of the last buffer (about ten milliseconds), left then
+    /// right. The little line that rests above the bar for a few seconds is
+    /// the panel's own hold, not this.
+    pub peak_left: f64,
+    pub peak_right: f64,
+    /// Root-mean-square of the same buffer — the body of the bar.
+    pub rms_left: f64,
+    pub rms_right: f64,
+    /// Something has reached the master ceiling since the clip lights were
+    /// last put out, so the limiter is holding sound back. Sticky until
+    /// [`reset_audio_clip`], because a light that cleared itself would only
+    /// report an overload to somebody who happened to be looking.
+    pub clipped: bool,
+}
+
+/// What the mix is doing: one entry per sounding strip in the order the mixer
+/// draws them, then the master last.
+///
+/// Meant to be polled while the mixer is on screen — it takes one short lock
+/// and reads lock-free atomics the audio callback publishes once per buffer.
+/// Empty when nothing is loaded or the machine has no output: a mixer with no
+/// strips, not a fault. A paused transport reads silence rather than freezing
+/// on whatever was playing.
+#[frb(sync)]
+pub fn audio_meters() -> Vec<BridgeAudioMeter> {
+    #[cfg(feature = "media")]
+    {
+        crate::audio::meters()
+            .into_iter()
+            .map(|s| BridgeAudioMeter {
+                layer: s.layer.map(|id| id.to_string()).unwrap_or_default(),
+                peak_left: f64::from(s.reading.peak[0]),
+                peak_right: f64::from(s.reading.peak[1]),
+                rms_left: f64::from(s.reading.rms[0]),
+                rms_right: f64::from(s.reading.rms[1]),
+                clipped: s.reading.clipped,
+            })
+            .collect()
+    }
+    // No decoder, so nothing ever plays and there is nothing to meter.
+    #[cfg(not(feature = "media"))]
+    Vec::new()
+}
+
+/// Put every clip light out. Nothing else about the mix changes — this is the
+/// desk's "I have seen it", not a fix for what lit them.
+#[frb(sync)]
+pub fn reset_audio_clip() {
+    #[cfg(feature = "media")]
+    crate::audio::reset_clip();
+}
+
 /// One output the machine can play through.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

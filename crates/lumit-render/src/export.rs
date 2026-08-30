@@ -68,6 +68,16 @@ pub struct AudioJob {
     /// The footage item the audio comes from — the key the preview path uses
     /// to reuse an already-decoded buffer instead of re-decoding the file.
     pub item: uuid::Uuid,
+    /// **The mixer strip this sound belongs to**: the layer *of the comp
+    /// being mixed* that carries it (docs/09 §3.1, K-690).
+    ///
+    /// For a footage layer that is its own id. For sound arriving through a
+    /// Precomp layer it is the **Precomp layer's** id, not the inner
+    /// footage layer's — the mixer draws the rows of the comp in front of
+    /// you, and a nested comp is one row on it however many sources are
+    /// inside. Several jobs therefore share a strip, which is exactly what
+    /// summing them onto one meter means.
+    pub layer: uuid::Uuid,
     pub path: PathBuf,
     pub in_s: f64,
     pub out_s: f64,
@@ -2407,6 +2417,7 @@ mod tests {
         use lumit_core::Rational;
         let job = |volume: Property, offset_s: f64| AudioJob {
             item: uuid::Uuid::nil(),
+            layer: uuid::Uuid::nil(),
             path: PathBuf::new(),
             in_s: 0.0,
             out_s: 10.0,

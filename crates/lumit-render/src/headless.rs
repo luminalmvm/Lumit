@@ -2439,6 +2439,7 @@ impl AudioJobsBuilder {
             0.0,
             (f64::NEG_INFINITY, f64::INFINITY),
             &[],
+            None,
             &mut visited,
             &mut jobs,
         );
@@ -2453,6 +2454,10 @@ impl AudioJobsBuilder {
         base_s: f64,
         window: (f64, f64),
         carriers: &[(lumit_core::anim::Property, f64)],
+        // The mixer strip everything found down this branch belongs to — the
+        // outermost layer of the comp being mixed (`None` at the top, where
+        // each layer is its own strip). See `AudioJob::layer`.
+        strip: Option<Uuid>,
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
@@ -2467,6 +2472,7 @@ impl AudioJobsBuilder {
                 continue;
             }
             let offset_s = layer.start_offset.0.to_f64() + base_s;
+            let strip = strip.unwrap_or(layer.id);
             match &layer.kind {
                 LayerKind::Footage { item, .. } => {
                     let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
@@ -2477,6 +2483,7 @@ impl AudioJobsBuilder {
                     }
                     jobs.push(AudioJob {
                         item: *item,
+                        layer: strip,
                         path: footage_path(f),
                         in_s,
                         out_s,
@@ -2495,7 +2502,16 @@ impl AudioJobsBuilder {
                     let mut inner = carriers.to_vec();
                     inner.push((layer.volume_db.clone(), offset_s));
                     visited.push(*nested_id);
-                    self.walk(doc, nested, offset_s, (in_s, out_s), &inner, visited, jobs);
+                    self.walk(
+                        doc,
+                        nested,
+                        offset_s,
+                        (in_s, out_s),
+                        &inner,
+                        Some(strip),
+                        visited,
+                        jobs,
+                    );
                     visited.pop();
                 }
                 _ => {}
@@ -3880,6 +3896,46 @@ mod tests {
             "the Precomp layer's Volume rides on the job"
         );
         assert!((job.carriers[0].0.value_at(0.0) - -6.0).abs() < 1e-9);
+        assert_eq!(
+            job.layer, comp.layers[0].id,
+            "the mixer strip is B's own Precomp row, not the footage layer \
+             hidden inside A — the desk draws the comp in front of you"
+        );
+    }
+
+    /// **A strip is a row of the comp being mixed** (K-690). Two sounds
+    /// straight in the comp are two strips; two sounds arriving through one
+    /// Precomp layer are one, because that is the one row the mixer draws
+    /// and the one fader that would move them.
+    #[test]
+    fn each_sounding_row_of_the_comp_is_one_mixer_strip() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let voice = push_footage_item(&mut doc, "vo.wav");
+        // A precomp holding two sounds, placed once in the comp being mixed,
+        // beside a footage layer of its own.
+        let inner = push_comp(&mut doc, "beds", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        push_layer(&mut doc, inner, LayerKind::Footage { item: voice });
+        let outer = push_comp(&mut doc, "edit", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+        push_layer(&mut doc, outer, LayerKind::Footage { item: song });
+
+        let mut builder = AudioJobsBuilder::new();
+        seed_has_audio(song);
+        seed_has_audio(voice);
+        let comp = doc.comp(outer).unwrap().clone();
+        let jobs = builder.audio_jobs(&doc, &comp);
+        assert_eq!(jobs.len(), 3, "three sources sound");
+
+        let (precomp_row, footage_row) = (comp.layers[0].id, comp.layers[1].id);
+        assert_eq!(
+            jobs.iter().map(|j| j.layer).collect::<Vec<_>>(),
+            vec![precomp_row, precomp_row, footage_row],
+            "both of the precomp's sounds fold onto its one row"
+        );
+        let strips: std::collections::BTreeSet<Uuid> = jobs.iter().map(|j| j.layer).collect();
+        assert_eq!(strips.len(), 2, "two rows, two strips");
     }
 
     /// **A Precomp layer over a comp that has sound in it says it has sound**

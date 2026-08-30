@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `document_snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
@@ -24,6 +24,21 @@ void audioStop() => BridgeLib.instance.api.crateApiAudioAudioStop();
 /// short lock.
 BridgeAudioClock audioClock() =>
     BridgeLib.instance.api.crateApiAudioAudioClock();
+
+/// What the mix is doing: one entry per sounding strip in the order the mixer
+/// draws them, then the master last.
+///
+/// Meant to be polled while the mixer is on screen — it takes one short lock
+/// and reads lock-free atomics the audio callback publishes once per buffer.
+/// Empty when nothing is loaded or the machine has no output: a mixer with no
+/// strips, not a fault. A paused transport reads silence rather than freezing
+/// on whatever was playing.
+List<BridgeAudioMeter> audioMeters() =>
+    BridgeLib.instance.api.crateApiAudioAudioMeters();
+
+/// Put every clip light out. Nothing else about the mix changes — this is the
+/// desk's "I have seen it", not a fix for what lit them.
+void resetAudioClip() => BridgeLib.instance.api.crateApiAudioResetAudioClip();
 
 /// Every output the machine offers, and which one is in use.
 ///
@@ -134,4 +149,62 @@ class BridgeAudioDevices {
           devices == other.devices &&
           active == other.active &&
           fellBack == other.fellBack;
+}
+
+/// One mixer strip's bars, or the master's (docs/09 §3.1, K-683).
+///
+/// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
+/// a bar that wants dB converts where it is drawn, once, rather than the
+/// engine guessing which scale the drawing wanted. 1.0 is full scale.
+class BridgeAudioMeter {
+  /// The layer this row belongs to, or an empty string for the master. A
+  /// Precomp layer's row covers everything inside it — the mixer draws the
+  /// rows of the comp in front of you.
+  final String layer;
+
+  /// Loudest sample of the last buffer (about ten milliseconds), left then
+  /// right. The little line that rests above the bar for a few seconds is
+  /// the panel's own hold, not this.
+  final double peakLeft;
+  final double peakRight;
+
+  /// Root-mean-square of the same buffer — the body of the bar.
+  final double rmsLeft;
+  final double rmsRight;
+
+  /// Something has reached the master ceiling since the clip lights were
+  /// last put out, so the limiter is holding sound back. Sticky until
+  /// [`reset_audio_clip`], because a light that cleared itself would only
+  /// report an overload to somebody who happened to be looking.
+  final bool clipped;
+
+  const BridgeAudioMeter({
+    required this.layer,
+    required this.peakLeft,
+    required this.peakRight,
+    required this.rmsLeft,
+    required this.rmsRight,
+    required this.clipped,
+  });
+
+  @override
+  int get hashCode =>
+      layer.hashCode ^
+      peakLeft.hashCode ^
+      peakRight.hashCode ^
+      rmsLeft.hashCode ^
+      rmsRight.hashCode ^
+      clipped.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAudioMeter &&
+          runtimeType == other.runtimeType &&
+          layer == other.layer &&
+          peakLeft == other.peakLeft &&
+          peakRight == other.peakRight &&
+          rmsLeft == other.rmsLeft &&
+          rmsRight == other.rmsRight &&
+          clipped == other.clipped;
 }
