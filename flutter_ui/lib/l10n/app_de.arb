@@ -761,9 +761,25 @@
       }
     }
   },
+  "compGroupFrame": "Frame",
+  "@compGroupFrame": {
+    "description": "New composition / Composition settings dialog: the section naming the size, rate, length and background."
+  },
   "compGroupMotionBlur": "Bewegungsunschärfe",
   "@compGroupMotionBlur": {
     "description": "New composition / Composition settings dialog: the section naming the shutter every blurred layer is drawn through."
+  },
+  "compPresetLabel": "{name} · {rate}",
+  "@compPresetLabel": {
+    "description": "New composition / Composition settings dialog: one entry in the preset list: a format name (not translated) and its frame rate.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
   },
   "compShutterAngle": "Verschlusswinkel",
   "@compShutterAngle": {
@@ -1053,6 +1069,10 @@
   "@exportAllOff": {
     "description": "Export dialog, Composition group: the value of the Effects, Solo switches and Guide layers rows meaning \"ignore every one of them for this export\"."
   },
+  "exportAlpha": "Alpha",
+  "@exportAlpha": {
+    "description": "Export dialog, Picture group: how the colour channels relate to the alpha channel in the written file."
+  },
   "exportAudio16Bit": "16 Bit",
   "@exportAudio16Bit": {
     "description": "Export dialog, Audio row: the bit depth every export is mixed at. Disabled — there is nothing to choose."
@@ -1161,6 +1181,10 @@
   "@exportColourSpaceDisplayP3": {
     "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
   },
+  "exportColourSpaceLinear": "Linear",
+  "@exportColourSpaceLinear": {
+    "description": "Export dialog, Colour section, Colour space list: the space with Rec. 709 primaries and no transfer curve, for a file going back into a compositor. A colour-science term."
+  },
   "exportColourSpaceRec2020": "Rec. 2020",
   "@exportColourSpaceRec2020": {
     "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.2020 wide-gamut space. A standard's number, so it is not translated."
@@ -1189,6 +1213,10 @@
   "@exportCropBottom": {
     "description": "Export dialog, Crop row: the mark before the bottom inset's value box. One letter — the row holds four of these."
   },
+  "exportCropLeft": "L",
+  "@exportCropLeft": {
+    "description": "Export dialog, Crop row: the mark before the left inset's value box. One letter — the row holds four of these."
+  },
   "exportCropReading": "Beschnitten auf {width} × {height}",
   "@exportCropReading": {
     "description": "Export dialog, Picture group: a factual line under the rows saying what the crop leaves, in pixels at composition size.",
@@ -1202,6 +1230,10 @@
         "example": "900"
       }
     }
+  },
+  "exportCropRight": "R",
+  "@exportCropRight": {
+    "description": "Export dialog, Crop row: the mark before the right inset's value box. One letter — the row holds four of these."
   },
   "exportCropTop": "O",
   "@exportCropTop": {
@@ -1282,6 +1314,10 @@
   "exportFromFrame": "Ab Frame",
   "@exportFromFrame": {
     "description": "Export dialogue: the first frame to write."
+  },
+  "exportGroupAudio": "Audio",
+  "@exportGroupAudio": {
+    "description": "Export dialog: the group naming the sound written with the picture."
   },
   "exportGroupColour": "Farbe",
   "@exportGroupColour": {
@@ -1531,6 +1567,10 @@
   "@exportSpan": {
     "description": "Export dialog: row label: which part of the composition is written."
   },
+  "exportSpanFrames": "Frames",
+  "@exportSpanFrames": {
+    "description": "Export dialog: row label for the two frame numbers of a span of one’s own."
+  },
   "exportSpanWholeComp": "Ganze Komposition",
   "@exportSpanWholeComp": {
     "description": "Export dialog: span: every frame of the composition."
@@ -1568,6 +1608,15 @@
       }
     }
   },
+  "exportSummarySize": "≈ {size} GB",
+  "@exportSummarySize": {
+    "description": "Export dialog: the footer line’s estimate of the file size, appended to the summary.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "exportTimeReading": "Anfang {start} · Ende {end} · Dauer {duration}",
   "@exportTimeReading": {
     "description": "Export dialog: a factual line under the Time rows; each value is a timecode.",
@@ -1598,6 +1647,10 @@
   "exportTypeImageSequence": "Bildsequenz",
   "@exportTypeImageSequence": {
     "description": "Export dialog: output type: one numbered still image per frame."
+  },
+  "exportTypeVideo": "Video",
+  "@exportTypeVideo": {
+    "description": "Export dialog: output type: a single video file."
   },
   "exportUseRegionOfInterest": "Interessenbereich verwenden",
   "@exportUseRegionOfInterest": {
@@ -1889,6 +1942,10 @@
   "@frameRate": {
     "description": "Field label: frames per second."
   },
+  "fxA": "A",
+  "@fxA": {
+    "description": "Effect controls — the left-hand number on the Math driver; a variable name, not a word."
+  },
   "fxAdd": "Addieren",
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
@@ -1989,6 +2046,10 @@
   "@fxAsymmetric": {
     "description": "Effect controls — a Type option on Ripple."
   },
+  "fxAudio": "Audio",
+  "@fxAudio": {
+    "description": "Effect controls — the layer whose sound the Audio level driver measures."
+  },
   "fxAudioLevel": "Audiopegel",
   "@fxAudioLevel": {
     "description": "Driver name in the Graph panel — gives a layer's loudness as a number."
@@ -1996,6 +2057,10 @@
   "fxAudioThisComp": "Diese Komposition",
   "@fxAudioThisComp": {
     "description": "Effect controls — the first entry of the Audio level driver's source dropdown, meaning the composition's own mix rather than one named layer."
+  },
+  "fxB": "B",
+  "@fxB": {
+    "description": "Effect controls — the right-hand number on the Math driver; a variable name, not a word."
   },
   "fxBackground": "Hintergrund",
   "@fxBackground": {
@@ -2373,6 +2438,10 @@
   "@fxCustomShader": {
     "description": "Effect controls — the name of the effect that runs a shader the user wrote."
   },
+  "fxCyan": "Cyan",
+  "@fxCyan": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
   "fxCyans": "Cyantöne",
   "@fxCyans": {
     "description": "Effect controls — a colour range on Hue and saturation."
@@ -2452,6 +2521,10 @@
   "fxDetectEdgeThreshold": "Kantenerkennungs-Schwellenwert",
   "@fxDetectEdgeThreshold": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxDiagonal": "Diagonal",
+  "@fxDiagonal": {
+    "description": "Effect controls — an Orientation option on Lens distort."
   },
   "fxDifference": "Differenz",
   "@fxDifference": {
@@ -2641,6 +2714,10 @@
   "@fxElement9": {
     "description": "Effect controls — the coating chosen for one glass element of the Lens flare's lens; the row label is just the element's number."
   },
+  "fxEllipse": "Ellipse",
+  "@fxEllipse": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
+  },
   "fxEllipseOutline": "Ellipsenkontur",
   "@fxEllipseOutline": {
     "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of an ellipse rather than anywhere inside it."
@@ -2652,6 +2729,10 @@
   "fxEmitRate": "Emissionsrate",
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
+  },
+  "fxEmitter": "Emitter",
+  "@fxEmitter": {
+    "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."
   },
   "fxEmitterAngle": "Emitterwinkel",
   "@fxEmitterAngle": {
@@ -2740,6 +2821,10 @@
   "fxFill": "Füllen",
   "@fxFill": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxFilter": "Filter",
+  "@fxFilter": {
+    "description": "Effect controls — a control on Photo filter: which coloured glass."
   },
   "fxFinalResult": "Final result",
   "@fxFinalResult": {
@@ -2957,6 +3042,10 @@
   "@fxHighlights": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
+  "fxHorizontal": "Horizontal",
+  "@fxHorizontal": {
+    "description": "Effect controls — a Displacement option on Turbulent displace, and an Orientation option on Lens distort."
+  },
   "fxHorizontalAmount": "Horizontale Stärke",
   "@fxHorizontalAmount": {
     "description": "Effect controls — a control on Displacement map."
@@ -3040,6 +3129,10 @@
   "fxInterlaceOffset": "Interlace-Versatz",
   "@fxInterlaceOffset": {
     "description": "Effect controls — a control on Scanlines."
+  },
+  "fxInterpolation": "Interpolation",
+  "@fxInterpolation": {
+    "description": "Effect controls — a control on Polar coordinates."
   },
   "fxInvert": "Invertieren",
   "@fxInvert": {
@@ -3197,6 +3290,10 @@
   "@fxLinePeriod": {
     "description": "Effect controls — a control on Scanlines."
   },
+  "fxLinear": "Linear",
+  "@fxLinear": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
   "fxLinearWipe": "Lineare Blende",
   "@fxLinearWipe": {
     "description": "Effect name in the Add effect menu — sweeps a straight edge across the frame."
@@ -3236,6 +3333,10 @@
   "fxLut": "LUT",
   "@fxLut": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxMagenta": "Magenta",
+  "@fxMagenta": {
+    "description": "Effect controls — a Filter option on Photo filter."
   },
   "fxMagentas": "Magentatöne",
   "@fxMagentas": {
@@ -3305,9 +3406,17 @@
   "@fxMaxPoints": {
     "description": "Effect controls — a control on Grid and Scatter: the most points either may make at once, which is also the memory they are given."
   },
+  "fxMaximum": "Maximum",
+  "@fxMaximum": {
+    "description": "Effect controls — a Math driver operation: the larger of the two numbers."
+  },
   "fxMaximumSignal": "Maximales Signal",
   "@fxMaximumSignal": {
     "description": "Effect controls — a control on Broadcast safe: the largest signal amplitude allowed, in IRE."
+  },
+  "fxMedian": "Median",
+  "@fxMedian": {
+    "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
   },
   "fxMidtoneContrast": "Mitteltonkontrast",
   "@fxMidtoneContrast": {
@@ -3316,6 +3425,10 @@
   "fxMidtones": "Mitteltöne",
   "@fxMidtones": {
     "description": "Effect controls — a Curves knot, the curve's output at input 0.5."
+  },
+  "fxMinimum": "Minimum",
+  "@fxMinimum": {
+    "description": "Effect controls — a Math driver operation: the smaller of the two numbers."
   },
   "fxMirror": "Spiegeln",
   "@fxMirror": {
@@ -3424,6 +3537,10 @@
   "fxOperation": "Rechenart",
   "@fxOperation": {
     "description": "Effect controls — which arithmetic the Math driver does."
+  },
+  "fxOrange": "Orange",
+  "@fxOrange": {
+    "description": "Effect controls — a Filter option on Photo filter."
   },
   "fxOrientation": "Ausrichtung",
   "@fxOrientation": {
@@ -3561,6 +3678,10 @@
   "@fxPositionY": {
     "description": "Effect controls — a control on Transform."
   },
+  "fxPositionZ": "Position z",
+  "@fxPositionZ": {
+    "description": "Effect controls — a control on Particulate: how far in front of or behind the layer's own plane the emitter sits."
+  },
   "fxPosterize": "Tontrennung",
   "@fxPosterize": {
     "description": "Effect name in the Add effect menu — the tone range cut into flat steps."
@@ -3593,6 +3714,10 @@
   "@fxQuality": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxRadial": "Radial",
+  "@fxRadial": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
   "fxRadialBlur": "Radialer Weichzeichner",
   "@fxRadialBlur": {
     "description": "Effect controls — the name of an effect."
@@ -3620,6 +3745,10 @@
   "fxRandomness": "Zufälligkeit",
   "@fxRandomness": {
     "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
+  },
+  "fxRate": "Rate",
+  "@fxRate": {
+    "description": "Effect controls — how many turns a second the Colour cycle driver makes."
   },
   "fxRec709": "Rec. 709",
   "@fxRec709": {
@@ -3660,6 +3789,10 @@
   "fxReduceSaturation": "Sättigung verringern",
   "@fxReduceSaturation": {
     "description": "Effect controls — a How to treat option on Broadcast safe: drain colour from an over-saturated pixel until it is legal."
+  },
+  "fxRelief": "Relief",
+  "@fxRelief": {
+    "description": "Effect controls — a control on Emboss and on Texturize: how thick the raised surface reads."
   },
   "fxRemainder": "Rest",
   "@fxRemainder": {
@@ -3860,6 +3993,10 @@
   "fxSegments": "Segmente",
   "@fxSegments": {
     "description": "Effect controls — a Style option on Trail: the tail is drawn as a joined-up ribbon through the remembered places, rather than as separate dabs."
+  },
+  "fxSepia": "Sepia",
+  "@fxSepia": {
+    "description": "Effect controls — a Filter option on Photo filter."
   },
   "fxSetChannels": "Kanäle festlegen",
   "@fxSetChannels": {
@@ -4072,6 +4209,10 @@
   "fxSrgb": "sRGB",
   "@fxSrgb": {
     "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
+  },
+  "fxStandard": "Standard",
+  "@fxStandard": {
+    "description": "Effect controls — a control on Broadcast safe: which television system's signal is being measured."
   },
   "fxStar": "Stern",
   "@fxStar": {
@@ -4305,6 +4446,10 @@
   "@fxTurbulenceSpeed": {
     "description": "Effect controls — a control on Particulate: how quickly those swirls change as a particle ages."
   },
+  "fxTurbulent": "Turbulent",
+  "@fxTurbulent": {
+    "description": "Effect controls — a Fractal type option on Fractal noise."
+  },
   "fxTurbulentDisplace": "Turbulente Verschiebung",
   "@fxTurbulentDisplace": {
     "description": "Effect name in the Add effect menu — the fractal-driven warp."
@@ -4376,6 +4521,10 @@
   "fxVectorScale": "Vektorskalierung",
   "@fxVectorScale": {
     "description": "Fast motion blur parameter label in the Effect Controls panel — how many pixels of movement a full channel of the Motion vectors layer stands for."
+  },
+  "fxVegas": "Vegas",
+  "@fxVegas": {
+    "description": "Effect name in the Add effect menu — runs marching lights along the picture's contours."
   },
   "fxVenetianBlinds": "Jalousie",
   "@fxVenetianBlinds": {
@@ -4457,6 +4606,18 @@
   "@fxWidth": {
     "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
   },
+  "fxWindX": "Wind x",
+  "@fxWindX": {
+    "description": "Effect controls — a control on Particulate: the air's own sideways speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindY": "Wind y",
+  "@fxWindY": {
+    "description": "Effect controls — a control on Particulate: the air's own up-and-down speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindZ": "Wind z",
+  "@fxWindZ": {
+    "description": "Effect controls — a control on Particulate: the air's own speed through the layer's plane, towards or away from the camera, which moves particles only while Drag is above zero."
+  },
   "fxWindow": "Fenster",
   "@fxWindow": {
     "description": "Effect controls — how long a stretch of sound the Audio level driver measures."
@@ -4532,6 +4693,10 @@
   "graphGroup": "Gruppe",
   "@graphGroup": {
     "description": "Graph panel node search: the kind shown beside a row that is a saved group of boxes rather than a single one, in the place an effect row shows its category."
+  },
+  "graphKeyFrameField": "Frame",
+  "@graphKeyFrameField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact frame, in the small box that opens when a keyframe is double-clicked."
   },
   "graphKeyKicker": "Keyframe",
   "@graphKeyKicker": {
@@ -5672,6 +5837,10 @@
   "@metadataComment": {
     "description": "Export dialog, Metadata section: a free note written into the file."
   },
+  "metadataCopyright": "Copyright",
+  "@metadataCopyright": {
+    "description": "Export dialog, Metadata section: the copyright line written into the file."
+  },
   "metadataCreated": "Erstellt",
   "@metadataCreated": {
     "description": "Export dialog, Metadata section: the creation time written into the file."
@@ -6671,6 +6840,18 @@
   "@settingsExportFilename": {
     "description": "Row label on Settings > Export. A pattern the suggested file name of an export is built from."
   },
+  "settingsExportFilenameHint": "{comp}-{date}",
+  "@settingsExportFilenameHint": {
+    "description": "Placeholder text shown inside the empty filename-template field on Settings > Export. It is an example pattern rather than a sentence. Both values arrive as literal token text in curly braces — the composition-name token and the date token — which Lumit substitutes when it builds a file name; never translate the tokens themselves, only the punctuation between them.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "settingsExportNoFolder": "Noch kein Ordner gewählt",
   "@settingsExportNoFolder": {
     "description": "Line under the Destination row on Settings > Export, shown when the fixed-folder option is chosen but no folder has been picked. The folder's path replaces it once one is picked."
@@ -7049,9 +7230,17 @@
   "@settingsPageAppearance": {
     "description": "Settings window: name of a page in the sidebar."
   },
+  "settingsPageAudio": "Audio",
+  "@settingsPageAudio": {
+    "description": "Settings window: name of a page in the sidebar — where sound comes out."
+  },
   "settingsPageAutosave": "Automatisches Speichern",
   "@settingsPageAutosave": {
     "description": "Settings window: name of a page in the sidebar — how often Lumit writes a spare copy of the project."
+  },
+  "settingsPageExport": "Export",
+  "@settingsPageExport": {
+    "description": "Name of the Export page in the Settings window's sidebar of pages."
   },
   "settingsPageGeneral": "Allgemein",
   "@settingsPageGeneral": {
@@ -7217,9 +7406,33 @@
   "@shaderEditorTitle": {
     "description": "Title of the window that opens from a Custom shader effect's 'Edit shader…' button, where the user types the shader program. Shown capitalised as a kicker in the window's title strip."
   },
+  "shaderNodeMatte": "Matte",
+  "@shaderNodeMatte": {
+    "description": "Name of the 'Matte' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the effect's matte strength at each point. Also a row of the box search that adds one."
+  },
+  "shaderNodeMax": "Maximum",
+  "@shaderNodeMax": {
+    "description": "Name of the 'Maximum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMin": "Minimum",
+  "@shaderNodeMin": {
+    "description": "Name of the 'Minimum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeModulo": "Modulo",
+  "@shaderNodeModulo": {
+    "description": "Name of the 'Modulo' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeParam": "Parameter",
+  "@shaderNodeParam": {
+    "description": "Name of the 'Parameter' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — declares one control row in the Effect controls panel. Also a row of the box search that adds one."
+  },
   "shaderNodeUv": "UV",
   "@shaderNodeUv": {
     "description": "Name of the 'UV' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the position of the pixel being drawn, 0..1 across the frame. Also a row of the box search that adds one."
+  },
+  "shaderPortUv": "uv",
+  "@shaderPortUv": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — a position across the frame. Lower case: socket labels are quiet row text beside the wire dots."
   },
   "shapeCombine": "Kombinieren",
   "@shapeCombine": {
@@ -7280,6 +7493,14 @@
   "shapeGradientFlat": "Einfarbig",
   "@shapeGradientFlat": {
     "description": "One choice on a shape layer's Gradient row: no ramp, the fill is one colour."
+  },
+  "shapeGradientLinear": "Linear",
+  "@shapeGradientLinear": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps along a line."
+  },
+  "shapeGradientRadial": "Radial",
+  "@shapeGradientRadial": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
   },
   "shapeGradientStartX": "Verlaufsanfang x",
   "@shapeGradientStartX": {
@@ -7416,6 +7637,10 @@
   "strokeStart": "Anfang",
   "@strokeStart": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark begins, as a percentage."
+  },
+  "surroundNeutral": "Neutral",
+  "@surroundNeutral": {
+    "description": "One choice for the Viewer's surround: a plain grey, which is what a grade has to be judged against."
   },
   "swatchForget": "Diese Farbe vergessen",
   "@swatchForget": {
@@ -7765,6 +7990,15 @@
   "@tipBrushSize": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
   },
+  "tipCacheDisk": "{path}",
+  "@tipCacheDisk": {
+    "description": "Tooltip on the disk cache meter, which is the folder frames are parked in and nothing else. {path} is that folder and is not translated. A tooltip is a name, never more than two words (K-482).",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "tipCacheDiskNone": "Kein Ordner",
   "@tipCacheDiskNone": {
     "description": "Tooltip on the disk cache meter when the machine offers no cache folder."
@@ -7812,6 +8046,16 @@
   "tipDisplayTransform": "Anzeigetransformation",
   "@tipDisplayTransform": {
     "description": "Tooltip on the Viewer bar's colour-management badge, which reads the display transform the picture is shown through. One or two words."
+  },
+  "tipDrivenBy": "{driver}",
+  "@tipDrivenBy": {
+    "description": "Tooltip on the driven mark that stands where a parameter row's stopwatch would be, in Effect controls, the Node panel and the Timeline fold-out. It is the driver box's own name and nothing else: the row already carries the word 'driven' beside the mark, so the tooltip names the box the way any other tooltip names its control.",
+    "placeholders": {
+      "driver": {
+        "type": "String",
+        "example": "Wiggle"
+      }
+    }
   },
   "tipEdgeHardness": "Kantenhärte",
   "@tipEdgeHardness": {
@@ -7910,6 +8154,10 @@
   "tipMasterMotionBlurOn": "Unschärfe an",
   "@tipMasterMotionBlurOn": {
     "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
+  },
+  "tipMatte": "Matte",
+  "@tipMatte": {
+    "description": "Tooltip on the matte cell. One or two words."
   },
   "tipMeasureRenderTimes": "Zeiten messen",
   "@tipMeasureRenderTimes": {
@@ -8106,6 +8354,10 @@
   "@tipTransportNext": {
     "description": "Tooltip on the Viewer transport's step-forward button, an icon with no words: it moves the playhead on by one frame."
   },
+  "tipTransportPause": "Pause",
+  "@tipTransportPause": {
+    "description": "Tooltip on the Viewer transport's play button while playback is running, an icon with no words: pressing it stops."
+  },
   "tipTransportPlay": "Abspielen",
   "@tipTransportPlay": {
     "description": "Tooltip on the Viewer transport's play button while playback is stopped, an icon with no words: pressing it starts."
@@ -8186,6 +8438,15 @@
   "tipZoomOut": "Verkleinern",
   "@tipZoomOut": {
     "description": "Tooltip on the small landscape glyph at the left end of the Timeline's zoom slider. Clicking it zooms one step out."
+  },
+  "tipZoomPercent": "Zoom {percent}%",
+  "@tipZoomPercent": {
+    "description": "Tooltip on the Timeline's zoom slider. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
   },
   "tokenAccent": "Akzent",
   "@tokenAccent": {
@@ -8768,6 +9029,18 @@
   "@transformPosition": {
     "description": "Where a layer sits."
   },
+  "transformPositionX": "Position x",
+  "@transformPositionX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the position, shown once its axes have been separated."
+  },
+  "transformPositionY": "Position y",
+  "@transformPositionY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the position, shown once its axes have been separated."
+  },
+  "transformPositionZ": "Position z",
+  "@transformPositionZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth half of a 3D layer's position, shown once its axes have been separated."
+  },
   "transformRotation": "Drehung",
   "@transformRotation": {
     "description": "How far a layer is turned."
@@ -8853,14 +9126,29 @@
   "@unitPixels": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
+  "unitSymbolDegrees": "°",
+  "@unitSymbolDegrees": {
+    "description": "The unit rider beside an effect parameter's value when the number is an angle. A symbol, not a word — it sits in a narrow column beside the number.",
+    "type": "text"
+  },
   "unitSymbolFrames": "Frames",
   "@unitSymbolFrames": {
     "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
     "type": "text"
   },
+  "unitSymbolPercent": "%",
+  "@unitSymbolPercent": {
+    "description": "The unit rider beside an effect parameter's value when the number is a percentage. A symbol, not a word — it sits in a narrow column beside the number.",
+    "type": "text"
+  },
   "unitSymbolPx": "px",
   "@unitSymbolPx": {
     "description": "The unit rider beside an effect parameter's value when the number is a distance in pixels at composition size. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unitSymbolSeconds": "s",
+  "@unitSymbolSeconds": {
+    "description": "The unit rider beside an effect parameter's value when the number is a length of time in seconds. Abbreviated because it sits in a narrow column beside the number.",
     "type": "text"
   },
   "unsavedChanges": "Ungespeicherte Änderungen",
@@ -9148,6 +9436,18 @@
   "@viewerColourConfigOff": {
     "description": "The Viewer header's colour-pipeline picker, on its closed face. The project names a colour configuration but it is missing or unusable, so the picture is being shown through the built-in transform instead. Short: it sits on a 22px strip. Config is short for configuration."
   },
+  "viewerColourViewFace": "{view} — {display}",
+  "@viewerColourViewFace": {
+    "description": "The Viewer header's colour-pipeline picker, on its closed face, naming the view the picture is shown through. Both words come out of the user's own colour configuration file and stay exactly as they are; only the punctuation between them is ours.",
+    "placeholders": {
+      "view": {
+        "type": "String"
+      },
+      "display": {
+        "type": "String"
+      }
+    }
+  },
   "viewerDisplayTransform": "Linear → sRGB",
   "@viewerDisplayTransform": {
     "description": "Colour-management badge on the Viewer bar: the display transform, written as working space then an arrow then the display's space. \"Linear\" and \"sRGB\" are colour-space names and are not translated."
@@ -9188,6 +9488,60 @@
   "viewerQualityResolution": "Vorschauauflösung",
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
+  },
+  "viewerReadout": "{comp} · {time} · {source} → {preview} · {zoom}",
+  "@viewerReadout": {
+    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, the time shown, the composition's own pixel size, the pixel size the preview was actually made at, and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "preview": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "viewerReadoutNoComp": "{time} · {source} · {zoom}",
+  "@viewerReadoutNoComp": {
+    "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "viewerReadoutNoPreview": "{comp} · {time} · {source} · {zoom}",
+  "@viewerReadoutNoPreview": {
+    "description": "The Viewer bar's reading, second form, used when the bar is too narrow for the full one: the same line with the arrow and the preview's own pixel size dropped. Which composition is on screen, the time shown, the composition's pixel size, and the magnification. Every part is a number or a name, so only the separators are translatable.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
   },
   "volume": "Lautstärke",
   "@volume": {
@@ -9248,6 +9602,17 @@
   "welcomeRecent": "Zuletzt verwendet",
   "@welcomeRecent": {
     "description": "Welcome screen: the heading over the list of recently opened projects. Drawn in capitals, so give the sentence-case word."
+  },
+  "welcomeRecentDate": "{when}",
+  "@welcomeRecentDate": {
+    "description": "Welcome screen: the date a recent project was last opened, for anything older than today. Day and short month only — it has 70px of room.",
+    "placeholders": {
+      "when": {
+        "type": "DateTime",
+        "format": "d MMM",
+        "isCustomDateFormat": true
+      }
+    }
   },
   "welcomeToday": "Heute",
   "@welcomeToday": {
