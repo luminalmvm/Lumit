@@ -10202,6 +10202,14 @@
   "@badgeShaderFailed": {
     "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
   },
+  "shaderEditorTitle": "Edit shader",
+  "@shaderEditorTitle": {
+    "description": "Title of the window that opens from a Custom shader effect's 'Edit shader…' button, where the user types the shader program. Shown capitalised as a kicker in the window's title strip."
+  },
+  "shaderCompiles": "The shader compiles",
+  "@shaderCompiles": {
+    "description": "Quiet line under the code box in the shader editor window, when the program the user has typed compiles. Replaced by the compiler's own message when it does not. A statement, not praise."
+  },
   "menuRowTicked": "Ticked",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."

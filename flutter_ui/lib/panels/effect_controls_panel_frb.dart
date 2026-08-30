@@ -64,6 +64,7 @@ import 'graph_panel.dart' show drivenParamsOf;
 import 'camera_track_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
+import 'shader_editor.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
@@ -165,18 +166,21 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     } catch (_) {
       return;
     }
-    final stack = layer.getEffects();
-    for (final instance in stack) {
-      if (instance.id() != effect) continue;
-      instance.setShaderSource(source: text, origin: path);
-      try {
-        layer.setEffects(effects: stack);
-      } catch (_) {
-        // The stack changed under us; re-reading is the recovery.
-      }
-      break;
-    }
+    applyShaderSource(
+        layer: layer, effect: effect, source: text, origin: path);
     if (mounted) context.read<LumitUiState>().model.refresh();
+  }
+
+  /// Open the shader editor on `effect` and refresh on what it applied
+  /// (docs/impl/custom-shader.md §3.2, CS3).
+  ///
+  /// The window commits through the same one write `Load from file…` does, so
+  /// either way of getting text onto a shader is one `SetLayerEffects` and one
+  /// undo step.
+  Future<void> _editShaderOn(LayerReference layer, UuidValue effect) async {
+    final applied = await showShaderEditor(
+        context: context, layer: layer, effect: effect);
+    if (applied && mounted) context.read<LumitUiState>().model.refresh();
   }
 
   /// How many Action buttons have been pressed in this panel's life (K-417).
@@ -788,16 +792,21 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           curvePlotSize: ui.workspace.curvePlotSize,
                           onCurvePlotSize: ui.workspace.setCurvePlotSize,
                           onAction: (effect, param) {
-                            // The Custom shader's `Load from file…` is the
-                            // frontend's own button (docs/impl/custom-shader.md
-                            // §1.1): it opens a native dialogue and copies the
-                            // text onto the instance, neither of which is an
-                            // event the engine could answer. Every other Action
-                            // row goes back as one, which is what the kind is.
-                            if (param == 'load_from_file' &&
-                                info.effects[index].name == 'custom_shader') {
-                              _loadShaderInto(layer, effect);
-                              return;
+                            // The Custom shader's two buttons are the
+                            // frontend's own (docs/impl/custom-shader.md §1.1,
+                            // §3.2): one opens a native file dialogue, the
+                            // other the editor window, and neither is an event
+                            // the engine could answer. Every other Action row
+                            // goes back as one, which is what the kind is.
+                            if (info.effects[index].name == 'custom_shader') {
+                              if (param == 'load_from_file') {
+                                _loadShaderInto(layer, effect);
+                                return;
+                              }
+                              if (param == 'edit') {
+                                _editShaderOn(layer, effect);
+                                return;
+                              }
                             }
                             try {
                               fireEffectAction(

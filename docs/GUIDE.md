@@ -12883,14 +12883,24 @@ Every effect in Lumit is a small program that runs on the graphics card, and eve
 them so far was written by us. The **Custom shader** effect is the one that lets somebody
 else write one — a person with an idea and twenty lines of code, who does not want to build
 a plugin, learn Rust, or ask us first. `docs/impl/custom-shader.md` is the plan and this
-section is the plain-English half of it; the effect, its grammar and its pipeline are built,
-and the editor surface and the box canvas below are the parts still to come.
+section is the plain-English half of it; the effect, its grammar, its pipeline and the
+editor window are built, and the box canvas below is the part still to come.
 
 ### What it looks like to use
 
 It is an ordinary entry in the effects menu. Drop it on a layer and nothing happens, because
 it has no program yet. Open it and type one — or load a file somebody sent you — and the
 layer starts doing whatever the program says.
+
+The typing happens in a small window the effect's *Edit shader* button opens: a monospaced
+box with numbered lines, and a line underneath saying what the compiler makes of the text.
+It does not check every keystroke — that would be noise while you are mid-word — it waits
+for a short pause in the typing and then quietly updates its verdict, with the complaint's
+line number counted from *your* text, not from the wrapping Lumit puts around it. Apply (or
+Ctrl+Enter) puts the program on the effect as a single undoable step; Cancel throws the
+typing away. Applying a program that does not compile is allowed, because half-finished is
+a normal state to save your place in — the picture keeps the last version that worked, and
+the effect wears the calm note saying so.
 
 The part worth understanding is where the **controls** come from. In an ordinary effect, we
 write down the controls: Gaussian blur has a Radius because somebody typed "radius" into its

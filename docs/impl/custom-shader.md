@@ -12,8 +12,13 @@ K-129/K-065 (`.lumfx` preset files), K-031 (preview equals export).
 **Status: CS1's engine half is built** (K-650, 2026-08-30) — the catalogue entry, the §1.4
 grammar and its derived rows, the §1.3 assembler, naga validation and the §2.2 refusals, the
 §2.3 NaN epilogue, the source-hash pipeline cache and the §3.2 last-good rule, and the §2.4
-frame-key term. CS2 (the bridge), CS3 (the editor surface), CS4 (the inner graph) and CS5
-(entry) are not. Four things K-650 settled where this note left a choice open, and which the
+frame-key term. **CS2 and CS3 are built too**: the bridge's instance-scoped
+`list_parameters`, `shader_source`/`set_shader_source` and `shader_status`, and the editor
+window `Edit shader…` opens — Apply commits synchronously as one `SetLayerEffects`, and the
+preview check while typing is a debounced `shader_status` call answered from the engine's
+source-hash cache, not §3.2's worker job (whose trigger for existing is a felt stutter while
+typing; the render path never waits on it either way). CS4 (the inner graph) and CS5 (entry)
+are not built. Four things K-650 settled where this note left a choice open, and which the
 rest of the note should be read against:
 
 - **The derived rows are `&'static [ParamSchema]`** from a session-lived parse cache keyed by

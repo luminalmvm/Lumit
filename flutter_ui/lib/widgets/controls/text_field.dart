@@ -73,6 +73,19 @@ class HouseTextField extends StatefulWidget {
   /// row), where the default 3 px above and below would burst it.
   final EdgeInsets padding;
 
+  /// Many lines instead of one, filling the height the parent gives it —
+  /// what a **code well** is (docs/impl/custom-shader.md CS3). Enter inserts a
+  /// newline rather than submitting, and the text scrolls inside the box.
+  ///
+  /// The single-line well is still the default and still what every other
+  /// caller gets: a well is one line unless somebody asks for a page.
+  final bool multiline;
+
+  /// The well's scroll position, owned by the caller — for a gutter that has
+  /// to follow the text it numbers. Null and [EditableText] makes its own, as
+  /// every single-line caller wants.
+  final ScrollController? scrollController;
+
   /// The well's fill, for the two grounds the mockups actually draw. The
   /// default `surface0` is the recess every well takes (§2.1) — the Timeline's
   /// layer search, the ease popup's fields, an inline rename. A search well
@@ -97,6 +110,8 @@ class HouseTextField extends StatefulWidget {
     this.focusNode,
     this.style,
     this.hint,
+    this.multiline = false,
+    this.scrollController,
     this.leading,
     this.leadingInteractive = false,
     this.textAlign = TextAlign.start,
@@ -342,6 +357,15 @@ class _HouseTextFieldState extends State<HouseTextField>
                     autofocus: widget.autofocus,
                     style: widget.style ?? t.bodyPrimary,
                     textAlign: widget.textAlign,
+                    // A page rather than a line: `expands` fills the height the
+                    // caller gave the well, and the multiline keyboard type is
+                    // what makes Enter a newline instead of a submission.
+                    maxLines: widget.multiline ? null : 1,
+                    expands: widget.multiline,
+                    keyboardType: widget.multiline
+                        ? TextInputType.multiline
+                        : TextInputType.text,
+                    scrollController: widget.scrollController,
                     cursorColor: t.accent,
                     backgroundCursorColor: t.surface2,
                     selectionColor: t.accent.withValues(alpha: 0.5),
