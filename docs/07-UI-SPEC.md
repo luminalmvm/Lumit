@@ -1618,6 +1618,22 @@ arithmetic is the one shared pure module (`panels/timeline_snap.dart`).
 - The playhead MUST stay visible during playback via edge-follow scrolling (page-flip or
   smooth per user setting); the timeline MUST NOT recentre while the user is dragging
   anything.
+- **The time navigator** (K-648): a slim strip across the top of the panel, above the ruler,
+  drawing the **whole composition** at a fixed size with the span the lanes are showing as a
+  **window** on it and the playhead as a line. The scrollbar under the lanes says where you
+  are in pixels of a content width nobody can see and says nothing about the playhead; this
+  says which slice, how big against the whole, and where the frame you are on sits in it.
+  It is a control as well: **drag the window to pan**, **drag either end to zoom** — about
+  the end not taken hold of, so the frame the eye is on does not move — and press anywhere
+  on the track to bring the window there. AE's gestures, so nobody has to learn them.
+  It carries **no numbers, ticks, markers or work area**: everything on it is about the
+  *view*, and drawing the document too would be a second ruler at the wrong scale two pixels
+  above the real one. It stands the **full panel width and draws only over the lane area** —
+  the ruler's height is derived from the outline's two header rows so the halves line up row
+  for row (§12A.1), and a strip on the lane side alone would drop every lane half a band
+  below its own name. Its look is the ruler band's: the lane ground, a closing hairline, and
+  a window edged with the work-area handles' own drawn tabs, a step stronger under the
+  pointer.
 
 **Shipped (K-189, K-190):** the outline and lanes scroll vertically as one table — one
 linked scroll, the visible thumb on the lane side; in graph view each side scrolls alone

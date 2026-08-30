@@ -76,6 +76,7 @@ import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'timeline_extras_frb.dart';
+import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
@@ -2386,6 +2387,45 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         duration: fly ? animationDuration(_animationLevel) : Duration.zero);
   }
 
+  /// The navigator asked for a window: `start` frames from the left, `span`
+  /// frames across (T5).
+  ///
+  /// The strip draws the view and names what it wants; turning that into a
+  /// magnification and an offset is this panel's job, because this panel owns
+  /// both. The window's **left edge is the anchor** and is held for the length
+  /// of the gesture ([_zoomAnchorHeld]), which is what makes dragging the
+  /// window's right-hand end zoom about its left-hand one: the frame the eye is
+  /// on stays exactly where it is while the span changes around it. The strip
+  /// swaps the two ends over for the other handle by naming a different start.
+  ///
+  /// A pan asks for the same span it already had, and a zoom that is not
+  /// changing does not notify — so there is no tick to carry the anchor into
+  /// layout, and the offset is jumped straight to the frame instead.
+  void _navigateTo(double start, double span) {
+    if (_laneFrames <= 0 || span <= 0) return;
+    _zoomAnchorFrame = start;
+    _zoomAnchorViewportX = 0;
+    _zoomAnchorHeld = true;
+    final want = (_laneFrames / span).clamp(1.0, _maxZoom);
+    if ((want - _zoomMotion.target).abs() > 1e-9) {
+      _setZoom(want, fly: false);
+    } else {
+      _scrollFrameToLeftEdge(start);
+    }
+  }
+
+  /// Put [frame] at the lanes' left edge, at the width the lanes have now.
+  void _scrollFrameToLeftEdge(double frame) {
+    final position = positionOf(_hLane);
+    if (position == null || _laneFrames <= 0) return;
+    final span = position.viewportDimension +
+        position.maxScrollExtent -
+        TimelineAxis.pad * 2;
+    if (span <= 0) return;
+    _hLane.jumpTo((TimelineAxis.pad + frame * span / _laneFrames)
+        .clamp(0.0, position.maxScrollExtent));
+  }
+
   /// True while a slider drag holds the anchor fixed — see [_setZoom].
   bool _zoomAnchorHeld = false;
 
@@ -2533,9 +2573,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       List<double> heights, Offset global, DensityTokens density) {
     final box = _dropArea.currentContext?.findRenderObject();
     if (box is! RenderBox) return 0;
-    // The two chrome rows above the stack — the same pair the lane side
-    // spends on its ruler, which is exactly what `density.ruler` is.
+    // Everything above the stack: the navigator strip and its hairline (T5),
+    // then the two chrome rows — the same pair the lane side spends on its
+    // ruler, which is exactly what `density.ruler` is. Both are taken off, or
+    // a drop lands a row above where it was let go.
     final y = box.globalToLocal(global).dy -
+        TimelineNavigator.band -
         density.ruler +
         (_vLane.hasClients ? _vLane.offset : 0);
     final slot = layerDropSlot(heights, y);
@@ -2872,93 +2915,124 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // editing recognisers over these surfaces exclude the
                   // trackpad in turn, so they cannot take it back
                   // (`dragDevices` in widgets/controls.dart).
-                  return ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context).copyWith(
-                        dragDevices: const {PointerDeviceKind.trackpad},
-                        scrollbars: false),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // **The outline redraws under a seam drag** (T4): while
-                        // a seam is in hand this half is built at the live
-                        // width, so the Layers column's names widen with the
-                        // gesture and a switch column's cells go away as the
-                        // seam passes them. Only this half listens — nothing
-                        // right of the seam depends on a column width, and
-                        // rebuilding the lanes and bars per pointer move is
-                        // what made this drag lag when it was tried before.
-                        ValueListenableBuilder<
-                            MapEntry<TimelineGroup, double>?>(
-                          valueListenable: _liveResize,
-                          builder: (context, live, _) {
-                            final widths =
-                                _liveWidths(groupWidths, live, anyMatte);
-                            return _outlineHalf(context, ui, comp,
-                                rows: rows,
-                                layers: layers,
-                                blockHeights: blockHeights,
-                                groupOrder: groupOrder,
-                                groupWidths: widths,
-                                matteToggles: anyMatte,
-                                graphColours: graphColours,
-                                outlineViewport: outlineViewport,
-                                channels: channels,
-                                outlineWidth: live == null
-                                    ? outlineWidth
-                                    : outlineWidthOf(widths));
-                          },
-                        ),
-                        Expanded(
-                          // **Only this half rebuilds when the zoom moves**
-                          // (K-293). The zoom is a `Listenable`, and the lane
-                          // side listens to it here rather than the panel
-                          // calling `setState`: nothing left of the seam — the
-                          // toolbar, the column header, every outline row, and
-                          // the work-area and fold reads that come with them —
-                          // depends on the zoom, and rebuilding all of it once
-                          // per animation frame is what made a dragged zoom
-                          // slider crawl.
-                          child: ListenableBuilder(
-                            listenable: _zoomMotion,
-                            builder: (context, _) {
-                              // The axis spans the lane viewport times the
-                              // zoom: at 1 the whole comp fits the panel (the
-                              // Viewer's fit-to-panel habit); zoomed in, the
-                              // lanes scroll under the bottom bar's scrollbar.
-                              final axis = TimelineAxis(
-                                  frames: frames, width: laneViewport * _zoom);
-                              // Where the work area falls, read once and handed
-                              // to the ruler, the lanes and the curves alike
-                              // (K-203) — and null pixels when it covers the
-                              // whole comp, which is when there is no
-                              // out-of-range ground to wash.
-                              final graphWork = work.whole
-                                  ? null
-                                  : (axis.xOf(work.start), axis.xOf(work.end));
-                              return _graph
-                                  ? _graphHalf(context, ui, comp,
-                                      axis: axis,
-                                      channels: channels,
-                                      rows: rows,
-                                      work: work,
-                                      graphWork: graphWork,
-                                      frames: frames,
-                                      fpsNum: fpsNum,
-                                      fpsDen: fpsDen)
-                                  : _laneHalf(context, ui, comp,
-                                      axis: axis,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // The time navigator (T5): the whole comp as a strip,
+                      // with the slice the lanes are showing drawn on it.
+                      //
+                      // **Above both halves, not above the lanes alone.** The
+                      // ruler's height is derived from the outline's two header
+                      // rows precisely so the two sides line up row for row
+                      // (docs/15 §12A.1); a strip inserted on the lane side
+                      // would push every lane half a band below its own name.
+                      // It stands the full width and draws only over the lane
+                      // area, which is also where After Effects puts it.
+                      TimelineNavigator(
+                        leading: outlineViewport,
+                        trailing: scrollGutterWidth,
+                        frames: frames,
+                        zoom: _zoomMotion,
+                        hScroll: _hLane,
+                        playhead: ui.playheadFrame,
+                        onWindow: _navigateTo,
+                        onWindowEnd: _zoomDragEnd,
+                      ),
+                      Expanded(
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(context).copyWith(
+                              dragDevices: const {PointerDeviceKind.trackpad},
+                              scrollbars: false),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // **The outline redraws under a seam drag** (T4): while
+                              // a seam is in hand this half is built at the live
+                              // width, so the Layers column's names widen with the
+                              // gesture and a switch column's cells go away as the
+                              // seam passes them. Only this half listens — nothing
+                              // right of the seam depends on a column width, and
+                              // rebuilding the lanes and bars per pointer move is
+                              // what made this drag lag when it was tried before.
+                              ValueListenableBuilder<
+                                  MapEntry<TimelineGroup, double>?>(
+                                valueListenable: _liveResize,
+                                builder: (context, live, _) {
+                                  final widths =
+                                      _liveWidths(groupWidths, live, anyMatte);
+                                  return _outlineHalf(context, ui, comp,
                                       rows: rows,
                                       layers: layers,
                                       blockHeights: blockHeights,
-                                      work: work,
-                                      frames: frames,
-                                      fpsNum: fpsNum,
-                                      fpsDen: fpsDen);
-                            },
+                                      groupOrder: groupOrder,
+                                      groupWidths: widths,
+                                      matteToggles: anyMatte,
+                                      graphColours: graphColours,
+                                      outlineViewport: outlineViewport,
+                                      channels: channels,
+                                      outlineWidth: live == null
+                                          ? outlineWidth
+                                          : outlineWidthOf(widths));
+                                },
+                              ),
+                              Expanded(
+                                // **Only this half rebuilds when the zoom moves**
+                                // (K-293). The zoom is a `Listenable`, and the lane
+                                // side listens to it here rather than the panel
+                                // calling `setState`: nothing left of the seam — the
+                                // toolbar, the column header, every outline row, and
+                                // the work-area and fold reads that come with them —
+                                // depends on the zoom, and rebuilding all of it once
+                                // per animation frame is what made a dragged zoom
+                                // slider crawl.
+                                child: ListenableBuilder(
+                                  listenable: _zoomMotion,
+                                  builder: (context, _) {
+                                    // The axis spans the lane viewport times the
+                                    // zoom: at 1 the whole comp fits the panel (the
+                                    // Viewer's fit-to-panel habit); zoomed in, the
+                                    // lanes scroll under the bottom bar's scrollbar.
+                                    final axis = TimelineAxis(
+                                        frames: frames,
+                                        width: laneViewport * _zoom);
+                                    // Where the work area falls, read once and handed
+                                    // to the ruler, the lanes and the curves alike
+                                    // (K-203) — and null pixels when it covers the
+                                    // whole comp, which is when there is no
+                                    // out-of-range ground to wash.
+                                    final graphWork = work.whole
+                                        ? null
+                                        : (
+                                            axis.xOf(work.start),
+                                            axis.xOf(work.end)
+                                          );
+                                    return _graph
+                                        ? _graphHalf(context, ui, comp,
+                                            axis: axis,
+                                            channels: channels,
+                                            rows: rows,
+                                            work: work,
+                                            graphWork: graphWork,
+                                            frames: frames,
+                                            fpsNum: fpsNum,
+                                            fpsDen: fpsDen)
+                                        : _laneHalf(context, ui, comp,
+                                            axis: axis,
+                                            rows: rows,
+                                            layers: layers,
+                                            blockHeights: blockHeights,
+                                            work: work,
+                                            frames: frames,
+                                            fpsNum: fpsNum,
+                                            fpsDen: fpsDen);
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -3345,16 +3419,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           ],
                         ),
                         // The playhead, over the
-                        // ruler and curves alike.
-                        ValueListenableBuilder<int>(
-                          valueListenable: ui.playheadFrame,
-                          builder: (context, frame, child) => Positioned(
-                            left: axis.xOf(frame) - PlayheadMarker.halfWidth,
-                            top: 0,
-                            bottom: 0,
-                            child: child!,
-                          ),
-                          child: const PlayheadMarker(),
+                        // ruler and curves alike —
+                        // on its own layer, so the
+                        // curves are not redrawn
+                        // for it.
+                        PlayheadOverlay(
+                          playhead: ui.playheadFrame,
+                          xOf: axis.xOf,
                         ),
                       ],
                     ),

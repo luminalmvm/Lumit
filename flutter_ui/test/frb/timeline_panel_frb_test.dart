@@ -29,6 +29,7 @@ import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/ease_popover.dart';
+import 'package:lumit_flutter/panels/timeline_navigator.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/panels/waveform_frb.dart';
@@ -81,6 +82,36 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tl-more')));
       await tester.pumpAndSettle();
     }
+
+    /// **The time navigator** (T5, K-648): the whole comp as a strip, with the
+    /// visible span as a window on it. Dragging the window's right-hand end
+    /// inward narrows the view — which is a zoom in — about its left-hand end,
+    /// and the lanes widen to match.
+    testWidgets('the navigator window zooms the lanes', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      double laneWidth() =>
+          tester.widget<TimelineRuler>(find.byType(TimelineRuler)).axis.width;
+
+      final strip = find.byKey(const ValueKey('tl-navigator'));
+      expect(strip, findsOneWidget);
+      final box = tester.getRect(strip);
+      final fitted = laneWidth();
+
+      // At fit the window is the whole comp, so its right-hand handle sits at
+      // the strip's right-hand end. Half the strip's width in is half the comp.
+      await tester.dragFrom(
+        Offset(box.right - TimelineNavigator.handleGrab / 2, box.center.dy),
+        Offset(-box.width / 2, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(laneWidth(), greaterThan(fitted * 1.5),
+          reason: 'half the comp across the same panel is about twice the '
+              'pixels per frame');
+    });
 
     /// The Razor tool (K-220). Clicking a bar cuts that layer **where the
     /// pointer is**, not at the playhead — the difference between a razor and
@@ -3176,6 +3207,7 @@ void main() {
           ],
           layout: const [],
           exposed: const [],
+          groups: const [],
         ),
       );
       await mount(tester, p);
