@@ -497,7 +497,7 @@ inverse restores nodes *and* edges; export-equals-preview on a driven comp (rend
 Drivers category in the catalogue listing, `BridgePortType`.
 **Files**: `crates/lumit-bridge/src/api/**` (then codegen; generated files never edited),
 `flutter_ui/lib/l10n/engine_labels.dart` + `app_en.arb` (new keys listed in the commit
-message and PR for Crowdin, K-303).
+message and PR for translation, K-303).
 **Tests**: `engine_labels_test.dart` green over the new tables; an frb test driving
 add-driver/connect/undo through the bridge; `bridge_call_budget_test.dart` unchanged at 0
 for rebuild paths.

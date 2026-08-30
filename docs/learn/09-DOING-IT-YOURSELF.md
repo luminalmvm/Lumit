@@ -588,13 +588,14 @@ build, regenerates the Dart from the file.
    automatic. **Say so in the commit message and in the pull request**, listing
    the new keys, or the upload gets forgotten and the string stays English in
    every other language for a whole release.
-2. The source has to go up to Crowdin: `crowdin push sources`, which reads
-   `crowdin.yml` and needs `CROWDIN_PROJECT_ID` and `CROWDIN_PERSONAL_TOKEN` in
-   the environment. Translations come back down with `crowdin pull translations`,
-   or arrive by themselves on the `translation/main` branch.
+2. The new English reaches translators through the translation page on
+   lumitlab.com, which is built from `app_en.arb` itself — so a key that lands in
+   the repository is offered the next time the site is deployed. What a translator
+   sends back is read in by `scripts/translations.ps1`, which is the only thing
+   that writes a translation file.
 3. **Never hand-edit `app_de.arb`, `app_uk.arb`, `app_zh.arb`, `app_zh_Hant.arb`
-   or `app_kk.arb`.** Those are Crowdin's. A fix typed here is overwritten by the
-   next sync. Fix it on Crowdin instead.
+   or `app_kk.arb`.** Those belong to the ingest tool. A fix typed here is
+   overwritten by the next run; make it on the translation page instead.
 
 **A string the engine sends needs two entries, not one.** Effect labels, category
 names and keymap action descriptions are English text that Rust hands over, so
@@ -605,10 +606,10 @@ without thinking of it as "a string".
 
 **When it goes wrong.**
 
-- *`flutter pub get` fails complaining that a locale and a filename disagree.* A
-  Crowdin sync wrote `zh-CN` into `app_zh.arb`. A workflow mends this on the sync
-  branch automatically; if you hit it another way, the `@@locale` value must
-  match the filename.
+- *`flutter pub get` fails complaining that a locale and a filename disagree.*
+  Something wrote `zh-CN` into `app_zh.arb`. The `@@locale` value inside a file
+  must be exactly what its filename says; `arb_test.dart` checks it on every run,
+  so the failure names the file.
 - *CI's Flutter job fails on `engine_labels_test`.* You added something the
   engine names in English without adding it to `engine_labels.dart`.
 

@@ -628,7 +628,7 @@ same list — the smallest honest surface, replaced when the dialogue lands.
 **K-303/K-005 gate**: the new Lumit-authored strings — the picker's missing state,
 the settings rows, the refusal sentences the engine can send, the submenu label —
 land with their `app_en.arb` keys in the same commit, engine-sent ones also in
-`engine_labels.dart`; new keys listed in the commit message and PR for Crowdin.
+`engine_labels.dart`; new keys listed in the commit message and PR for translation.
 Config-supplied names cross verbatim and are never translated (§4.4).
 
 ## 7. Conformance — the golden fixture suite
@@ -737,7 +737,7 @@ replaces `check` wherever a project is in hand.
 `colour_summary`, `set_colour_config`, `set_colour_space`, the viewer look call's
 view field, in `crates/lumit-bridge/src/api/**` (then codegen; generated files never
 edited). Engine-sent refusal sentences into `engine_labels.dart` + `app_en.arb`
-(K-005), keys listed for Crowdin.
+(K-005), keys listed for translation.
 **Tests**: `engine_labels_test.dart` green; an frb test loading a fixture config and
 walking assign/undo through the seam; `bridge_call_budget_test.dart` unchanged at 0.
 

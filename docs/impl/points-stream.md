@@ -341,7 +341,7 @@ signature's data inputs beside the schema params, so `InputRef::Param` needs no 
 - Refusals cross as the existing calm sentences; the cycle message already exists.
 - **K-005/K-303**: the port label "Points" is a new engine-sendable word — its
   `engine_labels.dart` entry and `app_en.arb` key land with the seam package, listed in
-  the commit and PR for Crowdin. Particulate's own labels land with PS1, Points sample's
+  the commit and PR for translation. Particulate's own labels land with PS1, Points sample's
   with PS4, the moment each enters the catalogue (the label walk fails CI otherwise).
 - **No stream introspection in v1.** A live particle-count readout on the node or in
   the Node preview would be a per-frame value, which must ride a render response —
@@ -383,7 +383,7 @@ per §2's Traits block, the declared Points output, and the **CPU render path** 
 and streaks as software dabs (the paint rasteriser's precedent), sprite via the
 layer-input machinery (layer-input.md), unset-sprite-draws-discs.
 **l10n**: Particulate's label, group kickers and every parameter label —
-`app_en.arb` + `engine_labels.dart` in the same commit, keys listed for Crowdin (K-303).
+`app_en.arb` + `engine_labels.dart` in the same commit, keys listed for translation (K-303).
 **Tests**: particulate.md §9 items 1–7 and 9–11 on the CPU path (determinism, random
 access, schedule against closed-form counts, force closed forms across the guard,
 turbulence golden values, id stability, cap rule, mask-path no-op, sprite fallback,
@@ -429,7 +429,7 @@ the driver walk gaining the layer's stack and timing context, the `EffectData` a
 `Eval`, and the per-producer per-frame stream memo (§3.3); `driver_window` 0; the
 empty-stream values pinned.
 **l10n**: Points sample's label, Position, Count, Nearest distance — arb +
-`engine_labels.dart`, same commit, Crowdin-listed.
+`engine_labels.dart`, same commit, listed for translation.
 **Tests**: the sampled stream equals PS1's drawn stream **under driven producer
 parameters** (a Wiggle on Emit rate, then sample — the §1.3 property); unwired and
 empty-stream values; nearest-distance against a hand-placed fixture; frame-key
@@ -441,7 +441,7 @@ picture differs from the wire-cut picture, and preview equals export).
 
 Whatever PS3–PS4 added to `crates/lumit-bridge/src/api/**` finishes crossing: codegen
 rerun (generated files never edited), the dylib rebuilt for the frb tests, the port
-label "Points" through `engine_labels.dart` + `app_en.arb` (Crowdin-listed), docs/17
+label "Points" through `engine_labels.dart` + `app_en.arb` (listed for translation), docs/17
 checked against the shipped surface.
 **Tests**: `engine_labels_test.dart` green; an frb test wiring Particulate's Points
 output into a Points sample and reading the graph back; `bridge_call_budget_test.dart`

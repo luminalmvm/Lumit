@@ -8872,27 +8872,33 @@ string does not.
 
 ### Where the translations come from
 
-Your friends do the translating on **Crowdin**, which is a website built for
-exactly this. They see the English phrase, its note, and a box to type theirs
-into. Nobody clones the repository, nobody runs Flutter, nobody can break the
-build by mistyping a bracket.
+Your friends do the translating on **a page on lumitlab.com**, built for exactly
+this. They see the English phrase, its note, and a box to type theirs into.
+Nobody clones the repository, nobody runs Flutter, nobody can break the build by
+mistyping a bracket. This used to be a service called Crowdin; it went behind a
+paywall in August 2026 and the page replaced it (K-653). Nothing about how the
+files work changed — only who hosts the box you type into.
 
 The traffic is one-way in each direction, and it matters which is which:
 
-- **English goes up.** You change `app_en.arb`, run `crowdin push sources`, and
-  Crowdin now offers the new phrase to translate.
-- **Everything else comes down.** `crowdin pull translations` writes
-  `app_de.arb`, `app_kk.arb`, `app_uk.arb` and `app_zh.arb` into the same folder.
+- **English goes out.** The page is built from `app_en.arb` itself, so a phrase
+  you add to that file is offered to translators the next time the site deploys.
+  There is nothing to push by hand.
+- **Everything else comes back as a file.** A translator finishes a language and
+  sends the file the page hands them; `scripts/translations.ps1` reads it in and
+  writes `app_de.arb`, `app_kk.arb`, `app_uk.arb` and the two Chinese files.
 
-Those four files are **never edited by hand in this repository.** If a German
-phrase is wrong, it is fixed on Crowdin; fixing it here works until the next pull
-overwrites it, which is worse than not working at all because it works for a
-while first. `crowdin.yml` at the top of the repository is the whole
-configuration — which file goes up, and what each language is called on disk.
+Those files are **never edited by hand in this repository.** If a German phrase
+is wrong, it is fixed through the page and read in again; fixing it here works
+until the next ingest overwrites it, which is worse than not working at all
+because it works for a while first.
 
-The two passwords Crowdin needs are not written in that file, because this
-repository is public. They are read from the environment instead:
-`CROWDIN_PROJECT_ID` and `CROWDIN_PERSONAL_TOKEN`.
+The ingest tool is also what keeps them honest. When an English string changes
+under a translation, the old translation is not a translation any more — it is a
+confident answer to a question nobody asked. Those entries are deleted rather
+than kept, and the phrase falls back to English until somebody translates the new
+wording. English that is merely untranslated is a gap; English that is wrongly
+translated is a bug you cannot see unless you read that language.
 
 ### What happens when a translation is missing
 
@@ -8964,29 +8970,19 @@ turn out not to read needs to be able to find their way back, and they will not
 do it by looking for the word "German".
 
 The words themselves are not written here. `lib/l10n/app_en.arb` is the one file
-anybody types English into; every other `app_*.arb` beside it is sent back by
-Crowdin, the site the translators work on, and editing one of those in this repo
-achieves nothing — the next sync writes over it. So a wrong translation is fixed
-on Crowdin, and so is anything about *which* languages exist.
+anybody types English into; every other `app_*.arb` beside it is written by the
+ingest tool from what the translation page sends back, and editing one of those
+in this repo achieves nothing — the next ingest writes over it. So a wrong
+translation is fixed through the page, and so is anything about *which* languages
+exist.
 
 One trap is worth knowing, because it stopped the build twice (K-311). Each of
 those files names its own language twice: once in its file name, and once in a
 key inside it called `@@locale`. Flutter refuses to build if the two disagree,
-and Crowdin fills that key in with its own spelling of the language — "zh-CN"
-where Flutter wants "zh". `test/l10n/arb_test.dart` compares the two on every
-run, so the failure says which file and what to do about it rather than the
-whole build stopping with an error about locales.
-
-The cure was supposed to be a setting on Crowdin. It is not: Crowdin's language
-mapping renames the *file* — which works, and is why the file is called
-app_zh.arb at all — but the value written *inside* it comes from somewhere the
-mapping does not reach, and every sync has written "zh-CN" regardless. So the
-repair is automatic now. Crowdin pushes to a branch of its own, and a small job
-(`.github/workflows/translation-locale.yml`) meets it there, puts each
-`@@locale` back to whatever the file name says, and pushes the result on. By the
-time anybody sees a translation pull request the names agree. Nothing else in
-those files is touched — the words are the translators', and a locale name is
-bookkeeping.
+and "zh-CN" is a very ordinary thing for a tool to write into a file Flutter
+wants to call "zh". `test/l10n/arb_test.dart` compares the two on every run, so a
+mismatch says which file and what to do about it, rather than the whole build
+stopping with an error about locales that names nothing.
 ### A text layer that says whatever the expression works out
 
 Until now a text layer said one fixed thing. You typed some words, and those

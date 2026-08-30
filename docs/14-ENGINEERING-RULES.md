@@ -191,8 +191,8 @@ machine". Exceptions require a decision entry in [02-DECISIONS.md](02-DECISIONS.
 - **User-facing strings** go through the i18n table from day one (K-005); en-GB, sentence
   case, calm, no exclamation marks. No string literal shown to a user lives in code. The
   table is `flutter_ui/lib/l10n/app_en.arb`, reached as `l10n.<key>`, and translation
-  happens on Crowdin (K-303) — every other `app_*.arb` comes back from there and is never
-  hand-edited. A new string lands with an `@key` description saying where it appears; a
+  happens on the site's translation page (K-303, K-653) — every other `app_*.arb` is
+  written by the ingest tool from what that page sends back, and is never hand-edited. A new string lands with an `@key` description saying where it appears; a
   label the *engine* sends gets an entry in `lib/l10n/engine_labels.dart` at the same time,
   which `test/l10n/engine_labels_test.dart` enforces against the Rust sources.
 - **Glossary compliance** extends to identifiers: `retime_map`, not `time_remap`; `speed`,

@@ -185,7 +185,7 @@ because the next build overwrites it. Change the source on the left instead.
 |---|---|---|
 | `flutter_ui/lib/src/rust/**` and `crates/lumit-bridge/src/frb_generated.rs` | `crates/lumit-bridge/src/api/**` | `flutter_rust_bridge_codegen generate` (from `flutter_ui/`) |
 | `flutter_ui/lib/l10n/gen/**` | `flutter_ui/lib/l10n/app_en.arb` | `flutter pub get` (from `flutter_ui/`) |
-| `flutter_ui/lib/l10n/app_<locale>.arb` (every file except `app_en.arb`) | Crowdin translators | Nothing local. Crowdin overwrites hand edits |
+| `flutter_ui/lib/l10n/app_<locale>.arb` (every file except `app_en.arb`) | The site's translation page | `scripts/translations.ps1` ingest. A hand edit is overwritten by the next run |
 | `flutter_ui/rust_builder/cargokit/**` | Vendored upstream | Nothing. Do not modify |
 
 The first two fail CI when stale. The third fails silently, which is worse: your

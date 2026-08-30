@@ -20415,3 +20415,42 @@ the two halves' viewports level (K-278), so nothing about the scroll ranges move
 Regression tests: `the outline's foot carries the keyframe strip` and `the zoom and the
 magnet lead the bottom bar in both views` (timeline_panel_frb_test), both now measuring
 against the lane bar's leading edge — the commands end before it begins.
+
+## K-653 — Translation leaves Crowdin for a page on the site and a tool that reads its files
+
+**Status:** DECIDED (owner, 2026-08-30) · supersedes the hosting half of K-303 (Crowdin as
+the translation platform) and retires K-311's mending workflow; K-303's other rulings stand
+unchanged — `app_en.arb` is the source, British English, no en-US, and no `app_*.arb`
+besides the source is ever hand-edited
+
+Crowdin went behind a paywall. Nothing about Lumit's strings depended on Crowdin the
+company — only on somebody hosting a box a translator types into — so translation moves to
+**a page on lumitlab.com**, built from `app_en.arb` itself, and the file a translator sends
+back is read in by `scripts/translations.ps1`. The page and the tool are one package; this
+entry is cited by both.
+
+**What is unchanged.** `flutter_ui/lib/l10n/app_en.arb` is still the only file anybody
+types English into, and every key still carries an `@key` description saying where the
+string appears — that description was written for a translator who sees the phrase and
+nothing else, and it is still the only context the page can give them. The five target
+languages, the `@@locale`-matches-filename rule, the fallback to English for a missing key,
+and `engine_labels.dart` for anything Rust says in English are all as they were.
+
+**What is gone.** `crowdin.yml`, `.github/workflows/translation-locale.yml` and
+`.github/scripts/name_arb_locales.py`. The workflow existed only to put `@@locale` back
+after a Crowdin sync wrote its own spelling into it; a tool of our own writes the right
+value in the first place, so there is nothing to mend. `arb_test.dart` keeps checking the
+invariant — it is the gate, and it never depended on who broke it.
+
+**What is new, and is the reason to have our own tool at all: a translation whose English
+moved on is deleted, not kept.** Crowdin marked such a string "needs review" and went on
+serving the old translation until a human got to it. That is the worst failure mode i18n
+has, because it is invisible to everyone who does not read the language: an English reader
+sees a corrected string, a German reader sees a confident answer to the question the string
+used to ask. Falling back to English is a visible gap; a stale translation is a silent
+wrong one. So the ingest tool expires an entry whose source hash has changed, and expiry
+runs as a `prune` step rather than waiting on a review queue.
+
+The exit's own housekeeping was done in the same series: 15 keys with no English left, and
+all 77 tooltip translations that the 2026-08-26 tooltip sweep had orphaned, were removed
+from all five files — 1128 keys each became 1036.

@@ -749,7 +749,7 @@ concurrent export-workflow session has landed its commits** — it works in the 
 (`timeline_panel_frb.dart`, `timeline_extras_frb.dart`, the l10n arbs); rebase on its
 result rather than merging around it. New user-facing strings (menu rows, keymap labels,
 the badge) land in `app_en.arb` in the same commit, with `engine_labels.dart` entries for
-anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
+anything the engine names (K-303, K-005); PRs list the new keys for translation.
 
 - **TI-1 — Selection reaches everywhere** (§2; gaps 4, 14–17, and bug 4). **Landed.**
   Marquee from

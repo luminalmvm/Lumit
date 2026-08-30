@@ -13,7 +13,6 @@ After Effects' depth, Vegas' retiming, one application. Free and open source.
 [![CI](https://github.com/luminalmvm/Lumit/actions/workflows/ci.yml/badge.svg)](https://github.com/luminalmvm/Lumit/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/luminalmvm/Lumit?sort=semver&label=release)](https://github.com/luminalmvm/Lumit/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/luminalmvm/Lumit/total?label=downloads)](https://github.com/luminalmvm/Lumit/releases)
-[![Crowdin](https://badges.crowdin.net/lumit/localized.svg)](https://crowdin.com/project/lumit)
 [![Licence: GPL v3](https://img.shields.io/badge/licence-GPLv3-blue)](LICENSE)
 
 [Website](https://lumitlab.com) ·
@@ -152,9 +151,10 @@ Issues and pull requests are welcome.
 - Everything lands with tests, and CI runs must succeed.
 
 Translators especially welcome: the interface is fully externalised but nothing
-is translated yet. That work happens on
-[Crowdin](https://crowdin.com/project/lumit), not in this repository — the only
-language file edited here is the British-English source.
+is translated yet. That work happens on the translation page at
+[lumitlab.com](https://lumitlab.com), not in this repository — the only language
+file edited here is the British-English source, and the others are written from
+what the page sends back.
 
 ## Licence
 

@@ -603,7 +603,7 @@ flutter pub get
 That writes `l10n.projectHasSoundCount(count)` into the generated localisations, and
 `flutter analyze` will tell you at once if you mistyped the key.
 
-**The other `app_*.arb` files are not yours to touch.** They come back from Crowdin.
+**The other `app_*.arb` files are not yours to touch.** The ingest tool writes them.
 Adding an English key leaves the other languages short, which is expected — a missing
 translation falls back to English — but the commit message must say so and name the
 new key, or the upload gets forgotten and the string ships English everywhere.
@@ -1014,9 +1014,9 @@ than complain. `-D warnings` means a warning ends the run: this workspace treats
 You have working code. A commit is more than working code, and the difference is
 mostly about the next person:
 
-- **The Crowdin note.** New key `projectHasSoundCount`, named in the commit message
+- **The translation note.** New key `projectHasSoundCount`, named in the commit message
   and in the pull request, because the other languages are now one string short and
-  somebody has to upload it.
+  somebody has to see that it reaches the translation page.
 - **A word in [GUIDE.md](../GUIDE.md)** if the change introduces a concept, not just
   a value. "Workspaces are trees of splits and tabs" belongs there; "Audio's Effect
   controls moved" does not.

@@ -91,23 +91,24 @@ updates the site with no deploy.
 
 ```mermaid
 flowchart LR
-    A[app_en.arb<br/>hand-edited, with key descriptions] -->|crowdin push| B[Crowdin]
-    B -->|translators| B
-    B -->|sync| C[branch translation/main]
-    C -->|translation-locale.yml<br/>mends each @@locale| D[PR to main]
+    A[app_en.arb<br/>hand-edited, with key descriptions] -->|published| B[translation page<br/>on lumitlab.com]
+    B -->|a translator fills in a language| C[a file they send back]
+    C -->|scripts/translations.ps1| D[app_&lt;locale&gt;.arb]
     D --> E[flutter pub get<br/>regenerates Strings]
 ```
 
 Rules:
 
 - Every user-facing string lives in `app_en.arb` with an `@key` description saying
-  where it appears. Widgets read `l10n.someKey`. No inline strings.
+  where it appears. Widgets read `l10n.someKey`. No inline strings. The description is
+  the only context a translator gets, so it says where the string appears.
 - A string the **engine** sends (effect label, keymap action) needs the arb key
   **and** an entry in `lib/l10n/engine_labels.dart`. `engine_labels_test.dart` walks
   the Rust tables and fails on any gap.
-- Never hand-edit `app_<locale>.arb` files other than `app_en.arb` — Crowdin
-  overwrites them. Missing translations fall back to English. List new keys in the
-  commit message and pull request, so the Crowdin upload is not forgotten.
+- Never hand-edit `app_<locale>.arb` files other than `app_en.arb` — the ingest tool
+  writes them and the next run overwrites a hand edit. Missing translations fall back
+  to English. List new keys in the commit message and pull request, so the translation
+  page is not left a release behind (K-653).
 
 ## Packaging and the websites
 

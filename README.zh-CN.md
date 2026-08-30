@@ -13,7 +13,6 @@
 [![CI](https://github.com/luminalmvm/Lumit/actions/workflows/ci.yml/badge.svg)](https://github.com/luminalmvm/Lumit/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/luminalmvm/Lumit?sort=semver&label=release)](https://github.com/luminalmvm/Lumit/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/luminalmvm/Lumit/total?label=downloads)](https://github.com/luminalmvm/Lumit/releases)
-[![Crowdin](https://badges.crowdin.net/lumit/localized.svg)](https://crowdin.com/project/lumit)
 [![Licence: GPL v3](https://img.shields.io/badge/licence-GPLv3-blue)](LICENSE)
 
 [官网](https://lumitlab.com) ·
@@ -126,7 +125,7 @@ cargo test --workspace
 - [docs/01-GLOSSARY.md](docs/01-GLOSSARY.md) 对代码、界面文案和提交信息具有约束力，请务必使用其中规定的术语。
 - 所有改动都需要带上测试，并且 CI 运行必须通过。
 
-特别欢迎翻译者：界面已完全外部化，但目前还没有任何翻译。翻译工作在 [Crowdin](https://crowdin.com/project/lumit) 上进行，不在此仓库内——这里唯一编辑的语言文件是英语。
+特别欢迎翻译者：界面已完全外部化，但目前还没有任何翻译。翻译工作在 [lumitlab.com](https://lumitlab.com) 的翻译页面上进行，不在此仓库内——这里唯一编辑的语言文件是英式英语原文，其余文件由该页面回传的内容写入。
 
 ## 许可证
 

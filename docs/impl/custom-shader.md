@@ -790,7 +790,7 @@ plus the writes the affordances need: `set_shader_source`, `sync_parameters`,
 `remove_unused_parameters`, and `shader_status` (the badge's reason key and detail).
 **Files**: `crates/lumit-bridge/src/api/effect.rs` (then codegen; generated files are never
 edited), `docs/17-BRIDGE-CONTRACT.md`, `flutter_ui/lib/l10n/engine_labels.dart` +
-`app_en.arb` (new keys listed in the commit message and the PR for Crowdin, K-303).
+`app_en.arb` (new keys listed in the commit message and the PR for translation, K-303).
 **Tests**: an frb test driving edit → derive → sync → keyframe → undo; `engine_labels_test`
 green; `bridge_call_budget_test` unchanged at 0 for rebuild paths — the derived list is
 fetched on selection and on document change and cached Dart-side, exactly as `get_effects` is.

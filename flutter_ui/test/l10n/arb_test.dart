@@ -115,8 +115,8 @@ void main() {
     expect(
       undescribed,
       isEmpty,
-      reason: 'Crowdin shows the description beside the string, and it is all '
-          'the context a translator gets. Say where it appears and what '
+      reason: 'The description is shown beside the string and is all the '
+          'context a translator gets. Say where it appears and what '
           'constrains it.',
     );
   });
@@ -159,20 +159,20 @@ void main() {
   });
 
   test('the target languages have a file to be translated into', () {
-    // Crowdin writes these; an empty one is normal and means "not started".
+    // The ingest tool writes these; a short one is normal and means the
+    // language is part-way done. Every key it lacks falls back to English.
     for (final tag in ['de', 'kk', 'uk', 'zh', 'zh_Hant']) {
       expect(File('lib/l10n/app_$tag.arb').existsSync(), isTrue,
-          reason:
-              'app_$tag.arb is missing — crowdin.yml expects to land there');
+          reason: 'app_$tag.arb is missing — it is a target language');
     }
   });
 
   test('every .arb names the locale its filename says', () {
     // Flutter's generator refuses to run when these disagree, and it runs on
-    // `flutter pub get` — so a sync that lands `"@@locale": "zh-CN"` in a file
-    // called app_zh.arb takes down every Flutter job in CI before a single test
-    // is reached. Crowdin writes its own code into that key, so the fix is the
-    // per-language custom code in the Crowdin project (see crowdin.yml).
+    // `flutter pub get` — so a file called app_zh.arb that says
+    // `"@@locale": "zh-CN"` takes down every Flutter job in CI before a single
+    // test is reached. It has happened twice (K-311), which is why this is a
+    // test and not a convention.
     final wrong = <String>[];
     for (final file in _arbFiles()) {
       final name = file.uri.pathSegments.last;
@@ -185,15 +185,15 @@ void main() {
       }
     }
     expect(wrong, isEmpty,
-        reason: 'set the language\'s custom ARB code on Crowdin so the next '
-            'sync lands the right one; see crowdin.yml');
+        reason: 'the @@locale key and the filename name the same language');
   });
 
   test('there is no en-US', () {
     // K-303: British English is the source and stays the source. An
-    // app_en_US.arb is a copy of the source under another name, and it arrives
-    // only because en-US was enabled as a target language by mistake.
+    // app_en_US.arb is a copy of the source under another name — an American
+    // spelling of Lumit is not a translation, it is a second source to keep
+    // level with the first.
     expect(File('lib/l10n/app_en_US.arb').existsSync(), isFalse,
-        reason: 'turn en-US off as a target language on Crowdin (K-303)');
+        reason: 'British English is the source and there is no en-US (K-303)');
   });
 }

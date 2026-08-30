@@ -698,7 +698,8 @@ section's 4/8/12/16px scale) does not vary by shape; only radius, gap, inset and
 ## 10. Voice and copy
 
 - British English, sentence case, calm, no exclamation marks, no emoji. UI strings go through
-  the i18n table (K-005) — `flutter_ui/lib/l10n/app_en.arb`, translated on Crowdin (K-303).
+  the i18n table (K-005) — `flutter_ui/lib/l10n/app_en.arb`, translated through the site's
+  translation page (K-303, K-653).
   British English is the source and stays the source; there is no en-US.
 - **A tooltip is a name, not a lesson**: **one or two words, never more** (K-440,
   tightening [07-UI-SPEC.md](07-UI-SPEC.md) §13.2's "under five"). Under the Icons chrome

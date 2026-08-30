@@ -23,8 +23,8 @@ void main() {
   test('choosing a language takes effect on the next read', () {
     useLocale(const Locale('de'));
     // Nothing is translated into German yet, so this proves the fallback rather
-    // than the translation — which is the behaviour that matters while the work
-    // is in progress on Crowdin.
+    // than the translation — which is the behaviour that matters while the
+    // translations are still being written.
     expect(l10n.menuFile, isNotEmpty);
   });
 
