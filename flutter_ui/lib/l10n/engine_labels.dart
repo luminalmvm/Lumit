@@ -968,6 +968,7 @@ Map<String, String> get _table => {
       "Crop comp to region of interest": l10n.menuCropCompToRegion,
       "Edit pan": l10n.histEditPan,
       "Move master fader": l10n.histMoveMasterFader,
+      "Set beat grid": l10n.histSetBeatGrid,
       "Several changes": l10n.histSeveralChanges,
     };
 

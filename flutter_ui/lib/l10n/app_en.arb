@@ -11055,5 +11055,9 @@
   "histMoveMasterFader": "Move master fader",
   "@histMoveMasterFader": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetBeatGrid": "Set beat grid",
+  "@histSetBeatGrid": {
+    "description": "A row of the Edit > History window: the name of one edit that was made (confirming or clearing the tempo grid beat detection found). Sent by the engine as English and looked up here."
   }
 }
