@@ -58,6 +58,7 @@ fn conversion(key: &str) -> Option<Build> {
         // --- Utility ---
         "transform" => transform as Build,
         "set_matte" => set_matte,
+        "set_channels" => set_channels,
         // --- Distortion ---
         "motion_tile" => motion_tile,
         "offset" => offset,
@@ -150,6 +151,99 @@ fn set_matte(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(4); // If Layer Sizes Differ — the Matte row is always "stretch to fit"
     fx.toggle(5, "combine");
     fx.drop_ae(6); // Premultiply Matte Layer — Lumit composites premultiplied throughout
+}
+
+/// AE `ADBE Set Channels` → Set channels (docs/11 §5, docs/08 §3.94).
+///
+/// **Four source layers become one.** After Effects gives every output channel
+/// its own layer picker; Lumit's carriage carries one auxiliary layer per
+/// effect, and every output channel names either that layer or the one the
+/// effect is on. So the conversion picks the **first source layer that is
+/// neither None nor this layer** as the Source row, and then each output
+/// channel maps exactly when it names that layer, this layer, or nothing at
+/// all. A second, different source layer is a picture Lumit cannot fetch here,
+/// so that channel is **reported and left at its identity default** rather than
+/// pointed at the wrong picture (§5's "never the closest guess"); the answer is
+/// a second copy of the effect.
+///
+/// The pairing is `-0001`/`-0002` for red and so on up to `-0007`/`-0008` for
+/// alpha. AE's channel list is 1-based — Red, Green, Blue, Alpha, Luminance,
+/// Hue, Lightness, Saturation, Full On, Full Off — and the three it has that
+/// Lumit does not collapse onto Luminance and say so, exactly as [`Fx::channel`]
+/// collapses them.
+fn set_channels(fx: &mut Fx<'_, '_>) {
+    const OUTPUTS: [(u32, u32, &str, u32); 4] = [
+        (1, 2, "red_from", 1),
+        (3, 4, "green_from", 2),
+        (5, 6, "blue_from", 3),
+        (7, 8, "alpha_from", 4),
+    ];
+    let this = fx.conv.self_index;
+    // **An absent picker is not None.** The file stores only what is not at its
+    // default, and After Effects' default here is the layer the effect is on —
+    // so a slot with no leaf at all means this layer, while a leaf holding zero
+    // means the user chose None.
+    let sources: Vec<u32> = OUTPUTS
+        .iter()
+        .map(|(n, ..)| match fx.find(*n) {
+            None => this,
+            Some(_) => fx.still(*n).map_or(0, |v| v.round().max(0.0) as u32),
+        })
+        .collect();
+    let chosen = sources
+        .iter()
+        .copied()
+        .find(|index| *index != 0 && *index != this);
+    if let Some(index) = chosen {
+        match fx.conv.layer_ids.get(&index).copied() {
+            Some(layer) => fx.set("source", EffectValue::Layer(Some(layer))),
+            None => fx.row(Outcome::Adjusted, Reason::MatteTargetMissing { index }),
+        }
+    }
+
+    for (i, (layer_n, channel_n, id, default_channel)) in OUTPUTS.iter().enumerate() {
+        // The file only stores what is not at its default, and the default is
+        // the identity assignment — red from red, and so on.
+        let picked = match fx.find(*channel_n) {
+            None => i64::from(*default_channel),
+            Some(_) => fx
+                .still(*channel_n)
+                .map_or(i64::from(*default_channel), |v| v.round() as i64),
+        };
+        // AE 1..5 are Red, Green, Blue, Alpha, Luminance, which are Lumit's
+        // 0..4 in the same order. 6, 7 and 8 are Hue, Lightness and Saturation,
+        // which Lumit does not have; 9 and 10 are Full On and Full Off.
+        let base = match picked {
+            1..=5 => (picked - 1) as u32,
+            9 => {
+                fx.set(id, EffectValue::Choice(10));
+                continue;
+            }
+            10 => {
+                fx.set(id, EffectValue::Choice(11));
+                continue;
+            }
+            _ => {
+                let ae_name = fx.ae_name(*channel_n);
+                fx.approximated(&ae_name, "Luminance");
+                4
+            }
+        };
+        let source = sources[i];
+        if source == this {
+            fx.set(id, EffectValue::Choice(base));
+        } else if Some(source) == chosen {
+            fx.set(id, EffectValue::Choice(base + 5));
+        } else {
+            // Zero is After Effects' "None" and anything else is a *second*
+            // source layer; both are a picture this conversion will not guess
+            // at, so the report names the **picker** rather than the channel
+            // beside it — that is the control that could not be carried — and
+            // the channel keeps its identity default.
+            let ae_name = fx.ae_name(*layer_n);
+            fx.approximated(&ae_name, "this layer's own channel");
+        }
+    }
 }
 
 /// AE `ADBE Tile` → Tile (docs/11 §5): every control carries, and the four
@@ -738,6 +832,15 @@ impl<'a, 'c> Fx<'a, 'c> {
         self.not_carried(&param);
     }
 
+    /// After Effects' own name for one parameter slot, as the report prints it.
+    /// Empty when the file has no leaf there at all — the file stores only what
+    /// is not at its default.
+    fn ae_name(&self, n: u32) -> String {
+        self.find(n)
+            .map(|leaf| display_name(leaf, "").trim().to_string())
+            .unwrap_or_default()
+    }
+
     fn approximated(&mut self, param: &str, imported_as: &str) {
         let effect = self.name.clone();
         self.row(
@@ -1199,7 +1302,7 @@ mod tests {
     fn run(node: &AeProp) -> Run {
         let mut report = ImportReport::default();
         let tb = TimeBase::fallback();
-        let ids: BTreeMap<u32, Uuid> = (1..=2).map(|i| (i, layer_id(i))).collect();
+        let ids: BTreeMap<u32, Uuid> = (1..=3).map(|i| (i, layer_id(i))).collect();
         let inst = {
             let mut conv = Conv {
                 report: &mut report,
@@ -1209,6 +1312,9 @@ mod tests {
                 span: (Rational::ZERO, tb.seconds(2.0)),
                 layer_ids: ids,
                 masks: Vec::new(),
+                // The composition's first layer is the one the effect is on,
+                // which is what "this layer" means to a layer-reference row.
+                self_index: 1,
             };
             let path = ItemPath::item("Comp 1").layer("Layer 1");
             claim(&mut conv, &path, node).expect("the table claims this match name")
@@ -1310,6 +1416,7 @@ mod tests {
             span: (Rational::ZERO, tb.seconds(1.0)),
             layer_ids: BTreeMap::new(),
             masks: Vec::new(),
+            self_index: 1,
         };
         let node = fx("RE:Vision Twixtor", "Twixtor", vec![]);
         assert!(claim(&mut conv, &ItemPath::default(), &node).is_none());
@@ -1613,6 +1720,109 @@ mod tests {
         assert!(boolean(&r, "combine"));
         assert!(dropped(&r, "If Layer Sizes Differ"));
         assert!(dropped(&r, "Premultiply Matte Layer"));
+    }
+
+    /// **Set channels: four After Effects source layers onto one Source row.**
+    ///
+    /// The three cases that actually occur in the reference project, in one
+    /// instance each. Every channel that names the chosen source layer, or the
+    /// layer the effect is on, converts exactly; a *second* source layer and
+    /// After Effects' "None" are both reported and left at the identity, which
+    /// is §5's "reported rather than approximated".
+    #[test]
+    fn set_channels_folds_four_source_layers_onto_one_source_row() {
+        let ae = "ADBE Set Channels";
+        // The commonest shape by far: all four channels off one other layer,
+        // the identity assignment. Six of the project's ten instances.
+        let r = run(&fx(
+            ae,
+            "Set Channels",
+            vec![
+                layer_ref(ae, 1, "Source Layer 1", 2),
+                num(ae, 2, "Set Red To Source 1's", 1.0),
+                layer_ref(ae, 3, "Source Layer 2", 2),
+                num(ae, 4, "Set Green To Source 2's", 2.0),
+                layer_ref(ae, 5, "Source Layer 3", 2),
+                num(ae, 6, "Set Blue To Source 3's", 3.0),
+                layer_ref(ae, 7, "Source Layer 4", 2),
+                num(ae, 8, "Set Alpha To Source 4's", 4.0),
+            ],
+        ));
+        assert_eq!(layer_of(&r, "source"), Some(layer_id(2)));
+        assert_eq!(choice(&r, "red_from"), 5, "Source red");
+        assert_eq!(choice(&r, "green_from"), 6, "Source green");
+        assert_eq!(choice(&r, "blue_from"), 7, "Source blue");
+        assert_eq!(choice(&r, "alpha_from"), 8, "Source alpha");
+
+        // Three channels off another layer, the alpha off **this** one, which
+        // is After Effects' own default for a picker nobody touched. This
+        // layer's channels are the first five options, so it needs no Source
+        // row and no report.
+        let r = run(&fx(
+            ae,
+            "Set Channels",
+            vec![
+                layer_ref(ae, 1, "Source Layer 1", 3),
+                num(ae, 2, "Set Red To Source 1's", 1.0),
+                layer_ref(ae, 3, "Source Layer 2", 3),
+                num(ae, 4, "Set Green To Source 2's", 2.0),
+                layer_ref(ae, 5, "Source Layer 3", 3),
+                num(ae, 6, "Set Blue To Source 3's", 3.0),
+                layer_ref(ae, 7, "Source Layer 4", 1),
+                num(ae, 8, "Set Alpha To Source 4's", 5.0),
+            ],
+        ));
+        assert_eq!(layer_of(&r, "source"), Some(layer_id(3)));
+        assert_eq!(choice(&r, "red_from"), 5, "Source red");
+        assert_eq!(choice(&r, "alpha_from"), 4, "this layer's own luminance");
+        assert!(
+            !approximated(&r, "Source Layer 4"),
+            "naming the layer the effect is on is exact, not an approximation"
+        );
+
+        // **An absent picker is the layer the effect is on**, not None: the
+        // file stores only what is not at its default, and that is the default.
+        let r = run(&fx(
+            ae,
+            "Set Channels",
+            vec![num(ae, 8, "Set Alpha To Source 4's", 5.0)],
+        ));
+        assert_eq!(layer_of(&r, "source"), None, "nothing named a second layer");
+        assert_eq!(choice(&r, "alpha_from"), 4, "this layer's own luminance");
+        assert!(!approximated(&r, "Source Layer 4"));
+
+        // A second source layer, After Effects' None, and one of the three
+        // channels Lumit does not have. All three are reported; none of them
+        // guesses at a picture.
+        let r = run(&fx(
+            ae,
+            "Set Channels",
+            vec![
+                layer_ref(ae, 1, "Source Layer 1", 2),
+                num(ae, 2, "Set Red To Source 1's", 9.0),
+                layer_ref(ae, 3, "Source Layer 2", 3),
+                num(ae, 4, "Set Green To Source 2's", 2.0),
+                layer_ref(ae, 5, "Source Layer 3", 0),
+                num(ae, 6, "Set Blue To Source 3's", 3.0),
+                layer_ref(ae, 7, "Source Layer 4", 2),
+                num(ae, 8, "Set Alpha To Source 4's", 7.0),
+            ],
+        ));
+        assert_eq!(layer_of(&r, "source"), Some(layer_id(2)));
+        assert_eq!(choice(&r, "red_from"), 10, "AE's Full On");
+        assert_eq!(choice(&r, "green_from"), 1, "the second source is refused");
+        assert!(
+            approximated(&r, "Source Layer 2"),
+            "the picker is what could not be carried, so the picker is what the report names"
+        );
+        assert_eq!(choice(&r, "blue_from"), 2, "None is refused");
+        assert!(approximated(&r, "Source Layer 3"));
+        assert_eq!(
+            choice(&r, "alpha_from"),
+            9,
+            "Lightness collapses onto the chosen source's luminance"
+        );
+        assert!(approximated(&r, "Set Alpha To Source 4's"));
     }
 
     /// AE's radii are raster pixels and Lumit's are px@comp, so the import

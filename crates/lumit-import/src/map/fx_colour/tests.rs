@@ -103,6 +103,7 @@ fn run_with_masks(node: &AeProp, masks: Vec<(Uuid, f64)>) -> Ran {
             span: (Rational::ZERO, Rational::new(4, 1).unwrap()),
             layer_ids: BTreeMap::new(),
             masks,
+            self_index: 1,
         };
         let path = crate::report::ItemPath::item("Comp").layer("Layer");
         let out = crate::map::map_effect(&mut conv, &path, node);

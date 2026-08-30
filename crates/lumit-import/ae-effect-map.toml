@@ -275,6 +275,12 @@ name = "Set Matte"
 lumit = "set_matte"
 conversion = "set_matte"
 
+[[effect]]
+ae = "ADBE Set Channels"
+name = "Set Channels"
+lumit = "set_channels"
+conversion = "set_channels"
+
 # --- Distortion ------------------------------------------------------------
 
 [[effect]]

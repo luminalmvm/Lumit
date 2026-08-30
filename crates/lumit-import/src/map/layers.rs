@@ -114,6 +114,9 @@ pub(crate) fn map_layer(
     let masks = masks(conv, &path, props);
     // Masks before effects, because an effect parameter can name one (K-408).
     conv.masks = super::fx_colour::mask_refs(&masks);
+    // Which layer an effect parameter means by "this one" (docs/11 §5's Set
+    // Channels row).
+    conv.self_index = index;
     // **An effect is measured against the layer, not the composition**
     // (K-636). After Effects runs an effect on the layer's own raster, so
     // Motion Tile's per cents are per cents of *that* frame and its Tile

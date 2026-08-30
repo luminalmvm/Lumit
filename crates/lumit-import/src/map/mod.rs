@@ -130,6 +130,12 @@ pub struct Conv<'a> {
     /// perimeter is what turns AE's *count* of segments into Lumit's segment
     /// *length* (docs/11 §5's Vegas row).
     pub(crate) masks: Vec<(Uuid, f64)>,
+    /// The current layer's own AE stacking index, or 0 outside a layer. An
+    /// effect parameter naming a layer may name **this** one — After Effects
+    /// defaults Set Channels' four source pickers to it — and telling that
+    /// apart from a genuine second source is the difference between an exact
+    /// conversion and a reported approximation (docs/11 §5's Set Channels row).
+    pub(crate) self_index: u32,
 }
 
 impl Conv<'_> {
@@ -513,6 +519,7 @@ fn composition(
         span: (Rational::ZERO, Rational::ZERO),
         layer_ids: ids.clone(),
         masks: Vec::new(),
+        self_index: 0,
     };
     let layers = ae
         .layers
