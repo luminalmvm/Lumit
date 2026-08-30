@@ -1544,6 +1544,31 @@ impl ExportSpec {
         Ok(())
     }
 
+    /// The render settings this export actually runs with.
+    ///
+    /// **A sound file has no picture, so it takes no picture settings.** Every
+    /// field of [`RenderOptions`] is a statement about how the composition is
+    /// *drawn* — the tier it draws at, whether the effect stacks run, which
+    /// layers the picture looks at, which files it reads. An audio-only export
+    /// draws nothing, so it runs at the defaults whatever the spec carries (the
+    /// owner's ruling of 2026-08-30; the dialogue dims the whole Composition
+    /// group for the same reason).
+    ///
+    /// It matters because two of them did reach the mix. `honour_solo: false`
+    /// clears every layer's solo switch, and the mixer counts solos with
+    /// [`lumit_core::model::any_solo`] — every soloed layer, audio-only ones
+    /// included (K-435) — so a picture setting was deciding what a `.wav`
+    /// contained. The defaults are the two rules that are *not* picture
+    /// settings: solos are honoured, exactly as playback honours them (K-031),
+    /// and a guide layer stays reference-only at every depth, its sound no more
+    /// delivered than its picture (K-497).
+    pub fn render_options(&self) -> RenderOptions {
+        match self.format {
+            ExportFormat::Audio(_) => RenderOptions::default(),
+            _ => self.render,
+        }
+    }
+
     /// The video bitrate this spec runs with, as `(target, peak)` — the typed
     /// numbers, or the worked-out ones for `size` — and `None` for a format
     /// with no bitrate to choose. `size` is the frame actually being written,
@@ -1715,7 +1740,7 @@ fn run(
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
-    let overridden = apply_render_overrides(doc, &spec.render);
+    let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let fps = comp.frame_rate.fps().max(1.0);
@@ -3696,6 +3721,65 @@ mod tests {
             ..RenderOptions::default()
         };
         assert!(!half.changes_document(), "a tier is not a document change");
+    }
+
+    /// A sound file takes no picture settings (the owner's 2026-08-30 ruling).
+    ///
+    /// The one that actually reached the file was solo: `honour_solo: false`
+    /// clears every layer's solo switch, and the mixer counts solos across
+    /// *all* layers (K-435), so a picture setting decided what a `.wav`
+    /// contained. An audio-only spec now runs at the defaults, so the solos
+    /// stand and the mix is the mix.
+    #[test]
+    fn a_sound_file_takes_no_picture_settings() {
+        let (doc, comp_id) = solid_doc(32, 16);
+        let mut seeded = Document::clone(&doc);
+        for item in &mut seeded.items {
+            if let ProjectItem::Composition(c) = item {
+                for l in &mut c.layers {
+                    l.switches.solo = true;
+                }
+            }
+        }
+        let seeded = Arc::new(seeded);
+
+        let picture_settings = RenderOptions {
+            effects: false,
+            honour_solo: false,
+            render_guides: true,
+            quality: crate::plan::Quality {
+                divisor: 4,
+                ..crate::plan::Quality::default()
+            },
+            ..RenderOptions::default()
+        };
+        let with_settings = |format| ExportSpec {
+            format,
+            render: picture_settings,
+            ..ExportSpec::default()
+        };
+
+        let sound = with_settings(ExportFormat::Audio(AudioFormat::Wav));
+        assert_eq!(
+            sound.render_options(),
+            RenderOptions::default(),
+            "a sound file draws nothing, so it takes no drawing settings"
+        );
+        assert!(
+            apply_render_overrides(&seeded, &sound.render_options()).is_none(),
+            "so the mix is made from the document as it stands"
+        );
+        assert!(
+            seeded.comp(comp_id).unwrap().layers[0].switches.solo,
+            "and the solo the mixer counts is still there"
+        );
+
+        // A file with a picture keeps every one of them.
+        let video = with_settings(ExportFormat::Video(lumit_media::encode::VideoCodec::H264));
+        assert_eq!(video.render_options(), picture_settings);
+        let patched = apply_render_overrides(&seeded, &video.render_options())
+            .expect("a picture export still honours what was asked of it");
+        assert!(!patched.comp(comp_id).unwrap().layers[0].switches.solo);
     }
 
     /// The when-done hook tolerates a missing sound file in silence — the

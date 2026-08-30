@@ -1061,128 +1061,148 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       );
 
-  Widget _compositionGroup(LumitTheme t) => _group(
-        t,
-        ExportSection.output,
-        l10n.exportGroupComposition,
-        [
-          _columns(
-            _row(
+  /// How the composition is drawn on the way out — and the sound-only case it
+  /// has nothing to say in either. Every row here is a statement about the
+  /// picture, so a format with no picture leaves the whole group dead, exactly
+  /// as Picture and Colour are (the owner's ruling: there is no image in an
+  /// audio-only export to alter). The engine agrees rather than being taken on
+  /// trust: `ExportSpec::render_options` hands a sound-only export the
+  /// defaults, so a solo switch left ignored here cannot decide what a `.wav`
+  /// contains.
+  Widget _compositionGroup(LumitTheme t) {
+    final dim = !_picture;
+    return _group(
+      t,
+      ExportSection.output,
+      l10n.exportGroupComposition,
+      [
+        _columns(
+          _row(
+            t,
+            l10n.exportQuality,
+            dialogDropdown<int>(
               t,
-              l10n.exportQuality,
-              dialogDropdown<int>(
-                t,
-                id: 'export-quality',
-                value: _quality,
-                options: const [1, 2, 3, 4],
-                label: _qualityLabel,
-                onChanged: (q) => _edit(() => _quality = q),
-              ),
+              id: 'export-quality',
+              value: _quality,
+              options: const [1, 2, 3, 4],
+              label: _qualityLabel,
+              onChanged: (q) => _edit(() => _quality = q),
             ),
-            _row(
-              t,
-              l10n.exportEffects,
-              dialogDropdown<bool>(
-                t,
-                id: 'export-effects',
-                value: _effects,
-                options: const [true, false],
-                label: (on) =>
-                    on ? l10n.exportCurrentSettings : l10n.exportAllOff,
-                onChanged: (on) => _edit(() => _effects = on),
-              ),
-              labelColumn: exportLabelColumnPaired,
-            ),
+            dimmed: dim,
           ),
-          _columns(
-            _row(
+          _row(
+            t,
+            l10n.exportEffects,
+            dialogDropdown<bool>(
               t,
-              l10n.exportResolution,
-              dialogDropdown<int>(
-                t,
-                id: 'export-resolution',
-                value: _divisor,
-                options: const [1, 2, 3, 4],
-                label: (d) => d == 1
-                    ? l10n.exportResolutionFull('$_compWidth', '$_compHeight')
-                    : l10n.exportResolutionFraction(
-                        '$d',
-                        '${(_compWidth / d).round()}',
-                        '${(_compHeight / d).round()}',
-                      ),
-                onChanged: (d) => _edit(() => _divisor = d),
-              ),
+              id: 'export-effects',
+              value: _effects,
+              options: const [true, false],
+              label: (on) =>
+                  on ? l10n.exportCurrentSettings : l10n.exportAllOff,
+              onChanged: (on) => _edit(() => _effects = on),
             ),
-            _row(
-              t,
-              l10n.exportSoloSwitches,
-              dialogDropdown<bool>(
-                t,
-                id: 'export-solo',
-                value: _honourSolo,
-                options: const [true, false],
-                label: (on) =>
-                    on ? l10n.exportCurrentSettings : l10n.exportAllOff,
-                onChanged: (on) => _edit(() => _honourSolo = on),
-              ),
-              labelColumn: exportLabelColumnPaired,
-            ),
+            labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
           ),
-          // Both default to the delivery answer rather than to the project's
-          // own: an export reads the originals (K-501) and leaves the guide
-          // layers out (K-497), whatever is switched on to work with.
-          _columns(
-            _row(
+        ),
+        _columns(
+          _row(
+            t,
+            l10n.exportResolution,
+            dialogDropdown<int>(
               t,
-              l10n.exportProxies,
-              dialogDropdown<bool>(
-                t,
-                id: 'export-proxies',
-                value: _useProxies,
-                options: const [false, true],
-                label: (on) =>
-                    on ? l10n.exportProxiesAll : l10n.exportProxiesNone,
-                onChanged: (on) => _edit(() => _useProxies = on),
-              ),
+              id: 'export-resolution',
+              value: _divisor,
+              options: const [1, 2, 3, 4],
+              label: (d) => d == 1
+                  ? l10n.exportResolutionFull('$_compWidth', '$_compHeight')
+                  : l10n.exportResolutionFraction(
+                      '$d',
+                      '${(_compWidth / d).round()}',
+                      '${(_compHeight / d).round()}',
+                    ),
+              onChanged: (d) => _edit(() => _divisor = d),
             ),
-            _row(
-              t,
-              l10n.exportGuideLayers,
-              dialogDropdown<bool>(
-                t,
-                id: 'export-guide-layers',
-                value: _renderGuides,
-                options: const [false, true],
-                label: (on) =>
-                    on ? l10n.exportCurrentSettings : l10n.exportAllOff,
-                onChanged: (on) => _edit(() => _renderGuides = on),
-              ),
-              labelColumn: exportLabelColumnPaired,
-            ),
+            dimmed: dim,
           ),
-          _columns(
-            _row(
+          _row(
+            t,
+            l10n.exportSoloSwitches,
+            dialogDropdown<bool>(
               t,
-              l10n.exportDiskCache,
-              dialogDropdown<bool>(
-                t,
-                id: 'export-disk-cache',
-                value: _diskCache,
-                options: const [false, true],
-                label: (on) =>
-                    on ? l10n.exportDiskCacheReadOnly : l10n.exportDiskCacheOff,
-                onChanged: (on) => _edit(() => _diskCache = on),
-              ),
+              id: 'export-solo',
+              value: _honourSolo,
+              options: const [true, false],
+              label: (on) =>
+                  on ? l10n.exportCurrentSettings : l10n.exportAllOff,
+              onChanged: (on) => _edit(() => _honourSolo = on),
             ),
-            _row(
-              t,
-              l10n.exportColourDepth,
-              _depthDropdown(t, 'export-colour-depth'),
-              labelColumn: exportLabelColumnPaired,
-            ),
+            labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
           ),
-        ],
-      );
+        ),
+        // Both default to the delivery answer rather than to the project's
+        // own: an export reads the originals (K-501) and leaves the guide
+        // layers out (K-497), whatever is switched on to work with.
+        _columns(
+          _row(
+            t,
+            l10n.exportProxies,
+            dialogDropdown<bool>(
+              t,
+              id: 'export-proxies',
+              value: _useProxies,
+              options: const [false, true],
+              label: (on) =>
+                  on ? l10n.exportProxiesAll : l10n.exportProxiesNone,
+              onChanged: (on) => _edit(() => _useProxies = on),
+            ),
+            dimmed: dim,
+          ),
+          _row(
+            t,
+            l10n.exportGuideLayers,
+            dialogDropdown<bool>(
+              t,
+              id: 'export-guide-layers',
+              value: _renderGuides,
+              options: const [false, true],
+              label: (on) =>
+                  on ? l10n.exportCurrentSettings : l10n.exportAllOff,
+              onChanged: (on) => _edit(() => _renderGuides = on),
+            ),
+            labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
+          ),
+        ),
+        _columns(
+          _row(
+            t,
+            l10n.exportDiskCache,
+            dialogDropdown<bool>(
+              t,
+              id: 'export-disk-cache',
+              value: _diskCache,
+              options: const [false, true],
+              label: (on) =>
+                  on ? l10n.exportDiskCacheReadOnly : l10n.exportDiskCacheOff,
+              onChanged: (on) => _edit(() => _diskCache = on),
+            ),
+            dimmed: dim,
+          ),
+          _row(
+            t,
+            l10n.exportColourDepth,
+            _depthDropdown(t, 'export-colour-depth'),
+            labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
+          ),
+        ),
+      ],
+      dimmed: dim,
+    );
+  }
 
   Widget _timeGroup(LumitTheme t) {
     final (start, end) = _range;

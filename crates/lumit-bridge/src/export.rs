@@ -947,9 +947,12 @@ mod driving {
         // The inputs are gathered from the *delivery* snapshot (K-497), not the
         // project: a guide layer is reference-only, so its sound is no more
         // delivered than its picture — and "solo ignored" reaches the mixdown
-        // for the same reason. The exporter applies the same overrides again
-        // to the same document, which is a no-op the second time.
-        let delivery = lumit_render::export::apply_render_overrides(doc, &spec.render);
+        // for the same reason, in an export that has a picture at all. The
+        // options come through `render_options` so a sound-only export takes
+        // the defaults instead: it draws nothing, so it takes no picture
+        // settings. The exporter asks the same question of the same spec and
+        // applies the same overrides again, a no-op the second time.
+        let delivery = lumit_render::export::apply_render_overrides(doc, &spec.render_options());
         let doc = delivery.as_ref().unwrap_or(doc);
         let inputs = crate::render::with_export_inputs(doc, comp)
             .ok_or("export: the GPU pipeline is unavailable")?;

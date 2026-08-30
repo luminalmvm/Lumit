@@ -933,12 +933,15 @@ void main() {
       expect(dead('audio'), isFalse, reason: 'an mp4 carries sound');
       expect(dead('picture'), isFalse);
       expect(dead('colour'), isFalse);
+      expect(dead('composition'), isFalse);
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
       expect(dead('audio'), isTrue, reason: 'a folder of stills is mute');
       expect(dead('picture'), isFalse,
           reason: 'a sequence is all picture, whatever it cannot carry');
+      expect(dead('composition'), isFalse,
+          reason: 'and is drawn, so how it is drawn still matters');
       expect(dead('metadata'), isTrue,
           reason: 'and has no container to keep metadata in');
 
@@ -947,6 +950,9 @@ void main() {
       expect(dead('picture'), isTrue,
           reason: 'a sound file has no picture to size, crop or resample');
       expect(dead('colour'), isTrue, reason: 'and no colour to state either');
+      expect(dead('composition'), isTrue,
+          reason: 'and nothing is drawn, so there is no quality, resolution '
+              'or solo switch to set for the drawing');
       expect(dead('audio'), isFalse);
       expect(find.textContaining('refused rather than written wrongly'),
           findsNothing,

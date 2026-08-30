@@ -20454,3 +20454,31 @@ runs as a `prune` step rather than waiting on a review queue.
 The exit's own housekeeping was done in the same series: 15 keys with no English left, and
 all 77 tooltip translations that the 2026-08-26 tooltip sweep had orphaned, were removed
 from all five files — 1128 keys each became 1036.
+
+## K-654 — An audio-only export takes no picture settings, in the dialogue and in the engine
+
+**Status:** DECIDED (owner, 2026-08-30) · narrows K-105, K-497 and K-501 to the exports
+that have a picture; K-435 is why it mattered
+
+The export dialogue's Composition group — quality, effects, resolution, solo switches,
+proxies, guide layers, disk cache, colour depth — is dimmed entire when the chosen output
+is audio-only, the same deaf-not-faded treatment Picture and Colour already wear for a
+sound file. The owner's words: *why should you be able to alter export picture settings
+when there's no image in audio only.*
+
+**The engine agrees rather than being taken on trust.** Two of those settings genuinely
+reached the mix, so dimming the group alone would have been a lie the next spec could
+tell. `RenderOptions::honour_solo` off clears every layer's solo switch on the delivery
+snapshot, and the mixer counts solos with `any_solo` — *every* soloed layer, audio-only
+ones included, which is exactly the split K-435 made — so a picture setting was deciding
+which layers a `.wav` contained. `render_guides` reaches it by the same route, silencing
+a guide layer along with hiding it.
+
+So `ExportSpec::render_options` answers `RenderOptions::default()` for an
+`ExportFormat::Audio`, whatever the spec carries, and both callers of
+`apply_render_overrides` ask it rather than reading `spec.render`. The defaults are the
+two rules that are *not* picture settings and must keep holding: solos are honoured,
+exactly as playback honours them (K-031), and a guide layer stays reference-only at every
+depth, its sound no more delivered than its picture (K-497). What lapses is only the
+override — an audio-only export cannot be asked to ignore solos, because ignoring solos is
+a statement about a drawing it never makes.

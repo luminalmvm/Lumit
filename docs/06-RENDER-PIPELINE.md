@@ -1122,6 +1122,14 @@ visible nor audible nor soloed and its proxy master switch is cleared, at every 
 draw builder, the decode planner and the frame key all agree while the Viewer, which never
 takes this path, keeps its guide layers and its proxies.
 
+Every one of them is a statement about a picture, so an **audio-only export ignores the lot
+and runs at their defaults** (K-654), and the dialogue dims the whole group rather than
+offering settings that would be dropped. It is not cosmetic: solo ignored cleared the solo
+switches the *mixer* counts (K-435 counts every soloed layer, audio-only ones included), so a
+picture setting was deciding which layers a `.wav` contained. The defaults keep the two rules
+that are not picture settings — solos honoured as playback honours them (K-031), and a guide
+layer reference-only at every depth, sound included (K-497).
+
 **When done.** An export finishing can do nothing, play a short sound, or show the file in the
 file browser. The sound is a bundled file; when there is none, the hook is silent rather than
 faulty — a missing ding must never make a finished export look failed.
