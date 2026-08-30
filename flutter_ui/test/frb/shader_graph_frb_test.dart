@@ -10,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
