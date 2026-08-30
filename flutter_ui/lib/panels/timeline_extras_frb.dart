@@ -2107,6 +2107,55 @@ class PlayheadMarker extends StatelessWidget {
   }
 }
 
+/// The playhead, standing over a view and following [playhead] **on its own
+/// layer** (K-626's pattern).
+///
+/// **Why it is not simply a `Positioned` that moves.** It was, and moving a
+/// `Positioned` child changes the parent `Stack`'s layout: the stack relaid out
+/// and repainted, and repainting a stack repaints every child of it that has no
+/// layer of its own. So one frame of a scrub — a frame the cache already held,
+/// with nothing on screen changed but a vertical line — redrew every bar and
+/// every lane under it, and the cost grew with the number of rows a `U` had
+/// opened. That is the whole of "scrubbing with many lanes open is laggy even
+/// over cached frames".
+///
+/// Here the marker is laid out once, at the left edge, and *painted* at the
+/// frame through a transform: a transform is a paint-time property, so the
+/// stack is never relaid out and the repaint stops at the boundary above the
+/// marker. The view beside it keeps the picture it already drew.
+class PlayheadOverlay extends StatelessWidget {
+  const PlayheadOverlay({
+    super.key,
+    required this.playhead,
+    required this.xOf,
+  });
+
+  /// The frame the marker stands on. Listened to, never read during a build of
+  /// anything but this.
+  final ValueListenable<int> playhead;
+
+  /// Where a frame falls in the view's own pixels — the caller's axis.
+  final double Function(int frame) xOf;
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+        left: 0,
+        top: 0,
+        bottom: 0,
+        child: RepaintBoundary(
+          key: const ValueKey('tl-playhead-layer'),
+          child: ValueListenableBuilder<int>(
+            valueListenable: playhead,
+            builder: (context, frame, child) => Transform.translate(
+              offset: Offset(xOf(frame) - PlayheadMarker.halfWidth, 0),
+              child: child,
+            ),
+            child: const PlayheadMarker(),
+          ),
+        ),
+      );
+}
+
 /// The playhead's head: a downward triangle with the hairline carried up into
 /// it as a notch.
 class _PlayheadHeadPainter extends CustomPainter {

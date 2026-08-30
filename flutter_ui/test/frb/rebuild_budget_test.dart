@@ -19,6 +19,7 @@
 // (`debugPrintRebuildDirtyWidgets`), which names every element it rebuilds.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
@@ -158,6 +159,56 @@ void main() {
         lessThan(700),
         reason: 'a scrub redrew far too much:\n${rebuilds.ranking()}',
       );
+    });
+
+    /// **What a scrub *paints*, which is not the same question.**
+    ///
+    /// Rebuilding little is no help if the framework still redraws everything:
+    /// the playhead was a `Positioned` child of the same `Stack` the lanes sit
+    /// in, so moving it relaid that stack out — and repainting a stack repaints
+    /// every child of it that has no layer of its own. The bars and lanes were
+    /// redrawn for a vertical line moving over them, and the bill grew with
+    /// every row a `U` opened. That is the owner's "laggy even over cached
+    /// frames".
+    ///
+    /// Counted off the boundaries themselves: a `RenderRepaintBoundary` records
+    /// each time it is actually repainted, so this asks the render tree what it
+    /// did rather than inferring it.
+    testWidgets('a scrub repaints the playhead and not the lanes',
+        (tester) async {
+      final p = await mount(tester);
+      // Twirled open, so the lanes carry rows and not only bars — the state the
+      // complaint is about.
+      for (final layer in p.comp.getLayers()) {
+        final id = layer.internallayerId.toString();
+        await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+        await tester.pump();
+      }
+      await settleFrb(tester, minRounds: 4);
+      // This one counts paints, not rebuilds, and the framework refuses to end
+      // a test with a foundation debug flag still set.
+      rebuilds.remove();
+
+      int paints(String key) {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(ValueKey<String>(key)).first);
+        return boundary.debugSymmetricPaintCount +
+            boundary.debugAsymmetricPaintCount;
+      }
+
+      final lanesBefore = paints('tl-lane-blocks');
+      final headBefore = paints('tl-playhead-layer');
+      for (var frame = 1; frame <= 20; frame++) {
+        p.ui.playheadFrame.value = frame;
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      expect(paints('tl-lane-blocks'), lanesBefore,
+          reason: 'the lanes were redrawn for a playhead that moved over them');
+      // The guard, without which a lane area that had stopped drawing at all
+      // would pass: the line itself must have been redrawn, twenty times.
+      expect(paints('tl-playhead-layer'), greaterThan(headBefore),
+          reason: 'the playhead did not redraw, so nothing was measured');
     });
 
     /// The other half of the rule, and the reason the first test cannot be

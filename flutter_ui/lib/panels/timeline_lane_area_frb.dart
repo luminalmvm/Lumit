@@ -661,6 +661,10 @@ class LayerArea extends StatelessWidget {
                             // in this area's own pixels against, while a
                             // long precomp costs what is on screen.
                             LazyBlocks(
+                              // Named so a budget test can read the layer's
+                              // own paint count: a playhead-only change must
+                              // leave it alone.
+                              key: const ValueKey<String>('tl-lane-blocks'),
                               controller: vScroll,
                               heights: blockHeights,
                               viewport: box.maxHeight,
@@ -888,18 +892,11 @@ class LayerArea extends StatelessWidget {
                 )),
               ],
             ),
-            // The playhead rides above every bar so it is never hidden behind one,
-            // and it is the only thing here that redraws when it moves.
-            ValueListenableBuilder<int>(
-              valueListenable: playhead,
-              builder: (context, frame, child) => Positioned(
-                left: axis.xOf(frame) - PlayheadMarker.halfWidth,
-                top: 0,
-                bottom: 0,
-                child: child!,
-              ),
-              child: const PlayheadMarker(),
-            ),
+            // The playhead rides above every bar so it is never hidden behind
+            // one, and it is the only thing here that redraws when it moves —
+            // on its own layer, so that is true of the *painting* and not only
+            // of the rebuilding (see [PlayheadOverlay]).
+            PlayheadOverlay(playhead: playhead, xOf: axis.xOf),
           ],
         ));
   }

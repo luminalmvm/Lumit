@@ -690,13 +690,23 @@ class _LazyBlocksState extends State<LazyBlocks> {
     for (var i = last; i < widget.heights.length; i++) {
       below += widget.heights[i];
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (above > 0) SizedBox(height: above),
-        for (var i = first; i < last; i++) widget.builder(context, i),
-        if (below > 0) SizedBox(height: below),
-      ],
+    // **The stack keeps its own layer** (K-626's pattern). Everything drawn
+    // over the blocks — the playhead, the marquee, the work-area wash — sits
+    // in the same `Stack` as they do, and a stack that is relaid out repaints
+    // every child of it that has no layer of its own. That put the whole cost
+    // of the blocks on screen behind a single vertical line moving, which is
+    // exactly what a scrub over cached frames is. Behind a boundary, the
+    // blocks are repainted when the blocks change and not when something above
+    // them does.
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (above > 0) SizedBox(height: above),
+          for (var i = first; i < last; i++) widget.builder(context, i),
+          if (below > 0) SizedBox(height: below),
+        ],
+      ),
     );
   }
 }

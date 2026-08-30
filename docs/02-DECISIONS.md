@@ -20172,3 +20172,84 @@ call.
 Regression tests: `moving the playhead converts the frame once` (extended: no
 `sample_scalar` at all, at most one `sample_scalars`) and `a scrub costs the same with
 twice the rows open`, both in `bridge_call_budget_test.dart`.
+
+
+## K-648 — The Timeline carries a time navigator, spanning the panel and drawing over the lanes
+
+**Status: DECIDED (2026-08-30).** Extends [07-UI-SPEC.md](07-UI-SPEC.md) §4.6's navigation
+rules. Nothing is superseded; K-293's zoom mechanism is what this drives.
+
+**What was missing.** Zoomed in, nothing on screen said which slice of the composition the
+lanes were showing. The scrollbar beneath them says where you are — in pixels of a content
+width that is drawn nowhere, at a magnification the eye cannot read off a thumb — and it says
+nothing whatever about the playhead, which may be a long way outside the view. "How much of
+this comp am I looking at, and where is the frame I am working on?" had no answer but zooming
+out to check and zooming back in again.
+
+**What it is.** A slim strip across the top of the Timeline, above the ruler, drawing the
+**whole composition** at a fixed size. On it: the visible span as a **window**, and the
+playhead as a line. It is also the control — **drag the window to pan, drag either end to
+zoom, press the track to bring the window there** — and those are After Effects' gestures on
+purpose, because this is a control most people arrive already knowing.
+
+**It draws the view, never the document.** No numbers, no ticks, no markers, no work area. A
+strip that also drew the document would be a second time ruler at a different scale, two
+pixels above the real one, and the eye would have to decide which of the two it was reading.
+
+**Three rulings the build turned on:**
+
+- **It spans the whole panel and paints only over the lane area.** The ruler's height is
+  *derived* from the outline's two header rows precisely so the two halves line up row for
+  row (§12A.1); a strip inserted on the lane side alone drops every lane half a band below
+  its own name. Laid out over both halves and left blank over the outline, it looks like
+  what it is and keeps the table a table.
+- **The window is read from the scroll, never from the magnification.** `frames / zoom` is
+  the obvious derivation and it is wrong in flight: the zoom flies (K-293) while the offset
+  is corrected during layout, so the two disagree slightly on every frame of a flight and
+  the window jitters through it. The scroll's own viewport, extent and offset are three
+  numbers that are consistent by construction.
+- **The strip names a window; the panel decides what that means.** It hands back a start and
+  a span in frames, and the panel turns those into a magnification and an anchored offset —
+  the same anchor mechanism the magnification slider uses, with the window's far end as the
+  fixed point, which is what makes dragging one end zoom about the other. Flutter is a thin
+  view (K-181): a strip that set a zoom itself would be a second opinion about the view.
+
+**Look.** The ruler band's own: the lane ground it stands on, the closing hairline every
+band in the panel has, a window in `surface2` edged with a hairline, and at each end the
+work-area handle's drawn tab — one step stronger under the pointer (§4.1). The playhead
+crosses it in the accent, over the window rather than under it.
+
+Regression tests: `the window a scroll position implies` and `what a drag asks for`
+(`timeline_navigator_test`) — the fit-to-panel case, the zoomed slice, the pan that keeps
+its width and stops at either end, and the end-drag that holds the other end still and
+cannot be pulled through it.
+
+
+## K-649 — The playhead is a layer over the lanes, not a child of them
+
+**Status: DECIDED (2026-08-30).** Applies K-626's pattern (own painter, own repaint
+boundary) to the Timeline's playhead, and to the block stacks both halves of the table are
+built from.
+
+The playhead was a `Positioned` child of the same `Stack` the lanes, the row seams, the
+work-area wash and the key-block overlay sit in, and its `left` moved with the frame.
+Moving a `Positioned` relays that stack out, and repainting a stack repaints every child of
+it that has no layer of its own — so one vertical line sliding sideways redrew every bar and
+every lane under it, at a cost that grew with the rows a `U` had opened. That is the other
+half of "scrubbing with many lanes open is laggy even over cached frames"; K-647 is the
+first half.
+
+Two changes, and both are needed. **`PlayheadOverlay`** lays the marker out once at the left
+edge and paints it at the frame through a `Transform` behind its own `RepaintBoundary`: a
+transform is a paint-time property, so the stack is never relaid out and the repaint stops
+at the boundary. Both views use it — the lanes and the graph — because the playhead spans
+whichever is open. **`LazyBlocks` keeps its own layer**, so the blocks are redrawn when the
+blocks change and not when any of the overlays above them does; that covers the marquee and
+the work-area wash as well as the playhead, and it applies to the outline's stack as well as
+the lanes'.
+
+Regression test: `a scrub repaints the playhead and not the lanes` in
+`rebuild_budget_test.dart`, counted off `RenderRepaintBoundary`'s own record of when it was
+repainted — the render tree asked what it did, rather than inferred. It carries its guard: a
+lane area that had stopped drawing entirely would satisfy the first assertion, so the
+playhead's own layer must be shown to have redrawn.

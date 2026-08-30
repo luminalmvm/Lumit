@@ -7341,6 +7341,19 @@ memory. Nothing has to register or unregister — the list of curves is simply
 what was asked for last, so a row that appears joins it after one frame and a
 row that goes falls out of it.
 
+The other half of the same lag was not the engine at all — it was the drawing.
+Flutter keeps a picture of what it has already drawn and only redraws the parts
+that changed, but it can only do that where you have told it a part is worth
+keeping separately: a **repaint boundary** is that marker, and everything on one
+side of it is redrawn or kept as a unit. The playhead had none, and it lived in
+the same pile of overlapping widgets as the lanes; moving it changed that pile's
+layout, and redrawing a pile redraws every child in it that has no picture of its
+own. So one vertical line sliding sideways redrew every bar and every lane
+beneath it, and the more rows a `U` had opened the worse it got. Now the lane
+blocks keep a picture of their own, and the playhead is *positioned* once and
+merely painted at a different offset each frame — a paint-time move rather than a
+layout one. A scrub over frames the cache already holds redraws a line.
+
 - **Project** — items in folders, multi-select, drag onto the Timeline or onto
   New composition (which prefills size, rate and duration from what you dropped).
 - **Viewer** — the picture, the transport, the resolution picker, the on-picture
@@ -12896,3 +12909,53 @@ its own effects, and it can only touch the handful of pictures and numbers it wa
 cannot read your disc, reach the network, or run when a project is merely opened. That is why
 a shared shader can travel inside an ordinary preset file, and a plugin cannot: one is data,
 the other is code.
+
+## 40. The strip that shows you where you are, in plain terms
+
+Zoom the Timeline in and the lanes stop showing the whole composition — they show
+a slice of it. Which slice? Until now the only answer on screen was the scrollbar
+under the lanes, and a scrollbar measures in pixels of a width that is not drawn
+anywhere. It cannot tell you that you are looking at four seconds of a two-minute
+comp, and it says nothing at all about where the playhead is.
+
+The **time navigator** is the strip along the top of the panel that answers all
+three at once. It draws the whole composition end to end at a fixed size — it
+never zooms, that is the point of it — and on that it draws two things: a window
+where the lanes' slice falls, and a line where the playhead is. So a glance says
+how much of the comp you are looking at, whereabouts in it, and whether the frame
+you are working on is inside that or somewhere off to the left.
+
+It is also a control, which is the half that earns it the room:
+
+- **Drag the window** and the lanes pan with it.
+- **Drag either end of the window** and the lanes zoom. The end you did *not*
+  take hold of stays put, so whatever you were looking at stays where it is on
+  screen while the span grows or shrinks around it.
+- **Press anywhere on the track** and the window comes to you.
+
+Those are After Effects' gestures, deliberately: it is a control most people
+arrive already knowing, and inventing a better one would only mean teaching it.
+
+Two things about how it is built are worth knowing, because both were choices
+that could have gone the other way.
+
+The first is **where it gets its numbers**. The obvious source is the
+magnification — divide the comp's length by the zoom and you have the visible
+span. But the zoom *flies*: it moves over a fraction of a second rather than
+jumping, and while it is flying the lanes' scroll offset is being corrected
+during layout to keep the right frame under your eye. Read the two together
+mid-flight and they disagree slightly on every frame of it, and the window
+jitters. So the strip asks the scroll itself instead — how wide is your content,
+how wide is your viewport, where are you in it — three numbers that are always
+consistent with each other because they come from the same place.
+
+The second is **why it spans the whole panel and only draws over half of it**.
+The Timeline is one table: names on the left, time on the right, and each row's
+name has to sit exactly level with its own lane. What keeps them level is that
+the time ruler is built to be exactly as tall as the two header rows above the
+names. Slide a new strip in above the ruler only, and everything on the time side
+drops by the height of that strip while the names stay put — every lane half a
+band below its label. So the strip is put above *both* halves, and simply leaves
+the part over the names blank. It looks like a strip over the time area, because
+that is what it is; it is laid out as a strip over everything, because that is
+what keeps the table a table.
