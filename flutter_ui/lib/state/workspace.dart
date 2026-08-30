@@ -1058,6 +1058,24 @@ class Workspace extends ChangeNotifier {
     return true;
   }
 
+  /// Which strip slot the arrangement in force occupies, or null when it is
+  /// not one of the workspaces on the strip — the inverse of
+  /// [switchToWorkspaceSlot], and what Window ▸ Assign shortcut binds.
+  ///
+  /// **The chord follows the slot, not the name** (K-574). Slots count the
+  /// presets first and then the user's own in name order, so a workspace
+  /// renamed past one of its neighbours changes slot with it. That is what
+  /// makes `Alt+Shift+7` reach the same *place* on the strip every launch, and
+  /// it is what the dialogue says out loud.
+  int? get activeWorkspaceSlot {
+    const presets = WorkspacePreset.values;
+    if (activePreset case final preset?) return presets.indexOf(preset) + 1;
+    final active = activeUserWorkspace;
+    if (active == null) return null;
+    final at = userWorkspaces.indexWhere((w) => w.name == active);
+    return at < 0 ? null : presets.length + at + 1;
+  }
+
   /// The arrangement moved: write it back to the user workspace in force, if
   /// there is one (docs/07 §1.4 — layout changes persist automatically to the
   /// active workspace). A no-op under a preset, whose factory layout is not the

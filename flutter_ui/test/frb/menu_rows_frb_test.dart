@@ -10,6 +10,7 @@
 // of half these rows is about the selection, and the selection lives in a
 // notifier the bar does not subscribe to itself.
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -17,6 +18,8 @@ import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/dock.dart' show WorkspacePreset;
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -481,6 +484,65 @@ void main() {
       final after = layer.getTransform().positionX;
       expect(after, isA<BridgeScalar_Expression>());
       expect((after as BridgeScalar_Expression).field0, 'time * 2');
+    });
+
+    /// K-466 left the wireframes, the handles and the hover highlight on one
+    /// switch, and gave it a seat in the Viewer's own view menu. This row is
+    /// the second door onto that switch, so it has to move the same state.
+    testWidgets('View ▸ Show wireframe flips the layer controls',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+      expect(p.uiState.viewerLayerControls, isTrue);
+
+      await choose(tester, 'View', 'Show wireframe');
+      expect(p.uiState.viewerLayerControls, isFalse);
+
+      await settle(tester, p);
+      await choose(tester, 'View', 'Show wireframe');
+      expect(p.uiState.viewerLayerControls, isTrue);
+    });
+
+    /// The chord is bound to the **slot**, not to the name (K-574), and the
+    /// dialogue says which slot that is rather than letting it be a surprise
+    /// the first time a rename moves it.
+    testWidgets('Window ▸ Assign shortcut names the slot it will bind',
+        (tester) async {
+      final p = withComp();
+      p.uiState.workspace.activePreset = WorkspacePreset.edit;
+      expect(p.uiState.workspace.activeWorkspaceSlot, 1,
+          reason: 'the presets come first on the strip');
+      await mount(tester, p);
+
+      await choose(tester, 'Window', 'Assign shortcut to this workspace');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('workspace-shortcut-summary')),
+          findsOneWidget);
+
+      // It opens showing the chord the slot already answers to, so a person
+      // who only wanted to look sees what they have.
+      String box() => tester
+          .widget<Text>(find.descendant(
+              of: find.byKey(const ValueKey('workspace-shortcut-chord')),
+              matching: find.byType(Text)))
+          .data!;
+      final was = box();
+      expect(was, isNot(l10n.keymapPressAShortcut));
+
+      // And it keeps listening, so a second press is how you change your mind.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.digit4);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.digit4);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pumpAndSettle();
+      expect(box(), isNot(was));
+      expect(box(), contains('4'));
+
+      // Cancel leaves the keymap exactly as it was.
+      await tester.tap(find.byKey(const ValueKey('workspace-shortcut-cancel')));
+      await tester.pumpAndSettle();
+      expect(p.uiState.keymap.chordFor('workspace.switch.1'),
+          isNot(contains('4')));
     });
 
     testWidgets('File ▸ Close project leaves an empty one in its place',

@@ -66,6 +66,7 @@ import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
 import 'theme_name_dialog.dart';
 import 'update_dialog_frb.dart';
+import 'workspace_shortcut_frb.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
 /// arrangement on screen under a name of the user's own, and renaming,
@@ -1059,7 +1060,14 @@ List<MenuSection> lumitMenus(
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuShowGrid, action: 'viewer.grid.toggle'),
         MenuEntry.todo(l10n.menuShowRuler, action: 'viewer.rulers.toggle'),
-        MenuEntry.todo(l10n.menuShowWireframe),
+        // The layer-controls switch (K-217, K-466): the wireframes, the
+        // handles and the hover highlight, on and off together. The bar's own
+        // view menu carries the same switch under its own name — they are one
+        // switch until the full wireframe display mode of §2.2 item 5 gives
+        // this row something of its own to turn on.
+        MenuEntry(l10n.menuShowWireframe,
+            () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+            checked: ui.viewerLayerControls),
         MenuEntry.todo(l10n.menuSnapToGrid),
       ]
     ),
@@ -1082,7 +1090,13 @@ List<MenuSection> lumitMenus(
           MenuEntry.divider(),
           MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
         ]),
-        MenuEntry.todo(l10n.menuAssignWorkspaceShortcut),
+        // A chord for the arrangement on screen (K-574): the engine's nine
+        // `workspace.switch.N` actions count *slots* on the strip, so what
+        // is bound is the position rather than the name — which is what the
+        // dialogue says, and what makes the key reach the same place next
+        // launch.
+        MenuEntry(l10n.menuAssignWorkspaceShortcut,
+            assignWorkspaceShortcutAction(context, app, ui)),
         MenuEntry.divider(),
         // Every panel, ticked when it is in the arrangement. Toggling one adds
         // or drops its pane and persists the layout, so a panel you closed stays

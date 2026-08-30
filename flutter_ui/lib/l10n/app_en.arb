@@ -10171,6 +10171,34 @@
   "@workspaceNewName": {
     "description": "The name suggested when saving an arrangement as a workspace for the first time."
   },
+  "workspaceShortcutSet": "{chord} switches to {workspace}",
+  "@workspaceShortcutSet": {
+    "description": "Status-line notice after a workspace shortcut is assigned. {chord} is the key combination as it reads on this platform, {workspace} the arrangement's name.",
+    "placeholders": {
+      "chord": {
+        "type": "String",
+        "example": "Alt+Shift+3"
+      },
+      "workspace": {
+        "type": "String",
+        "example": "Grading"
+      }
+    }
+  },
+  "workspaceShortcutSlot": "{workspace} is slot {slot} on the strip. The shortcut follows the slot, so renaming a workspace can move it.",
+  "@workspaceShortcutSlot": {
+    "description": "The factual line under the capture box in the Assign shortcut to this workspace dialogue, saying that the chord is bound to a position rather than to a name.",
+    "placeholders": {
+      "workspace": {
+        "type": "String",
+        "example": "Grading"
+      },
+      "slot": {
+        "type": "String",
+        "example": "3"
+      }
+    }
+  },
   "workspaceSaved": "{name} saved.",
   "@workspaceSaved": {
     "description": "Status-line notice after saving a workspace. {name} is its name.",

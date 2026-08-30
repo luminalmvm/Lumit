@@ -1733,6 +1733,27 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the Viewer draws its **layer controls** (K-217, K-466): the
+  /// wireframe round every layer, the transform handles and the hover
+  /// highlight, on and off as one.
+  ///
+  /// Here rather than in the Viewer panel because two things reach it — the
+  /// bar's own view menu and View ▸ Show wireframe (K-244) — and a switch
+  /// with one route is a switch that disappears the day something intercepts
+  /// that route. Display only: no engine copy, no cache entry, and nothing an
+  /// export can see.
+  ///
+  /// The full wireframe *display mode* the specification also names (docs/07
+  /// §2.2 item 5, outlines only and no raster) is a separate thing and is
+  /// still owed; until it lands these two rows are the one switch.
+  bool viewerLayerControls = true;
+
+  void setViewerLayerControls(bool on) {
+    if (viewerLayerControls == on) return;
+    viewerLayerControls = on;
+    notifyListeners();
+  }
+
   /// Whether the Viewer's transparency grid is up (K-352). While it is, the
   /// engine leaves the comp's background colour out of the composite, so
   /// pixels nothing covers arrive transparent and the grid shows through.

@@ -168,7 +168,6 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// because a selected layer with no box is a layer you cannot see the extent
   /// of; the switch exists for judging the picture itself, where any mark over
   /// it is in the way.
-  bool _wireframes = true;
   Offset _pan = Offset.zero;
 
   /// The composition this Viewer has already asked for a frame of — so
@@ -520,7 +519,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             // Session state rather than panel state (K-352): the engine has to
             // be told when it flips, and [LumitUiState] is what talks to it.
             grid: ui.viewerGrid,
-            wireframes: _wireframes,
+            wireframes: ui.viewerLayerControls,
             look: ui.viewerLook,
             onStops: ui.setViewerStops,
             playing: playing,
@@ -533,7 +532,8 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             background: ui.model.heldBackground,
             onChannel: (c) => setState(() => _channel = c),
             onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
-            onWireframes: () => setState(() => _wireframes = !_wireframes),
+            onWireframes: () =>
+                ui.setViewerLayerControls(!ui.viewerLayerControls),
             onPlayPause: _togglePlay,
             onSeek: (f) => _seek(comp, ui, f),
             hasSnapshot: _snapshot != null,
@@ -612,7 +612,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
               pictureKey: _pictureKey,
               snapshot: _showingSnapshot ? _snapshot : null,
               snapshotArea: _snapshotArea,
-              wireframes: _wireframes,
+              wireframes: ui.viewerLayerControls,
               channel: _channel,
               compSize: size,
               footage: footage,
