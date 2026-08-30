@@ -298,7 +298,7 @@ pub fn list_presets() -> Vec<BridgePresetInfo> {
 }
 
 /// Every `.lumgrp` **node group** in the same library folder, sorted by name
-/// (K-646) — what the graph canvas's search offers beside the drivers.
+/// (K-651) — what the graph canvas's search offers beside the drivers.
 ///
 /// The same folder as the effect presets, because it is the same kind of thing:
 /// something this person saved to use again, on any project.

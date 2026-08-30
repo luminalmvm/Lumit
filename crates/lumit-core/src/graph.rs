@@ -155,6 +155,40 @@ pub struct LayerGraph {
     /// reaches no frame key. A wired socket draws regardless of it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exposed: Vec<NodeRef>,
+    /// The named regions of the canvas (K-651). Presentation state beside
+    /// [`Self::layout`] and for the same reasons: it persists and travels, it
+    /// is committed by the same whole-graph write, and it reaches no frame key
+    /// because it changes no pixel.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<NodeGroup>,
+}
+
+/// A named set of boxes drawn on one tinted wash (K-651).
+///
+/// # In plain terms
+///
+/// A graph of any size grows regions that belong together — the three boxes
+/// that make the music drive the glow, say. A group is a name written on that
+/// region and a colour behind it: the canvas draws a rectangle around whatever
+/// its members happen to be sitting on, so the wash follows the boxes rather
+/// than the boxes being trapped in a box.
+///
+/// **No geometry is stored.** The rectangle is worked out from the members'
+/// own positions every time it is drawn, which is what keeps a group honest
+/// when a member is dragged, and what keeps this out of the way of every other
+/// edit — dragging a box is still one `layout` write.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeGroup {
+    /// What the group is called, drawn as the wash's kicker.
+    pub name: String,
+    /// Which chip of the label palette tints it. An index, not a colour: no
+    /// colour has ever crossed the bridge, and the frontend takes this modulo
+    /// its own palette length (K-188's set).
+    pub colour: u32,
+    /// The boxes inside it. A box may sit in one group or none — a member
+    /// listed twice is the same as listed once, and a member the layer no
+    /// longer carries is dropped by [`LayerGraph::prune_to`].
+    pub members: Vec<NodeRef>,
 }
 
 /// Why a graph was refused (§1.5).
@@ -284,6 +318,7 @@ impl LayerGraph {
             && self.edges.is_empty()
             && self.layout.is_empty()
             && self.exposed.is_empty()
+            && self.groups.is_empty()
     }
 
     /// The driver instance named by `id`, if this graph carries one.
@@ -318,7 +353,20 @@ impl LayerGraph {
     pub fn prune_to(&mut self, effects: &[EffectInstance]) -> bool {
         let alive = |id: &Uuid| effects.iter().any(|e| e.id == *id);
         let gone = |node: &NodeRef| matches!(node, NodeRef::Effect(id) if !alive(id));
-        let before = (self.edges.len(), self.layout.len(), self.exposed.len());
+        // Members rather than groups: a group that merely *lost* one has still
+        // changed, and counting the groups alone would call that no change.
+        let members = |g: &Self| {
+            g.groups
+                .iter()
+                .map(|group| group.members.len())
+                .sum::<usize>()
+        };
+        let before = (
+            self.edges.len(),
+            self.layout.len(),
+            self.exposed.len(),
+            members(self),
+        );
         self.edges.retain(|e| {
             // The source: a driver or the layer's own alpha is not the stack's
             // to remove, but an effect is.
@@ -334,7 +382,20 @@ impl LayerGraph {
         });
         self.layout.retain(|(node, _)| !gone(node));
         self.exposed.retain(|node| !gone(node));
-        before != (self.edges.len(), self.layout.len(), self.exposed.len())
+        // A group loses the members the stack removed, and a group that has
+        // lost all of them goes with them: a wash around nothing is not a
+        // region, and leaving one behind would be a name with nothing under it.
+        for group in &mut self.groups {
+            group.members.retain(|node| !gone(node));
+        }
+        self.groups.retain(|group| !group.members.is_empty());
+        before
+            != (
+                self.edges.len(),
+                self.layout.len(),
+                self.exposed.len(),
+                members(self),
+            )
     }
 
     /// The wire feeding `to`, if any.
@@ -579,6 +640,7 @@ mod tests {
                 edges: vec![edge],
                 layout: vec![(NodeRef::Source, [0.0, 0.0])],
                 exposed: Vec::new(),
+                groups: Vec::new(),
             },
             vec![blur],
         )

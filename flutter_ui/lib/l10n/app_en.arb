@@ -1045,6 +1045,10 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
+  "fileTypeNodeGroup": "Lumit node group",
+  "@fileTypeNodeGroup": {
+    "description": "A file type in the system's file dialogues: a saved .lumgrp set of Graph panel boxes and the wires between them."
+  },
   "fileTypeAeProject": "After Effects project",
   "@fileTypeAeProject": {
     "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
@@ -9006,6 +9010,14 @@
   "graphSearchWires": "Connects the dragged wire where it fits",
   "@graphSearchWires": {
     "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
+  },
+  "graphSaveGroup": "Save group…",
+  "@graphSaveGroup": {
+    "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
+  },
+  "graphGroup": "Group",
+  "@graphGroup": {
+    "description": "Graph panel node search: the kind shown beside a row that is a saved group of boxes rather than a single one, in the place an effect row shows its category."
   },
   "graphDriven": "driven",
   "@graphDriven": {

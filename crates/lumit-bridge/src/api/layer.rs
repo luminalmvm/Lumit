@@ -4898,6 +4898,59 @@ impl LayerReference {
         Ok(())
     }
 
+    /// The JSON text of a **node group** gathered from `nodes` (K-651) — the
+    /// mirror of `save_preset` for the graph canvas.
+    ///
+    /// The engine hands back the text and Dart chooses where it goes, exactly
+    /// as an effect preset does: the engine never opens a file dialogue. What
+    /// is saved is the driver boxes, the wires with both ends inside the set,
+    /// and where they sat relative to one another; a wire leaving the set is
+    /// not saved, because it names something the group does not carry.
+    #[frb(sync)]
+    pub fn save_node_group(
+        &self,
+        name: String,
+        colour: u32,
+        nodes: Vec<crate::api::graph::BridgeNodeRef>,
+    ) -> Result<String, BridgeError> {
+        let layer = self.item()?;
+        let members: Vec<lumit_core::graph::NodeRef> =
+            nodes.into_iter().map(|n| n.core()).collect();
+        let preset = lumit_core::preset::group_from_graph(&layer.graph, &name, colour, &members);
+        lumit_core::preset::group_to_json(&preset).map_err(|_| BridgeError::InvalidEffect)
+    }
+
+    /// Insert a saved node group at canvas point `(x, y)` — **one commit**, so
+    /// one undo step however many boxes and wires it carries.
+    ///
+    /// Every instance id is minted here, so dropping one group twice never
+    /// makes two boxes share an instance. Unlike `new_driver` this is not
+    /// staged: dropping a saved rig *is* the whole gesture, there being nothing
+    /// left to decide once the spot is chosen.
+    #[frb(sync)]
+    pub fn insert_node_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
+        let preset =
+            lumit_core::preset::group_from_json(&text).map_err(|_| BridgeError::InvalidEffect)?;
+        let added = lumit_core::preset::group_instantiated(&preset, [x, y]);
+
+        let mut graph = self.item()?.graph;
+        graph.nodes.extend(added.nodes);
+        graph.edges.extend(added.edges);
+        graph.layout.extend(added.layout);
+        graph.groups.push(added.group);
+
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetLayerGraph {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                graph: Box::new(graph),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// Which of this layer's property groups the reveal shortcuts should open
     /// (docs/07 §4.3's `U` / `UU`, K-199).
     ///

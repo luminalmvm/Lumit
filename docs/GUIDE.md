@@ -10843,6 +10843,30 @@ changes. Turning the chip on does not change the document. So the engine throws 
 away itself whenever the chip moves — the same thing it already does when you change the
 exposure, for exactly the same reason.
 
+### Named groups of boxes (K-651)
+
+A graph of any size grows regions that belong together: the three boxes that make the glow
+pulse with the music, say. Pick them, press **Save group…**, and two things happen at once.
+The canvas draws a faintly tinted rectangle behind them with the name written above it, so
+the region can be seen at a glance rather than traced wire by wire — and the same set is
+written to a small file in your own library, beside the effect presets, so it can be
+dropped into another layer's graph later with its inner wiring intact. Tab on the canvas
+offers your saved groups beside the drivers; picking one drops the whole rig where you
+asked for it, wired, in one step that one undo takes away whole.
+
+The rectangle is not a container and nothing is trapped inside it. A group remembers
+*which boxes* are in it and nothing about where they are, so the wash is worked out fresh
+from wherever its members happen to be sitting: drag one to the far side of the canvas and
+the wash stretches to follow. Delete the effects a group's boxes were about and the group
+quietly loses those members, and a group that has lost all of them goes too — a name with
+nothing under it is not a region.
+
+The colour is a chip from the same small palette layer labels use, picked for you as the
+next one along. Nothing about the colour reaches the engine: the file remembers *which
+chip*, and the application decides what that looks like — the same arrangement the wires
+already have, where the engine says what a socket carries and the theme says what colour
+that is.
+
 ## 21. The wordmark and the empty shell, in plain terms
 
 **The wordmark is a picture, not a word.** The "lumit" at the top of the welcome page used

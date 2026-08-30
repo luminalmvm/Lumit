@@ -104,6 +104,23 @@ Future<String?> pickPresetSaveLocation(String suggestedName,
   return location?.path;
 }
 
+/// The `.lumgrp` node-group type group (K-651) — a saved set of graph boxes,
+/// living in the same library folder as the effect presets.
+XTypeGroup _nodeGroupGroup() =>
+    XTypeGroup(label: l10n.fileTypeNodeGroup, extensions: const ['lumgrp']);
+
+/// Choose where to save a `.lumgrp` node group, defaulting as
+/// [pickPresetSaveLocation] does, or null when cancelled.
+Future<String?> pickNodeGroupSaveLocation(String suggestedName,
+    {String? initialDirectory}) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_nodeGroupGroup()],
+    suggestedName: suggestedName,
+    initialDirectory: initialDirectory,
+  );
+  return location?.path;
+}
+
 /// The OCIO configuration type group (K-490): the config file itself, which is
 /// `config.ocio` by convention but need not be named that.
 XTypeGroup _ocioGroup() =>

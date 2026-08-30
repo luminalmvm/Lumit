@@ -28,6 +28,7 @@
 // no colour crosses the bridge — the engine sends the type, the frontend maps
 // it to the token.
 
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
@@ -50,6 +51,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
+import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
@@ -136,6 +138,15 @@ const double graphIconSize = 13;
 
 // The Tab search is the Ctrl+Space console (K-645): one search surface, opened
 // by two keys. `shell/fx_console_frb.dart` owns its shape.
+
+/// A group's wash: the air it leaves round its members, and the band its name
+/// sits in above them (K-651, the NodeGraph drawing's own numbers).
+const double graphGroupPad = 12;
+const double graphGroupHead = 18;
+
+/// What a saved group is called on disk — the engine's own constant, restated
+/// here only because a file dialogue needs the letters.
+const String graphGroupExtension = 'lumgrp';
 
 /// Where an unplaced box lands: the chain marches right, the drivers sit
 /// below it. The drawing's own spacing — a node's width plus 88 of air.
@@ -268,6 +279,27 @@ class _Box {
           graphPortRowHeight / 2,
     );
   }
+}
+
+/// The rectangle a group's wash covers, in canvas units: its members' own
+/// bounds, plus air all round and a band above for its name.
+///
+/// **Derived, never stored** (K-651). A group holds names, not geometry, so the
+/// wash follows a member the moment it is dragged and cannot go stale. Null
+/// where the canvas is drawing none of the members — a group whose boxes have
+/// all gone draws nothing rather than a rectangle round the origin.
+Rect? graphGroupRect(Iterable<Rect> members) {
+  Rect? bounds;
+  for (final member in members) {
+    bounds = bounds == null ? member : bounds.expandToInclude(member);
+  }
+  if (bounds == null) return null;
+  return Rect.fromLTRB(
+    bounds.left - graphGroupPad,
+    bounds.top - graphGroupPad - graphGroupHead,
+    bounds.right + graphGroupPad,
+    bounds.bottom + graphGroupPad,
+  );
 }
 
 /// The whole canvas worked out from the held graph: every box's rectangle and
@@ -483,7 +515,20 @@ class GraphPanelFrb extends StatefulWidget {
   /// asserted without the real registry.
   final List<BridgeEffectInfo> Function()? driversLister;
 
-  const GraphPanelFrb({super.key, this.driversLister});
+  /// The saved-group library seam, injected for the same reason — a test says
+  /// what is in the folder rather than writing to the user's own library.
+  final List<BridgePresetInfo> Function()? groupsLister;
+
+  /// Where "Save group…" writes, injected so a test never opens a system file
+  /// dialogue. Null takes the picker, starting in the preset library folder.
+  final Future<String?> Function()? groupSavePicker;
+
+  const GraphPanelFrb({
+    super.key,
+    this.driversLister,
+    this.groupsLister,
+    this.groupSavePicker,
+  });
 
   @override
   State<GraphPanelFrb> createState() => _GraphPanelFrbState();
@@ -707,6 +752,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   BridgeGraphWiring _wiringNow({
     List<BridgeGraphEdge>? edges,
     List<BridgeNodeRef>? exposed,
+    List<BridgeNodeGroup>? groups,
   }) {
     final w = _graph!.wiring;
     return BridgeGraphWiring(
@@ -717,6 +763,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
             BridgeNodePosition(node: ref, x: e.value.dx, y: e.value.dy),
       ],
       exposed: exposed ?? w.exposed,
+      groups: groups ?? w.groups,
     );
   }
 
@@ -1135,12 +1182,92 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   group: engineLabel(driver.categoryLabel),
                   run: () => _addDriver(driver, at, wire),
                 ),
+            // The saved groups, beside the drivers they are made of (K-651).
+            // Only with no wire in hand: a group is a rig, not a socket, so
+            // there is nothing for the wire to land on.
+            if (wire == null)
+              for (final saved in (widget.groupsLister ?? listNodeGroups)())
+                FxConsoleEntry(
+                  label: saved.name,
+                  kind: FxConsoleKind.effect,
+                  group: l10n.graphGroup,
+                  run: () => _insertGroup(saved.path, at),
+                ),
           ],
         ),
       );
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  // --- Named groups (K-651) -----------------------------------------------
+
+  /// The picked driver boxes — what a group can hold. The Source, the Layer
+  /// out and the stack's effects are derived from the layer, so a group naming
+  /// one could only ever be dropped back onto a layer with the same stack.
+  List<BridgeNodeRef> get _groupable => [
+        for (final node in _selection.values)
+          if (node is BridgeNodeRef_Driver) node,
+      ];
+
+  /// Name the picked boxes and write them to the library — **one gesture, two
+  /// halves** (K-651). Naming a set is what draws its wash, and the same name
+  /// is what the file is called, exactly as an effect preset takes its display
+  /// name from the file it was saved as.
+  Future<void> _saveGroup() async {
+    final layer = _layer;
+    final graph = _graph;
+    final members = _groupable;
+    if (layer == null || graph == null || members.isEmpty) return;
+
+    final picker = widget.groupSavePicker;
+    final path = picker != null
+        ? await picker()
+        : await pickNodeGroupSaveLocation('group.lumgrp',
+            initialDirectory: presetsDirPath());
+    if (path == null || !mounted) return;
+    final name = path
+        .split(RegExp(r'[/\\]'))
+        .last
+        .replaceAll('.$graphGroupExtension', '');
+    // The next chip along, skipping index 0 — that one is the palette's quiet
+    // default, and a wash that reads as "no colour" is not a region.
+    final colour = graph.wiring.groups.length + 1;
+
+    _commit(_wiringNow(groups: [
+      ...graph.wiring.groups,
+      BridgeNodeGroup(name: name, colour: colour, members: members),
+    ]));
+    // Written from the *committed* graph, so the file and the wash carry the
+    // same name, colour and members however the commit was healed.
+    try {
+      File(path).writeAsStringSync(
+          layer.saveNodeGroup(name: name, colour: colour, nodes: members));
+    } catch (_) {
+      // The library is the user's folder; a failed write leaves the group on
+      // the canvas, which is the half that did land.
+    }
+  }
+
+  /// Drop a saved group at `at` — one commit, so one undo step however many
+  /// boxes and wires it carries.
+  void _insertGroup(String path, Offset at) {
+    final layer = _layer;
+    if (layer == null) return;
+    final String text;
+    try {
+      text = File(path).readAsStringSync();
+    } catch (_) {
+      return;
+    }
+    try {
+      layer.insertNodeGroup(text: text, x: at.dx, y: at.dy);
+    } catch (_) {
+      return;
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   /// Drop a driver where the search opened, and — with Auto-wire on and a wire
@@ -1185,6 +1312,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
             BridgeNodePosition(node: ref, x: at.dx, y: at.dy),
           ],
           exposed: _graph!.wiring.exposed,
+          groups: _graph!.wiring.groups,
         ),
       );
     } catch (_) {
@@ -1574,6 +1702,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   style: t.body.copyWith(color: t.textMuted),
                   overflow: TextOverflow.ellipsis),
             ),
+            // Named regions of the canvas: what is picked becomes a group with
+            // a wash of its own, and the same act writes it to the library
+            // (K-651). Greyed until at least one driver box is picked, since a
+            // group of derived boxes is a group nothing could re-insert.
+            HouseButton(
+              key: const ValueKey('graph-save-group'),
+              small: true,
+              frameless: true,
+              onPressed: _groupable.isEmpty ? null : _saveGroup,
+              child: Text(l10n.graphSaveGroup, style: t.small),
+            ),
+            const SizedBox(width: 10),
             Text(l10n.graphAutoWire, style: t.kicker),
             const SizedBox(width: 10),
             HouseToggle(
@@ -1688,6 +1828,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
+                            // The named regions, under every box and taking no
+                            // pointer: a wash is something to read, never
+                            // something to press (K-651).
+                            for (final group in _graph!.wiring.groups)
+                              if (graphGroupRect([
+                                for (final member in group.members)
+                                  if (layout.byKey[graphNodeKey(member)]
+                                      case final box?)
+                                    box.rect,
+                              ])
+                                  case final rect?)
+                                _groupWash(t, group, rect),
                             for (final box in layout.boxes)
                               Positioned(
                                 left: box.rect.left,
@@ -1738,6 +1890,33 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// One group's tinted wash and its name. The colour is a **label chip**
+  /// (K-188's palette, indexed) — the graph's own colour coding is the port
+  /// types and nothing else, so a region borrows the application's other
+  /// palette rather than inventing a third.
+  Widget _groupWash(LumitTheme t, BridgeNodeGroup group, Rect rect) {
+    final colour = t.labelColour(group.colour.toInt());
+    return Positioned.fromRect(
+      key: ValueKey<String>('graph-group-${group.name}'),
+      rect: rect,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: colour.withValues(alpha: 0.05),
+            border: Border.all(color: colour.withValues(alpha: 0.18)),
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          ),
+          padding: EdgeInsets.fromLTRB(graphGroupPad, 3, graphGroupPad, 0),
+          alignment: Alignment.topLeft,
+          child: Text(group.name,
+              style: t.kicker.copyWith(color: colour),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
       ),
     );
   }

@@ -20306,3 +20306,54 @@ shaders` decides whether a broken source falls back to that instance's last good
 it is **false** unless the interactive realiser turns it on — so export and headless never fall
 back, and a frame drawn from a stale pipeline is never entered into any cache tier. Moving the
 compile off the render path is CS3's work, arriving with the surface that makes it necessary.
+
+## K-651 — A group of boxes is a name, a colour and a library file
+
+**Status: DECIDED (2026-08-30).** Extends [impl/node-graph.md](impl/node-graph.md) §1.2 and
+§5, and [17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md)'s layer-graph section. The
+NodeGraph drawing's own region — a label-tinted wash under a set of boxes, with the name
+above it in the kicker — plus the library the Caddis study calls a *recipe*.
+
+**One act, two halves.** Pick the boxes, press **Save group…**, name the file: the canvas
+draws the wash and the same set goes into the per-user library beside the `.lumfx`
+presets, as `.lumgrp`. Naming the region and naming the file are the same naming, exactly
+as an effect preset takes its display name from the file it was saved as — there is no
+second dialogue asking the same question twice.
+
+**A group names boxes, never geometry.** `NodeGroup` carries a name, a palette index and
+its members; the rectangle is derived from where those members are sitting, every time it
+is drawn. So the wash follows a box that is dragged away, dragging is still one `layout`
+write, and there is no stored rectangle to go stale. A group whose members the stack
+removed loses them in `prune_to`, and a group that has lost all of them goes with them: a
+name with nothing under it is not a region.
+
+**The colour is an index, not a colour.** The chip comes from the layer-label palette
+(K-188) — the application's other palette, borrowed rather than a third one invented,
+since the graph's own colour coding is the port types and nothing else (K-472). The engine
+stores which chip; the frontend decides what that looks like, and no colour crosses the
+bridge. The next chip along is picked for the user, skipping index 0, which is the
+palette's quiet default and would read as no region at all.
+
+**Only driver boxes.** The Source, the Layer out and the stack's effects are *derived*
+from the layer (K-471 §1.1), so a saved group naming one could only ever be re-inserted
+onto a layer that happened to carry the same stack. What is saved is the drivers, the
+wires with **both** ends inside the set, and where they sat relative to one another. A
+wire that left the set is not saved: it names something the group does not carry, and
+inventing an end for it on the way back in would be a guess.
+
+**Insert is one commit.** `insert_node_group(text, x, y)` mints fresh ids, re-points the
+inner wires at them, places the boxes at the drop point in the shape they were saved in
+and commits one `SetLayerGraph` — so a whole rig arrives, and one undo takes it away
+whole. Fresh ids every time, so dropping one group twice never makes two boxes share an
+instance, which is the rule `preset::instantiated` already follows for an effect stack.
+
+The wash's **styling** is deliberately plain here — a token-tinted fill, a hairline of the
+same token, the name in the kicker — because the drawing session that settles its chrome
+had not run when this landed. Nothing about the model depends on how it is painted.
+
+Regression tests: `a_group_saves_its_members_the_wires_between_them_and_their_shape`,
+`inserting_a_group_mints_fresh_ids_and_re_points_the_wires`,
+`two_inserts_of_one_group_share_no_ids` (lumit-core);
+`a_node_group_round_trips_through_its_file_in_one_commit` (lumit_bridge);
+`Save group names the pick, washes the canvas and writes a file` and
+`a saved group is offered by the search and dropped whole` (graph_panel_frb_test).

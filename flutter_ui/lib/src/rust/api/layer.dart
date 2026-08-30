@@ -1353,12 +1353,21 @@ class LayerReference {
     required this.internallayerId,
   });
 
-  /// Append the built-in effect named `name` to this layer's stack.
+  /// Append the built-in effect named `name` to this layer's stack — or, when
+  /// `name` is a **driver**, to this layer's graph.
   ///
   /// Seeded at composition size, because a few effects' defaults are positions
   /// (a transform's anchor and position start at the centre of the frame), and
   /// a fresh effect should look like identity rather than dragging the picture
   /// to a corner. An unknown name is refused; nothing partial is committed.
+  ///
+  /// **The fork is here rather than in each caller.** A driver is browsed as
+  /// one more Controls entry, so the console, the Effect menu, the palette and
+  /// the browser all offer one — and a driver on an effect *stack* would be a
+  /// node that changes no pixel. Every one of those routes goes through this
+  /// method, so the one question "is this a driver" is asked once and the node
+  /// lands on the graph, unwired and unplaced (the panel auto-places a node
+  /// with no layout entry). One op either way, so one undo step either way.
   void addEffect({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddEffect(that: this, name: name);
 
@@ -1949,6 +1958,18 @@ class LayerReference {
         that: this,
       );
 
+  /// Insert a saved node group at canvas point `(x, y)` — **one commit**, so
+  /// one undo step however many boxes and wires it carries.
+  ///
+  /// Every instance id is minted here, so dropping one group twice never
+  /// makes two boxes share an instance. Unlike `new_driver` this is not
+  /// staged: dropping a saved rig *is* the whole gesture, there being nothing
+  /// left to decide once the spot is chosen.
+  void insertNodeGroup(
+          {required String text, required double x, required double y}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
+          that: this, text: text, x: x, y: y);
+
   /// Append a `.lumfx` preset's effects to this layer's stack, as one op.
   ///
   /// Each arrives with a **fresh** instance id (K-065): applying one preset to
@@ -2081,6 +2102,21 @@ class LayerReference {
   BridgeRevealGroups revealGroups({required BridgeRevealKind kind}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceRevealGroups(that: this, kind: kind);
+
+  /// The JSON text of a **node group** gathered from `nodes` (K-646) — the
+  /// mirror of `save_preset` for the graph canvas.
+  ///
+  /// The engine hands back the text and Dart chooses where it goes, exactly
+  /// as an effect preset does: the engine never opens a file dialogue. What
+  /// is saved is the driver boxes, the wires with both ends inside the set,
+  /// and where they sat relative to one another; a wire leaving the set is
+  /// not saved, because it names something the group does not carry.
+  String saveNodeGroup(
+          {required String name,
+          required int colour,
+          required List<BridgeNodeRef> nodes}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSaveNodeGroup(
+          that: this, name: name, colour: colour, nodes: nodes);
 
   /// Serialise this layer's whole effect stack to `.lumfx` JSON.
   ///

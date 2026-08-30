@@ -6634,7 +6634,7 @@ fn the_preset_library_lists_presets_and_skips_strays() {
     write("broken.lumfx", "{ this is not json");
     write("shaped.lumfx", r#"{"name":"no effects list here"}"#);
 
-    let listed = crate::api::effect::presets_in(dir.path());
+    let listed = crate::api::effect::presets_in(dir.path(), "lumfx");
     let names: Vec<&str> = listed.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(
         names,
@@ -8270,6 +8270,7 @@ fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
                     y: 40.0,
                 }],
                 exposed: vec![BridgeNodeRef::Effect(blur)],
+                groups: Vec::new(),
             },
         )
         .expect("a number into a number");
@@ -8464,6 +8465,7 @@ fn a_broken_graph_is_refused_with_the_engines_own_words() {
         edges,
         layout: Vec::new(),
         exposed: Vec::new(),
+        groups: Vec::new(),
     };
 
     let id = drivers(&layer)[0].id();
@@ -8556,6 +8558,7 @@ fn a_colour_and_a_number_refuse_each_other() {
         }],
         layout: Vec::new(),
         exposed: Vec::new(),
+        groups: Vec::new(),
     };
 
     layer
@@ -8712,6 +8715,7 @@ fn a_points_stream_into_a_number_socket_is_refused() {
                     }],
                     layout: Vec::new(),
                     exposed: Vec::new(),
+                    groups: Vec::new(),
                 },
             )
             .expect_err("a stream is not a number")
@@ -8748,6 +8752,7 @@ fn a_points_wire_drawn_up_the_stack_is_refused() {
                     }],
                     layout: Vec::new(),
                     exposed: Vec::new(),
+                    groups: Vec::new(),
                 },
             )
             .expect_err("the producer is below its consumer")
@@ -8813,6 +8818,7 @@ fn an_effect_box_draws_the_data_inputs_its_signature_declares() {
                 }],
                 layout: Vec::new(),
                 exposed: Vec::new(),
+                groups: Vec::new(),
             },
         )
         .expect("a producer above its consumer is the arrangement K-492 asks for");
@@ -8840,6 +8846,7 @@ fn the_source_matte_is_a_wire_like_any_other() {
                 }],
                 layout: Vec::new(),
                 exposed: Vec::new(),
+                groups: Vec::new(),
             },
         )
         .expect("every effect with a matte row takes one");
@@ -8949,6 +8956,93 @@ fn a_drivers_parameter_keyframes_like_any_other() {
         BridgeEffectValue::Float(BridgeScalar::Static(v)) if v != 42.0
     ));
     assert_eq!(layer.get_graph().expect("graph").wiring.edges.len(), 1);
+}
+
+/// **A named group saves the boxes, the wires between them and their shape**
+/// (K-651), and comes back as fresh instances one undo takes away whole.
+#[test]
+fn a_node_group_round_trips_through_its_file_in_one_commit() {
+    let (project, layer) = layer_to_wire();
+    let (_blur, wiggle) = wiggle_into_blur(&layer);
+    // A second driver, wired to the first, so there is a wire *inside* the set.
+    let smooth = layer.new_driver("smooth".into()).expect("a driver");
+    let smooth_id = smooth.id();
+    let mut wiring = layer.get_graph().expect("graph").wiring;
+    wiring.edges.push(BridgeGraphEdge {
+        from: BridgeOutputRef::Driver {
+            node: wiggle,
+            port: "value".into(),
+        },
+        to: BridgeInputRef::Param {
+            node: BridgeNodeRef::Driver(smooth_id),
+            port: "value".into(),
+        },
+    });
+    wiring.layout.push(BridgeNodePosition {
+        node: BridgeNodeRef::Driver(smooth_id),
+        x: 300.0,
+        y: 120.0,
+    });
+    layer
+        .set_graph(
+            {
+                let mut all = layer.get_graph_drivers().expect("drivers");
+                all.push(smooth);
+                all
+            },
+            wiring,
+        )
+        .expect("committed");
+
+    let text = layer
+        .save_node_group(
+            "Audio rig".into(),
+            3,
+            vec![
+                BridgeNodeRef::Driver(wiggle),
+                BridgeNodeRef::Driver(smooth_id),
+            ],
+        )
+        .expect("saved");
+
+    let before = layer.get_graph_drivers().expect("drivers").len();
+    layer
+        .insert_node_group(text, 700.0, 400.0)
+        .expect("inserted");
+
+    let after = layer.get_graph().expect("graph");
+    assert_eq!(
+        layer.get_graph_drivers().expect("drivers").len(),
+        before + 2,
+        "the two saved boxes arrived"
+    );
+    let group = after.wiring.groups.last().expect("a group came with them");
+    assert_eq!(group.name, "Audio rig");
+    assert_eq!(group.colour, 3);
+    assert_eq!(group.members.len(), 2);
+    // The wire inside the set came back, pointing at the new boxes — the wire
+    // that left the set (the wiggle into the blur's radius) was not saved, so
+    // there is exactly one more edge than before.
+    let inside = after.wiring.edges.iter().filter(|e| {
+        matches!(&e.to, BridgeInputRef::Param { node, .. }
+            if group.members.contains(node))
+    });
+    assert_eq!(inside.count(), 1);
+    // Dropped where it was asked for, keeping the shape it was saved in.
+    let placed: Vec<&BridgeNodePosition> = after
+        .wiring
+        .layout
+        .iter()
+        .filter(|p| group.members.contains(&p.node))
+        .collect();
+    assert_eq!(placed.len(), 2);
+    assert!(placed.iter().any(|p| p.x == 700.0 && p.y == 400.0));
+
+    // One commit, so one undo step — boxes, wires and wash together.
+    project.undo().expect("undone");
+    let back = layer.get_graph().expect("graph");
+    assert_eq!(layer.get_graph_drivers().expect("drivers").len(), before);
+    assert!(back.wiring.groups.is_empty());
 }
 
 /// **The Drivers family keeps its listing and loses its heading.** The canvas

@@ -94,7 +94,7 @@ impl BridgeNodeRef {
     }
 
     #[frb(ignore)]
-    fn core(self) -> NodeRef {
+    pub(crate) fn core(self) -> NodeRef {
         match self {
             BridgeNodeRef::Source => NodeRef::Source,
             BridgeNodeRef::Effect(id) => NodeRef::Effect(id),
@@ -247,8 +247,22 @@ pub struct BridgeNodePosition {
     pub y: f64,
 }
 
-/// The half of the graph the user edits: wires, positions, and which boxes are
-/// grown to show every socket.
+/// A named region of the canvas: a tinted wash behind a set of boxes (K-651).
+///
+/// **No rectangle crosses**, and no colour: the wash is worked out from where
+/// the members are sitting, and `colour` is an index into the frontend's own
+/// label palette taken modulo its length. The engine has never known what a
+/// colour is, and it does not know what a node card is either.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeNodeGroup {
+    pub name: String,
+    pub colour: u32,
+    pub members: Vec<BridgeNodeRef>,
+}
+
+/// The half of the graph the user edits: wires, positions, which boxes are
+/// grown to show every socket, and the named regions behind them.
 ///
 /// Read out of [`BridgeLayerGraph`], changed, and handed straight back to
 /// `LayerReference::set_graph` — one gesture, one op, one undo step. There is
@@ -262,6 +276,8 @@ pub struct BridgeGraphWiring {
     /// The boxes whose `E` badge is on. A wired socket is drawn whether its box
     /// is exposed or not.
     pub exposed: Vec<BridgeNodeRef>,
+    /// The named regions (K-651).
+    pub groups: Vec<BridgeNodeGroup>,
 }
 
 impl BridgeGraphWiring {
@@ -279,6 +295,20 @@ impl BridgeGraphWiring {
                 })
                 .collect(),
             exposed: g.exposed.iter().copied().map(BridgeNodeRef::of).collect(),
+            groups: g
+                .groups
+                .iter()
+                .map(|group| BridgeNodeGroup {
+                    name: group.name.clone(),
+                    colour: group.colour,
+                    members: group
+                        .members
+                        .iter()
+                        .copied()
+                        .map(BridgeNodeRef::of)
+                        .collect(),
+                })
+                .collect(),
         }
     }
 }
@@ -535,6 +565,15 @@ pub(crate) fn wiring_into(
             .exposed
             .into_iter()
             .map(BridgeNodeRef::core)
+            .collect(),
+        groups: wiring
+            .groups
+            .into_iter()
+            .map(|group| lumit_core::graph::NodeGroup {
+                name: group.name,
+                colour: group.colour,
+                members: group.members.into_iter().map(BridgeNodeRef::core).collect(),
+            })
             .collect(),
     }
 }

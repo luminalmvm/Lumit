@@ -387,12 +387,22 @@ split is the design:
     ask, so there is nothing to write back and nothing to keep in step. Filtering `nodes`
     to its `Effect` boxes *is* the effect stack, which is why the stack view can never be
     made to lie: the graph has no second opinion to disagree with.
-- **Stored, read and written.** `BridgeGraphWiring` — the wires, the canvas positions, and
-    which boxes wear the `E` badge — comes back inside the same read, is edited, and is
-    handed straight to `LayerReference::set_graph(drivers, wiring)`, which commits one
-    `Op::SetLayerGraph`. Add a driver, connect, disconnect, drag a box, toggle exposure:
-    each gesture is one write and therefore one undo step, and auto-wire folds its edge
-    into the same commit as the add. There is deliberately **no per-wire call**.
+- **Stored, read and written.** `BridgeGraphWiring` — the wires, the canvas positions,
+    which boxes wear the `E` badge, and the **named groups** (K-651) — comes back inside
+    the same read, is edited, and is handed straight to
+    `LayerReference::set_graph(drivers, wiring)`, which commits one `Op::SetLayerGraph`.
+    Add a driver, connect, disconnect, drag a box, toggle exposure, name a region: each
+    gesture is one write and therefore one undo step, and auto-wire folds its edge into
+    the same commit as the add. There is deliberately **no per-wire call**.
+
+**A group names boxes, never geometry** (K-651). `BridgeNodeGroup` carries a name, a label
+palette *index* and its members; the wash's rectangle is worked out from where those
+members are sitting, so it follows a dragged box and no colour crosses the bridge —
+the same rule the port types follow. `save_node_group(name, colour, nodes)` hands back the
+JSON and Dart chooses where it goes (the engine never opens a file dialogue, exactly as
+`save_preset`); `insert_node_group(text, x, y)` mints fresh ids, re-points the wires that
+were inside the set and commits **once**, so a whole rig arrives and leaves in one undo
+step. `list_node_groups()` lists the `.lumgrp` files beside the `.lumfx` presets.
 
 **One call, not one per node** (K-183). `get_graph` is asked on selection and on document
 change and held in Dart; the budget test forbids it in a rebuild path, and nothing about a

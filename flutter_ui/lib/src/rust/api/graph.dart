@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 part 'graph.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `catalogue_ports`, `core`, `core`, `of`, `of`, `of`, `of`, `of`, `param_ports`, `read_layer_graph`, `wiring_into`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One wire.
 class BridgeGraphEdge {
@@ -94,8 +94,8 @@ class BridgeGraphNode {
           outputs == other.outputs;
 }
 
-/// The half of the graph the user edits: wires, positions, and which boxes are
-/// grown to show every socket.
+/// The half of the graph the user edits: wires, positions, which boxes are
+/// grown to show every socket, and the named regions behind them.
 ///
 /// Read out of [`BridgeLayerGraph`], changed, and handed straight back to
 /// `LayerReference::set_graph` — one gesture, one op, one undo step. There is
@@ -109,14 +109,19 @@ class BridgeGraphWiring {
   /// is exposed or not.
   final List<BridgeNodeRef> exposed;
 
+  /// The named regions (K-646).
+  final List<BridgeNodeGroup> groups;
+
   const BridgeGraphWiring({
     required this.edges,
     required this.layout,
     required this.exposed,
+    required this.groups,
   });
 
   @override
-  int get hashCode => edges.hashCode ^ layout.hashCode ^ exposed.hashCode;
+  int get hashCode =>
+      edges.hashCode ^ layout.hashCode ^ exposed.hashCode ^ groups.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -125,7 +130,8 @@ class BridgeGraphWiring {
           runtimeType == other.runtimeType &&
           edges == other.edges &&
           layout == other.layout &&
-          exposed == other.exposed;
+          exposed == other.exposed &&
+          groups == other.groups;
 }
 
 @freezed
@@ -170,6 +176,36 @@ class BridgeLayerGraph {
           runtimeType == other.runtimeType &&
           nodes == other.nodes &&
           wiring == other.wiring;
+}
+
+/// A named region of the canvas: a tinted wash behind a set of boxes (K-646).
+///
+/// **No rectangle crosses**, and no colour: the wash is worked out from where
+/// the members are sitting, and `colour` is an index into the frontend's own
+/// label palette taken modulo its length. The engine has never known what a
+/// colour is, and it does not know what a node card is either.
+class BridgeNodeGroup {
+  final String name;
+  final int colour;
+  final List<BridgeNodeRef> members;
+
+  const BridgeNodeGroup({
+    required this.name,
+    required this.colour,
+    required this.members,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ colour.hashCode ^ members.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeNodeGroup &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          colour == other.colour &&
+          members == other.members;
 }
 
 /// Where one box sits on the canvas, in canvas units.

@@ -12,6 +12,8 @@
 //    sockets of different types never reaches the engine, because both types
 //    are in the read model already (docs/17, "The layer graph").
 
+import 'dart:io';
+
 import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -61,19 +63,26 @@ void main() {
                 node: BridgeNodeRef.driver(id), x: at.dx, y: at.dy),
           ],
           exposed: graph.wiring.exposed,
+          groups: graph.wiring.groups,
         ),
       );
       return id;
     }
 
     Future<void> mount(WidgetTester tester, dynamic p,
-        {List<BridgeEffectInfo> Function()? drivers}) async {
+        {List<BridgeEffectInfo> Function()? drivers,
+        List<BridgePresetInfo> Function()? groups,
+        Future<String?> Function()? groupSave}) async {
       const size = Size(900, 600);
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
-        child: GraphPanelFrb(driversLister: drivers),
+        child: GraphPanelFrb(
+          driversLister: drivers,
+          groupsLister: groups,
+          groupSavePicker: groupSave,
+        ),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: size,
@@ -509,6 +518,7 @@ void main() {
             BridgeNodePosition(node: BridgeNodeRef.driver(wiggle), x: 4, y: 4),
           ],
           exposed: moved.wiring.exposed,
+          groups: moved.wiring.groups,
         ),
       );
 
@@ -1140,6 +1150,110 @@ void main() {
           held: LogicalKeyboardKey.controlLeft);
       expect(prefixChipName(p.uiState), isNull,
           reason: 'two picked is no single point to stop at');
+    });
+
+    // --- Named groups (K-651) ---------------------------------------------
+
+    /// A temporary library folder, cleaned up with the test.
+    Directory library() {
+      final dir = Directory.systemTemp.createTempSync('lumit-groups');
+      addTearDown(() {
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+      return dir;
+    }
+
+    Finder driverBox(UuidValue id) =>
+        find.byKey(ValueKey<String>('graph-node-driver:$id'));
+
+    /// **Naming a set is one act with two halves** (K-651): the wash appears on
+    /// the canvas and the same name goes into the library, so a rig that took
+    /// five minutes to wire is one row in the search from then on.
+    testWidgets(
+        'Save group names the pick, washes the canvas and writes a file',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(60, 300));
+      final smooth = seedDriver(p.layer, 'smooth', const Offset(320, 300));
+      final path = '${library().path}/Audio rig.lumgrp';
+      await mount(tester, p, groupSave: () async => path);
+
+      await clickBox(tester, driverBox(wiggle));
+      await clickBox(tester, driverBox(smooth),
+          held: LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(const ValueKey('graph-save-group')));
+      await tester.pumpAndSettle();
+
+      final group = p.layer.getGraph().wiring.groups.single;
+      expect(group.name, 'Audio rig', reason: 'the file names the group');
+      expect(group.members, hasLength(2));
+      expect(group.colour, isNot(0),
+          reason: 'index 0 is the quiet default of the palette, not a region');
+      expect(File(path).existsSync(), isTrue);
+      expect(find.byKey(const ValueKey<String>('graph-group-Audio rig')),
+          findsOneWidget,
+          reason: 'and the wash is drawn behind its members');
+    });
+
+    /// **The wires inside come back wired** — the whole reason a group is worth
+    /// saving — and the drop is one undo step.
+    testWidgets('a saved group is offered by the search and dropped whole',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(60, 300));
+      final smooth = seedDriver(p.layer, 'smooth', const Offset(320, 300));
+      // Wire one into the other, so the file carries a wire of its own.
+      final graph = p.layer.getGraph();
+      p.layer.setGraph(
+        drivers: p.layer.getGraphDrivers(),
+        wiring: BridgeGraphWiring(
+          edges: [
+            ...graph.wiring.edges,
+            BridgeGraphEdge(
+              from: BridgeOutputRef.driver(node: wiggle, port: 'value'),
+              to: BridgeInputRef.param(
+                  node: BridgeNodeRef.driver(smooth), port: 'value'),
+            ),
+          ],
+          layout: graph.wiring.layout,
+          exposed: graph.wiring.exposed,
+          groups: graph.wiring.groups,
+        ),
+      );
+      final path = '${library().path}/Audio rig.lumgrp';
+      File(path).writeAsStringSync(p.layer.saveNodeGroup(
+        name: 'Audio rig',
+        colour: 2,
+        nodes: [BridgeNodeRef.driver(wiggle), BridgeNodeRef.driver(smooth)],
+      ));
+      p.uiState.model.refresh();
+
+      await mount(tester, p,
+          groups: () => [BridgePresetInfo(name: 'Audio rig', path: path)]);
+      await tester.tapAt(const Offset(600, 500));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-Audio rig')));
+      await tester.pump();
+
+      expect(p.layer.getGraphDrivers(), hasLength(4),
+          reason: 'the two saved boxes arrived beside the two they came from');
+      final dropped = p.layer.getGraph().wiring.groups.single;
+      expect(dropped.name, 'Audio rig');
+      expect(dropped.colour, 2);
+      expect(p.layer.getGraph().wiring.edges, hasLength(2),
+          reason: 'the wire inside the set came back, re-pointed');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraphDrivers(), hasLength(2),
+          reason: 'one undo takes the whole rig away');
+      expect(p.layer.getGraph().wiring.groups, isEmpty);
     });
   });
 }

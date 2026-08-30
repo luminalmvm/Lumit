@@ -65,6 +65,16 @@ struct LayerGraph {
     edges: Vec<Edge>,                  // §1.4
     layout: Vec<(NodeRef, [f64; 2])>,  // canvas positions; missing entries auto-place
     exposed: Vec<NodeRef>,             // the boxes twirled open (WP2; §1.4)
+    groups: Vec<NodeGroup>,            // named regions of the canvas (K-651)
+}
+
+/// A named set of boxes drawn on one tinted wash (K-651). No geometry: the
+/// rectangle is worked out from where the members are sitting, so it follows a
+/// dragged box, and `colour` is an index into the frontend's label palette.
+struct NodeGroup {
+    name: String,
+    colour: u32,
+    members: Vec<NodeRef>,
 }
 
 /// Names anything the canvas draws. Stack-derived nodes get stable synthetic refs.
@@ -362,6 +372,13 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   parameter moves under the pointer instead of only on release. The nodes only: a drag on
   a number changes no wire, position or exposure, and staging them would invent a state
   the document cannot be in.
+- **Node groups** (K-651): `BridgeGraphWiring::groups` rides the stored half, and
+  `save_node_group` / `insert_node_group` / `list_node_groups()` are the library seam —
+  `.lumgrp` files beside the `.lumfx` presets, in the same per-user folder. A group names
+  boxes and a palette index; the wash's rectangle is derived from its members' positions,
+  so nothing about geometry is stored and dragging a member is still one `layout` write.
+  Insert is one `SetLayerGraph`: fresh ids, the wires that were inside the set re-pointed,
+  the wires that left it dropped.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
 - **K-005 gate**: every label the engine can send gets its `engine_labels.dart` entry and

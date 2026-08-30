@@ -12,12 +12,11 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-            // These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `clamp_animation`, `document_for`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `clamp_animation`, `document_for`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
-
-            /// Every built-in **effect**, in schema order — the Add-effect menu's source of
+/// Every built-in **effect**, in schema order — the Add-effect menu's source of
 /// truth ([`lumit_core::fx::BUILTINS`]), and the frb form of v0's `list_effects`.
 ///
 /// Stateless, so it is a free function rather than a method: the menu is
@@ -29,7 +28,8 @@ part 'effect.freezed.dart';
 /// it on the layer's graph rather than its stack — `LayerReference::add_effect`
 /// decides that, so no caller has to. [`list_drivers`] still answers the
 /// canvas's narrower question: which entries may be *dropped on the graph*.
-List<BridgeEffectInfo>  listEffects() => BridgeLib.instance.api.crateApiEffectListEffects();
+List<BridgeEffectInfo> listEffects() =>
+    BridgeLib.instance.api.crateApiEffectListEffects();
 
 /// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
@@ -39,7 +39,8 @@ List<BridgeEffectInfo>  listEffects() => BridgeLib.instance.api.crateApiEffectLi
 /// canvas is the only place one can be *dropped*. Every entry carries the
 /// `controls` grouping key and heading its browse family gives it, so a driver
 /// reads as one more Controls entry wherever it is listed.
-List<BridgeEffectInfo>  listDrivers() => BridgeLib.instance.api.crateApiEffectListDrivers();
+List<BridgeEffectInfo> listDrivers() =>
+    BridgeLib.instance.api.crateApiEffectListDrivers();
 
 /// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) and offer what is
 /// found as effects.
@@ -53,7 +54,8 @@ List<BridgeEffectInfo>  listDrivers() => BridgeLib.instance.api.crateApiEffectLi
 /// Registration is additive and idempotent: calling this twice registers each
 /// plugin once (K-593), so a rescan after installing something new is safe at
 /// any moment.
-Future<BridgePluginScan>  rescanPlugins() => BridgeLib.instance.api.crateApiEffectRescanPlugins();
+Future<BridgePluginScan> rescanPlugins() =>
+    BridgeLib.instance.api.crateApiEffectRescanPlugins();
 
 /// Switch a discovered plugin on or off, by the `match_name` the listing hands
 /// out (docs/12 §2.6).
@@ -73,7 +75,9 @@ Future<BridgePluginScan>  rescanPlugins() => BridgeLib.instance.api.crateApiEffe
 ///
 /// [`BridgeError::WriteFailed`] when the preference could not be written — the
 /// answer still holds for this session.
-void  setPluginEnabled({required String effect , required bool enabled }) => BridgeLib.instance.api.crateApiEffectSetPluginEnabled(effect: effect, enabled: enabled);
+void setPluginEnabled({required String effect, required bool enabled}) =>
+    BridgeLib.instance.api
+        .crateApiEffectSetPluginEnabled(effect: effect, enabled: enabled);
 
 /// What plugins have asked Lumit to say since this was last called, oldest
 /// first, taken as they are read.
@@ -86,25 +90,29 @@ void  setPluginEnabled({required String effect , required bool enabled }) => Bri
 ///
 /// Empty on every session with no plugins, which is what makes polling it from
 /// the shell's existing tick free.
-List<String>  pluginMessages() => BridgeLib.instance.api.crateApiEffectPluginMessages();
+List<String> pluginMessages() =>
+    BridgeLib.instance.api.crateApiEffectPluginMessages();
 
 /// Every `.lumfx` in the preset library folder, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
 /// or not preset JSON) is simply not listed; the folder is the user's to put
 /// things in, and a stray file there is not a fault.
-List<BridgePresetInfo>  listPresets() => BridgeLib.instance.api.crateApiEffectListPresets();
+List<BridgePresetInfo> listPresets() =>
+    BridgeLib.instance.api.crateApiEffectListPresets();
 
 /// Every `.lumgrp` **node group** in the same library folder, sorted by name
 /// (K-646) — what the graph canvas's search offers beside the drivers.
 ///
 /// The same folder as the effect presets, because it is the same kind of thing:
 /// something this person saved to use again, on any project.
-List<BridgePresetInfo>  listNodeGroups() => BridgeLib.instance.api.crateApiEffectListNodeGroups();
+List<BridgePresetInfo> listNodeGroups() =>
+    BridgeLib.instance.api.crateApiEffectListNodeGroups();
 
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
-String?  presetsDirPath() => BridgeLib.instance.api.crateApiEffectPresetsDirPath();
+String? presetsDirPath() =>
+    BridgeLib.instance.api.crateApiEffectPresetsDirPath();
 
 /// What `scalar` reads as at `time` — the value the picture is actually showing.
 ///
@@ -118,7 +126,10 @@ String?  presetsDirPath() => BridgeLib.instance.api.crateApiEffectPresetsDirPath
 ///
 /// Sampling is in `f64` seconds, matching the engine: exactness is a property of
 /// key *times* (which cross as integer pairs), not of a sampled value.
-double  sampleScalar({required BridgeScalar scalar , required BridgeRational time }) => BridgeLib.instance.api.crateApiEffectSampleScalar(scalar: scalar, time: time);
+double sampleScalar(
+        {required BridgeScalar scalar, required BridgeRational time}) =>
+    BridgeLib.instance.api
+        .crateApiEffectSampleScalar(scalar: scalar, time: time);
 
 /// Every one of `scalars` at the same `time`, in the order they were given.
 ///
@@ -128,11 +139,26 @@ double  sampleScalar({required BridgeScalar scalar , required BridgeRational tim
 /// That was one crossing of the boundary per row per frame — chatter that grew
 /// with the number of lanes open, so a `U` on a busy layer made the playhead
 /// lag over frames the cache already held. One crossing carries the lot.
-Float64List  sampleScalars({required List<BridgeScalar> scalars , required BridgeRational time }) => BridgeLib.instance.api.crateApiEffectSampleScalars(scalars: scalars, time: time);
+Float64List sampleScalars(
+        {required List<BridgeScalar> scalars, required BridgeRational time}) =>
+    BridgeLib.instance.api
+        .crateApiEffectSampleScalars(scalars: scalars, time: time);
 
-double  sampleScalarWithContext({required BridgeScalar scalar , required BridgeRational time , required LayerReference layer }) => BridgeLib.instance.api.crateApiEffectSampleScalarWithContext(scalar: scalar, time: time, layer: layer);
+double sampleScalarWithContext(
+        {required BridgeScalar scalar,
+        required BridgeRational time,
+        required LayerReference layer}) =>
+    BridgeLib.instance.api.crateApiEffectSampleScalarWithContext(
+        scalar: scalar, time: time, layer: layer);
 
-Float64List  sampleScalarRangeWithContext({required BridgeScalar scalar , required LayerReference layer , required BridgeRational start , required BridgeRational end , required PlatformInt64 samples }) => BridgeLib.instance.api.crateApiEffectSampleScalarRangeWithContext(scalar: scalar, layer: layer, start: start, end: end, samples: samples);
+Float64List sampleScalarRangeWithContext(
+        {required BridgeScalar scalar,
+        required LayerReference layer,
+        required BridgeRational start,
+        required BridgeRational end,
+        required PlatformInt64 samples}) =>
+    BridgeLib.instance.api.crateApiEffectSampleScalarRangeWithContext(
+        scalar: scalar, layer: layer, start: start, end: end, samples: samples);
 
 /// Every parameter `effect` declares, in schema order — what the panel draws a
 /// row per.
@@ -141,7 +167,8 @@ Float64List  sampleScalarRangeWithContext({required BridgeScalar scalar , requir
 /// takes. An unknown name is an empty list rather than an error: a project
 /// carrying an effect this build does not know still opens, and its instance
 /// simply has no rows to draw.
-List<BridgeParamInfo>  listParameters({required String effect }) => BridgeLib.instance.api.crateApiEffectListParameters(effect: effect);
+List<BridgeParamInfo> listParameters({required String effect}) =>
+    BridgeLib.instance.api.crateApiEffectListParameters(effect: effect);
 
 /// An effect's vector pairs, in schema order — the fourth static list beside
 /// [`list_parameters`], and memoised on the Dart side for the same reason
@@ -151,104 +178,90 @@ List<BridgeParamInfo>  listParameters({required String effect }) => BridgeLib.in
 /// An unknown match name is an empty list rather than an error, like every
 /// other schema read: a project carrying an effect this build does not know
 /// still opens.
-List<BridgeParamPair>  listPairs({required String effect }) => BridgeLib.instance.api.crateApiEffectListPairs(effect: effect);
+List<BridgeParamPair> listPairs({required String effect}) =>
+    BridgeLib.instance.api.crateApiEffectListPairs(effect: effect);
 
 /// Every parameter group `effect` declares, in schema order (empty for an
 /// effect with none, or an unknown name). The panel inserts each group's
 /// twirl at its first member's position and hides the members it covers from
 /// the flat run.
-List<BridgeParamGroup>  listParameterGroups({required String effect }) => BridgeLib.instance.api.crateApiEffectListParameterGroups(effect: effect);
+List<BridgeParamGroup> listParameterGroups({required String effect}) =>
+    BridgeLib.instance.api.crateApiEffectListParameterGroups(effect: effect);
 
 /// Every greying rule `effect` declares (empty for an effect whose controls are
 /// all independent, which is most of them, or for an unknown name — a project
 /// carrying an effect this build does not know still opens).
-List<BridgeEnabledWhen>  listEnabledWhen({required String effect }) => BridgeLib.instance.api.crateApiEffectListEnabledWhen(effect: effect);
+List<BridgeEnabledWhen> listEnabledWhen({required String effect}) =>
+    BridgeLib.instance.api.crateApiEffectListEnabledWhen(effect: effect);
 
-            
-                // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<BridgeEffectInstance>>
-                abstract class BridgeEffectInstance implements RustOpaqueInterface {
-                    /// False when the effect is individually bypassed (docs/08 §1.5) — the state
-/// of the checkbox in its title bar.
- bool  enabled();
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<BridgeEffectInstance>>
+abstract class BridgeEffectInstance implements RustOpaqueInterface {
+  /// False when the effect is individually bypassed (docs/08 §1.5) — the state
+  /// of the checkbox in its title bar.
+  bool enabled();
 
+  /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
+  BridgeEffectInstanceInfo getInfo();
 
-/// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
- BridgeEffectInstanceInfo  getInfo();
+  List<String> getParameters();
 
+  /// A parameter's value, whatever kind it is. An unknown `id` is an error;
+  /// every parameter an instance actually carries is expressible, so there is
+  /// no "cannot represent this one" answer any more.
+  BridgeEffectValue getValue({required String id});
 
- List<String>  getParameters();
+  /// This instance's own id — what the stack ops on
+  /// [`crate::api::layer::LayerReference`] address it by.
+  UuidValue id();
 
+  String name();
 
-/// A parameter's value, whatever kind it is. An unknown `id` is an error;
-/// every parameter an instance actually carries is expressible, so there is
-/// no "cannot represent this one" answer any more.
- BridgeEffectValue  getValue({required String id });
+  /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+  /// effect has no pair for is unlinked, never an error.
+  bool pairLinked({required String stem});
 
+  String serialize();
 
-/// This instance's own id — what the stack ops on
-/// [`crate::api::layer::LayerReference`] address it by.
- UuidValue  id();
+  /// Stage the user's own name for this instance (K-321) — an empty or
+  /// whitespace name clears it back to the effect's label. Staging only, like
+  /// `set_value`: `LayerReference::set_effects` is the commit.
+  void setCustomName({required String name});
 
+  /// Bypass or enable this instance on the **staged** copy, like
+  /// `set_custom_name`. The commit is `LayerReference::set_graph` for a
+  /// driver node, whose `B` badge this is; a stack effect has its own
+  /// committing op (`LayerReference::set_effect_enabled`) and does not need
+  /// this.
+  void setEnabled({required bool enabled});
 
- String  name();
+  /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
+  /// copy — `LayerReference::set_effects` is the commit, exactly as
+  /// `set_custom_name` and `set_value` are, so a toggle is one op and one
+  /// undo step like every other effect-stack edit.
+  ///
+  /// Answers whether anything moved, so a caller can skip a commit that
+  /// would undo to itself. The proportional drag a chained pair takes is
+  /// deliberately **not** here: it is UI-time arithmetic while a gesture is
+  /// live, and the document's business is only which pairs are tied.
+  bool setPairLinked({required String stem, required bool linked});
 
-
-/// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
-/// effect has no pair for is unlinked, never an error.
- bool  pairLinked({required String stem });
-
-
- String  serialize();
-
-
-/// Stage the user's own name for this instance (K-321) — an empty or
-/// whitespace name clears it back to the effect's label. Staging only, like
-/// `set_value`: `LayerReference::set_effects` is the commit.
- void  setCustomName({required String name });
-
-
-/// Bypass or enable this instance on the **staged** copy, like
-/// `set_custom_name`. The commit is `LayerReference::set_graph` for a
-/// driver node, whose `B` badge this is; a stack effect has its own
-/// committing op (`LayerReference::set_effect_enabled`) and does not need
-/// this.
- void  setEnabled({required bool enabled });
-
-
-/// Chain or unchain the vector pair keyed by `stem`, on the **staged**
-/// copy — `LayerReference::set_effects` is the commit, exactly as
-/// `set_custom_name` and `set_value` are, so a toggle is one op and one
-/// undo step like every other effect-stack edit.
-///
-/// Answers whether anything moved, so a caller can skip a commit that
-/// would undo to itself. The proportional drag a chained pair takes is
-/// deliberately **not** here: it is UI-time arithmetic while a gesture is
-/// live, and the document's business is only which pairs are tied.
- bool  setPairLinked({required String stem , required bool linked });
-
-
-/// Overwrite a parameter on this staged copy. Nothing is committed — see the
-/// type's own documentation; `LayerReference::set_effects` is the commit.
-///
-/// Refused when `value` is of a different kind from the parameter, so a
-/// control can never quietly change what a parameter *is*.
-///
-/// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
-/// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
-/// dragged in the graph editor, picked off the Viewer, wired from a node,
-/// pasted, loaded from a preset — passes through this one call, and both the
-/// preview and the commit stage through it, so clamping once here is what
-/// makes the picture a scrub shows and the value it lands on the same number.
-/// A control that also clamps its own reading is agreeing with the engine,
-/// not deciding for it; a control that forgets to can no longer render a
-/// value the parameter does not have.
- void  setValue({required String id , required BridgeEffectValue value });
-
-
-
-                    
-                }
-                
+  /// Overwrite a parameter on this staged copy. Nothing is committed — see the
+  /// type's own documentation; `LayerReference::set_effects` is the commit.
+  ///
+  /// Refused when `value` is of a different kind from the parameter, so a
+  /// control can never quietly change what a parameter *is*.
+  ///
+  /// **The hard range is enforced here, not in the panel** (docs/08 §1.2,
+  /// K-620). Every way a number reaches an effect parameter — typed, scrubbed,
+  /// dragged in the graph editor, picked off the Viewer, wired from a node,
+  /// pasted, loaded from a preset — passes through this one call, and both the
+  /// preview and the commit stage through it, so clamping once here is what
+  /// makes the picture a scrub shows and the value it lands on the same number.
+  /// A control that also clamps its own reading is agreeing with the engine,
+  /// not deciding for it; a control that forgets to can no longer render a
+  /// value the parameter does not have.
+  void setValue({required String id, required BridgeEffectValue value});
+}
 
 /// An **automatic** bezier side ([`SideInterp::Auto`]): its speed is computed
 /// from the key's neighbours, `clamped` saying whether the computation is the
@@ -258,322 +271,380 @@ List<BridgeEnabledWhen>  listEnabledWhen({required String effect }) => BridgeLib
 /// free. They cross in both directions untouched, which is what makes
 /// Free → Auto → Free give the custom ease back without the write path having
 /// to consult what was there before.
-class BridgeAutoSide  {
-                final bool clamped;
-final double speed;
-final double influence;
+class BridgeAutoSide {
+  final bool clamped;
+  final double speed;
+  final double influence;
 
-                const BridgeAutoSide({required this.clamped ,required this.speed ,required this.influence ,});
+  const BridgeAutoSide({
+    required this.clamped,
+    required this.speed,
+    required this.influence,
+  });
 
-                
-                
+  @override
+  int get hashCode => clamped.hashCode ^ speed.hashCode ^ influence.hashCode;
 
-                
-        @override
-        int get hashCode => clamped.hashCode^speed.hashCode^influence.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeAutoSide &&
-                runtimeType == other.runtimeType
-                && clamped == other.clamped&& speed == other.speed&& influence == other.influence;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAutoSide &&
+          runtimeType == other.runtimeType &&
+          clamped == other.clamped &&
+          speed == other.speed &&
+          influence == other.influence;
+}
 
 /// A bezier side's After Effects-compatible handle: `speed` in value-units per
 /// second, `influence` as a fraction of the gap to the neighbouring key.
-class BridgeBezierSide  {
-                final double speed;
-final double influence;
+class BridgeBezierSide {
+  final double speed;
+  final double influence;
 
-                const BridgeBezierSide({required this.speed ,required this.influence ,});
+  const BridgeBezierSide({
+    required this.speed,
+    required this.influence,
+  });
 
-                
-                
+  @override
+  int get hashCode => speed.hashCode ^ influence.hashCode;
 
-                
-        @override
-        int get hashCode => speed.hashCode^influence.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeBezierSide &&
-                runtimeType == other.runtimeType
-                && speed == other.speed&& influence == other.influence;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeBezierSide &&
+          runtimeType == other.runtimeType &&
+          speed == other.speed &&
+          influence == other.influence;
+}
 
 /// A colour parameter: four independently animatable scene-linear channels.
-class BridgeColour  {
-                final BridgeScalar r;
-final BridgeScalar g;
-final BridgeScalar b;
-final BridgeScalar a;
+class BridgeColour {
+  final BridgeScalar r;
+  final BridgeScalar g;
+  final BridgeScalar b;
+  final BridgeScalar a;
 
-                const BridgeColour({required this.r ,required this.g ,required this.b ,required this.a ,});
+  const BridgeColour({
+    required this.r,
+    required this.g,
+    required this.b,
+    required this.a,
+  });
 
-                
-                
+  @override
+  int get hashCode => r.hashCode ^ g.hashCode ^ b.hashCode ^ a.hashCode;
 
-                
-        @override
-        int get hashCode => r.hashCode^g.hashCode^b.hashCode^a.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeColour &&
-                runtimeType == other.runtimeType
-                && r == other.r&& g == other.g&& b == other.b&& a == other.a;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeColour &&
+          runtimeType == other.runtimeType &&
+          r == other.r &&
+          g == other.g &&
+          b == other.b &&
+          a == other.a;
+}
 
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
 /// pass to [`crate::api::layer::LayerReference::add_effect`], the sentence-case
 /// `label` to draw, and the category to group under. `category` is a stable
 /// machine key the menu sorts by; `category_label` is its heading (K-090).
-class BridgeEffectInfo  {
-                final String name;
-final String label;
-final String category;
-final String categoryLabel;
-/// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
-///
-/// A discovered plugin is drawn exactly as a built-in is — same row, same
-/// star, same drag — and this is the one difference: docs/12 §2.6 asks for
-/// "a small provenance tag in the effect's context menu", and nothing else.
-/// It rides on the listing rather than being a second call, because the
-/// browser needs it for every row it draws.
-final String namespace;
-/// The sockets an instance of this entry would draw, from its declaration
-/// alone (K-471 §1.3) — the parameters that can take a wire.
-///
-/// Here because the Graph panel has to know an entry's ports *before* it is
-/// in the document: it is what lets adding a driver and joining it to the
-/// wire in hand be one commit and so one undo step, and what lets the Tab
-/// search show only the entries a dragged wire could land on. `wired` is
-/// always false — nothing is wired on a catalogue entry.
-final List<BridgePort> inputs;
-/// The output sockets — empty for every image effect, and the declared
-/// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
-final List<BridgePort> outputs;
+class BridgeEffectInfo {
+  final String name;
+  final String label;
+  final String category;
+  final String categoryLabel;
 
-                const BridgeEffectInfo({required this.name ,required this.label ,required this.category ,required this.categoryLabel ,required this.namespace ,required this.inputs ,required this.outputs ,});
+  /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+  ///
+  /// A discovered plugin is drawn exactly as a built-in is — same row, same
+  /// star, same drag — and this is the one difference: docs/12 §2.6 asks for
+  /// "a small provenance tag in the effect's context menu", and nothing else.
+  /// It rides on the listing rather than being a second call, because the
+  /// browser needs it for every row it draws.
+  final String namespace;
 
-                
-                
+  /// The sockets an instance of this entry would draw, from its declaration
+  /// alone (K-471 §1.3) — the parameters that can take a wire.
+  ///
+  /// Here because the Graph panel has to know an entry's ports *before* it is
+  /// in the document: it is what lets adding a driver and joining it to the
+  /// wire in hand be one commit and so one undo step, and what lets the Tab
+  /// search show only the entries a dragged wire could land on. `wired` is
+  /// always false — nothing is wired on a catalogue entry.
+  final List<BridgePort> inputs;
 
-                
-        @override
-        int get hashCode => name.hashCode^label.hashCode^category.hashCode^categoryLabel.hashCode^namespace.hashCode^inputs.hashCode^outputs.hashCode;
-        
+  /// The output sockets — empty for every image effect, and the declared
+  /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
+  final List<BridgePort> outputs;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeEffectInfo &&
-                runtimeType == other.runtimeType
-                && name == other.name&& label == other.label&& category == other.category&& categoryLabel == other.categoryLabel&& namespace == other.namespace&& inputs == other.inputs&& outputs == other.outputs;
-        
-            }
+  const BridgeEffectInfo({
+    required this.name,
+    required this.label,
+    required this.category,
+    required this.categoryLabel,
+    required this.namespace,
+    required this.inputs,
+    required this.outputs,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      label.hashCode ^
+      category.hashCode ^
+      categoryLabel.hashCode ^
+      namespace.hashCode ^
+      inputs.hashCode ^
+      outputs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeEffectInfo &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          label == other.label &&
+          category == other.category &&
+          categoryLabel == other.categoryLabel &&
+          namespace == other.namespace &&
+          inputs == other.inputs &&
+          outputs == other.outputs;
+}
 
 /// Everything a panel draws for one effect instance, in one crossing (K-183):
 /// its id, match name, bypass state, and every parameter's current value. The
 /// instance is an opaque handle, so `id()`/`name()`/`get_value()` each cross
 /// the bridge — a card that read them one at a time cost a call per field per
 /// parameter per rebuild.
-class BridgeEffectInstanceInfo  {
-                final UuidValue id;
-final String name;
-/// The user's own name for the instance (K-321), or `None` to show the
-/// effect's label. `name` stays the `match_name` either way — it is the
-/// schema key, not a display string.
-final String? customName;
-final bool enabled;
-final List<BridgeParamValue> values;
-/// The stems of the vector pairs this instance has chained (K-443), sorted.
-/// Empty is "every pair unlinked", which is what every older project means.
-///
-/// In the read model rather than asked per pair, for the reason every other
-/// field here is: a chain glyph is drawn per point row per rebuild, and a
-/// call apiece is exactly the hover-hot traffic the budget test forbids.
-final List<String> linkedPairs;
-/// Why this instance is not doing its own work, if it is not (docs/12 §1,
-/// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
-///
-/// A **key**, not a sentence: the panel draws the calm badge in the user's
-/// own language (K-303). Four things it can say — the plugin failed, the
-/// plugin is switched off, the plugin is not installed on this machine, or
-/// this build has never heard of the effect at all. The last two are the
-/// placeholder docs/12 §1 requires: the instance is kept, values and all,
-/// so saving cannot lose it.
-final String? badgeReason;
-/// The engine's or the plugin's own words about the failure, where there
-/// are any — shown beneath the badge, verbatim and untranslated, because it
-/// is somebody else's sentence about somebody else's code.
-final String? badgeDetail;
+class BridgeEffectInstanceInfo {
+  final UuidValue id;
+  final String name;
 
-                const BridgeEffectInstanceInfo({required this.id ,required this.name ,this.customName ,required this.enabled ,required this.values ,required this.linkedPairs ,this.badgeReason ,this.badgeDetail ,});
+  /// The user's own name for the instance (K-321), or `None` to show the
+  /// effect's label. `name` stays the `match_name` either way — it is the
+  /// schema key, not a display string.
+  final String? customName;
+  final bool enabled;
+  final List<BridgeParamValue> values;
 
-                
-                
+  /// The stems of the vector pairs this instance has chained (K-443), sorted.
+  /// Empty is "every pair unlinked", which is what every older project means.
+  ///
+  /// In the read model rather than asked per pair, for the reason every other
+  /// field here is: a chain glyph is drawn per point row per rebuild, and a
+  /// call apiece is exactly the hover-hot traffic the budget test forbids.
+  final List<String> linkedPairs;
 
-                
-        @override
-        int get hashCode => id.hashCode^name.hashCode^customName.hashCode^enabled.hashCode^values.hashCode^linkedPairs.hashCode^badgeReason.hashCode^badgeDetail.hashCode;
-        
+  /// Why this instance is not doing its own work, if it is not (docs/12 §1,
+  /// §2.3) — one of [`BADGE_REASONS`], or `None` for the ordinary case.
+  ///
+  /// A **key**, not a sentence: the panel draws the calm badge in the user's
+  /// own language (K-303). Four things it can say — the plugin failed, the
+  /// plugin is switched off, the plugin is not installed on this machine, or
+  /// this build has never heard of the effect at all. The last two are the
+  /// placeholder docs/12 §1 requires: the instance is kept, values and all,
+  /// so saving cannot lose it.
+  final String? badgeReason;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeEffectInstanceInfo &&
-                runtimeType == other.runtimeType
-                && id == other.id&& name == other.name&& customName == other.customName&& enabled == other.enabled&& values == other.values&& linkedPairs == other.linkedPairs&& badgeReason == other.badgeReason&& badgeDetail == other.badgeDetail;
-        
-            }
+  /// The engine's or the plugin's own words about the failure, where there
+  /// are any — shown beneath the badge, verbatim and untranslated, because it
+  /// is somebody else's sentence about somebody else's code.
+  final String? badgeDetail;
 
-@freezed
-                sealed class BridgeEffectValue with _$BridgeEffectValue  {
-                    const BridgeEffectValue._();
+  const BridgeEffectInstanceInfo({
+    required this.id,
+    required this.name,
+    this.customName,
+    required this.enabled,
+    required this.values,
+    required this.linkedPairs,
+    this.badgeReason,
+    this.badgeDetail,
+  });
 
-                     const factory BridgeEffectValue.float(  BridgeScalar field0,) = BridgeEffectValue_Float;
- const factory BridgeEffectValue.point(  BridgePoint field0,) = BridgeEffectValue_Point;
- const factory BridgeEffectValue.colour(  BridgeColour field0,) = BridgeEffectValue_Colour;
- const factory BridgeEffectValue.bool(  bool field0,) = BridgeEffectValue_Bool;
- const factory BridgeEffectValue.choice(  int field0,) = BridgeEffectValue_Choice;
- const factory BridgeEffectValue.seed(  int field0,) = BridgeEffectValue_Seed;
- const factory BridgeEffectValue.file(  BridgeFileParam field0,) = BridgeEffectValue_File;
- const factory BridgeEffectValue.layer([  UuidValue? field0,]) = BridgeEffectValue_Layer;
- /// Which of the owning layer's masks an effect walks (K-408): the mask id,
-/// or `None` for "First mask". The *geometry* never crosses — the render
-/// flattens it engine-side, beside the op.
-const factory BridgeEffectValue.maskPath([  UuidValue? field0,]) = BridgeEffectValue_MaskPath;
- /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
-/// in the unit square, in x order. Crosses as written — the engine
-/// straightens what it reads (`CurvePoints::sanitised`), so a panel
-/// mid-drag need not, and a curve is never refused for being momentarily
-/// out of order.
-const factory BridgeEffectValue.curve(  List<Float32List> field0,) = BridgeEffectValue_Curve;
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      customName.hashCode ^
+      enabled.hashCode ^
+      values.hashCode ^
+      linkedPairs.hashCode ^
+      badgeReason.hashCode ^
+      badgeDetail.hashCode;
 
-                    
-
-                    
-                }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeEffectInstanceInfo &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          customName == other.customName &&
+          enabled == other.enabled &&
+          values == other.values &&
+          linkedPairs == other.linkedPairs &&
+          badgeReason == other.badgeReason &&
+          badgeDetail == other.badgeDetail;
+}
 
 @freezed
-                sealed class BridgeEnabledCond with _$BridgeEnabledCond  {
-                    const BridgeEnabledCond._();
+sealed class BridgeEffectValue with _$BridgeEffectValue {
+  const BridgeEffectValue._();
 
-                     /// Editable while the named bool holds this value.
-const factory BridgeEnabledCond.boolIs(  bool field0,) = BridgeEnabledCond_BoolIs;
- /// Editable while the named choice is on this option index.
-const factory BridgeEnabledCond.choiceIs(  int field0,) = BridgeEnabledCond_ChoiceIs;
- /// Editable while the named choice is on anything but this index.
-const factory BridgeEnabledCond.choiceIsNot(  int field0,) = BridgeEnabledCond_ChoiceIsNot;
- /// Editable while the named layer reference actually names a layer.
-const factory BridgeEnabledCond.layerSet() = BridgeEnabledCond_LayerSet;
+  const factory BridgeEffectValue.float(
+    BridgeScalar field0,
+  ) = BridgeEffectValue_Float;
+  const factory BridgeEffectValue.point(
+    BridgePoint field0,
+  ) = BridgeEffectValue_Point;
+  const factory BridgeEffectValue.colour(
+    BridgeColour field0,
+  ) = BridgeEffectValue_Colour;
+  const factory BridgeEffectValue.bool(
+    bool field0,
+  ) = BridgeEffectValue_Bool;
+  const factory BridgeEffectValue.choice(
+    int field0,
+  ) = BridgeEffectValue_Choice;
+  const factory BridgeEffectValue.seed(
+    int field0,
+  ) = BridgeEffectValue_Seed;
+  const factory BridgeEffectValue.file(
+    BridgeFileParam field0,
+  ) = BridgeEffectValue_File;
+  const factory BridgeEffectValue.layer([
+    UuidValue? field0,
+  ]) = BridgeEffectValue_Layer;
 
-                    
+  /// Which of the owning layer's masks an effect walks (K-408): the mask id,
+  /// or `None` for "First mask". The *geometry* never crosses — the render
+  /// flattens it engine-side, beside the op.
+  const factory BridgeEffectValue.maskPath([
+    UuidValue? field0,
+  ]) = BridgeEffectValue_MaskPath;
 
-                    
-                }
+  /// A tone curve as its own control points (K-412): 2..=16 `[x, y]` pairs
+  /// in the unit square, in x order. Crosses as written — the engine
+  /// straightens what it reads (`CurvePoints::sanitised`), so a panel
+  /// mid-drag need not, and a curve is never refused for being momentarily
+  /// out of order.
+  const factory BridgeEffectValue.curve(
+    List<Float32List> field0,
+  ) = BridgeEffectValue_Curve;
+}
+
+@freezed
+sealed class BridgeEnabledCond with _$BridgeEnabledCond {
+  const BridgeEnabledCond._();
+
+  /// Editable while the named bool holds this value.
+  const factory BridgeEnabledCond.boolIs(
+    bool field0,
+  ) = BridgeEnabledCond_BoolIs;
+
+  /// Editable while the named choice is on this option index.
+  const factory BridgeEnabledCond.choiceIs(
+    int field0,
+  ) = BridgeEnabledCond_ChoiceIs;
+
+  /// Editable while the named choice is on anything but this index.
+  const factory BridgeEnabledCond.choiceIsNot(
+    int field0,
+  ) = BridgeEnabledCond_ChoiceIsNot;
+
+  /// Editable while the named layer reference actually names a layer.
+  const factory BridgeEnabledCond.layerSet() = BridgeEnabledCond_LayerSet;
+}
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
 /// `lumit_core::fx::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
-class BridgeEnabledWhen  {
-                final String param;
-final String on_;
-final BridgeEnabledCond cond;
+class BridgeEnabledWhen {
+  final String param;
+  final String on_;
+  final BridgeEnabledCond cond;
 
-                const BridgeEnabledWhen({required this.param ,required this.on_ ,required this.cond ,});
+  const BridgeEnabledWhen({
+    required this.param,
+    required this.on_,
+    required this.cond,
+  });
 
-                
-                
+  @override
+  int get hashCode => param.hashCode ^ on_.hashCode ^ cond.hashCode;
 
-                
-        @override
-        int get hashCode => param.hashCode^on_.hashCode^cond.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeEnabledWhen &&
-                runtimeType == other.runtimeType
-                && param == other.param&& on_ == other.on_&& cond == other.cond;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeEnabledWhen &&
+          runtimeType == other.runtimeType &&
+          param == other.param &&
+          on_ == other.on_ &&
+          cond == other.cond;
+}
 
 /// A file parameter: the paths it references, and the index that selects which
 /// one is live. Two paths cannot be blended, so the index only ever steps
 /// (hold keyframes, K-111); the common case is one path and a static index.
 /// An empty `paths` means unset, which the consuming effect treats as identity.
-class BridgeFileParam  {
-                final List<String> paths;
-final BridgeScalar index;
+class BridgeFileParam {
+  final List<String> paths;
+  final BridgeScalar index;
 
-                const BridgeFileParam({required this.paths ,required this.index ,});
+  const BridgeFileParam({
+    required this.paths,
+    required this.index,
+  });
 
-                
-                
+  @override
+  int get hashCode => paths.hashCode ^ index.hashCode;
 
-                
-        @override
-        int get hashCode => paths.hashCode^index.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeFileParam &&
-                runtimeType == other.runtimeType
-                && paths == other.paths&& index == other.index;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFileParam &&
+          runtimeType == other.runtimeType &&
+          paths == other.paths &&
+          index == other.index;
+}
 
 /// One keyframe on one scalar channel.
-class BridgeKeyframe  {
-                final BridgeRational time;
-final double value;
-/// Approaching this key.
-final BridgeSideInterp interpIn;
-/// Leaving this key.
-final BridgeSideInterp interpOut;
+class BridgeKeyframe {
+  final BridgeRational time;
+  final double value;
 
-                const BridgeKeyframe({required this.time ,required this.value ,required this.interpIn ,required this.interpOut ,});
+  /// Approaching this key.
+  final BridgeSideInterp interpIn;
 
-                
-                
+  /// Leaving this key.
+  final BridgeSideInterp interpOut;
 
-                
-        @override
-        int get hashCode => time.hashCode^value.hashCode^interpIn.hashCode^interpOut.hashCode;
-        
+  const BridgeKeyframe({
+    required this.time,
+    required this.value,
+    required this.interpIn,
+    required this.interpOut,
+  });
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeKeyframe &&
-                runtimeType == other.runtimeType
-                && time == other.time&& value == other.value&& interpIn == other.interpIn&& interpOut == other.interpOut;
-        
-            }
+  @override
+  int get hashCode =>
+      time.hashCode ^ value.hashCode ^ interpIn.hashCode ^ interpOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeKeyframe &&
+          runtimeType == other.runtimeType &&
+          time == other.time &&
+          value == other.value &&
+          interpIn == other.interpIn &&
+          interpOut == other.interpOut;
+}
 
 /// One collapsible parameter group of an effect (docs/08 §1.2, K-145/K-257):
 /// the panel tucks the named member rows behind a twirl. An empty `label`
@@ -581,36 +652,48 @@ final BridgeSideInterp interpOut;
 /// conditional run of parameters takes. `visible_when_param` with a
 /// non-empty `visible_when_values` shows the group only while that sibling
 /// Choice parameter holds one of those indices.
-class BridgeParamGroup  {
-                final String label;
-/// Member parameter ids — a contiguous run of the schema's parameters.
-final List<String> params;
-/// Whether the twirl starts closed.
-final bool collapsed;
-/// See the struct docs.
-final String? visibleWhenParam;
-/// See the struct docs. Empty when the group is unconditional.
-final Uint32List visibleWhenValues;
+class BridgeParamGroup {
+  final String label;
 
-                const BridgeParamGroup({required this.label ,required this.params ,required this.collapsed ,this.visibleWhenParam ,required this.visibleWhenValues ,});
+  /// Member parameter ids — a contiguous run of the schema's parameters.
+  final List<String> params;
 
-                
-                
+  /// Whether the twirl starts closed.
+  final bool collapsed;
 
-                
-        @override
-        int get hashCode => label.hashCode^params.hashCode^collapsed.hashCode^visibleWhenParam.hashCode^visibleWhenValues.hashCode;
-        
+  /// See the struct docs.
+  final String? visibleWhenParam;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeParamGroup &&
-                runtimeType == other.runtimeType
-                && label == other.label&& params == other.params&& collapsed == other.collapsed&& visibleWhenParam == other.visibleWhenParam&& visibleWhenValues == other.visibleWhenValues;
-        
-            }
+  /// See the struct docs. Empty when the group is unconditional.
+  final Uint32List visibleWhenValues;
+
+  const BridgeParamGroup({
+    required this.label,
+    required this.params,
+    required this.collapsed,
+    this.visibleWhenParam,
+    required this.visibleWhenValues,
+  });
+
+  @override
+  int get hashCode =>
+      label.hashCode ^
+      params.hashCode ^
+      collapsed.hashCode ^
+      visibleWhenParam.hashCode ^
+      visibleWhenValues.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamGroup &&
+          runtimeType == other.runtimeType &&
+          label == other.label &&
+          params == other.params &&
+          collapsed == other.collapsed &&
+          visibleWhenParam == other.visibleWhenParam &&
+          visibleWhenValues == other.visibleWhenValues;
+}
 
 /// One declared parameter of an effect, as the panel needs to *draw* it:
 /// what to call it, what kind of control it is, and the range or option list
@@ -620,99 +703,141 @@ final Uint32List visibleWhenValues;
 /// particular instance currently holds. The panel needs both: the value to show,
 /// and this to know whether "0.5" wants a slider from 0 to 100 or a colour
 /// channel, and what the third entry in a dropdown is called.
-class BridgeParamInfo  {
-                /// Stable snake_case id — the key [`BridgeEffectInstance::get_value`] and
-/// `set_value` take.
-final String id;
-final String label;
-final BridgeParamKind kind;
-/// What the number *is* (K-443): the rider the row draws beside the value,
-/// and — on a point pair — the unit a Viewer pick has to write in. Declared
-/// per parameter engine-side, so a row's unit travels with the row rather
-/// than with its id and the panel never has to guess.
-final BridgeUnit unit;
+class BridgeParamInfo {
+  /// Stable snake_case id — the key [`BridgeEffectInstance::get_value`] and
+  /// `set_value` take.
+  final String id;
+  final String label;
+  final BridgeParamKind kind;
 
-                const BridgeParamInfo({required this.id ,required this.label ,required this.kind ,required this.unit ,});
+  /// What the number *is* (K-443): the rider the row draws beside the value,
+  /// and — on a point pair — the unit a Viewer pick has to write in. Declared
+  /// per parameter engine-side, so a row's unit travels with the row rather
+  /// than with its id and the panel never has to guess.
+  final BridgeUnit unit;
 
-                
-                
+  const BridgeParamInfo({
+    required this.id,
+    required this.label,
+    required this.kind,
+    required this.unit,
+  });
 
-                
-        @override
-        int get hashCode => id.hashCode^label.hashCode^kind.hashCode^unit.hashCode;
-        
+  @override
+  int get hashCode =>
+      id.hashCode ^ label.hashCode ^ kind.hashCode ^ unit.hashCode;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeParamInfo &&
-                runtimeType == other.runtimeType
-                && id == other.id&& label == other.label&& kind == other.kind&& unit == other.unit;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamInfo &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          label == other.label &&
+          kind == other.kind &&
+          unit == other.unit;
+}
 
 @freezed
-                sealed class BridgeParamKind with _$BridgeParamKind  {
-                    const BridgeParamKind._();
+sealed class BridgeParamKind with _$BridgeParamKind {
+  const BridgeParamKind._();
 
-                     const factory BridgeParamKind.float({   required double default_ ,/// The slider's travel. Typing may exceed it (docs/08 §1.2); only
-/// `hard_min`/`hard_max` may not.
-  required double sliderMin ,  required double sliderMax ,/// Hard bounds, either side open (K-090: a threshold clamps at zero
-/// below and runs unbounded above).
-  double? hardMin ,  double? hardMax , }) = BridgeParamKind_Float;
- /// A whole-number parameter (docs/08 §1.2): the value is still a Float
-/// scalar in the model — the kind only asks the row to step, display and
-/// commit whole numbers.
-const factory BridgeParamKind.int({   required PlatformInt64 default_ ,  required PlatformInt64 sliderMin ,  required PlatformInt64 sliderMax ,  PlatformInt64? hardMin ,  PlatformInt64? hardMax , }) = BridgeParamKind_Int;
- /// Degrees, drawn as a dial beneath the number (docs/07 §6). The value
-/// crossing the bridge is a [`BridgeEffectValue::Float`] — an angle is a
-/// number of degrees, and this kind only says which control to draw.
-/// Unbounded, so the dial winds through full turns.
-const factory BridgeParamKind.angle({   required double default_ ,/// Snapping increment in degrees while a modifier is held.
-  required double dialStep , }) = BridgeParamKind_Angle;
- const factory BridgeParamKind.choice({   required List<String> options ,  required int default_ ,/// Option indices after which the dropdown draws a group divider (T21).
-/// Empty for an ungrouped list.
-  required Uint32List dividersAfter , }) = BridgeParamKind_Choice;
- const factory BridgeParamKind.bool({   required bool default_ , }) = BridgeParamKind_Bool;
- const factory BridgeParamKind.colour({ /// Scene-linear RGBA. Channels animate independently in the model, so
-/// the panel edits four scalars behind one swatch.
-  required Float64List default_ ,/// Per-channel edit range — a linear value may exceed 1 (an HDR tint)
-/// or dip below 0 (a lift), so each colour declares its own.
-  required double min ,  required double max , }) = BridgeParamKind_Colour;
- const factory BridgeParamKind.seed() = BridgeParamKind_Seed;
- const factory BridgeParamKind.file({ /// Lower-case extensions without the dot, for the open dialog.
-  required List<String> filter ,  required String filterName , }) = BridgeParamKind_File;
- const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
- /// One of the **owning layer's masks**, whose geometry the effect walks
-/// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
-/// "First mask" as the unset entry; the mask names come from the read model
-/// the panel already holds, so the row costs no call of its own.
-const factory BridgeParamKind.maskPath() = BridgeParamKind_MaskPath;
- /// A tone curve, drawn as a curve editor (K-412). The panel edits the
-/// point list itself; there is no range to declare, because the points
-/// live in the unit square by definition.
-const factory BridgeParamKind.curve() = BridgeParamKind_Curve;
- /// A closed range (K-414), drawn as a track and thumb with the value
-/// beside it. `min`/`max` are the travel *and* the hard bound — that is
-/// what closed means — so the row refuses a typed value outside them.
-///
-/// The value crossing the bridge is a [`BridgeEffectValue::Float`], the
-/// arrangement `Int` and `Angle` already use: the kind says which control
-/// to draw, not how the number is stored, so the row keeps every float
-/// affordance including keyframes and the graph editor.
-const factory BridgeParamKind.slider({   required double default_ ,  required double min ,  required double max , }) = BridgeParamKind_Slider;
- /// A **button** (K-417), drawn as one and pressed through
-/// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
-/// value at all — no default, no range, nothing in
-/// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
-/// not a number that could be keyframed, undone or interpolated.
-const factory BridgeParamKind.action() = BridgeParamKind_Action;
+  const factory BridgeParamKind.float({
+    required double default_,
 
-                    
+    /// The slider's travel. Typing may exceed it (docs/08 §1.2); only
+    /// `hard_min`/`hard_max` may not.
+    required double sliderMin,
+    required double sliderMax,
 
-                    
-                }
+    /// Hard bounds, either side open (K-090: a threshold clamps at zero
+    /// below and runs unbounded above).
+    double? hardMin,
+    double? hardMax,
+  }) = BridgeParamKind_Float;
+
+  /// A whole-number parameter (docs/08 §1.2): the value is still a Float
+  /// scalar in the model — the kind only asks the row to step, display and
+  /// commit whole numbers.
+  const factory BridgeParamKind.int({
+    required PlatformInt64 default_,
+    required PlatformInt64 sliderMin,
+    required PlatformInt64 sliderMax,
+    PlatformInt64? hardMin,
+    PlatformInt64? hardMax,
+  }) = BridgeParamKind_Int;
+
+  /// Degrees, drawn as a dial beneath the number (docs/07 §6). The value
+  /// crossing the bridge is a [`BridgeEffectValue::Float`] — an angle is a
+  /// number of degrees, and this kind only says which control to draw.
+  /// Unbounded, so the dial winds through full turns.
+  const factory BridgeParamKind.angle({
+    required double default_,
+
+    /// Snapping increment in degrees while a modifier is held.
+    required double dialStep,
+  }) = BridgeParamKind_Angle;
+  const factory BridgeParamKind.choice({
+    required List<String> options,
+    required int default_,
+
+    /// Option indices after which the dropdown draws a group divider (T21).
+    /// Empty for an ungrouped list.
+    required Uint32List dividersAfter,
+  }) = BridgeParamKind_Choice;
+  const factory BridgeParamKind.bool({
+    required bool default_,
+  }) = BridgeParamKind_Bool;
+  const factory BridgeParamKind.colour({
+    /// Scene-linear RGBA. Channels animate independently in the model, so
+    /// the panel edits four scalars behind one swatch.
+    required Float64List default_,
+
+    /// Per-channel edit range — a linear value may exceed 1 (an HDR tint)
+    /// or dip below 0 (a lift), so each colour declares its own.
+    required double min,
+    required double max,
+  }) = BridgeParamKind_Colour;
+  const factory BridgeParamKind.seed() = BridgeParamKind_Seed;
+  const factory BridgeParamKind.file({
+    /// Lower-case extensions without the dot, for the open dialog.
+    required List<String> filter,
+    required String filterName,
+  }) = BridgeParamKind_File;
+  const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
+
+  /// One of the **owning layer's masks**, whose geometry the effect walks
+  /// (K-408, docs/08 §1.2). The panel draws the layer's masks by name, with
+  /// "First mask" as the unset entry; the mask names come from the read model
+  /// the panel already holds, so the row costs no call of its own.
+  const factory BridgeParamKind.maskPath() = BridgeParamKind_MaskPath;
+
+  /// A tone curve, drawn as a curve editor (K-412). The panel edits the
+  /// point list itself; there is no range to declare, because the points
+  /// live in the unit square by definition.
+  const factory BridgeParamKind.curve() = BridgeParamKind_Curve;
+
+  /// A closed range (K-414), drawn as a track and thumb with the value
+  /// beside it. `min`/`max` are the travel *and* the hard bound — that is
+  /// what closed means — so the row refuses a typed value outside them.
+  ///
+  /// The value crossing the bridge is a [`BridgeEffectValue::Float`], the
+  /// arrangement `Int` and `Angle` already use: the kind says which control
+  /// to draw, not how the number is stored, so the row keeps every float
+  /// affordance including keyframes and the graph editor.
+  const factory BridgeParamKind.slider({
+    required double default_,
+    required double min,
+    required double max,
+  }) = BridgeParamKind_Slider;
+
+  /// A **button** (K-417), drawn as one and pressed through
+  /// [`crate::api::layer::LayerReference::fire_effect_action`]. It carries no
+  /// value at all — no default, no range, nothing in
+  /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
+  /// not a number that could be keyframed, undone or interpolated.
+  const factory BridgeParamKind.action() = BridgeParamKind_Action;
+}
 
 /// One **vector pair** of an effect: two adjacent `_x`/`_y` Float parameters
 /// the panel draws as one row of two wells with a chain between them (K-443).
@@ -722,139 +847,128 @@ const factory BridgeParamKind.action() = BridgeParamKind_Action;
 /// now, so the panel, the link flag on the instance and the engine all get one
 /// answer. `stem` is the key the link flag is stored under, so it is the
 /// pair's identity rather than either half's id.
-class BridgeParamPair  {
-                final String stem;
-final String x;
-final String y;
+class BridgeParamPair {
+  final String stem;
+  final String x;
+  final String y;
 
-                const BridgeParamPair({required this.stem ,required this.x ,required this.y ,});
+  const BridgeParamPair({
+    required this.stem,
+    required this.x,
+    required this.y,
+  });
 
-                
-                
+  @override
+  int get hashCode => stem.hashCode ^ x.hashCode ^ y.hashCode;
 
-                
-        @override
-        int get hashCode => stem.hashCode^x.hashCode^y.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeParamPair &&
-                runtimeType == other.runtimeType
-                && stem == other.stem&& x == other.x&& y == other.y;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamPair &&
+          runtimeType == other.runtimeType &&
+          stem == other.stem &&
+          x == other.x &&
+          y == other.y;
+}
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]
 /// carries it.
-class BridgeParamValue  {
-                final String id;
-final BridgeEffectValue value;
+class BridgeParamValue {
+  final String id;
+  final BridgeEffectValue value;
 
-                const BridgeParamValue({required this.id ,required this.value ,});
+  const BridgeParamValue({
+    required this.id,
+    required this.value,
+  });
 
-                
-                
+  @override
+  int get hashCode => id.hashCode ^ value.hashCode;
 
-                
-        @override
-        int get hashCode => id.hashCode^value.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeParamValue &&
-                runtimeType == other.runtimeType
-                && id == other.id&& value == other.value;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamValue &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          value == other.value;
+}
 
 /// What one scan of the machine's plugin folders did (docs/12 §2.6).
-class BridgePluginScan  {
-                /// The labels of the effects this scan added, in the order they were found.
-/// Empty for a rescan that found nothing new, which is the usual answer.
-final List<String> registered;
-/// One calm line per bundle or plugin turned away — a broken install, a
-/// context this host cannot drive, a plugin the user switched off. Shown as
-/// a report, never as a dialogue.
-final List<String> skipped;
+class BridgePluginScan {
+  /// The labels of the effects this scan added, in the order they were found.
+  /// Empty for a rescan that found nothing new, which is the usual answer.
+  final List<String> registered;
 
-                const BridgePluginScan({required this.registered ,required this.skipped ,});
+  /// One calm line per bundle or plugin turned away — a broken install, a
+  /// context this host cannot drive, a plugin the user switched off. Shown as
+  /// a report, never as a dialogue.
+  final List<String> skipped;
 
-                static Future<BridgePluginScan>  default_()=>BridgeLib.instance.api.crateApiEffectBridgePluginScanDefault();
+  const BridgePluginScan({
+    required this.registered,
+    required this.skipped,
+  });
 
+  static Future<BridgePluginScan> default_() =>
+      BridgeLib.instance.api.crateApiEffectBridgePluginScanDefault();
 
-                
+  @override
+  int get hashCode => registered.hashCode ^ skipped.hashCode;
 
-                
-        @override
-        int get hashCode => registered.hashCode^skipped.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgePluginScan &&
-                runtimeType == other.runtimeType
-                && registered == other.registered&& skipped == other.skipped;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePluginScan &&
+          runtimeType == other.runtimeType &&
+          registered == other.registered &&
+          skipped == other.skipped;
+}
 
 /// A point parameter: two independently animatable axes.
-class BridgePoint  {
-                final BridgeScalar x;
-final BridgeScalar y;
+class BridgePoint {
+  final BridgeScalar x;
+  final BridgeScalar y;
 
-                const BridgePoint({required this.x ,required this.y ,});
+  const BridgePoint({
+    required this.x,
+    required this.y,
+  });
 
-                
-                
+  @override
+  int get hashCode => x.hashCode ^ y.hashCode;
 
-                
-        @override
-        int get hashCode => x.hashCode^y.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgePoint &&
-                runtimeType == other.runtimeType
-                && x == other.x&& y == other.y;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePoint &&
+          runtimeType == other.runtimeType &&
+          x == other.x &&
+          y == other.y;
+}
 
 /// One saved `.lumfx` preset in the user's library: the display name it was
 /// saved under and the file to read when applying it.
-class BridgePresetInfo  {
-                final String name;
-final String path;
+class BridgePresetInfo {
+  final String name;
+  final String path;
 
-                const BridgePresetInfo({required this.name ,required this.path ,});
+  const BridgePresetInfo({
+    required this.name,
+    required this.path,
+  });
 
-                
-                
+  @override
+  int get hashCode => name.hashCode ^ path.hashCode;
 
-                
-        @override
-        int get hashCode => name.hashCode^path.hashCode;
-        
-
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgePresetInfo &&
-                runtimeType == other.runtimeType
-                && name == other.name&& path == other.path;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePresetInfo &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          path == other.path;
+}
 
 /// An exact rational time in seconds, as `num / den`.
 ///
@@ -862,60 +976,61 @@ final String path;
 /// floating-point seconds (docs/17 "rational time crosses as integers"): a key
 /// at 1/3 s read back as 0.333… and written again would no longer land on the
 /// frame it was set on, and this round trip has to be exact.
-class BridgeRational  {
-                final PlatformInt64 num;
-/// Always positive in anything the engine hands out; a zero or negative
-/// denominator coming the other way is refused, not normalised.
-final PlatformInt64 den;
+class BridgeRational {
+  final PlatformInt64 num;
 
-                const BridgeRational({required this.num ,required this.den ,});
+  /// Always positive in anything the engine hands out; a zero or negative
+  /// denominator coming the other way is refused, not normalised.
+  final PlatformInt64 den;
 
-                
-                
+  const BridgeRational({
+    required this.num,
+    required this.den,
+  });
 
-                
-        @override
-        int get hashCode => num.hashCode^den.hashCode;
-        
+  @override
+  int get hashCode => num.hashCode ^ den.hashCode;
 
-                
-        @override
-        bool operator ==(Object other) =>
-            identical(this, other) ||
-            other is BridgeRational &&
-                runtimeType == other.runtimeType
-                && num == other.num&& den == other.den;
-        
-            }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRational &&
+          runtimeType == other.runtimeType &&
+          num == other.num &&
+          den == other.den;
+}
 
 @freezed
-                sealed class BridgeScalar with _$BridgeScalar  {
-                    const BridgeScalar._();
+sealed class BridgeScalar with _$BridgeScalar {
+  const BridgeScalar._();
 
-                     const factory BridgeScalar.static_(  double field0,) = BridgeScalar_Static;
- /// At least one key, strictly ascending in time — the invariant the
-/// engine's keyframe ops maintain, enforced here on the way in.
-const factory BridgeScalar.keyframed(  List<BridgeKeyframe> field0,) = BridgeScalar_Keyframed;
- const factory BridgeScalar.expression(  String field0,) = BridgeScalar_Expression;
+  const factory BridgeScalar.static_(
+    double field0,
+  ) = BridgeScalar_Static;
 
-                    
-
-                    
-                }
+  /// At least one key, strictly ascending in time — the invariant the
+  /// engine's keyframe ops maintain, enforced here on the way in.
+  const factory BridgeScalar.keyframed(
+    List<BridgeKeyframe> field0,
+  ) = BridgeScalar_Keyframed;
+  const factory BridgeScalar.expression(
+    String field0,
+  ) = BridgeScalar_Expression;
+}
 
 @freezed
-                sealed class BridgeSideInterp with _$BridgeSideInterp  {
-                    const BridgeSideInterp._();
+sealed class BridgeSideInterp with _$BridgeSideInterp {
+  const BridgeSideInterp._();
 
-                     const factory BridgeSideInterp.hold() = BridgeSideInterp_Hold;
- const factory BridgeSideInterp.linear() = BridgeSideInterp_Linear;
- const factory BridgeSideInterp.bezier(  BridgeBezierSide field0,) = BridgeSideInterp_Bezier;
- const factory BridgeSideInterp.auto(  BridgeAutoSide field0,) = BridgeSideInterp_Auto;
-
-                    
-
-                    
-                }
+  const factory BridgeSideInterp.hold() = BridgeSideInterp_Hold;
+  const factory BridgeSideInterp.linear() = BridgeSideInterp_Linear;
+  const factory BridgeSideInterp.bezier(
+    BridgeBezierSide field0,
+  ) = BridgeSideInterp_Bezier;
+  const factory BridgeSideInterp.auto(
+    BridgeAutoSide field0,
+  ) = BridgeSideInterp_Auto;
+}
 
 /// The unit a parameter's number is in (K-443) — what the row draws as its
 /// rider beside the value, and what a point pick has to write in.
@@ -926,17 +1041,18 @@ const factory BridgeScalar.keyframed(  List<BridgeKeyframe> field0,) = BridgeSca
 /// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
 /// honest answer for a unit that must not exist.
 enum BridgeUnit {
-                    /// A plain number: a gamma, a count, a stop, a rate in Hz. No rider.
-raw,
-/// Per cent, where 100 is the whole of whatever it is a share of.
-percent,
-/// Pixels at composition size (px@comp) — the one spatial unit (K-419).
-px,
-degrees,
-seconds,
-/// Comp-rate frames.
-frames,
-                    ;
-                    
-                }
-            
+  /// A plain number: a gamma, a count, a stop, a rate in Hz. No rider.
+  raw,
+
+  /// Per cent, where 100 is the whole of whatever it is a share of.
+  percent,
+
+  /// Pixels at composition size (px@comp) — the one spatial unit (K-419).
+  px,
+  degrees,
+  seconds,
+
+  /// Comp-rate frames.
+  frames,
+  ;
+}

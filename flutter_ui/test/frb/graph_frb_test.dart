@@ -83,6 +83,7 @@ void main() {
             BridgeNodePosition(node: BridgeNodeRef.driver(id), x: 8, y: 4)
           ],
           exposed: const [],
+          groups: const [],
         ),
       );
 
@@ -132,6 +133,7 @@ void main() {
             ],
             layout: const [],
             exposed: const [],
+            groups: const [],
           ),
         ),
         throwsA(anything),

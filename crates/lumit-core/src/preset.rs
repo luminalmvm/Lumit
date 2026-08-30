@@ -304,6 +304,226 @@ pub fn selection_subset(
     out
 }
 
+// --- Node groups (K-651) --------------------------------------------------
+//
+// **In plain terms.** A group preset is to the Graph panel what an effect
+// preset is to the effect stack: pick a few boxes, give the set a name, and it
+// goes in the same library folder so it can be dropped into another layer's
+// graph later. What it saves is the boxes, the wires **between** them, and
+// where they sat relative to one another — so a rig that took five minutes to
+// wire comes back wired.
+//
+// A wire that left the group is not saved: it named something the group does
+// not carry, and inventing an end for it on the way back in would be a guess.
+
+/// A saved set of driver boxes and the wires between them.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GroupPreset {
+    pub format: u32,
+    pub name: String,
+    /// Which chip of the label palette the group wears (K-188's set, indexed).
+    #[serde(default)]
+    pub colour: u32,
+    /// The driver instances, in the order the graph carried them.
+    pub nodes: Vec<EffectInstance>,
+    /// The wires with both ends inside the set, naming the saved nodes' ids.
+    #[serde(default)]
+    pub edges: Vec<crate::graph::Edge>,
+    /// One position per node, **relative to the set's top-left corner**, so a
+    /// group dropped anywhere keeps the shape it was saved in.
+    #[serde(default)]
+    pub layout: Vec<[f64; 2]>,
+}
+
+/// The current on-disk format version for a group.
+pub const GROUP_FORMAT: u32 = 1;
+
+/// The file extension node groups use — a plain JSON document, beside the
+/// `.lumfx` effect presets in the same per-user library.
+pub const GROUP_EXTENSION: &str = "lumgrp";
+
+/// The id of a node this group could carry — `None` for the derived boxes and
+/// for the stack's effects, which belong to the effect list rather than here.
+fn driver_id(node: crate::graph::NodeRef) -> Option<uuid::Uuid> {
+    match node {
+        crate::graph::NodeRef::Driver(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// Gather `members` out of `graph` as a saveable group.
+///
+/// Only the driver boxes are taken: the Source, the Layer out and the stack's
+/// effects are *derived* from the layer, so a saved group naming one could only
+/// ever be re-inserted onto a layer that happened to have the same stack.
+///
+/// Deterministic: the nodes come out in the graph's own order, never the
+/// selection's, so saving the same three boxes twice writes the same file.
+#[must_use]
+pub fn group_from_graph(
+    graph: &crate::graph::LayerGraph,
+    name: &str,
+    colour: u32,
+    members: &[crate::graph::NodeRef],
+) -> GroupPreset {
+    let wanted: std::collections::BTreeSet<uuid::Uuid> =
+        members.iter().copied().filter_map(driver_id).collect();
+    let nodes: Vec<EffectInstance> = graph
+        .nodes
+        .iter()
+        .filter(|n| wanted.contains(&n.id))
+        .cloned()
+        .collect();
+
+    let at = |id: uuid::Uuid| {
+        graph
+            .layout
+            .iter()
+            .find(|(node, _)| driver_id(*node) == Some(id))
+            .map_or([0.0, 0.0], |(_, xy)| *xy)
+    };
+    let places: Vec<[f64; 2]> = nodes.iter().map(|n| at(n.id)).collect();
+    // The set's top-left corner. An empty set has no corner and no layout, so
+    // the fold's identity never reaches the subtraction below.
+    let origin = places.iter().fold([f64::MAX, f64::MAX], |acc, p| {
+        [acc[0].min(p[0]), acc[1].min(p[1])]
+    });
+    let layout: Vec<[f64; 2]> = places
+        .iter()
+        .map(|p| [p[0] - origin[0], p[1] - origin[1]])
+        .collect();
+
+    let inside =
+        |node: crate::graph::NodeRef| driver_id(node).is_some_and(|id| wanted.contains(&id));
+    let edges: Vec<crate::graph::Edge> = graph
+        .edges
+        .iter()
+        .filter(|e| {
+            let from = match &e.from {
+                crate::graph::OutputRef::Driver { node, .. } => wanted.contains(node),
+                _ => false,
+            };
+            let to = match &e.to {
+                crate::graph::InputRef::Param { node, .. } => inside(*node),
+                crate::graph::InputRef::Matte { .. } => false,
+            };
+            from && to
+        })
+        .cloned()
+        .collect();
+
+    GroupPreset {
+        format: GROUP_FORMAT,
+        name: name.to_owned(),
+        colour,
+        nodes,
+        edges,
+        layout,
+    }
+}
+
+/// Serialise a group to its JSON text.
+pub fn group_to_json(preset: &GroupPreset) -> Result<String, String> {
+    serde_json::to_string_pretty(preset).map_err(|e| e.to_string())
+}
+
+/// Parse group JSON back. A newer `format` still loads, for the reason
+/// [`from_json`] gives.
+pub fn group_from_json(text: &str) -> Result<GroupPreset, String> {
+    serde_json::from_str::<GroupPreset>(text).map_err(|e| e.to_string())
+}
+
+/// Everything one insert adds to a graph — handed over in a piece so the caller
+/// extends four lists and commits once.
+#[derive(Debug, Clone)]
+pub struct InsertedGroup {
+    pub nodes: Vec<EffectInstance>,
+    pub edges: Vec<crate::graph::Edge>,
+    pub layout: Vec<(crate::graph::NodeRef, [f64; 2])>,
+    pub group: crate::graph::NodeGroup,
+}
+
+/// What inserting `preset` at canvas point `at` adds to a graph: fresh nodes,
+/// the wires between them re-pointed at those fresh ids, where each one sits,
+/// and the group that names them.
+///
+/// Every id is minted here, so inserting one group twice never makes two boxes
+/// share an instance — the same rule [`instantiated`] follows for an effect
+/// preset, and for the same reason.
+#[must_use]
+pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
+    let mut fresh = std::collections::BTreeMap::new();
+    let nodes: Vec<EffectInstance> = preset
+        .nodes
+        .iter()
+        .cloned()
+        .map(|mut n| {
+            let id = uuid::Uuid::now_v7();
+            fresh.insert(n.id, id);
+            n.id = id;
+            n
+        })
+        .collect();
+
+    let renamed = |node: crate::graph::NodeRef| match node {
+        crate::graph::NodeRef::Driver(id) => {
+            fresh.get(&id).copied().map(crate::graph::NodeRef::Driver)
+        }
+        other => Some(other),
+    };
+    let edges: Vec<crate::graph::Edge> = preset
+        .edges
+        .iter()
+        .filter_map(|e| {
+            // A wire naming a node the file does not carry is dropped rather
+            // than landing dangling: the graph would refuse the whole insert
+            // for it, and one bad wire must not cost the rig.
+            let from = match &e.from {
+                crate::graph::OutputRef::Driver { node, port } => crate::graph::OutputRef::Driver {
+                    node: *fresh.get(node)?,
+                    port: port.clone(),
+                },
+                _ => return None,
+            };
+            let to = match &e.to {
+                crate::graph::InputRef::Param { node, port } => crate::graph::InputRef::Param {
+                    node: renamed(*node)?,
+                    port: port.clone(),
+                },
+                crate::graph::InputRef::Matte { .. } => return None,
+            };
+            Some(crate::graph::Edge { from, to })
+        })
+        .collect();
+
+    let layout: Vec<(crate::graph::NodeRef, [f64; 2])> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            let rel = preset.layout.get(i).copied().unwrap_or([0.0, 0.0]);
+            (
+                crate::graph::NodeRef::Driver(n.id),
+                [at[0] + rel[0], at[1] + rel[1]],
+            )
+        })
+        .collect();
+
+    let group = crate::graph::NodeGroup {
+        name: preset.name.clone(),
+        colour: preset.colour,
+        members: nodes
+            .iter()
+            .map(|n| crate::graph::NodeRef::Driver(n.id))
+            .collect(),
+    };
+    InsertedGroup {
+        nodes,
+        edges,
+        layout,
+        group,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
@@ -545,5 +765,118 @@ mod tests {
             .insert("future_field".into(), serde_json::json!(true));
         let back = from_json(&v.to_string()).unwrap();
         assert_eq!(back.effects, effects);
+    }
+
+    // --- Node groups ------------------------------------------------------
+
+    /// Two drivers wired to each other, a third outside them, and one wire
+    /// leaving the pair — the shape every group claim is made against.
+    fn wired_graph() -> (crate::graph::LayerGraph, Vec<crate::graph::NodeRef>) {
+        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let wiggle = crate::fx::instantiate("wiggle").unwrap();
+        let smooth = crate::fx::instantiate("smooth").unwrap();
+        let outside = crate::fx::instantiate("wiggle").unwrap();
+        let (a, b, c) = (wiggle.id, smooth.id, outside.id);
+        let graph = LayerGraph {
+            nodes: vec![wiggle, smooth, outside],
+            edges: vec![
+                // Inside the pair.
+                Edge {
+                    from: OutputRef::Driver {
+                        node: a,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Driver(b),
+                        port: "value".into(),
+                    },
+                },
+                // Out of the pair, into the box left behind.
+                Edge {
+                    from: OutputRef::Driver {
+                        node: b,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Driver(c),
+                        port: "amount".into(),
+                    },
+                },
+            ],
+            layout: vec![
+                (NodeRef::Driver(a), [100.0, 60.0]),
+                (NodeRef::Driver(b), [260.0, 90.0]),
+                (NodeRef::Driver(c), [500.0, 300.0]),
+            ],
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        };
+        (graph, vec![NodeRef::Driver(a), NodeRef::Driver(b)])
+    }
+
+    #[test]
+    fn a_group_saves_its_members_the_wires_between_them_and_their_shape() {
+        let (graph, members) = wired_graph();
+        let preset = group_from_graph(&graph, "Audio rig", 4, &members);
+
+        assert_eq!(preset.nodes.len(), 2, "the two picked boxes, no more");
+        assert_eq!(
+            preset.edges.len(),
+            1,
+            "the wire between them is kept and the one leaving them is not"
+        );
+        // Relative to the set's own top-left, so the pair keeps its shape
+        // wherever it is dropped.
+        assert_eq!(preset.layout, vec![[0.0, 0.0], [160.0, 30.0]]);
+        assert_eq!(preset.colour, 4);
+    }
+
+    #[test]
+    fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
+        let (graph, members) = wired_graph();
+        let preset = group_from_json(
+            &group_to_json(&group_from_graph(&graph, "Audio rig", 4, &members)).unwrap(),
+        )
+        .unwrap();
+
+        let added = group_instantiated(&preset, [400.0, 200.0]);
+        let (nodes, edges, layout, group) = (added.nodes, added.edges, added.layout, added.group);
+        assert_eq!(nodes.len(), 2);
+        assert!(
+            nodes
+                .iter()
+                .all(|n| !preset.nodes.iter().any(|s| s.id == n.id)),
+            "every instance id is fresh, so inserting twice never shares one"
+        );
+        // The wire came back pointing at the *new* boxes, not the saved ones.
+        assert_eq!(edges.len(), 1);
+        let crate::graph::OutputRef::Driver { node: from, .. } = edges[0].from else {
+            panic!("a driver wire");
+        };
+        let crate::graph::InputRef::Param {
+            node: crate::graph::NodeRef::Driver(to),
+            ..
+        } = edges[0].to
+        else {
+            panic!("into a driver parameter");
+        };
+        assert_eq!(from, nodes[0].id);
+        assert_eq!(to, nodes[1].id);
+        // Dropped where it was asked for, keeping the saved shape.
+        assert_eq!(layout[0].1, [400.0, 200.0]);
+        assert_eq!(layout[1].1, [560.0, 230.0]);
+        assert_eq!(group.name, "Audio rig");
+        assert_eq!(group.members.len(), 2);
+    }
+
+    /// A second insert of the same file shares nothing with the first — the
+    /// claim that makes a group library safe to lean on.
+    #[test]
+    fn two_inserts_of_one_group_share_no_ids() {
+        let (graph, members) = wired_graph();
+        let preset = group_from_graph(&graph, "Rig", 0, &members);
+        let first = group_instantiated(&preset, [0.0, 0.0]).nodes;
+        let second = group_instantiated(&preset, [0.0, 0.0]).nodes;
+        assert!(first.iter().all(|a| !second.iter().any(|b| b.id == a.id)));
     }
 }

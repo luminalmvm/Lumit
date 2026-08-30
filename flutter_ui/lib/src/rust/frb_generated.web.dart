@@ -502,6 +502,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMetadataField dco_decode_bridge_metadata_field(dynamic raw);
 
   @protected
+  BridgeNodeGroup dco_decode_bridge_node_group(dynamic raw);
+
+  @protected
   BridgeNodePosition dco_decode_bridge_node_position(dynamic raw);
 
   @protected
@@ -796,6 +799,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeMetadataField> dco_decode_list_bridge_metadata_field(dynamic raw);
+
+  @protected
+  List<BridgeNodeGroup> dco_decode_list_bridge_node_group(dynamic raw);
 
   @protected
   List<BridgeNodePosition> dco_decode_list_bridge_node_position(dynamic raw);
@@ -1512,6 +1518,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeNodeGroup sse_decode_bridge_node_group(SseDeserializer deserializer);
+
+  @protected
   BridgeNodePosition sse_decode_bridge_node_position(
       SseDeserializer deserializer);
 
@@ -1850,6 +1859,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeMetadataField> sse_decode_list_bridge_metadata_field(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeNodeGroup> sse_decode_list_bridge_node_group(
       SseDeserializer deserializer);
 
   @protected
@@ -2641,6 +2654,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMetadataField self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_node_group(
+      BridgeNodeGroup self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_node_position(
       BridgeNodePosition self, SseSerializer serializer);
 
@@ -3006,6 +3023,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_metadata_field(
       List<BridgeMetadataField> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_node_group(
+      List<BridgeNodeGroup> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_node_position(

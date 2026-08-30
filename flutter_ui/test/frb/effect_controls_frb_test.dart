@@ -2245,6 +2245,7 @@ void main() {
           ],
           layout: const [],
           exposed: const [],
+          groups: const [],
         ),
       );
       await mount(tester, p);
@@ -2273,7 +2274,8 @@ void main() {
       // one — the same rule every staged handle on this seam follows.
       p.layer.setGraph(
         drivers: p.layer.getGraphDrivers(),
-        wiring: const BridgeGraphWiring(edges: [], layout: [], exposed: []),
+        wiring: const BridgeGraphWiring(
+            edges: [], layout: [], exposed: [], groups: []),
       );
       p.uiState.model.refresh();
       await tester.pump();
