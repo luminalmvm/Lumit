@@ -892,6 +892,10 @@ class Outline extends StatelessWidget {
     // stack open, so the outline costs what is on screen rather than what the
     // comp has.
     return LazyBlocks(
+      // Named for the same reason the lane half's band is (K-293): a zoom is
+      // the lanes' business, so a budget test needs to be able to read this
+      // half's paint count and find it unmoved.
+      key: const ValueKey<String>('tl-outline-blocks'),
       controller: vScroll,
       heights: blockHeights,
       viewport: viewport,

@@ -21220,3 +21220,51 @@ Regression test: `bridge_call_budget_test.dart` — "an edit refreshes the model
 walks no layer" mounts the Viewer and the Timeline over a mixed stack of solids and
 precomps, commits one switch, delivers the change, and pins **one** `get_model`, **zero**
 `get_source_item`, `get_graph` and `get_volume_db`, and at most two `get_settings`.
+
+## K-681 — The repaint matrix is a gate per gesture, and the paint counters have to be read carefully
+
+**Status: DECIDED (2026-08-30).** WP-6 of K-676's note (docs/impl/ui-performance.md §4.2).
+The matrix in that section says what each gesture is *allowed* to rebuild and repaint. It
+now fails a build when a gesture exceeds it: `rebuild_budget_test.dart` carries one test
+per row — idle, select, scroll, zoom, playhead drag, work-area drag, edit — over a fixture
+deliberately taller than its panel (200 layers in a 300 px Timeline, 27 blocks in the
+window each half), because in a fixture that fits, "the window" and "the comp" are the
+same list and no budget can tell them apart. This is what enforces docs/13's 60/120 rule
+in CI, and docs/13 §2 now says so: the milliseconds that rule is written in are the cost
+of these counts.
+
+**The counters do not mean what their names suggest, and this cost a wrong answer before
+it was noticed.** A `RenderRepaintBoundary` raises its *symmetric* count when it
+re-recorded during its parent's own paint; its *asymmetric* count rises in two unrelated
+situations — when it re-recorded **alone**, and when the parent painted and this
+boundary's existing layer was **reused** without re-recording, which is the entire saving
+per-block boundaries exist for (K-678, K-649). Summing the two and calling it "repaints"
+is correct for a band's own boundary, which is how K-649's test reads it, and wrong for
+the blocks inside one: a wheel notch came out at 28 of 27 blocks "repainted" when the
+truth was three. The test's `recorded` helper decides per frame instead — symmetric up is
+a re-record, asymmetric up is one only where the band itself did not paint that frame —
+and `recordedOver` samples between the frames of a flight so the decision is made against
+that frame's band rather than the whole gesture's.
+
+**Where the two still cannot be separated, the gate moves to the band.** While a band
+paints every frame — a zoom fly, a scrub — a block re-recording alone and a block being
+reused are the same counter. So the zoom row is not gated on lane blocks; it is gated on
+the **outline** band's own paint count, which must not move at all. That is the stronger
+claim, because a band that did not paint cannot have painted a child, and with the band
+still, a child's asymmetric rise can only be a re-record. `Outline`'s `LazyBlocks` gained
+a `tl-outline-blocks` key so the test can read it, matching the lane half's existing one.
+
+**The numbers pinned** (27 blocks in the window): idle **0** rebuilds and **0** blocks;
+a layer click 304 rebuilds and **2** blocks each half; a wheel notch 497 and **3**; a zoom
+fly leaves the outline band **unpainted**; an edit's whole wave is capped at **one** pass
+over the window in both halves, which is what a second wave would break. The playhead and
+work-area rows were already held by K-649's and K-626's tests and are unchanged. Every
+test carries its honest half — the row must come up lit, the bars must come out wider, the
+switch must show as locked — so a budget cannot be met by a panel that has stopped drawing.
+
+**What is not gated, and the rule that replaces it.** The raster thread's milliseconds are
+unobservable headless: a widget test has no compositor, no window and no external texture,
+so frame rate, raster median and span cannot be asserted at any window size. The standing
+rule instead: a change that touches a Timeline paint path re-runs the note's §6 probe in
+the owner's conditions and quotes §2.3's rows for the gestures it touched, before and
+after. The counts are the leading indicator; the probe is the measurement.

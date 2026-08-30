@@ -7507,6 +7507,24 @@ blocks keep a picture of their own, and the playhead is *positioned* once and
 merely painted at a different offset each frame — a paint-time move rather than a
 layout one. A scrub over frames the cache already holds redraws a line.
 
+**How that is kept true** is a test that asks each of those saved pictures how
+often it was actually redrawn, one test per gesture: clicking a row, a wheel
+notch, a zoom, a scrub, a work-area drag, an edit, and doing nothing at all.
+Flutter keeps two tallies on each saved picture and neither of them is the
+number you want. One counts "redrawn while its surroundings were being redrawn".
+The other mixes two opposite things together — "redrawn on its own" and "its
+surroundings were redrawn and this picture was *reused*", which is the saving
+being tested for. Read naively, a gentle scroll therefore looks as though every
+row on screen had been redrawn, when the truth was three. So the test compares
+the tallies frame by frame and only counts the ambiguous one where the
+surroundings held still that frame, and where even that cannot separate them —
+a zoom, where the whole lane band is redrawing every frame anyway — it asks the
+question of the *other* half instead: the names column must not have been drawn
+at all, because nothing in it is drawn against time. Each test also proves the
+opposite half, that the thing which was supposed to change did: a budget met by
+a panel that has simply stopped drawing would be an editor where nothing ever
+lights up.
+
 - **Project** — items in folders, multi-select, drag onto the Timeline or onto
   New composition (which prefills size, rate and duration from what you dropped).
 - **Viewer** — the picture, the transport, the resolution picker, the on-picture

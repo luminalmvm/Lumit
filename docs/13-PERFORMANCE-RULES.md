@@ -113,7 +113,13 @@ Notes:
   regression is a defect) and the 8.3 ms budget itself.
   [impl/ui-performance.md](impl/ui-performance.md) is the binding note: the measured
   gesture table, the paint-layer architecture, and the work packages whose gates enforce
-  this panel by panel.
+  this panel by panel. **What enforces the 60/120 rule in CI is that note's §4.2 repaint
+  matrix, pinned gesture by gesture in `rebuild_budget_test.dart`** (K-681): idle, select,
+  scroll, zoom, playhead drag, work-area drag and edit each carry a rebuild and paint-count
+  budget that fails on regression, because the milliseconds the rule is written in are the
+  cost of those counts. The milliseconds themselves stay on the manual list below — a
+  widget test has no compositor — and are read with the note's probe in the owner's
+  conditions.
 - B9¹ **has a mechanism now, not a number** (K-585): loss is noticed, the renderer is rebuilt
   and the picture republished — see §4's "what is built today". The five seconds still cannot
   be *measured* without a real device to lose, so B9 stays on the manual list below with B1,

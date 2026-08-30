@@ -186,6 +186,39 @@ at their medians and p90 spans of 10–15 ms, with today's widget code. What Ski
 edit-commit build storms, and the per-frame sync calls (§3.4, now ~10 % of a 145 fps
 frame interval). Those are Lumit's own, and their packages stand.
 
+### 2.5 The same table after WP-2..WP-6
+
+One run of the same probe, the same conditions (`media beside project: resolves`,
+2560×1369, 57 rows, the Clips comp), 2026-08-30 21:34 — the confirming measurement
+WP-6 took of the finished programme rather than of its own change, which is
+test-side and cannot move a millisecond.
+
+| Gesture | build med (p90) | raster med | span med | fps | sync bridge over the gesture |
+|---|---|---|---|---|---|
+| Idle, 3 s | 0 frames scheduled | — | — | — | 0 calls |
+| Select, revisit | 0.0–0.1 | — | — | — | 0–1 calls |
+| Select, first visit to a layer | worst frame **39.8** | — | — | — | 19 calls, 1.7 ms |
+| Edit (lock switch) | worst frame 36.6–39.8 | — | — | — | 12–19 calls, 19.3–23.3 ms |
+| Scroll lanes | 3.28 (7.78) | 40.1 | 78.8 | 9.5 | 0 |
+| Scroll outline | 3.25 (5.71) | 38.2 | 74.3 | 9.5 | 0 |
+| Zoom fly | 8.14 (12.62) | 36.1 | 69.0 | **26.2** | 76 (`document_revision`, 2.0 ms) |
+| Playhead drag, fresh | 3.56 (5.15) | 30.8 | 60.5 | **29.1** | 184, 6.6 ms — all exempt |
+| Playhead drag, revisited | 3.41 (5.51) | 30.4 | 58.8 | **30.1** | 187, 4.1 ms |
+| Work-area drag | 3.29 (4.38) | 30.2 | 58.3 | **31.5** | 170, 28.7 ms (16.8 the commit) |
+| Graph mode, zoom fly | 4.92 (9.86) | 29.8 | 58.9 | 31.0 | 89, 1.8 ms |
+| Graph mode, playhead drag | 3.46 (4.71) | 29.6 | 57.9 | 30.8 | 195, 4.3 ms |
+
+Against §2.3: every continuous gesture's **build** is now inside the 8.3 ms budget at
+its median and at p90 (zoom's 12.6 p90 is the one over, from 10.9 med / no p90 recorded
+before), the scroll's ~75 ms slide frames are gone, and frame rate has risen by roughly
+half — 19.7 → 26.2 on the zoom, 19.9 → 29.1 on the scrub — because there is less picture
+to re-record. **What has not moved is the raster floor**: 30–40 ms a frame, every frame
+over 17 ms, which is §4.1's whole-window resolve blit and §7.2's open package. And two
+frame classes survive that this programme did not reach: a **first visit** to a layer
+still runs one ~40 ms build frame, and a lock switch's own commit still costs ~16 ms of
+fsync (§7 item 5). Both are named in §7, neither is the wave, and neither is
+reproducible in a headless test of the Timeline alone.
+
 ## 3. Where each millisecond sits
 
 ### 3.1 The click, pointer to lit row — two different clicks
@@ -353,6 +386,44 @@ K-626/K-649 layering, finished and enforced. What may rebuild and repaint per ge
 The gate: `rebuild_budget_test.dart` grows paint-count assertions per gesture (counted
 off `RenderRepaintBoundary`, as K-649's test already does), so a regression is a red
 test naming the gesture, not a feeling.
+
+**Landed with WP-6** (K-681, 2026-08-30), one test per row, and two things about the
+instrument are worth writing down because the obvious reading of it is wrong.
+
+- **A block boundary's paint counters do not count re-records.** A
+  `RenderRepaintBoundary` raises its *symmetric* count when it re-recorded during its
+  parent's own paint, and its *asymmetric* count in two unrelated situations: when it
+  re-recorded **alone**, and — the trap — when the parent painted and its existing layer
+  was **reused**, which is the whole saving these boundaries exist for. Summing the two
+  and calling it "repaints", which is how K-649's original test reads them (correctly,
+  because there the band's own boundary is the subject), makes every block on screen look
+  dirty on any gesture that moves the band at all: a wheel slide came out at 28 of 27
+  blocks. The test's `recorded` helper therefore decides per frame — a rise in symmetric
+  is a re-record; a rise in asymmetric is one only where **the band itself did not paint
+  that frame** — and `recordedOver` samples between the frames of a flight so the decision
+  is made against that frame's band rather than the whole gesture's.
+- **Where even that cannot separate them, the gate is stated of the band.** While a band
+  is painting every frame — a zoom fly, a scrub — one of its blocks re-recording alone is
+  indistinguishable from one being reused, so the lane half's zoom row is not gated on a
+  block count. It is gated on the **outline** band: its own paint count must not move at
+  all, which is the stronger claim (a band that did not paint cannot have painted a child,
+  and with the band still, a child's asymmetric rise can only be a re-record). The honest
+  half is geometry — the bars must actually be wider afterwards — so a Timeline that has
+  stopped listening to the wheel cannot pass by drawing nothing.
+
+The numbers, on a 200-layer comp in a 300 px panel (27 blocks in the window each half),
+which is the fixture the window-sized rules need: a fixture that fits makes "the window"
+and "the comp" the same list and no budget can tell them apart.
+
+| Row | Rebuilds | Blocks re-recorded, of 27 |
+|---|---|---|
+| Idle, 20 frames | **0** | 0 lanes, 0 outline |
+| Select a layer (name cell) | 304 | **2** lanes, **2** outline |
+| Scroll, one wheel notch | 497 | **3** lanes, **3** outline |
+| Zoom fly (Ctrl+wheel, 20 frames) | — | **0** outline, and the outline band **never paints** |
+| Playhead move, 20 frames | 300 | 0 lanes (K-649's test, unchanged) |
+| Work-area edge drag, 20 moves | 263 | 0 lanes, band 11 (K-626's test, unchanged) |
+| Edit (a lock switch, whole wave) | 4,972 | 1 lane, 27 outline — **one** pass over the window |
 
 ### 4.3 Scroll becomes incremental: widget identity plus per-block boundaries
 
@@ -702,8 +773,35 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    `get_source_item`, `get_graph` and `get_volume_db`, and at most two `get_settings`,
    with the Viewer and the Timeline both mounted over a mixed stack of solids and
    precomps.
-6. **WP-6 — The matrix becomes gates.** §4.2 lands as paint-count assertions in
-   `rebuild_budget_test.dart` per gesture, counted off `RenderRepaintBoundary`.
+6. **WP-6 — The matrix becomes gates. Landed 2026-08-30 (K-681).** §4.2 lands as
+   paint-count assertions in `rebuild_budget_test.dart` per gesture, counted off
+   `RenderRepaintBoundary`; §4.2's own table above carries the numbers each row is pinned
+   at, and the two traps in the instrument that had to be worked around to get them.
+   *Gate (CI):* every row of the matrix — idle, select, scroll, zoom, playhead drag,
+   work-area drag, edit — fails on a regression by name. Idle is `0` rebuilds and `0`
+   blocks; a select click and a wheel notch re-record **2** and **3** of 27 blocks; a zoom
+   leaves the outline band unpainted; an edit is capped at **one** pass over the window in
+   both halves, which is what a second wave would break. The playhead and work-area rows
+   were already held by K-649's and K-626's tests and are unchanged.
+   **What cannot be gated headless, and stays the probe's:** the raster thread's
+   milliseconds — a widget test has no compositor, no window and no external texture, so
+   frame rate, raster median and span are unobservable in CI at any window size. The
+   manual rule that replaces them: **a change that touches a Timeline paint path re-runs
+   §6's probe in the owner's conditions and quotes §2.3's table rows for the gestures it
+   touched, before and after.** The counts above are the leading indicator (they are what
+   causes those milliseconds); the probe is the measurement. §2.5 is the run that closed
+   the programme.
+   **What the gates found and did not fix**, recorded so the next package starts from it:
+   a select click made while **nothing** is selected — the first of a session — rebuilds
+   the Timeline whole (4,978 widgets against 304 for every later click, and the whole
+   panel from `TimelinePanelFrb` down, so it is not the block seam of §4.4 leaking). The
+   select row is therefore measured from a layer already in hand, which is the gesture the
+   matrix is about; the empty-to-first case is left as a named outlier. It is the likely
+   relative of the ~40 ms first-visit build frame §2.5 still shows on the probe, which no
+   headless fixture of the Timeline alone reproduces — the two panels that paid for that
+   click in WP-2 (the menu bar and the fronted Effect controls) are not mounted in a
+   rebuild-budget test, so finding it needs the shell, and that is a package rather than a
+   gate.
 
 After WP-1..4 the arithmetic for a scrub frame in the owner's conditions reads:
 build ~3.5 ms and raster ~5 ms overlapping across their two threads, zero sync

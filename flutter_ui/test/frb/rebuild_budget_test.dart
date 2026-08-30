@@ -19,13 +19,17 @@
 // (`debugPrintRebuildDirtyWidgets`), which names every element it rebuilds.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -807,6 +811,372 @@ void main() {
       expect(rebuilds.byName['OutlineRow'] ?? 0, greaterThan(0),
           reason: 'nothing was built, so no row entered the window:\n'
               '${rebuilds.ranking()}');
+    });
+
+    // ------------------------------------------------------------------
+    // **§4.2's repaint matrix, as gates** (WP-6, docs/impl/ui-performance.md).
+    //
+    // The tests above pin what an interaction *builds*; the matrix pins what
+    // it *re-records*, which is the half the owner's 20 fps actually lived in.
+    // Every row of the table gets one, in the table's own order: idle, select,
+    // scroll, zoom, playhead drag, work-area drag, edit. The playhead and
+    // work-area rows already have theirs above (they were written first, for
+    // K-626 and K-649); the five here are the rest.
+    //
+    // What cannot be tested headless is the raster thread's own milliseconds —
+    // a widget test has no compositor and no window. Those stay the probe's
+    // (§6, run in the owner's conditions); what is pinned here is the count
+    // that causes them: how many blocks re-recorded.
+    // ------------------------------------------------------------------
+
+    /// A tall stack in a short panel — the fixture every window-sized rule
+    /// needs, because in a fixture that fits, "the window" and "the comp" are
+    /// the same list and no budget can tell them apart.
+    Future<({dynamic state, dynamic ui, dynamic comp})> mountTall(
+      WidgetTester tester, {
+      int layers = 200,
+      Size size = const Size(1600, 300),
+    }) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      for (var i = 0; i < layers; i++) {
+        comp.addSolidLayer();
+      }
+      p.uiState.setSelectedComp(comp);
+      // One layer already in hand before the panel is mounted. An empty
+      // selection is not the state a select gesture is measured from: going
+      // from nothing to something is a different question (and a rarer one)
+      // than moving the light from one row to the next.
+      p.uiState.selectedLayer.value = comp.getLayers().first;
+      p.uiState.model.refresh();
+
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+        child: const TimelinePanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      return (state: p.state, ui: p.uiState, comp: comp);
+    }
+
+    /// A band's own paint counts and those of the repaint boundaries **directly
+    /// under** it — one per block (K-678, §4.3). The walk stops at the first
+    /// boundary down each branch, so the answer is about blocks and not about
+    /// the widgets inside them.
+    ///
+    /// **What the two counters mean**, because the arithmetic below depends on
+    /// it and the framework's names do not say it. A boundary's *symmetric*
+    /// count rises when it re-recorded during its parent's own paint. Its
+    /// *asymmetric* count rises in two different situations: it re-recorded
+    /// **alone** (the parent did not paint), and — the trap — the parent
+    /// painted and this child's existing layer was **reused** without
+    /// re-recording, which is the saving these boundaries exist for. So a
+    /// child's total is not a count of re-records, and reading it as one makes
+    /// every block on screen look dirty on any gesture that moves the band.
+    ({int band, Map<RenderRepaintBoundary, (int, int)> blocks}) bandPaints(
+        WidgetTester tester, String key) {
+      final root = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(ValueKey<String>(key)));
+      final out = <RenderRepaintBoundary, (int, int)>{};
+      void walk(RenderObject o) {
+        if (o is RenderRepaintBoundary && !identical(o, root)) {
+          out[o] = (o.debugSymmetricPaintCount, o.debugAsymmetricPaintCount);
+          return;
+        }
+        o.visitChildren(walk);
+      }
+
+      walk(root);
+      return (
+        band: root.debugSymmetricPaintCount + root.debugAsymmetricPaintCount,
+        blocks: out,
+      );
+    }
+
+    /// How many blocks **re-recorded** between two samples of [bandPaints].
+    ///
+    /// A block that entered the window since `before` counts: it was recorded
+    /// for the first time. Otherwise a rise in the symmetric count is a
+    /// re-record, and a rise in the asymmetric one is a re-record only where
+    /// the band itself did not paint — where it did, that rise is the reuse
+    /// described above.
+    ///
+    /// The one thing this cannot see, and the reason §4.2's raster rows stay
+    /// the probe's: while the band is painting, a block that re-recorded
+    /// *alone* on some other frame of the same gesture is indistinguishable
+    /// from one whose layer was reused. So on a band-moving gesture this
+    /// number is a floor, and the ceiling is the probe's raster millisecond in
+    /// the owner's conditions (§6).
+    Set<RenderRepaintBoundary> recorded(
+      ({int band, Map<RenderRepaintBoundary, (int, int)> blocks}) before,
+      ({int band, Map<RenderRepaintBoundary, (int, int)> blocks}) after,
+    ) {
+      final bandPainted = after.band > before.band;
+      return after.blocks.entries
+          .where((e) {
+            final was = before.blocks[e.key];
+            if (was == null) return true;
+            if (e.value.$1 > was.$1) return true;
+            return !bandPainted && e.value.$2 > was.$2;
+          })
+          .map((e) => e.key)
+          .toSet();
+    }
+
+    /// The same question over a gesture that takes several frames: the bands
+    /// are sampled after **each** one, so the reuse-versus-re-record decision
+    /// above is made against that frame's own band paint rather than against
+    /// the whole flight's. Returns how many distinct blocks re-recorded at
+    /// least once in each half.
+    Future<({int lanes, int outline})> recordedOver(
+        WidgetTester tester, int frames) async {
+      final lanes = <RenderRepaintBoundary>{};
+      final outline = <RenderRepaintBoundary>{};
+      var lanesWere = bandPaints(tester, 'tl-lane-blocks');
+      var outlineWere = bandPaints(tester, 'tl-outline-blocks');
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final l = bandPaints(tester, 'tl-lane-blocks');
+        final o = bandPaints(tester, 'tl-outline-blocks');
+        lanes.addAll(recorded(lanesWere, l));
+        outline.addAll(recorded(outlineWere, o));
+        lanesWere = l;
+        outlineWere = o;
+      }
+      return (lanes: lanes.length, outline: outline.length);
+    }
+
+    /// **Idle.** The matrix's first row, and the one everything else rests on:
+    /// an editor nobody is touching draws nothing. Measured true in all four
+    /// of the probe's conditions (§2.3) — this is the headless guard for it,
+    /// where the raster thread's silence cannot be observed but the render
+    /// tree's can.
+    testWidgets('idle: nothing rebuilds and no block repaints', (tester) async {
+      await mountTall(tester);
+      final blocks = bandPaints(tester, 'tl-lane-blocks').blocks.length;
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      final paints = await recordedOver(tester, 20);
+      rebuilds
+        ..counting = false
+        ..remove();
+
+      // ignore: avoid_print
+      print('IDLE REBUILDS ${rebuilds.total} paints lanes ${paints.lanes} '
+          'outline ${paints.outline} of $blocks blocks\n${rebuilds.ranking()}');
+      expect(paints.lanes, 0,
+          reason: 'a lane block re-recorded with nothing happening to it');
+      expect(paints.outline, 0,
+          reason: 'an outline block re-recorded with nothing happening to it');
+      expect(rebuilds.total, 0,
+          reason: 'something rebuilt itself at rest — a polling listener, or a '
+              'ticker nobody stopped:\n${rebuilds.ranking()}');
+    });
+
+    /// **Select.** The matrix allows "the blocks whose slice changed"; before
+    /// WP-2 the band was one boundary and a click re-recorded fifty-seven rows
+    /// to move the light on one (§4.3, 9.8–15.3 ms of the click frame).
+    testWidgets('select: a layer click repaints the block it lights',
+        (tester) async {
+      final p = await mountTall(tester);
+      // A layer that is not lit already: a click that changes nothing would
+      // meet any paint budget going.
+      final layer = p.comp.getLayers()[3];
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
+      expect(name, findsOneWidget, reason: 'the layer has a row on screen');
+
+      final lanesBefore = bandPaints(tester, 'tl-lane-blocks');
+      final outlineBefore = bandPaints(tester, 'tl-outline-blocks');
+      rebuilds
+        ..reset()
+        ..counting = true;
+      await tester.tapAt(tester.getTopLeft(name) + const Offset(5, 8));
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      final lanes =
+          recorded(lanesBefore, bandPaints(tester, 'tl-lane-blocks')).length;
+      final outline =
+          recorded(outlineBefore, bandPaints(tester, 'tl-outline-blocks'))
+              .length;
+      // The row's own double-click window (K-243's rename) is a 40 ms timer,
+      // and the binding refuses to end a test with one pending.
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // ignore: avoid_print
+      print('LAYER CLICK PAINTS lanes $lanes outline $outline of '
+          '${lanesBefore.blocks.length} blocks, ${rebuilds.total} rebuilds\n'
+          '${rebuilds.ranking()}');
+      // One block each half changes its answer, and the cap is roughly 2x in
+      // the house style — a previously-lit row unlighting is the honest second.
+      // What must never come back is a number that tracks the window.
+      expect(lanes, lessThan(5),
+          reason: 'a click re-recorded the lane band rather than the block it '
+              'lit ($lanes of ${lanesBefore.blocks.length})');
+      expect(outline, lessThan(5),
+          reason: 'a click re-recorded the outline band rather than the block '
+              'it lit ($outline of ${outlineBefore.blocks.length})');
+      // The honest half: a budget met by a band that has stopped drawing the
+      // selection at all is an editor where nothing lights up.
+      expect(outline, greaterThan(0),
+          reason: 'no outline block re-recorded, so no row lit');
+    });
+
+    /// **Scroll.** The build half of this is pinned above (K-678); this is the
+    /// paint half of the same rule — the entering block records, the rest of
+    /// the window translates on its own layer.
+    testWidgets('scroll: a slide repaints the blocks entering the window',
+        (tester) async {
+      await mountTall(tester);
+      rebuilds.remove();
+      final vertical = tester
+          .stateList<ScrollableState>(find.byType(Scrollable))
+          .map((s) => s.position)
+          .where((s) => s.axis == Axis.vertical && s.maxScrollExtent > 0)
+          .toList();
+      expect(vertical, isNotEmpty, reason: 'the stack has somewhere to scroll');
+      // Into the middle first: at the top the window is pinned against the
+      // start of the content and a short scroll slides nothing.
+      vertical.first.jumpTo(1000);
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final lanesBefore = bandPaints(tester, 'tl-lane-blocks');
+      final outlineBefore = bandPaints(tester, 'tl-outline-blocks');
+      // A wheel notch's worth: a couple of rows.
+      vertical.first.jumpTo(1050);
+      await tester.pump(const Duration(milliseconds: 16));
+      final lanes =
+          recorded(lanesBefore, bandPaints(tester, 'tl-lane-blocks')).length;
+      final outline =
+          recorded(outlineBefore, bandPaints(tester, 'tl-outline-blocks'))
+              .length;
+
+      // ignore: avoid_print
+      print('SCROLL SLIDE PAINTS lanes $lanes outline $outline of '
+          '${lanesBefore.blocks.length} blocks');
+      for (final (half, count, total) in [
+        ('lane', lanes, lanesBefore.blocks.length),
+        ('outline', outline, outlineBefore.blocks.length),
+      ]) {
+        expect(count, lessThan(8),
+            reason: 'a slide re-recorded the whole $half window rather than '
+                'the blocks entering it ($count of $total)');
+      }
+      expect(lanes, greaterThan(0),
+          reason: 'nothing re-recorded, so no block entered the window');
+    });
+
+    /// **Zoom.** K-293's seam, as a paint count: only the lane half listens to
+    /// the zoom, so the outline must not draw at all for one — and the zoom
+    /// flies (`SmoothZoom`), so the flight's frames are counted with it.
+    ///
+    /// The gate is stated of the outline **band** as well as of its blocks,
+    /// which is what makes it airtight: a band that did not paint cannot have
+    /// painted a child, and with the band still, a block's asymmetric count can
+    /// only have risen by re-recording alone. The lane half is left to the
+    /// probe for the reason `recorded` gives — while a band is painting every
+    /// frame, its blocks' reuse and their re-records are the same counter.
+    testWidgets('zoom: a zoom tick redraws the lanes and never the outline',
+        (tester) async {
+      await mountTall(tester);
+      rebuilds.remove();
+      final blocks = bandPaints(tester, 'tl-outline-blocks').blocks.length;
+      final bandBefore = bandPaints(tester, 'tl-outline-blocks').band;
+      final barBefore = tester.getRect(find.byType(Bar).first);
+
+      // Ctrl+wheel — the real gesture, through the real pointer-signal path.
+      // On a bar, not on the band's own centre: the band is as tall as the
+      // whole stack, so its centre is a couple of thousand pixels below the
+      // window and the wheel would land on nothing.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(barBefore.center));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -1)));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      // The flight, frame by frame.
+      final paints = await recordedOver(tester, 20);
+      final bandAfter = bandPaints(tester, 'tl-outline-blocks').band;
+      await tester.pumpAndSettle();
+
+      // ignore: avoid_print
+      print('ZOOM FLY PAINTS outline ${paints.outline} of $blocks blocks, '
+          'band ${bandAfter - bandBefore}');
+      // **This is the assertion.** A zoom moves time, and a name, a switch and
+      // a parent picker are not drawn against time.
+      expect(bandAfter, bandBefore,
+          reason: 'the outline band painted for a zoom, which changes nothing '
+              'in it');
+      expect(paints.outline, 0,
+          reason: 'an outline block re-recorded for a zoom '
+              '(${paints.outline} of $blocks blocks)');
+      // The honest half: a gate met by a panel that ignored the wheel would be
+      // a Timeline that cannot zoom. The bars really did move.
+      expect(tester.getRect(find.byType(Bar).first).width,
+          greaterThan(barBefore.width + 1),
+          reason: 'the wheel did not zoom the lanes, so nothing was measured');
+    });
+
+    /// **Edit.** The matrix's last row: one model-refresh wave, and what the
+    /// edit touched. The wave itself is `bridge_call_budget_test`'s ("an edit
+    /// refreshes the model once and walks no layer", WP-5); this is what it
+    /// costs on this side of the seam.
+    testWidgets('edit: a switch toggle redraws the row it changed',
+        (tester) async {
+      final p = await mountTall(tester);
+      final layer = p.comp.getLayers().first;
+
+      final lanesBefore = bandPaints(tester, 'tl-lane-blocks');
+      final outlineBefore = bandPaints(tester, 'tl-outline-blocks');
+      rebuilds
+        ..reset()
+        ..counting = true;
+      // Exactly what a click on a switch cell does: the op, the committing
+      // panel's own refresh, and — a turn later — the engine's own report of
+      // the same change, which is the second half of the wave.
+      layer.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+      p.ui.model.refresh();
+      p.state.handleChange(ScopedChange(
+        project: p.state.project!,
+        item: ItemReference.composition(p.comp),
+        layer: layer,
+        items: false,
+      ));
+      await tester.pump();
+      await settleFrb(tester, minRounds: 4, maxRounds: 8);
+      rebuilds
+        ..counting = false
+        ..remove();
+      final lanes =
+          recorded(lanesBefore, bandPaints(tester, 'tl-lane-blocks')).length;
+      final outline =
+          recorded(outlineBefore, bandPaints(tester, 'tl-outline-blocks'))
+              .length;
+
+      // ignore: avoid_print
+      print('EDIT REBUILDS ${rebuilds.total} paints lanes $lanes outline '
+          '$outline of ${lanesBefore.blocks.length} blocks\n${rebuilds.ranking()}');
+      // The rows on screen rebuild once for the new model — that is the wave,
+      // and it is allowed. What is not is the wave arriving twice, which is
+      // what the count catches: the cap is roughly 2x one pass over the window
+      // in the house style.
+      for (final name in ['OutlineRow', 'Bar']) {
+        expect(rebuilds.byName[name] ?? 0, lessThan(2 * lanesBefore.blocks.length),
+            reason: 'an edit rebuilt every $name more than once — the '
+                'follow-on is more than one wave:\n${rebuilds.ranking()}');
+      }
+      expect(outline, greaterThan(0),
+          reason: 'nothing re-recorded, so the locked switch never showed');
+      // And the shell heard it, so the budget is not met by a panel that has
+      // stopped following the document.
+      expect(layer.getSwitches().locked, isTrue);
     });
   }, skip: !engineAvailable);
 }
