@@ -15,7 +15,7 @@
 // asked, so the graph has no second opinion to disagree with — and every wire
 // gesture on the image chain lowers to the ordinary effect-stack commit. What
 // this panel edits is the additive half: driver boxes, wires, canvas positions
-// and which boxes wear the `E` badge, all committed by one `setGraph` per
+// and which boxes are twirled open, all committed by one `setGraph` per
 // gesture and therefore one undo step apiece.
 //
 // **One read, never in a rebuild** (K-183). `getGraph` is asked when the
@@ -43,7 +43,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../icons/icons.dart' show LumitIcon;
+import '../icons/icons.dart' show LumitIcon, lumitIcon;
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
@@ -52,6 +52,7 @@ import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
+import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'placeholder.dart';
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
@@ -80,8 +81,22 @@ const double graphPortRowHeight = 18;
 /// A socket, border included. Filled is wired, hollow is not.
 const double graphSocketSize = 9;
 
-/// The `E` and `B` badges in a node's header, border included.
+/// A mark in a node's header — the enable tick, the twirl, the no-stream
+/// badge — border included. One number, so the header's row of small things
+/// steps evenly whatever each of them is.
 const double graphBadgeSize = 14;
+
+/// The enable tick's cell. The Effect controls heading draws K-450's 14px
+/// checkbox [fxEnableMarkScale] larger, and the node header wears that same
+/// mark at that same size, so the cell that holds it is that much larger than
+/// the marks beside it — the tick is one control on two surfaces, not two
+/// drawings of one.
+const double graphEnableSize = graphBadgeSize * fxEnableMarkScale;
+
+/// The twirl glyph on a node header, smaller than the house default because
+/// the header is 21px rather than the 24 an Effect controls heading has
+/// (K-456: the default is a default, not a law).
+const double graphTwirlSize = 12;
 
 /// The dot grid's pitch on the canvas ground.
 const double graphDotGrid = 20;
@@ -289,7 +304,7 @@ class _Layout {
       // A **driver** draws every socket it has: the box is small, and its
       // ports are the whole of what it is for — both drawings draw them so.
       // An **effect** draws the picture's own sockets always, and a parameter
-      // socket when a wire is on it or when the box wears its `E` badge
+      // socket when a wire is on it or when the box is twirled open
       // (§1.4). Exposure grows the box; it is not a second kind of wiring.
       final open = exposed.contains(key) || isDriver;
       List<BridgePort> shown(List<BridgePort> ports) => [
@@ -354,7 +369,7 @@ class _Layout {
 ///
 /// A wire-only port has no stored value and therefore no panel row anywhere
 /// (points-stream.md §2.2) — a matte's, an audio stream's, a points stream's.
-/// The socket is the only way to reach it, so hiding it behind the `E` badge
+/// The socket is the only way to reach it, so hiding it behind the twirl
 /// would hide the whole port. A *parameter* socket is different: the row is
 /// still there in Effect controls, so the canvas may keep it folded away.
 bool _alwaysDrawn(BridgePortType type) =>
@@ -392,7 +407,10 @@ bool graphNoStream(BridgeGraphNode node) =>
       ),
   };
   final (toKey, toPort) = switch (e.to) {
-    BridgeInputRef_Param(:final node, :final port) => (graphNodeKey(node), port),
+    BridgeInputRef_Param(:final node, :final port) => (
+        graphNodeKey(node),
+        port
+      ),
     BridgeInputRef_Matte(:final effect) => (
         graphNodeKey(BridgeNodeRef.effect(effect)),
         'matte'
@@ -420,7 +438,8 @@ double _wireDistance(Offset a, Offset b, Offset at) {
   var best = double.infinity;
   for (final metric in graphWirePath(a, b).computeMetrics()) {
     for (var i = 0; i <= 20; i++) {
-      final point = metric.getTangentForOffset(metric.length * i / 20)?.position;
+      final point =
+          metric.getTangentForOffset(metric.length * i / 20)?.position;
       if (point != null) best = math.min(best, (point - at).distance);
     }
   }
@@ -567,10 +586,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Offset? _pressAt;
 
   /// Set by a control on a card on its way down, so the canvas behind it
-  /// leaves the press alone: pressing a box's `E` or `B` is not picking the
-  /// box. The canvas reads every pointer itself — that is how a socket is
-  /// grabbed without a gesture detector per socket — so it cannot tell a press
-  /// on a badge from a press on the card, and the badge has to say.
+  /// leaves the press alone: pressing a box's enable tick or its twirl is not
+  /// picking the box. The canvas reads every pointer itself — that is how a
+  /// socket is grabbed without a gesture detector per socket — so it cannot
+  /// tell a press on a control from a press on the card, and the control has
+  /// to say.
   bool _claimed = false;
 
   /// The rubber band in flight, in the canvas widget's own pixels (so it is
@@ -902,7 +922,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   void _toggleExposed(BridgeNodeRef node) {
     final key = graphNodeKey(node);
-    // The pressed box's new state, for all of them, so a pick of mixed badges
+    // The pressed box's new state, for all of them, so a pick of mixed twirls
     // comes out even. One `setGraph`, so one undo step however many it is.
     final on = !_graph!.wiring.exposed.any((e) => graphNodeKey(e) == key);
     final targets = {for (final n in _targets(node)) graphNodeKey(n): n};
@@ -1067,7 +1087,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     }
     if (effects.isNotEmpty) {
       // An effect's removal is the stack's own op, and one op is all it takes:
-      // `Op::SetLayerEffects` prunes the edges, positions and badges naming the
+      // `Op::SetLayerEffects` prunes the edges, positions and exposures naming the
       // box that went, inside the same commit, so this is one write per effect
       // exactly as a driver's removal is one for all of them.
       try {
@@ -1862,8 +1882,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 }
 
-/// One box on the canvas: a header strip with its name and badges, then the
-/// port rows with their sockets sitting on the border.
+/// One box on the canvas: a header strip carrying its enable tick, its twirl
+/// and its name, then the port rows with their sockets sitting on the border.
 class _NodeCard extends StatelessWidget {
   final _Box box;
   final String title;
@@ -1902,6 +1922,12 @@ class _NodeCard extends StatelessWidget {
   bool get _derived =>
       box.node.node is BridgeNodeRef_Source ||
       box.node.node is BridgeNodeRef_Out;
+
+  /// Whether this box has anything to twirl open. A **driver** draws every
+  /// socket it has whatever its exposure says — the box is small and its
+  /// ports are the whole of what it is for — so a twirl on one would be a
+  /// control that answers nothing, and it is left off.
+  bool get _foldable => !_derived && box.node.node is! BridgeNodeRef_Driver;
 
   @override
   Widget build(BuildContext context) {
@@ -1952,20 +1978,33 @@ class _NodeCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // **The name takes every pixel the badges leave** (owner, desk
+            // **Enable tick, twirl, name** — the order an Effect controls
+            // heading reads in (K-443), because on a node card it is the same
+            // grammar and, for the tick, the same control. What the box *is
+            // doing* comes before what the header does to what is under it.
+            if (!_derived) ...[
+              _enable(t),
+              const SizedBox(width: 2),
+            ],
+            if (_foldable) ...[
+              _twirl(t),
+              const SizedBox(width: 2),
+            ],
+            // **The name takes every pixel the marks leave** (owner, desk
             // test). It used to be a `Flexible` name beside a `Spacer`, and a
             // `Spacer` is an `Expanded` of flex 1: the two shared the header's
             // free space half each, so a name ellipsised with half the strip
             // standing empty beside it. One `Expanded` holding the names puts
-            // the whole remainder at their disposal — the badges are
-            // fixed-width and still sit hard right — so a name cuts only when
-            // it is genuinely out of room.
+            // the whole remainder at their disposal — the controls are
+            // fixed-width — so a name cuts only when it is genuinely out of
+            // room.
             Expanded(child: renaming ? _editor(t) : _names(t)),
             // **Nothing wired in** (K-509). A driver that reads a stream and
             // has none answers its documented no-op — a distance so large it
             // pins whatever it drives at the far end of the range — and the
             // box is the one place that can say so before the wire is drawn.
             if (graphNoStream(box.node)) ...[
+              const SizedBox(width: 4),
               LumitTooltip(
                 message: l10n.graphNoStream,
                 child: Container(
@@ -1982,12 +2021,6 @@ class _NodeCard extends StatelessWidget {
                       style: t.mono.copyWith(fontSize: 8, color: t.warning)),
                 ),
               ),
-              const SizedBox(width: 4),
-            ],
-            if (!_derived) ...[
-              _badge(t, 'E', exposed, onExpose, t.textPrimary),
-              const SizedBox(width: 4),
-              _badge(t, 'B', !box.node.enabled, onBypass, t.error),
             ],
           ],
         ),
@@ -2039,48 +2072,54 @@ class _NodeCard extends StatelessWidget {
         onCancel: onRenameCancelled,
       );
 
-  /// The `E` and `B` marks. `B` on is the one place the error family appears
-  /// on this canvas (15-DESIGN §12A.7) — a bypassed box is not a fault, but it
-  /// is the one box that is deliberately doing nothing.
-  Widget _badge(
-    LumitTheme t,
-    String mark,
-    bool on,
-    VoidCallback onTap,
-    Color onColour,
-  ) =>
-      // **Pressing a badge is not picking the box** (the Timeline's rule for
-      // its switch cells, K-452). The canvas reads its pointers through one
-      // `Listener` above this card, and a child listener is dispatched first —
-      // so the flag is set before the canvas decides what the press meant.
-      // Without it, pressing B on one of four picked boxes collapsed the pick
-      // to that box and then bypassed only it.
-      Listener(
-        onPointerDown: (_) => onOwnPress(),
-        child: GestureDetector(
-          key: ValueKey<String>(
-              'graph-badge-$mark-${graphNodeKey(box.node.node)}'),
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Container(
-            width: graphBadgeSize,
-            height: graphBadgeSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: on ? t.surface4 : null,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: on ? onColour : t.hairlineStrong),
-            ),
-            child: Text(
-              mark,
-              style: t.mono.copyWith(
-                fontSize: 8,
-                color: on ? onColour : t.textMuted,
-              ),
+  /// **Pressing a control on the header is not picking the box** (the
+  /// Timeline's rule for its switch cells, K-452). The canvas reads its
+  /// pointers through one `Listener` above this card, and a child listener is
+  /// dispatched first — so the flag is set before the canvas decides what the
+  /// press meant. Without it, switching one of four picked boxes off collapsed
+  /// the pick to that box and then bypassed only it.
+  Widget _claim(Widget child) =>
+      Listener(onPointerDown: (_) => onOwnPress(), child: child);
+
+  /// **The enable tick**, left of the name — the Effect controls heading's own
+  /// switch face ([fxEnableMark]), because a box's enable and its effect
+  /// card's switch are one control drawn on two surfaces. Off, the box's
+  /// border goes dashed and its name goes quiet (15-DESIGN §12A.7): a bypassed
+  /// box is not a fault, it is the one box deliberately doing nothing.
+  Widget _enable(LumitTheme t) => _claim(SizedBox(
+        width: graphEnableSize,
+        height: graphEnableSize,
+        child: Center(
+          child: fxEnableMark(
+            key:
+                ValueKey<String>('graph-enable-${graphNodeKey(box.node.node)}'),
+            on: box.node.enabled,
+            onChanged: (_) => onBypass(),
+          ),
+        ),
+      ));
+
+  /// **The twirl**, which opens the box up. Shut, an effect draws the
+  /// picture's own sockets and whatever is already wired; open, it draws a
+  /// socket for every parameter it has (`LayerGraph::exposed`). The same mark
+  /// and the same reading as the twirl on an Effect controls heading — what is
+  /// under the header, shown or folded away.
+  Widget _twirl(LumitTheme t) => _claim(GestureDetector(
+        key: ValueKey<String>('graph-twirl-${graphNodeKey(box.node.node)}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onExpose,
+        child: SizedBox(
+          width: graphBadgeSize,
+          height: graphBadgeSize,
+          child: Center(
+            child: lumitIcon(
+              exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+              size: graphTwirlSize,
+              color: exposed ? t.textPrimary : t.textMuted,
             ),
           ),
         ),
-      );
+      ));
 
   Widget _row(LumitTheme t, int i) {
     final input = i < box.inputs.length ? box.inputs[i] : null;

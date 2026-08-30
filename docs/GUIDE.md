@@ -3378,7 +3378,8 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   would expect. The outline's columns sit in **four groups** (K-188), left to right:
   first the **eye, speaker, solo star, padlock and shy** switches; then the **twirl, a
   small label-colour chip, the layer's stack number and its name**; then the
-  **flow-or-collapse glyph, an fx bypass switch, motion blur and 3D**; then the **Matte,
+  **fx bypass switch, motion blur, 3D, adjustment, flow and collapse** (K-632); then the
+  **Matte,
   Blend and Parent** dropdowns (Parent is the same parent-and-inherit link the Effect
   Controls tab offers — pick another layer and this one rides its transform). The row of
   tiny icons over the columns names each group — and it is also a handle: **drag a
@@ -3387,6 +3388,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   changes; the others keep the width you gave them, so the whole layer area grows or
   shrinks to suit. Whatever lives in a group grows with it — widen the switches group and
   the value boxes under it widen to match, so a long number always has room.
+  The rows redraw as you drag, not when you let go, so you can see the names you are
+  making room for.
+  **The two columns of switches shed cells instead of stretching** (K-633). They are rows
+  of icons, so there is nothing in them to make wider — dragging one narrower puts its
+  least-used marks away instead, in a fixed order, and dragging it back brings them out
+  again. Switches drops the grid mark first, then shy, then the padlock, then solo; the
+  eye and the speaker are never taken away. Modes drops flow, then adjustment, then motion
+  blur, leaving fx, 3D and collapse. Those two seams snap to whole cells as you drag, so
+  you always land on a column of complete icons; every other seam snaps back to the width
+  it started life at when you come close to it, which is how you undo a widened name
+  column exactly.
   **Drag a layer by its name** to move it up or down the stack — drop it on another
   row and it takes that row's place, in one undo step. (Dragging its *bar*, over in the
   lane area, moves it in time instead.)
@@ -5317,6 +5329,28 @@ renderer's name, a footage item's interpretation settings, a layer's stretch
 percentage — is parked in an **`ae` namespace** on whichever object it belonged to.
 Lumit's own file format carries fields it does not understand through a save
 untouched, so that data survives indefinitely and a later version can pick it up.
+
+### An effect is measured against its layer, not the composition (K-636)
+
+Nearly every number an After Effects effect holds is a share of something rather than an
+absolute: Motion Tile's output width is "125%", a blur centre is a point somewhere in a
+frame. The question is always *125% of what*, and After Effects' answer is always the
+same: of the **layer** the effect is sitting on. An effect in After Effects never sees the
+composition at all — it is handed the layer's own picture and works inside it.
+
+The import used to answer that question with the composition's width and height, which is
+the same answer whenever the layer happens to be the composition's size — and layers
+usually are, so nothing looked wrong for a long time. Put a 2560 by 1088 precomp into a
+1920 by 816 composition, though, and the two answers come apart. Worse, an After Effects
+project file only writes down the controls somebody actually moved, so an effect left at
+its defaults arrives with *no* numbers at all and the import has to supply them; supplying
+the composition's meant an untouched Motion Tile imported with its tile cut from up and to
+the left of the middle of the layer. That is what "the tile is offset" turned out to be.
+
+So the import now swaps in the layer's own frame for as long as it is reading that layer's
+effects, and puts the composition's back afterwards. A layer with no source picture of its
+own — a text layer, a shape, a null — draws at the composition's size, so for those two
+answers are the same one and nothing about them moved.
 
 ### The list of After Effects effects is a file, not a program (K-623)
 
@@ -10593,13 +10627,18 @@ through it: one colour for pictures and mattes, one for numbers, one for colours
 shapes and points, one for sound. You can read a graph's plumbing without clicking
 anything — a wire will only plug into a socket of its own colour.
 
-**Two letters and two switches.** A box carries an **E** and a **B**. `E` is *expose*: an
-effect has dozens of parameters and drawing a socket for every one of them would make the
-canvas unreadable, so a box normally shows only the picture's own sockets and whatever is
-already wired. Pressing `E` opens it up and shows the lot; pressing it again folds it
-back. `B` is *bypass* — the same switch the effect's card in Effect controls has, and a
-bypassed box draws its outline as a dashed line so you can see at a glance which one is
-sitting the frame out. In the panel's own strip along the top are two switches. **Auto-wire**:
+**A tick, a twirl, and two switches.** A box's header reads exactly the way an effect's
+heading reads in the Effect controls panel: a tick, then a twirl, then the name. The tick
+is not a lookalike — it is that panel's own switch, and it does the same thing, which is
+to switch the effect off. A box switched off draws its outline as a dashed line, so you
+can see at a glance which one is sitting the frame out. The twirl opens the box up. An
+effect has dozens of parameters, and drawing a socket for every one of them would make
+the canvas unreadable, so a box normally shows only the picture's own sockets and
+whatever is already wired; twirl it open and every parameter gets a socket, twirl it shut
+and they fold away again. It is the same gesture as twirling an effect open to see its
+rows — the same mark, the same meaning, a different surface. (A driver has only a handful
+of sockets and shows them all, so it has a tick and no twirl.) In the panel's own strip
+along the top are two switches. **Auto-wire**:
 let a wire go over empty canvas, pick a driver from the list that appears, and the wire
 is joined to the new box for you. **Heal**: when you delete a box, the wires that were on
 it go with it. Turn Heal off and a box with wires still on it is left alone until you

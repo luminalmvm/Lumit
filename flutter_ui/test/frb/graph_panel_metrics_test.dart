@@ -14,10 +14,14 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
@@ -146,7 +150,7 @@ void main() {
       final p = withBlur();
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       expect(
@@ -172,40 +176,76 @@ void main() {
           reason: 'hollow: the card\'s own ground shows through');
     });
 
-    /// 5. **The badges are 14 across**, mono at 8, and the bypassed `B` is the
-    /// one place the error family appears on this canvas (15-DESIGN §12A.7).
-    testWidgets('the E and B badges are the drawing\'s marks', (tester) async {
+    /// 5. **The header wears the application's own grammar** (K-637): an
+    /// enable tick left of the name — the Effect controls heading's switch
+    /// face, the same widget at the same scale — and a twirl beside it that
+    /// opens the box up. No lettered badges: the canvas says what it means
+    /// with the marks the rest of the application already uses.
+    testWidgets('a node header is a tick, a twirl and a name', (tester) async {
       final p = withBlur();
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      expect(at(tester, 'graph-badge-E-$key').width, graphBadgeSize);
-      expect(at(tester, 'graph-badge-E-$key').height, graphBadgeSize);
+      // The tick IS the Effect controls switch: `fxEnableMark`'s checkbox,
+      // scaled by the same number the heading scales it by.
+      final tick = tester.widget<HouseCheckbox>(
+          find.byKey(ValueKey<String>('graph-enable-$key')));
+      expect(tick.value, isTrue, reason: 'a live box reads as switched on');
+      expect(
+          tester
+              .widget<Transform>(find
+                  .ancestor(
+                    of: find.byKey(ValueKey<String>('graph-enable-$key')),
+                    matching: find.byType(Transform),
+                  )
+                  .first)
+              .transform
+              .getMaxScaleOnAxis(),
+          closeTo(fxEnableMarkScale, 0.001));
 
-      TextStyle mark(String badge) => tester
-          .widget<Text>(find.descendant(
-            of: find.byKey(ValueKey<String>('graph-badge-$badge-$key')),
-            matching: find.byType(Text),
-          ))
-          .style!;
-      expect(mark('B').fontFamily, LumitTheme.monoFontFamily);
-      expect(mark('B').fontSize, 8, reason: 'the drawing\'s 8px badge letter');
-      expect(mark('B').color, theme.textMuted, reason: 'off, so muted');
+      // Each mark fills its own cell: the tick's is the scaled checkbox's
+      // size, the twirl's is the header's ordinary one.
+      expect(at(tester, 'graph-enable-$key').width,
+          closeTo(graphEnableSize, 0.01));
+      expect(at(tester, 'graph-enable-$key').height,
+          closeTo(graphEnableSize, 0.01));
+      expect(at(tester, 'graph-twirl-$key').width, graphBadgeSize);
+      expect(at(tester, 'graph-twirl-$key').height, graphBadgeSize);
 
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-B-$key')));
+      // Shut, the twirl points the way it will open and draws muted; open, it
+      // points down in the primary text colour.
+      glyph.LumitIcon twirl() => tester.widget<glyph.LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>('graph-twirl-$key')),
+            matching: find.byType(glyph.LumitIcon),
+          ));
+      expect(twirl().glyph, LumitIcons.expand);
+      expect(twirl().colour, theme.textMuted);
+      expect(twirl().size, graphTwirlSize);
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
-      expect(mark('B').color, theme.error,
-          reason: 'a bypassed box wears the error family, and only here');
+      expect(twirl().glyph, LumitIcons.collapse);
+      expect(twirl().colour, theme.textPrimary);
 
-      // The derived boxes cannot be bypassed or exposed, so they carry no
-      // badges at all.
-      expect(find.byKey(const ValueKey<String>('graph-badge-B-source')),
+      // Switching the tick off bypasses the box, which is what `B` did.
+      await tester.tap(find.byKey(ValueKey<String>('graph-enable-$key')));
+      await tester.pump();
+      expect(
+          tester
+              .widget<HouseCheckbox>(
+                  find.byKey(ValueKey<String>('graph-enable-$key')))
+              .value,
+          isFalse);
+
+      // The derived boxes can be neither bypassed nor opened, so they carry
+      // neither control. A driver draws every socket it has whatever its
+      // exposure says, so it carries a tick and no twirl.
+      expect(find.byKey(const ValueKey<String>('graph-enable-source')),
           findsNothing);
-      expect(find.byKey(const ValueKey<String>('graph-badge-E-out')),
-          findsNothing);
+      expect(
+          find.byKey(const ValueKey<String>('graph-twirl-out')), findsNothing);
     });
 
-    /// 5b. **A name runs the whole width the badges leave** (owner, desk
+    /// 5b. **A name runs the whole width the controls leave** (owner, desk
     /// test): they cut short with half the header standing empty beside them.
     /// The header was a `Flexible` name next to a `Spacer`, and a `Spacer` is
     /// an `Expanded` of flex 1 — so the two split the free space half each and
@@ -218,23 +258,24 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      // The Source box wears no badges, so its name has the header entire:
+      // The Source box wears no controls, so its name has the header entire:
       // the card less its 1px border either side and the header's 8 of inset.
       final card = at(tester, 'graph-node-source');
       final name = at(tester, 'graph-node-name-source');
       expect(name.width, card.width - 2 - 16,
           reason: 'the drawing\'s 152 card, less its border and its insets');
 
-      // And on a box that does wear them, the badges are still hard right —
-      // the name gets the remainder, not a share of it.
+      // And on a box that does wear them, they are hard left and the name gets
+      // the whole remainder — not a share of it.
       final key = effectKey(p.layer);
-      final badge = at(tester, 'graph-badge-B-$key');
       final effect = at(tester, 'graph-node-$key');
-      expect(badge.right, closeTo(effect.right - 1 - 8, 0.01),
-          reason: 'the last badge ends at the header\'s own inset');
-      expect(at(tester, 'graph-node-name-$key').left,
+      expect(at(tester, 'graph-enable-$key').left,
           closeTo(effect.left + 1 + 8, 0.01),
-          reason: 'and the name starts at the other one');
+          reason: 'the tick starts at the header\'s own inset');
+      final controls = graphEnableSize + graphBadgeSize + 2 * 2;
+      expect(at(tester, 'graph-node-name-$key').left,
+          closeTo(effect.left + 1 + 8 + controls, 0.01),
+          reason: 'and the name starts where the twirl ends');
     });
 
     /// 6. **A node's name is a kicker**, primary while the box is live and
@@ -256,7 +297,7 @@ void main() {
       expect(name(key).fontSize, theme.kicker.fontSize);
       expect(name(key).color, theme.textPrimary);
 
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-B-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-enable-$key')));
       await tester.pump();
       expect(name(key).color, theme.textMuted,
           reason: 'a bypassed box\'s name goes quiet, as the drawing draws it');

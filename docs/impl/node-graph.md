@@ -64,7 +64,7 @@ struct LayerGraph {
     nodes: Vec<EffectInstance>,        // drivers — same struct, Drivers registry (§1.3)
     edges: Vec<Edge>,                  // §1.4
     layout: Vec<(NodeRef, [f64; 2])>,  // canvas positions; missing entries auto-place
-    exposed: Vec<NodeRef>,             // the `E` badges (WP2; §1.4)
+    exposed: Vec<NodeRef>,             // the boxes twirled open (WP2; §1.4)
 }
 
 /// Names anything the canvas draws. Stack-derived nodes get stable synthetic refs.
@@ -195,12 +195,14 @@ cross-layer tap a node rather than a new kind of edge.
   `LayerInputDraw::ThisLayer`, which the draw builder has always meant by "a matte pointed
   at the layer the effect is on" — the effect's own input at its point in the chain. One
   branch in `mattes_for`, and nothing downstream learns a new shape.
-- **Exposure** (the `E` badge) grows a node to show one hollow, type-coloured socket per
-  parameter. It is presentation state per node, not wiring; a wired socket is shown
-  regardless. **Built, 2026-08-24** as `LayerGraph::exposed`, a `Vec<NodeRef>` beside
-  `layout` rather than the bool on the instance this line first named — see WP2.
-- **Bypass** (`B`) is the existing `enabled` flag; a bypassed node draws its border dashed
-  (both drawings).
+- **Exposure** (the header twirl; the `E` badge until K-637) grows a node to show one
+  hollow, type-coloured socket per parameter. It is presentation state per node, not
+  wiring; a wired socket is shown regardless. **Built, 2026-08-24** as
+  `LayerGraph::exposed`, a `Vec<NodeRef>` beside `layout` rather than the bool on the
+  instance this line first named — see WP2.
+- **Bypass** is the existing `enabled` flag, answered by the enable tick left of the
+  node's name (the `B` badge until K-637); a bypassed node draws its border dashed (both
+  drawings).
 
 ### 1.5 Validation
 
@@ -303,7 +305,7 @@ One new op, shaped like the one it mirrors:
   add. Heal on an *effect* delete is `SetLayerEffects` (the list heals by construction);
   heal on a *driver* delete is dropping its edges in the same `SetLayerGraph`.
 - **`SetLayerEffects` prunes the graph** (built 2026-08-24). The image chain heals by
-  construction, but the *wires* do not: an edge, a canvas position or an `E` badge naming
+  construction, but the *wires* do not: an edge, a canvas position or an exposure naming
   a removed effect would be left dangling, and the next `SetLayerGraph` of any kind — a
   box dragged, a wire drawn — would be refused for it. `LayerGraph::prune_to` drops them
   inside the same apply, and the op's inverse becomes an `Op::Batch` of
@@ -350,8 +352,8 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   `render_frame_with_preview`. It substitutes `Layer::graph.nodes` on the worker's
   throwaway clone exactly as the stack call substitutes `Layer::effects`, so a driven
   parameter moves under the pointer instead of only on release. The nodes only: a drag on
-  a number changes no wire, position or badge, and staging them would invent a state the
-  document cannot be in.
+  a number changes no wire, position or exposure, and staging them would invent a state
+  the document cannot be in.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
 - **K-005 gate**: every label the engine can send gets its `engine_labels.dart` entry and

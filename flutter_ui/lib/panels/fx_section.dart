@@ -134,6 +134,25 @@ class FxEnablePaint {
   const FxEnablePaint(this.to);
 }
 
+/// **The enable switch's face**, on its own: K-450's checkbox at
+/// [fxEnableMarkScale] and nothing around it.
+///
+/// Shared because a second surface wears the same control. A node card in the
+/// Graph panel carries an enable tick left of its name, and it is *this* tick —
+/// the same mark at the same size, answering the same bypass — rather than a
+/// lookalike drawn again on a canvas. The hit target and the paint-drag differ
+/// between the two (a stack of headings has neighbours to paint; a canvas of
+/// boxes does not), so only the face is shared.
+Widget fxEnableMark({
+  Key? key,
+  required bool on,
+  required ValueChanged<bool> onChanged,
+}) =>
+    Transform.scale(
+      scale: fxEnableMarkScale,
+      child: HouseCheckbox(key: key, value: on, onChanged: onChanged),
+    );
+
 /// One effect's enable switch, with the drag that paints its neighbours
 /// (item 6.2, owner's desk test for the hit area).
 ///
@@ -169,13 +188,10 @@ Widget fxEnableSwitch({
             width: fxEnableHitWidth,
             height: fxEnableHitHeight,
             child: Center(
-              child: Transform.scale(
-                scale: fxEnableMarkScale,
-                child: HouseCheckbox(
-                  key: ValueKey<String>('fx-enabled-$id'),
-                  value: on,
-                  onChanged: onChanged,
-                ),
+              child: fxEnableMark(
+                key: ValueKey<String>('fx-enabled-$id'),
+                on: on,
+                onChanged: onChanged,
               ),
             ),
           ),

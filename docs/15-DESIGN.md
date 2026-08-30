@@ -1191,6 +1191,12 @@ carries. The rules worth writing down:
   count truncate**: the `n missing ·` half was fixed-width, which overflowed a
   narrow bar rather than shortening.
 - **The search well is an inset well** (§2.1), the row's full width, at the standard 20.
+- **The colour swatch filter lives inside that well, at its left** (K-634) — six 6px dots
+  3px apart, in the leading-mark slot a search glyph would take, with the well's own 6px
+  inset standing the first dot off the edge. One control that narrows the list rather than
+  two side by side, and it is the one leading mark in the app that answers the pointer,
+  because it is a control rather than a sign saying what the field is for. The held chip
+  is marked by a ring, never by growing, so the row keeps its resting width (§12A.5).
 - **The bottom bar carries the new-item controls at the left** — icon plus a 0.08em kicker
   word — **and a factual count at the right** (`1 missing · 10 items`) in mono at 0.06em,
   sentence case, never capitals: it is a statement, not a container label. The item total
@@ -1324,7 +1330,14 @@ layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on ho
 disables every control in Picture, an image sequence every control in Metadata, and neither
 carries a line under the rows saying the section does nothing. The disabled face is the
 sentence; a sentence beside it was one more thing to read and left live controls sitting
-next to a note that said they did not matter.
+next to a note that said they did not matter. **The section itself states it** (K-635): the
+group's notched name goes to `text_disabled` beside its rows' labels, the box stops
+answering pointers entirely rather than relying on each control having remembered to, and
+the factual readings under the rows go with the section — Colour's note about a space this
+build cannot transform to is about a file with no colour in it at all, and the crop's
+reading counts a frame nobody is writing. Deaf, not faded (§5): everything stays drawn and
+legible, because being off is not being gone. A sound file therefore darkens **Picture and
+Colour**, an image sequence **Audio and Metadata**.
 
 **The Time section's two overrides say exactly what they do, and one of them has two
 answers rather than three** (K-502). *Motion blur* offers **Current settings**, **On for checked
@@ -1561,8 +1574,15 @@ carries the model and the work packages. Binding rules beyond the drawings thems
   strip along the canvas's bottom edge. Colour is the legend; no other colour coding
   appears on the canvas.
 - A **filled socket is wired, a hollow one is not**; a dragged wire is dashed. A
-  **bypassed node draws its border dashed** (and its `B` badge is the one place `error`'s
-  family appears on the canvas); the **selected node's border is `animated`** (K-473).
+  **bypassed node draws its border dashed** and its name goes muted; the **selected
+  node's border is `animated`** (K-473).
+- A **node header is an enable tick, a twirl and the name**, in that order and left to
+  right (K-637) — the Effect controls heading's own grammar, on a card. The tick is
+  literally that heading's switch (`fxEnableMark`, K-450's checkbox at the heading's
+  scale) and bypasses the node; the twirl opens the node up to show a socket per
+  parameter, which is what an Effect controls twirl does to the rows under it. There are
+  **no lettered badges** on the canvas: the drawing's `E` and `B` said in two letters
+  what the application already says in two marks.
 - The canvas ground is `surface_0` under a dot grid one step lighter, whose dots stay
   20–40px apart **on screen** at every zoom: the grid skips every other line each time
   the zoom would crowd them closer than the 20px they are drawn at, so it thins as the

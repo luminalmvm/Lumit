@@ -19591,3 +19591,209 @@ Tests: `viewer_picture_filter_test` (below 1:1 is filtered whatever the smoothin
 says; at and above it the pixels stay square unless the setting asks otherwise; the three
 scales multiply, so half at 80% and quarter at 30% are magnification while quarter at 20% is
 not; a hi-DPI screen at 80% is 1.2 pixels a texel; a nonsense tier counts as full).
+
+
+## K-632 — Fx leads the Modes column and collapse has a cell of its own
+
+**Status:** DECIDED — 2026-08-30
+
+The Modes column shipped as flow-or-collapse · fx · motion blur · 3D · adjustment, with the
+first cell showing one switch or the other depending on the layer's kind (K-168's
+flow-or-collapse slot, kept by K-188 and inherited through K-483/K-484's shuffling of the
+fifth cell). Two things were wrong with that. The switch a reader is looking for was second
+rather than first — fx bypass is the one mode toggle that gets used on every layer in a
+comp — and a cell whose *meaning* changes by row is a cell that has to be read twice: the
+same square is a frame-interpolation policy on footage and a rasterisation rule on a
+Precomp, and on a Precomp made from retimed footage there was nowhere to say both.
+
+**The column is now six cells: fx · motion blur · 3D · adjustment · flow · collapse**
+(owner's ruling). Fx leads. Collapse leaves the shared slot for a column of its own after
+3D, and flow stands immediately left of it — the two kind-gated cells together at the end,
+where a row that can use neither reads as plainly empty rather than as a hole in the middle
+of the switches. Motion blur, 3D and adjustment keep the places they had between them,
+because nothing about them was being complained of.
+
+Each of the three kind-gated cells is blank where it does nothing — flow off footage,
+collapse off a Precomp, adjustment on the four kinds with no picture to set aside — and
+every cell keeps its width either way, so the Modes span is the same on every row and the
+pickers after it stay in one column. `renderGroupWidth` is `6 × switchCellWidth`, and the
+fold-out's value cells widen with it as they always have.
+
+docs/07 §4.2 is trued in the same commit.
+
+Tests: `timeline_panel_frb_test` (the row's cells run left to right in the L6 order; a
+Precomp draws collapse and footage draws flow, each in its own cell rather than in one
+shared one).
+
+## K-633 — The switch columns drag, and give their cells up in a named order
+
+**Status:** DECIDED — 2026-08-30
+
+K-448 pinned the Switches column at its minimum width, and the owner added Modes to the pin
+in 2026-08-24: a column of icons that never stretches buys nothing but blank space by being
+widened, so its seam was not a handle at all. **That pin is deliberately moved** (owner,
+T4). What a drag on one of these seams buys is not width — it is *cells*.
+
+**Narrowing hides them in a named order.** Switches gives up the grid mark first, then shy,
+then lock, then solo; visibility and audio are never in the ladder, because a column that
+cannot blind or silence a layer is not worth keeping the others for. Modes gives up flow,
+then adjustment, then motion blur, leaving fx, 3D and collapse. Widening brings them back in
+the reverse order and stops at the full set: `maxGroupWidth` is the column's own cells, so
+it can still never hold air.
+
+**Seams snap.** A switch column settles on whole cells — half an icon column is not a column
+— and every other column settles on the width it shipped at when the drag comes within
+`snapGrab` (6) of it, so a widened Layers column can be put back exactly.
+
+**And the outline follows the hand.** The seam drag was staged and committed on release
+because a live one called `setState` on the whole Timeline per pointer move — sixty rebuilds
+a second of every lane, bar and waveform for one hairline. It is live now, and it is cheap,
+because nothing right of the outline depends on a column width: the width in flight is
+published on a `ValueNotifier` that only the outline half listens to. The rows redraw under
+the drag, which is what makes the hide ladders legible — the cells going away are the whole
+of what the gesture does.
+
+Tests: `timeline_alignment_test` (the ladders, in order, on a real dragged seam; the rows
+redraw mid-drag rather than on release), `timeline_panel_frb_test` (the pure ladder and
+snapping maths).
+
+## K-634 — The swatch filter sits inside the search well, and narrows on the colour a row wears
+
+**Status: DECIDED (2026-08-30).** The Project panel's colour filter moves *into* the search
+well, at its left, in the leading-mark slot a search glyph would take. It is the same six
+6px dots 3px apart it always was — five palette colours and the neutral one that clears the
+filter — so nothing about the way it is drawn or used is new; what changes is that the
+search row now carries one control instead of two side by side, and the well is the row's
+full width again (344 in the 360 artboard, where it was 279 beside a 59-wide strip). The
+strip's own 4px standoff goes with the move: the well's 6px inset stands the first dot off
+the edge, and `HouseTextField` already puts 5 between a leading mark and the text. This is
+the one leading mark in the app that answers the pointer — `leadingInteractive` on
+`HouseTextField`, off everywhere else, because a mark that only says what a field is for
+must not swallow a click meant for the text behind it.
+
+**And it narrows on the colour a row is *wearing*, not on the `u8` it stores** — which
+supersedes K-567's parenthesis saying the chip filter still reads an item's own tag. K-567
+made a folder's colour a claim about everything filed under it, and the panel has tinted
+descendants' glyphs that way ever since; a filter that then hid those same rows when their
+colour was picked was reading a fact the screen had already stopped showing. So the filter
+matches an item's own tag where it has one and the nearest tagged ancestor's where it has
+not — exactly the effective colour the walk already carries down to draw the glyph, so no
+second traversal and no engine change. Nothing about the store moves: a label is still the
+`u8` it was, `0` still means inherit, and a folder's tag is still all that is written.
+
+A held colour also **opens the folders it has to look inside**, the way a search term
+already did: what wears a folder's colour is what is inside it, so a shut folder would hide
+precisely what was asked for.
+
+Tests: `project_panel_frb_test` (a colour finds an inherited row and not an untagged one;
+the swatch and a search term narrow together and clear independently; a held colour opens a
+shut folder), `project_panel_metrics_test` (the six 6px dots, now inside the well and clear
+of both its edges; the well at the row's full 344 with the strip 7 in from its left edge).
+
+## K-637 — A node card's header is an enable tick, a twirl and a name
+
+**Status:** DECIDED — 2026-08-30
+
+The approved NodeGraph drawing gave every box two lettered badges in its header: `E` for
+expose, which grew the box until every parameter had a socket, and `B` for bypass, which
+switched the effect off. Both were drawn as small outlined squares with a mono capital in
+them — a grammar that exists nowhere else in Lumit, and one a person has to be told how to
+read. Meanwhile the application already owns two marks for exactly these two ideas, and
+uses them a few pixels away: an Effect controls heading is an **enable switch, a twirl and
+a name**, in that order (K-443).
+
+**The node header is now that heading.** The enable tick sits left of the box's name and
+is literally the panel's own switch — `fxEnableMark`, K-450's checkbox at the heading's
+own scale, shared code rather than a lookalike redrawn on a canvas — and it answers the
+`enabled` flag, which is what `B` answered. The twirl sits beside it and opens the box up,
+which is what `E` did: shut, the box draws the picture's own sockets and whatever is
+already wired; open, it draws a socket per parameter. `LayerGraph::exposed` is untouched —
+this is a change of mark, not of model, and every op, undo step and multi-selection rule
+behaves exactly as it did.
+
+Only the face is shared, not the whole control. The Effect controls switch carries a
+paint-drag that sets the run of switches a pointer crosses, and a hit target the width of
+the stopwatch column; a canvas of scattered boxes has no run to paint and no column, and
+the canvas reads its own pointers, so the node card wraps the mark in its own cell and its
+own press-claim (K-452). A **driver** gets the tick and no twirl: it draws every socket it
+has whatever its exposure says, so a twirl there would be a control that answers nothing.
+
+**Why the drawing loses this one.** The mockup is authoritative about what a surface
+*has*, and the node card still has both controls; what it does not get to do is invent a
+second vocabulary for a switch and a twirl the application had already settled. This is
+also the first place the node graph stops being a study of the reference editor's canvas
+and starts being Lumit's — the header is the part a person reads first.
+
+Tests: `graph_panel_metrics_test` (the header is a tick, a twirl and a name; the tick is
+`fxEnableMark` at `fxEnableMarkScale` and reads the box's enabled flag; the twirl is the
+house twirl glyph, muted and pointing the way it will open, primary and pointing down once
+it is; each mark fills its own cell and the name takes every pixel they leave; the derived
+boxes carry neither), `graph_panel_frb_test` (the tick bypasses an effect and a driver
+alike and a driver carries no twirl; the twirl exposes, one gesture one undo step; both
+act on the whole pick), `effect_controls_frb_test` (the shared face still switches an
+effect from its own heading).
+
+## K-635 — A dead section says so in its own name, and its readings go with it
+
+**Status: DECIDED (2026-08-30).** K-618 disabled every *control* in a section the chosen
+output cannot use. It left the section's own furniture alive: the notched group name and the
+row labels still read at full weight, and the factual lines under the rows still spoke. The
+capability table now reaches the section itself.
+
+**What a dead section looks like.** Its name and its row labels are `text_disabled`; the box
+takes no pointer at all; the readings under its rows are not drawn. Nothing is faded and
+nothing is removed — deaf, not faded, the same idiom a driven parameter row wears
+(15-DESIGN §5). Being off is not being gone: the numbers stay legible, so you can still read
+what the crop or the sample rate would be if you changed the format back.
+
+**Which sections.** An **audio-only** output darkens **Picture** and **Colour** — a sound
+file has no frame to size, crop or resample and no colour to state. An **image sequence**
+darkens **Audio** and **Metadata** — a folder of stills is mute and has no container to keep
+metadata in. Nothing else changes: Time and the composition rows apply to every output,
+because every export has a span and a rate.
+
+**And two more lines are gone**, for K-618's reason rather than a new one. *"An export asking
+for a space this build cannot transform to is refused rather than written wrongly"* is a
+sentence about a file that has no colour in it; the crop's *"Final … × …"* reading counts a
+frame nobody is writing. Both are drawn only while their section is live.
+
+**Why the box stops answering pointers, given every control is already disabled.** Because
+"every control is already disabled" is an audit, and an audit rots — the next row added to
+Picture would be live in a sound file until somebody noticed. One `IgnorePointer` on the
+group makes the guarantee structural, and the per-control disabling stays because it is what
+draws the disabled *face*. The two are belt and braces on purpose.
+
+**Verified by** `shell_frb_test` — *a section the output cannot use goes dead entire*: an mp4
+leaves all four groups live, an image sequence deafens Audio and Metadata, an audio-only
+output deafens Picture and Colour and drops the Colour note.
+
+
+## K-636 — An imported effect is measured against its layer, not against the composition
+
+**Status: DECIDED (2026-08-30).** Corrects the importer's reading of every effect parameter
+that converts through a frame; amends [11-AE-IMPORT.md](11-AE-IMPORT.md) §5's Motion Tile,
+Card Wipe and Vegas rows. K-558's px@comp sizes and K-613's centred output window both
+stand — this is about *which* frame the per cents are per cents of.
+
+**What was wrong.** After Effects runs an effect **on the layer**, so a Motion Tile output
+width of 125 % is 125 % of the layer's own raster and its Tile Center is a point in that
+raster. The importer converted every such number against the **composition's** width and
+height, and — worse — built each effect instance's untouched defaults from the composition
+too, because an `.aep` only records the controls that were moved. The two agree exactly as
+long as a layer is the comp's size, which is nearly always, so this went unseen. Put a
+2560 × 1088 precomp in a 1920 × 816 comp, as the owner's project does, and a Motion Tile
+whose every control was left alone imported with its tile centre at (960, 408) instead of
+(1280, 544) and its tile 1920 × 816 instead of 2560 × 1088: the rectangle was cut from up
+and to the left of the middle, and the output window with it. That is the offset that was
+reported, and re-converting the project could not have fixed it.
+
+**The rule now.** For the length of a layer's effect stack, the frame the conversions read
+is the **layer's own source raster** — a precomp's comp dimensions, a solid's, a piece of
+footage's. A layer that has no source of its own — text, a shape, a null, a camera — draws
+at the composition's size, which is what the frame falls back to, so nothing about those
+layers moves. `Conv::size` is the one place it is read from and `map_layer` is the one place
+it is set, so every effect in the table follows without an edit of its own.
+
+Regression test: `a_motion_tile_is_measured_against_its_own_layer_not_the_composition`
+(`lumit-import`) — a 2560 × 1088 precomp in a 1920 × 816 comp whose Motion Tile carries only
+Output Width, asserting the centre, both tile sizes and both output sizes are the layer's.

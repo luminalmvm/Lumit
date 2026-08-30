@@ -104,8 +104,8 @@ void main() {
       expect(socket('out', 'audio'), findsOneWidget);
     });
 
-    /// The `E` badge grows the box to every parameter socket. Until it is on,
-    /// a number socket nobody has wired is not drawn at all.
+    /// The header twirl grows the box to every parameter socket. Until it is
+    /// open, a number socket nobody has wired is not drawn at all.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
       final p = withBlur();
@@ -113,7 +113,7 @@ void main() {
       final key = effectKey(p.layer);
 
       expect(socket(key, 'radius'), findsNothing);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       expect(socket(key, 'radius'), findsOneWidget);
@@ -132,7 +132,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
@@ -165,7 +165,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       var from = tester.getCenter(socket('driver:$wiggle', 'value'));
@@ -196,7 +196,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       final out = tester.getCenter(socket('driver:$wiggle', 'value'));
@@ -222,7 +222,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       var out = tester.getCenter(socket('driver:$wiggle', 'value'));
@@ -253,7 +253,7 @@ void main() {
       final cycle = seedDriver(p.layer, 'colour_cycle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       final from = tester.getCenter(socket('driver:$cycle', 'colour'));
@@ -289,7 +289,8 @@ void main() {
     /// focus tree and swallows the key: the picked box was never asked about,
     /// and the layer under it went instead. The panel claims Delete now
     /// (K-234's mechanism) and the shell stands down when the claim says yes.
-    testWidgets('a picked box claims Delete rather than leaving it to the shell',
+    testWidgets(
+        'a picked box claims Delete rather than leaving it to the shell',
         (tester) async {
       final p = withBlur();
       await mount(tester, p);
@@ -302,15 +303,16 @@ void main() {
               'shell goes on to the selected layer as it always did');
 
       final key = effectKey(p.layer);
-      await tester
-          .tapAt(tester.getCenter(find.byKey(ValueKey<String>('graph-node-$key'))));
+      await tester.tapAt(
+          tester.getCenter(find.byKey(ValueKey<String>('graph-node-$key'))));
       await tester.pump();
 
       expect(p.uiState.deleteClaim!(), isTrue,
           reason: 'a picked box is what Delete is about here');
       await tester.pump();
-      expect(p.layer.getEffects(), isEmpty, reason: 'and the box is the thing '
-          'that went — not the layer it was drawn for');
+      expect(p.layer.getEffects(), isEmpty,
+          reason: 'and the box is the thing '
+              'that went — not the layer it was drawn for');
     });
 
     testWidgets('deleting a wired driver takes its wire with it, in one step',
@@ -319,7 +321,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
       final to = tester.getCenter(socket(key, 'radius'));
@@ -353,7 +355,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
       final to = tester.getCenter(socket(key, 'radius'));
@@ -476,7 +478,7 @@ void main() {
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
       final from = tester.getCenter(socket('driver:$wiggle', 'value'));
       await tester.dragFrom(
@@ -572,21 +574,28 @@ void main() {
 
     /// Bypass is the existing `enabled` flag on both kinds of box; the border
     /// is dashed either way, and the op is the one that kind already had.
-    testWidgets('the B badge bypasses an effect and a driver alike',
+    testWidgets('the enable tick bypasses an effect and a driver alike',
         (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-B-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-enable-$key')));
       await tester.pump();
       expect(p.layer.getEffects().single.enabled(), isFalse);
 
       await tester
-          .tap(find.byKey(ValueKey<String>('graph-badge-B-driver:$wiggle')));
+          .tap(find.byKey(ValueKey<String>('graph-enable-driver:$wiggle')));
       await tester.pump();
       expect(p.layer.getGraphDrivers().single.enabled(), isFalse);
+
+      // A driver draws every socket it has whatever its exposure says, so it
+      // carries the tick and no twirl — a control that answered nothing would
+      // be worse than none.
+      expect(find.byKey(ValueKey<String>('graph-twirl-$key')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('graph-twirl-driver:$wiggle')),
+          findsNothing);
     });
 
     // --- The points wire (K-492, K-494, points-stream.md §4.3) -------------
@@ -622,7 +631,7 @@ void main() {
 
     /// **A wire-only socket is always drawn** — there is no row anywhere else
     /// to reach it from, which is what separates it from a parameter socket
-    /// the `E` badge folds away.
+    /// the twirl folds away.
     testWidgets('the Points sockets are drawn without exposing anything',
         (tester) async {
       final p = withPoints();
@@ -636,7 +645,7 @@ void main() {
       expect(socket('driver:${p.sample}', 'count'), findsOneWidget);
       expect(socket('driver:${p.sample}', 'nearest_distance'), findsOneWidget);
       expect(socket(particulateKey(p.layer), 'emit_rate'), findsNothing,
-          reason: 'a parameter socket still waits for the E badge');
+          reason: 'a parameter socket still waits for the twirl');
     });
 
     testWidgets('Particulate\'s Points output wires into the driver, once',
@@ -708,7 +717,7 @@ void main() {
       await tester.pump();
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
 
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
       final back = tester.getCenter(socket('driver:${p.sample}', 'count'));
       final onto = tester.getCenter(socket(key, 'emit_rate'));
@@ -772,7 +781,7 @@ void main() {
       final spare = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       final out = tester.getCenter(socket('driver:$first', 'value'));
@@ -824,13 +833,14 @@ void main() {
 
     /// A box that already carries wires is only being moved: dropping it on a
     /// wire would leave the question of what became of its own.
-    testWidgets('a wired box dragged over a wire is only moved', (tester) async {
+    testWidgets('a wired box dragged over a wire is only moved',
+        (tester) async {
       final p = withBlur();
       final first = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       final other = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
       await mount(tester, p);
       final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
       var out = tester.getCenter(socket('driver:$first', 'value'));
@@ -1063,7 +1073,7 @@ void main() {
           reason: 'one gesture, one undo step');
     });
 
-    testWidgets('the B badge bypasses every picked box', (tester) async {
+    testWidgets('the enable tick bypasses every picked box', (tester) async {
       final p = withTwoEffects();
       await mount(tester, p);
       final ids = stackIds(p.layer);
@@ -1071,7 +1081,7 @@ void main() {
       await clickBox(tester, boxOf(p.layer, 0));
       await clickBox(tester, boxOf(p.layer, 1),
           held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-B-effect:'
+      await tester.tap(find.byKey(ValueKey<String>('graph-enable-effect:'
           '${ids[0]}')));
       await tester.pump();
 
@@ -1079,7 +1089,7 @@ void main() {
           [false, false]);
     });
 
-    testWidgets('the E badge exposes every picked box', (tester) async {
+    testWidgets('the twirl exposes every picked box', (tester) async {
       final p = withTwoEffects();
       await mount(tester, p);
       final ids = stackIds(p.layer);
@@ -1087,7 +1097,7 @@ void main() {
       await clickBox(tester, boxOf(p.layer, 0));
       await clickBox(tester, boxOf(p.layer, 1),
           held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-effect:'
+      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-effect:'
           '${ids[0]}')));
       await tester.pump();
 
