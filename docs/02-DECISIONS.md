@@ -21041,3 +21041,46 @@ the arithmetic pins that a rasteriser change could have moved — `icon_crispnes
 
 Regression tests: none — this decision removes code rather than adding it, and its check is
 the probe run recorded above, re-run per Flutter upgrade (the note's §7.2).
+
+## K-678 — A scroll builds the rows it brings in: the Timeline's blocks are keyed and reused
+
+**Status: DECIDED (2026-08-30).** WP-3 of K-676's note (docs/impl/ui-performance.md §4.3).
+K-638's `LazyBlocks` bounded the Timeline's cost to the rows on screen, which is why a
+2,000-layer precomp costs what 57 do. What it did not bound was what a *slide* costs: a
+wheel notch moved the window by a row and the stack handed its `Column` a freshly built
+widget for every block in it, so showing one new row rebuilt three screenfuls — an 80 ms
+build frame at the owner's maximised window, and no good frame in either half.
+
+Two mechanical changes inside `_LazyBlocksState`, no API change and no new widget:
+
+- **Each block is keyed by its index.** A `Column`'s children are matched to their
+  elements *by key* once the list slides; unkeyed, every block landed on the element that
+  held its neighbour — a different layer, often a different shape — and was re-inflated
+  rather than updated.
+- **The built block is cached per index** for as long as the same builder closure and the
+  same heights list are in hand. A slide then hands back the *same widget instance* for
+  every block that has not changed, and `Element.updateChild` skips its rebuild and its
+  layout. Any panel rebuild arrives with a new closure and drops the cache whole, so a
+  cached row can never be stale about selection, theme or zoom; blocks the window has
+  left behind are dropped on the next build, so a long sweep holds three screenfuls of
+  widgets rather than the comp's.
+
+**Measured** (the parked probe, the owner's conditions per the note's §2.1 — maximised
+2560×1369, live preview, the *Set me Free* Clips comp), lane wheel-scroll:
+
+| | build med | build p90 | build max | raster med | span med | fps |
+|---|---|---|---|---|---|---|
+| Before | 3.00 | **80.18** | 100.68 | 42.48 | 81.65 | 8.2 |
+| Keys only, reuse defeated | 2.40 | 24.51 | 30.32 | 32.57 | 62.03 | 9.9 |
+| After | 2.62 | **5.96** | 11.81 | 34.75 | 62.85 | 9.5 |
+
+The outline half moves with it (p90 77.32 → 6.46). **The build gate is met** — p90 5.96
+against the note's 8.3 ms — and the raster, span and fps rows are not, at ~33 ms of
+window-sized raster a frame: that is K-677's floor, which Graph mode's single `CustomPaint`
+pays in the same window for the same gestures, and it is the note's §7.2, not this
+package's.
+
+Regression test: `rebuild_budget_test.dart`, "a scroll builds the rows it brings in, not
+the whole window" — 200 layers in a 300px panel, the window slid two rows: **3 rows and 3
+bars rebuilt, against 28 and 28 with the reuse defeated**, with the honest half asserting
+that the rows entering the window were built at all.

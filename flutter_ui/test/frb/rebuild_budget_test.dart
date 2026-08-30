@@ -731,5 +731,82 @@ void main() {
           reason: 'no row redrew, so nothing on screen changed:\n'
               '${rebuilds.ranking()}');
     });
+
+    /// The **incremental scroll** rule (K-678, docs/impl/ui-performance.md
+    /// §4.3): a wheel notch that slides the window by a row or two builds the
+    /// rows it brings in, and leaves the rest of the window alone.
+    ///
+    /// The select-all test above pins the window's *size*; this pins what a
+    /// slide inside it costs. Measured before the fix: every block in the
+    /// window rebuilt on each slide frame — 28 rows and 28 bars here, ~57 of
+    /// each at the owner's maximised window, a ~75 ms build frame and 8.6 fps.
+    testWidgets('a scroll builds the rows it brings in, not the whole window',
+        (tester) async {
+      const layers = 200;
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      for (var i = 0; i < layers; i++) {
+        comp.addSolidLayer();
+      }
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+
+      const size = Size(1600, 300);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+        child: const TimelinePanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final vertical = tester
+          .stateList<ScrollableState>(find.byType(Scrollable))
+          .map((s) => s.position)
+          .where((s) => s.axis == Axis.vertical && s.maxScrollExtent > 0)
+          .toList();
+      expect(vertical, isNotEmpty, reason: 'the stack has somewhere to scroll');
+
+      // Into the middle of the stack first. At the very top the window is
+      // pinned against the start of the content, so a short scroll slides
+      // nothing and the count below would be met by a panel that had simply
+      // not moved.
+      vertical.first.jumpTo(1000);
+      await tester.pump(const Duration(milliseconds: 16));
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      // A wheel notch's worth: a couple of rows.
+      vertical.first.jumpTo(1050);
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+
+      // ignore: avoid_print
+      print('SCROLL SLIDE REBUILDS ${rebuilds.total} over '
+          '${rebuilds.byName['OutlineRow'] ?? 0} rows and '
+          '${rebuilds.byName['Bar'] ?? 0} bars\n${rebuilds.ranking()}');
+      // **This is the assertion.** Two rows enter each half; the cap is roughly
+      // 2x that, in the house style. What must never come back is a count that
+      // tracks the *window* — every block rebuilt to show one new row.
+      for (final name in ['OutlineRow', 'Bar']) {
+        expect(
+          rebuilds.byName[name] ?? 0,
+          lessThan(8),
+          reason: 'a scroll slide rebuilt the whole window of $name, not the '
+              'blocks entering it:\n${rebuilds.ranking()}',
+        );
+      }
+      // And the honest half: the rows the slide brought in were built, so the
+      // budget is not met by a stack that has stopped following the scroll.
+      expect(rebuilds.byName['OutlineRow'] ?? 0, greaterThan(0),
+          reason: 'nothing was built, so no row entered the window:\n'
+              '${rebuilds.ranking()}');
+    });
   }, skip: !engineAvailable);
 }

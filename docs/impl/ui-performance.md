@@ -360,7 +360,12 @@ change:
   hands in a new builder closure and drops the cache — which is what keeps a cached
   row honest about selection, theme and zoom). An unchanged child is then `identical`
   on the next build, and Flutter skips its rebuild *and* its layout: a window slide
-  builds the entering blocks and the two blanks, nothing else.
+  builds the entering blocks and the two blanks, nothing else. **The cached block is
+  also keyed by its index**, which turns out to be half the saving on its own: a
+  `Column`'s children are matched to their elements *by key* once the list slides, and
+  unkeyed blocks each land on the element that held their neighbour — a different
+  layer, often a different shape — so the framework re-inflates rather than updates,
+  cache or no cache.
 - **A `RepaintBoundary` per block** (keyed by layer id) inside the band's boundary, so
   the raster thread records the entering block alone and scrolling inside the window
   is a pure layer translate.
@@ -379,9 +384,17 @@ the band's single boundary re-recording fifty-seven rows to move the light on tw
 through, so one line covers rows and bars. The flight worry above was then measured
 rather than argued: with the layers in, zoom-fly raster **fell** 33.0 → 28.5 ms and
 the playhead sweep 47.7 → 27.7 — less picture to re-record, not more — so no
-flight-time disabling is needed. What WP-3 still owns here is the first bullet, the
-widget identity across window slides, and the scroll gate itself (slide builds are
-still ~59 ms p90).
+flight-time disabling is needed.
+
+**The first bullet landed with WP-3** (K-678, 2026-08-30) and the two halves of it
+separate cleanly in the probe. Keying the blocks by index alone took the lane slide's
+build p90 from **80.2 ms to 24.5**; reusing the widget instance on top of it took it to
+**6.0 ms** (med 2.6, max 11.8) — inside the 8.3 ms budget, from thirteen times over it.
+The band now re-records the rows that entered rather than the window, so raster med fell
+with it, 42.5 → 32.6–34.8 across the two post-change runs. What the package does **not**
+reach is the frame rate: 9.5 fps against the gate's 60, because ~33 ms of the ~63 ms span
+is the window-sized raster floor WP-1 measured and could not move (§4.1, §7.2). The
+UI-thread half of §3.2 is answered; the rest of that gesture's cost is the backend's.
 
 ### 4.4 Selection is listenable row state, never a panel `setState`
 
@@ -521,10 +534,19 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    boundary (§4.3, brought forward). The last two were invisible to the widget
    counters — 600–950 rebuilds a click, of which the rows and bars are 4 — and
    turned up only by timing each builder in the running app.
-3. **WP-3 — Scroll is incremental.** §4.3, both halves. *Gate (probe):* wheel-scroll
-   the Clips comp — build p90 **< 8.3 ms** (slide frames were ~70–75 ms), raster med
-   **< 8 ms** on the pinned backend, span p90 **< 16.6 ms**, ≥ 60 fps effective.
-   *Gate (CI):* a window slide builds only entering blocks; K-649's
+3. **WP-3 — Scroll is incremental. Landed 2026-08-30 (K-678); its UI-thread gate is
+   met and its raster gate is WP-1's, still unmet.** §4.3, both halves. *Gate (probe):*
+   wheel-scroll the Clips comp — build p90 **< 8.3 ms** (slide frames were ~70–75 ms),
+   raster med **< 8 ms** on the pinned backend, span p90 **< 16.6 ms**, ≥ 60 fps
+   effective. **Measured after:** lane slide build p90 **5.96 ms** (med 2.62, max
+   11.81), from 80.18 (med 3.00, max 100.68); the outline half 6.46 from 77.32; raster
+   med 34.75 from 42.48, span med 62.85 from 81.65, 9.5 fps from 8.2. The build gate is
+   met with room; the raster, span and fps rows are the ~33 ms window floor of §4.1 —
+   the backend pin the gate's wording assumed does not exist (K-677), and Graph mode's
+   single painter rasters the same in the same window. Nothing widget-side reaches
+   them; they travel to §7.2. *Gate (CI):* a window slide builds only entering blocks
+   — `rebuild_budget_test`'s "a scroll builds the rows it brings in, not the whole
+   window": 3 rows and 3 bars on a slide of two rows, from 28 and 28. K-649's
    playhead-repaints-alone test keeps holding.
 4. **WP-4 — Continuous gestures make zero per-frame document calls.** §4.5 for
    `animated_mask_paths_at` (empty-at-revision short-circuit + regression test) and

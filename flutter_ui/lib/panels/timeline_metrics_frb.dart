@@ -643,6 +643,27 @@ class _LazyBlocksState extends State<LazyBlocks> {
   double _offset = 0;
   late (int, int) _window = _windowNow();
 
+  /// The blocks already built for this widget's [LazyBlocks.builder], by index.
+  ///
+  /// **This is what makes a scroll incremental** (K-678,
+  /// docs/impl/ui-performance.md §4.3). A slide used to hand the `Column` a
+  /// freshly built widget for every block in the window, so bringing one new
+  /// row in at the edge rebuilt three screenfuls — a ~75 ms build frame at the
+  /// owner's window, 8.6 fps. Handing back the *same instance* for a block
+  /// that has not changed makes `Element.updateChild` short-circuit it: no
+  /// rebuild, and no layout either, since its render object is never dirtied
+  /// and its constraints have not moved. A slide then costs the entering rows.
+  final Map<int, Widget> _built = {};
+
+  /// The block at [i], built once per builder.
+  ///
+  /// Keyed by index because a `Column`'s children are matched to their elements
+  /// **by key** once the list slides: without one, every block lands on the
+  /// element that held its neighbour, `canUpdate` says yes, and it rebuilds
+  /// there — cache or no cache.
+  Widget _blockAt(BuildContext context, int i) => _built[i] ??=
+      KeyedSubtree(key: ValueKey<int>(i), child: widget.builder(context, i));
+
   (int, int) _windowNow() {
     _offset = positionOf(widget.controller)?.pixels ?? _offset;
     return blockWindow(widget.heights, _offset, widget.viewport);
@@ -661,6 +682,12 @@ class _LazyBlocksState extends State<LazyBlocks> {
       old.controller.removeListener(_follow);
       widget.controller.addListener(_follow);
     }
+    // A new widget carries a new builder closure — over new rows, a new
+    // selection, a new zoom — so every cached block is answering from the last
+    // one. Dropped whole: which of them actually moved is the panel's question,
+    // not this stack's, and a rebuild of the window is what a panel rebuild has
+    // always cost.
+    _built.clear();
     // An edit or a resize is rebuilding this anyway, and either can change
     // which blocks are in view, so take the window again rather than hold one
     // measured against heights that have gone.
@@ -690,6 +717,10 @@ class _LazyBlocksState extends State<LazyBlocks> {
     for (var i = last; i < widget.heights.length; i++) {
       below += widget.heights[i];
     }
+    // Blocks the window has scrolled past are let go, so a long sweep down a
+    // 2,000-layer precomp holds three screenfuls of widgets rather than the
+    // whole comp's.
+    _built.removeWhere((i, _) => i < first || i >= last);
     // **The stack keeps its own layer** (K-626's pattern). Everything drawn
     // over the blocks — the playhead, the marquee, the work-area wash — sits
     // in the same `Stack` as they do, and a stack that is relaid out repaints
@@ -703,7 +734,7 @@ class _LazyBlocksState extends State<LazyBlocks> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (above > 0) SizedBox(height: above),
-          for (var i = first; i < last; i++) widget.builder(context, i),
+          for (var i = first; i < last; i++) _blockAt(context, i),
           if (below > 0) SizedBox(height: below),
         ],
       ),

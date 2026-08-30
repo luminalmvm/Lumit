@@ -13225,3 +13225,29 @@ what the numbers mean. In an ordinary build the flag is absent and the compiler
 removes the probe entirely; it ships in nothing. The full story — the measured
 table, where each millisecond went, and the ordered work that closes the gap — is
 docs/impl/ui-performance.md.
+
+### The scroll that only builds what comes in (K-678)
+
+Here is one of those measurements turning into a change, and it is a good example of
+how little the fix can be. The Timeline already only builds the rows near the screen
+— a two-thousand-layer comp costs what fifty-seven do. But every time the wheel moved
+the rows by one, it *rebuilt* all fifty-seven to show the one new row at the bottom:
+eighty milliseconds of a frame that had sixteen to spend, and the scroll ran at eight
+frames a second.
+
+The framework was doing that because it was told to. Each frame, the code handed it a
+brand-new description of every row, and something described anew is redrawn. Two
+small honesties fixed it. First, each row now carries a **name tag** (its position in
+the stack), so when the list shifts the framework can see that the row that was third
+is still that same row, now second, rather than assuming the row in the third slot
+became a different one. Second, the code now **hands back the very same description
+it handed back last time** for any row that has not changed — and the framework, on
+being given the identical thing, does nothing at all with it: no rebuild, no
+re-measure. Only the row that genuinely came into view is new work.
+
+The description is thrown away and rebuilt from scratch the moment anything about the
+panel changes — a click, a new selection, a zoom, a colour theme — so this can never
+show you a stale row; it only avoids repeating work between one scroll frame and the
+next. Slide frames went from 80 ms to 6. The scroll's remaining slowness is the other
+half of the frame, the part that turns the description into pixels, and that one is
+not ours to fix yet (K-677).
