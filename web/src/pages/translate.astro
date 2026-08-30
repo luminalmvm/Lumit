@@ -71,11 +71,31 @@ const totals = Object.fromEntries(
 
 const DISCORD = "https://discord.gg/dc3p3XC7mM";
 const REPO = "https://github.com/luminalmvm/Lumit";
+
+// The gate (K-653). A translator signs in with Discord and the page asks Discord whether
+// they hold the translator role in the Lumit server; only then do the boxes accept
+// typing, and what they send back carries their name.
+//
+// This is a curtain, not a lock, and it is worth being plain about why. Everything here
+// runs in the browser: the client ID is public by design, the access token is visible to
+// whoever holds it, and a determined person can post a file to the issue tracker without
+// ever loading this page. The gate keeps the form from being a stranger's toy and puts a
+// name on a submission - it does not decide what ships. The trust boundary is where it
+// always was: the maintainer's ingest, which validates every file and is a commit a human
+// writes. The small print on the card says the same thing to the translator.
+const AUTH = {
+  clientId: "1543622460409118750",
+  guildId: "1529080565507162172",
+  roleId: "1535688540027883650",
+  // Matched as a string by Discord against what is registered under OAuth2 - Redirects,
+  // so it is the deployed URL and sign-in cannot work from `astro dev`.
+  redirect: "https://lumitlab.com/translate",
+};
 ---
 
 <Base
   title="Translate Lumit"
-  description="Translate Lumit into your language. No account, no software to install - the page hands you a file to send back."
+  description="Translate Lumit into your language. Sign in with Discord, fill in as many phrases as you like, and the page hands you a file to send back."
 >
   <section class="pt-16 sm:pt-20">
     <div class="wrap">
@@ -89,11 +109,29 @@ const REPO = "https://github.com/luminalmvm/Lumit";
         reads it in.
       </p>
       <p class="mt-3 max-w-[620px] text-fg-3 text-[14px]">
-        No account here and nothing to install. Placeholders like <code
-          class="font-mono text-fg-2">{"{count}"}</code
-        > stand for a number or a name the application fills in - keep them exactly as they
-        are, anywhere in your sentence that reads well.
+        Nothing to install, and the only account is the Discord one you already have.
+        Placeholders like <code class="font-mono text-fg-2">{"{count}"}</code> stand for a
+        number or a name the application fills in - keep them exactly as they are, anywhere
+        in your sentence that reads well.
       </p>
+
+      <div id="gate" class="card mt-8 max-w-[620px]">
+        <p id="gate-line" class="text-fg-2">
+          Sign in with Discord to fill these in. The boxes open for anyone holding the
+          translator role in the Lumit server, and the file you send back carries your name
+          so a maintainer knows whose work they are reading.
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2.5">
+          <button id="signin" class="btn" type="button">Sign in with Discord</button>
+          <a id="join" class="btn btn-ghost hidden" href={DISCORD}>Open the Lumit Discord</a>
+        </div>
+        <p class="mt-4 text-[13.5px] leading-[1.55] text-fg-3">
+          This is a courtesy rather than a lock - it puts a name on a submission, and
+          submissions are reviewed before they ship. Signing in tells us your Discord name
+          and which roles you hold in this one server; the sign-in itself lives in this tab
+          and goes when you close it.
+        </p>
+      </div>
     </div>
   </section>
 
@@ -119,10 +157,20 @@ const REPO = "https://github.com/luminalmvm/Lumit";
         <span id="already">0</span> already translated
       </p>
       <div class="ml-auto flex items-center gap-2.5">
-        <button id="download" class="btn h-9 px-3.5 text-[14px]" type="button">
+        <button
+          id="download"
+          class="btn h-9 px-3.5 text-[14px] disabled:pointer-events-none disabled:opacity-40"
+          type="button"
+          disabled
+        >
           Download .json
         </button>
-        <button id="issue" class="btn btn-ghost h-9 px-3.5 text-[14px]" type="button">
+        <button
+          id="issue"
+          class="btn btn-ghost h-9 px-3.5 text-[14px] disabled:pointer-events-none disabled:opacity-40"
+          type="button"
+          disabled
+        >
           Open a GitHub issue
         </button>
       </div>
@@ -153,7 +201,7 @@ const REPO = "https://github.com/luminalmvm/Lumit";
     is:inline
     id="l10n-meta"
     type="application/json"
-    set:html={JSON.stringify({ languages: LANGUAGES, totals, repo: REPO }).replace(/</g, "\\u003c")}
+    set:html={JSON.stringify({ languages: LANGUAGES, totals, repo: REPO, auth: AUTH }).replace(/</g, "\\u003c")}
   />
 
   <script>
@@ -167,6 +215,11 @@ const REPO = "https://github.com/luminalmvm/Lumit";
     const doneEl = document.getElementById("done")!;
     const totalEl = document.getElementById("total")!;
     const alreadyEl = document.getElementById("already")!;
+    const gateLine = document.getElementById("gate-line")!;
+    const signinBtn = document.getElementById("signin") as HTMLButtonElement;
+    const joinLink = document.getElementById("join")!;
+    const downloadBtn = document.getElementById("download") as HTMLButtonElement;
+    const issueBtn = document.getElementById("issue") as HTMLButtonElement;
 
     const esc = (s: string) =>
       s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -177,6 +230,9 @@ const REPO = "https://github.com/luminalmvm/Lumit";
     let store: Record<string, string> = {};
     let cursor = 0;
     let saveTimer = 0;
+    // The Discord name of whoever is signed in, empty until the role check answers. It is
+    // the one flag the page has: empty means read-only.
+    let translator = "";
 
     // A translator fills a thousand boxes over several sittings; losing that to a closed
     // tab would be the end of them helping. Storage can be switched off, in which case
@@ -229,9 +285,9 @@ const REPO = "https://github.com/luminalmvm/Lumit";
             : ""
         }
         <input
-          class="mt-2.5 h-10 w-full rounded-ctl border border-line-2 bg-ink-2 px-3 text-[15px] text-fg outline-none focus:border-accent-2"
+          class="mt-2.5 h-10 w-full rounded-ctl border border-line-2 bg-ink-2 px-3 text-[15px] text-fg outline-none focus:border-accent-2 disabled:border-line disabled:text-fg-4"
           type="text" dir="auto" spellcheck="false" autocomplete="off"
-          aria-label="${esc(english)}" value="${esc(value)}" />
+          aria-label="${esc(english)}" value="${esc(value)}" ${translator ? "" : "disabled"} />
         <p class="mt-1.5 flex flex-wrap gap-x-3 font-mono text-[12px] text-fg-4">
           <span>${esc(key)}</span>
           ${marks.length ? `<span data-keep>keep ${esc(marks.join(" "))}</span>` : ""}
@@ -260,6 +316,7 @@ const REPO = "https://github.com/luminalmvm/Lumit";
       rows.innerHTML = "";
       totalEl.textContent = String(need.length);
       alreadyEl.textContent = String(meta.totals[code]);
+      downloadBtn.disabled = issueBtn.disabled = translator === "";
       progress();
       more();
     }
@@ -298,7 +355,9 @@ const REPO = "https://github.com/luminalmvm/Lumit";
         entries[key] = text;
         sourceHashes[key] = data.s[i];
       }
-      return { locale, entries, sourceHashes };
+      // `translator` is what the gate was for: the ingest prints it, and the maintainer
+      // names them in the commit that merges the file.
+      return { locale, translator, entries, sourceHashes };
     }
 
     document.getElementById("download")!.addEventListener("click", () => {
@@ -323,7 +382,7 @@ const REPO = "https://github.com/luminalmvm/Lumit";
           ? "```json\n" + json + "\n```"
           : `The file is too long to carry in a link. Download it with the button beside this one and drag \`lumit-${locale}.json\` into this box before posting.`;
       const body = [
-        `${count} strings for **${name}** (\`${locale}\`), from https://lumitlab.com/translate.`,
+        `${count} strings for **${name}** (\`${locale}\`) from **${b.translator}**, via https://lumitlab.com/translate.`,
         "",
         fenced,
         "",
@@ -337,8 +396,94 @@ const REPO = "https://github.com/luminalmvm/Lumit";
       window.open(url, "_blank", "noopener");
     });
 
+    // ------------------------------------------------------------------ the Discord gate
+    // The implicit flow, which is the whole of it: Discord hands the token back in the URL
+    // fragment, the page asks one endpoint whether this account holds the role, and the
+    // answer decides whether the boxes take typing. There is no server anywhere in this -
+    // the site is static files on a CDN - and no secret, because a page cannot keep one.
+    // Discord allows this call from a browser: the endpoint answers a preflight for
+    // https://lumitlab.com with `Authorization` among its allowed headers.
+    const TOKEN_KEY = "lumit-translate:token";
+    const STATE_KEY = "lumit-translate:oauth-state";
+
+    function gateSays(html: string, action: "signin" | "join" | "none") {
+      gateLine.innerHTML = html;
+      signinBtn.classList.toggle("hidden", action !== "signin");
+      joinLink.classList.toggle("hidden", action !== "join");
+    }
+
+    signinBtn.addEventListener("click", () => {
+      const nonce = crypto.randomUUID();
+      sessionStorage.setItem(STATE_KEY, nonce);
+      location.href =
+        "https://discord.com/oauth2/authorize?response_type=token" +
+        `&client_id=${meta.auth.clientId}` +
+        `&redirect_uri=${encodeURIComponent(meta.auth.redirect)}` +
+        `&scope=${encodeURIComponent("identify guilds.members.read")}` +
+        `&state=${nonce}`;
+    });
+
+    // A token arriving in the fragment is taken out of the address bar before anything
+    // else happens, so a copied link is not a copied token. The nonce is what says the
+    // return is one this page asked for rather than a link somebody sent.
+    function tokenFromReturn(): string | null {
+      const back = new URLSearchParams(location.hash.slice(1));
+      const token = back.get("access_token");
+      if (!token) return null;
+      const want = sessionStorage.getItem(STATE_KEY);
+      sessionStorage.removeItem(STATE_KEY);
+      history.replaceState(null, "", location.pathname);
+      return want && back.get("state") === want ? token : null;
+    }
+
+    const notAMember = () =>
+      gateSays(
+        `You are signed in, but this account does not hold the translator role in the
+         Lumit Discord. Ask for it in the server and reload this page - the phrases below
+         are yours to read either way.`,
+        "join",
+      );
+
+    async function gate() {
+      const arrived = tokenFromReturn();
+      if (arrived) sessionStorage.setItem(TOKEN_KEY, arrived);
+      const token = sessionStorage.getItem(TOKEN_KEY);
+      if (!token) return;
+      gateSays("Asking Discord about your roles.", "none");
+
+      let res: Response;
+      try {
+        res = await fetch(`https://discord.com/api/v10/users/@me/guilds/${meta.auth.guildId}/member`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        return gateSays("Discord could not be reached just now. Try again in a moment.", "signin");
+      }
+      if (res.status === 401) {
+        // A token from a previous sitting, expired or withdrawn. Start again.
+        sessionStorage.removeItem(TOKEN_KEY);
+        return gateSays("That sign-in has run out. Sign in again to carry on.", "signin");
+      }
+      // 403 and 404 are the same answer wearing two numbers: no membership of this server
+      // that this page is allowed to see.
+      if (!res.ok) return notAMember();
+
+      const member = await res.json();
+      if (!member.roles?.includes(meta.auth.roleId)) return notAMember();
+      translator = member.user?.global_name || member.user?.username || member.nick || "";
+      if (!translator) return notAMember();
+
+      gateSays(
+        `Signed in as <span class="text-fg">${esc(translator)}</span>. The boxes are open,
+         and the file you send back carries that name.`,
+        "none",
+      );
+      show(picker.value); // again, now that the boxes are the translator's to fill
+    }
+
     picker.addEventListener("change", () => show(picker.value));
     addEventListener("scroll", () => near() && more(), { passive: true });
     show(picker.value);
+    gate();
   </script>
 </Base>

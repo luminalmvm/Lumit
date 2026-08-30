@@ -50,7 +50,12 @@
 
 .NOTES
     An ingest is a commit like any other: read the file, run this, look at the diff, and
-    say in the commit message which language gained how many strings.
+    say in the commit message which language gained how many strings, and from whom - the
+    page signs a translator in with Discord and stamps their name into the file, and this
+    prints it for exactly that reason.
+
+    The sign-in on the page is a courtesy, not a boundary. This script is the boundary: it
+    is the only thing that validates a file, and it runs where a human reads the diff.
 #>
 [CmdletBinding()]
 param(
@@ -292,10 +297,14 @@ function Invoke-Ingest([string]$file) {
     Write-JsonMap (Get-ArbPath $locale) $arb
     Write-State $state
     Write-Host "$locale : $($accept.Count) entries ($new new, $changed reworded)"
+    # The page signs a translator in with Discord and stamps their name on the file. Say it
+    # here, because the commit message is the only place the credit survives.
+    $translator = if ($sub.Contains('translator')) { [string]$sub['translator'] } else { '' }
+    if ($translator) { Write-Host "  from $translator - name them in the commit message" }
     if ($arrivedStale -gt 0) {
         Write-Host "  $arrivedStale were translated from English that has since changed - status lists them as stale" -ForegroundColor Yellow
     }
-    return [pscustomobject]@{ Locale = $locale; Count = $accept.Count; New = $new; Changed = $changed; Stale = $arrivedStale }
+    return [pscustomobject]@{ Locale = $locale; Count = $accept.Count; New = $new; Changed = $changed; Stale = $arrivedStale; Translator = $translator }
 }
 
 # Put a key where a sorted file would have it, and carry English's note across so the
@@ -397,11 +406,13 @@ function Invoke-SelfTest {
         $good = Join-Path $tmp 'good.json'
         Write-JsonMap $good ([ordered]@{
                 locale       = 'de'
+                translator   = 'someone'
                 entries      = [ordered]@{ files = '{count} Dateien'; apply = 'Anwenden' }
                 sourceHashes = [ordered]@{ files = '{count} files'; apply = 'Apply' }
             })
         $r = Invoke-Ingest $good
         Assert ($r.Count -eq 2 -and $r.New -eq 1) 'ingest reports what it merged'
+        Assert ($r.Translator -eq 'someone') 'the name the page stamped on the file comes back for the commit message'
         $de = Read-JsonMap (Join-Path $tmp 'app_de.arb')
         Assert ($de['files'] -ceq '{count} Dateien' -and $de['apply'] -ceq 'Anwenden') 'the translations reached the .arb'
         Assert ($de.Contains('@files')) "English's note came with the new key"
