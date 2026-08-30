@@ -37,6 +37,7 @@ import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
+import 'package:lumit_flutter/state/playback_loop.dart';
 import 'package:lumit_flutter/state/preview_progress.dart';
 import 'package:lumit_flutter/state/render_timings.dart';
 import 'package:lumit_flutter/state/settings.dart';
@@ -411,16 +412,17 @@ class LumitUiState extends ChangeNotifier {
     if (comp == null) return;
     // The work area is the span being worked on, so it is the span playback
     // runs round: reaching its end goes back to its start and carries on,
-    // rather than playing out to the end of the comp and stopping. Read once
-    // here rather than per frame — it cannot change while the transport is
-    // running, and [_arrived] fires at the comp's rate.
+    // rather than playing out to the end of the comp and stopping — unless the
+    // playhead is parked past that end, where looping would mean never showing
+    // the frame the user is standing on ([playbackLoop]). Read once here rather
+    // than per frame — it cannot change while the transport is running, and
+    // [_arrived] fires at the comp's rate.
     final set = comp.getWorkArea();
-    _loop = set == null
-        ? null
-        : (
-            start: comp.frameAtTime(time: set.inPoint),
-            end: comp.frameAtTime(time: set.outPoint)
-          );
+    _loop = playbackLoop(
+      workStart: set == null ? null : comp.frameAtTime(time: set.inPoint),
+      workEnd: set == null ? null : comp.frameAtTime(time: set.outPoint),
+      playhead: playheadFrame.value,
+    );
     _playedFrom = playheadFrame.value;
     // Whatever the scrub before this was waiting for, it is not what the user
     // is watching now: playback draws no progress bar (docs/07 §2.5), and one
@@ -440,8 +442,10 @@ class LumitUiState extends ChangeNotifier {
   /// playback ends however it ends.
   int? _playedFrom;
 
-  /// The work area playback loops round, or null when the comp has not been
-  /// narrowed — in which case playback ends at the end, as it always did.
+  /// The work area playback loops round this run, or null when this run does
+  /// not loop — the comp has not been narrowed, or the playhead was parked past
+  /// the work area's end, which makes the run a preview of the tail rather than
+  /// a pass round the span ([playbackLoop]).
   ({int start, int end})? _loop;
 
   void _playFrom(CompositionReference comp, int frame) => comp.play(

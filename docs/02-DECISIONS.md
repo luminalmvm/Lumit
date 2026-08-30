@@ -19927,3 +19927,96 @@ The workspace strip's tabs need no change: they are `HouseButton`s, and a framel
 Regression test: `a hovered comp tab outlines, and does not move`
 (`timeline_extras_frb_test`) — an unfronted tab gains the one-pixel `hairline_strong`
 outline and keeps its size, and the fronted tab gains nothing.
+
+## K-637 — A shader the user writes is an ordinary effect, and entering it works like entering a precomp
+
+**Status: DECIDED (2026-08-30).** Commissioned by the owner from a conversation with a
+collaborator; supersedes nothing. The design is
+[impl/custom-shader.md](impl/custom-shader.md), which is binding and is design only — no
+code lands with it.
+
+**What is decided.** Lumit gains a **Custom shader** effect: one catalogue entry, a per-
+instance WGSL program, and a fragment-shaped authoring contract — `fn shade(uv) -> vec4` —
+that the host wraps into the compute kernel every other effect already is. The program says
+which numbers it wants, in doc-comment annotations over one `struct Params`, and those
+become ordinary Effect controls rows with sliders, keyframes and expressions. This is the
+first user-authored effect in Lumit, and it is deliberately not a plugin: it is text in the
+document, validated by the same naga front end K-263 already runs over the shipped kernels,
+addressing nothing but the seven bindings the host declares.
+
+**The framing is the owner's, and it decides phase two.** A Custom shader also holds an
+inner **node graph** that compiles to WGSL, and *"entering a shader node works like entering
+a precomp"* — double-click the box, the Graph panel shows the inside, a breadcrumb brings you
+back. K-624 built that road for a Precomp layer and this reuses it, including the part that
+matters most: the view you left is the view you return to, held in the session and never in
+the document. Text and graph are two views of one thing, and **the graph is master when
+present** — compiling a graph to text is a total function and parsing text back into a graph
+is not, so the direction is one-way and detaching is a deliberate act with its own undo step.
+
+**Three rulings the note argues at length and this entry pins:**
+
+- **The source is instance state, not a parameter.** The resolved parameter bag is `Copy`,
+  borrows nothing and is hashed field by field (K-381 §2.3); a kilobyte of text is none of
+  those. It lives in `EffectInstance.extra`, beside the dynamic parameters K-381 §4 already
+  put there, which is also what makes it ride save, undo, presets and an older reader for
+  free. The debt that buys is named: **`extra` is invisible to the frame key today**, so the
+  source hash and the derived shape are fed explicitly, or a shader edit changes the picture
+  without changing its name.
+- **A broken edit keeps the last good pipeline — on screen only.** Editing a shader means
+  being broken most of the time, and black-framing on every keystroke is punishment UI.
+  But a compile is a frame's whole budget, so it runs off the render path, and which
+  pipeline is in play then depends on when a background job finished. The split that keeps
+  K-031: the frame key always names the source **in the document**; a frame drawn with a
+  stale pipeline is rendered, badged and **discarded, never cached**; and export compiles
+  synchronously and renders identity rather than falling back at all.
+- **Nothing varies that the host did not hand in.** WGSL has no clock and no randomness, so
+  determinism is the language's guarantee rather than ours — and the two things the host
+  passes are chosen to keep it: `time` is the frame's layer time, and `seed` is derived from
+  the instance id and is **constant for the instance**, never a frame counter, because a
+  value that moved per frame would put a different picture behind an unmoved cache key. The
+  host also sanitises the shader's return, because one NaN in an fp16 target is a black
+  composition three effects later and an export nobody can debug.
+
+**What this is not.** It is not LFX and does not compete with it (docs/12 §3): a custom
+shader is what somebody writes in an afternoon for one project, LFX is what somebody ships to
+strangers. The security difference is the one that decides the shape — a `.lumfx` carrying a
+shader is **data, never code**, so docs/12 §5's "opening a project executes nothing" survives
+shader sharing intact, which it would not survive a native plugin arriving in a project file.
+GLSL is recorded as growth, not v1: naga's `glsl-in` front end is partial, and one road that
+works completely beats two that half do.
+
+**Work packages** CS1–CS5 in the note: the engine effect; the bridge's owed
+per-instance parameter call (docs/TODO's registry section has been waiting for it); the
+editor surface; the inner graph and its compiler; the entry UX. Tests are §8 of the note,
+thirty of them, and the four that carry the design are
+`a_shader_is_a_pure_function_of_frame_and_document`,
+`a_frame_drawn_with_a_stale_pipeline_is_never_cached`,
+`a_graph_compiles_to_byte_identical_wgsl` and `the_reader_never_panics`.
+
+
+## K-641 — The playhead can be parked outside the work area and previewed from
+
+**Status: DECIDED (2026-08-30).** Amends [07-UI-SPEC.md](07-UI-SPEC.md) §4.6's work-area
+bullet. §10's default loop mode stands.
+
+**What was wrong.** The two sides of the work area did not behave the same. Parked *before*
+it, pressing play previewed from where the playhead stood and joined the loop when the
+picture reached the work area's end — which is what anyone would expect. Parked *after* it,
+the first frame to arrive was already past that end, so the loop fired on it: the playhead
+snapped back inside before a single frame of the tail had been seen. The tail of a comp
+could not be previewed at all without first clearing the work area, and the asymmetry was
+invisible — nothing on screen said why one side worked and the other did not.
+
+**The rule now.** The loop is armed by where the run *starts*. A run that starts at or
+before the work area's end loops it, as before. A run that starts past that end does not
+loop at all: it previews forward from where the playhead was parked, out to the end of the
+composition, and stopping returns the playhead exactly as any other stop does (K-254).
+Playback never moves the playhead somewhere the user did not put it before showing them
+anything.
+
+This is one decision made once, in `playbackLoop` (`flutter_ui/lib/state/playback_loop.dart`),
+rather than a condition inside the frame-arrival path — the arrival path fires at the
+composition's rate and is the wrong place to be deciding policy.
+
+Regression test: `parked past the work area previews the tail instead of snapping back`
+(`playback_loop_test`).

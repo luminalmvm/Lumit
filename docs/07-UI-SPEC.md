@@ -1096,7 +1096,11 @@ the band's own row at the ruler's floor — the **cache bar**; then layer lanes.
   band to reset to the full comp (built, TI-9 — the reset writes the engine's own "not
   narrowed", which is what the whole comp *is*). Work area is the preview range and default export range,
   and playback **loops** it (§10's default loop mode): reaching its end resumes from its
-  start. It draws as **one band in `animated`** (K-441,
+  start. **The playhead can be parked anywhere and previewed from** (K-641): outside the
+  work area the loop does not pull it back inside, it previews forward from where it
+  stands — before the start it runs into the span and joins the loop, past the end it plays
+  the tail out and stops, returning the playhead as any other stop does (§10). It draws as
+  **one band in `animated`** (K-441,
   [15-DESIGN.md](15-DESIGN.md) §12A.1): the ruler's **second row** — K-513 gave it the whole
   height and K-529 reversed that half after desktop testing, a wash over the clock making
   the numbers harder to read — then on behind the cache bar and down through the lanes,
