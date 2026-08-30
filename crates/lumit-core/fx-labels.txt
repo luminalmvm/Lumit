@@ -581,6 +581,8 @@ Single layer, straw
 Size
 Size jitter
 Size over life
+Skew
+Skew axis
 Slice repeat
 Slider
 Slider control

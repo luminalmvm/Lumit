@@ -2682,6 +2682,14 @@
   "@fxSizeOverLife": {
     "description": "Effect controls — a curve on Particulate: how a particle's size changes between its birth and its end."
   },
+  "fxSkew": "Skew",
+  "@fxSkew": {
+    "description": "Effect controls — a control on Transform: how far the picture leans, like italic type."
+  },
+  "fxSkewAxis": "Skew axis",
+  "@fxSkewAxis": {
+    "description": "Effect controls — a control on Transform: the direction, in degrees, that the Skew lean runs along."
+  },
   "fxSliceRepeat": "Slice repeat",
   "@fxSliceRepeat": {
     "description": "Effect controls — a control on Block glitch."
@@ -9053,13 +9061,9 @@
   "@graphTypeAudio": {
     "description": "Graph panel legend: what a green wire carries. Lower case."
   },
-  "graphSearchKey": "Tab",
-  "@graphSearchKey": {
-    "description": "Graph panel: the key that opens the node search, named in the corner of the search popover. A keyboard key, so it keeps the name printed on the key."
-  },
-  "graphSearchAdds": "Adds a driver node",
-  "@graphSearchAdds": {
-    "description": "Graph panel node search, footer line when no wire is in hand: picking an entry adds that box to the canvas."
+  "graphConsoleAdds": "Adds a box to the graph",
+  "@graphConsoleAdds": {
+    "description": "Footer line of the Ctrl+Space console when it is opened over the node graph with no wire in hand: picking an entry (an effect, a driver or a saved group) adds that box to the canvas."
   },
   "graphSearchWires": "Connects the dragged wire where it fits",
   "@graphSearchWires": {
@@ -10484,9 +10488,9 @@
   "@shaderPortTint": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the tint colour. Lower case: socket labels are quiet row text beside the wire dots."
   },
-  "shaderGraphSearchHint": "Search boxes",
-  "@shaderGraphSearchHint": {
-    "description": "Placeholder in the small search field that adds a box to a Custom shader's inner node graph (opened with Tab, or by dropping a wire on empty canvas)."
+  "shaderSearchAdds": "Adds a shader box",
+  "@shaderSearchAdds": {
+    "description": "Footer line of the Ctrl+Space console when it is opened inside a Custom shader's inner node graph: picking an entry adds that box to the shader's canvas."
   },
   "shaderDetachTitle": "Detach graph",
   "@shaderDetachTitle": {

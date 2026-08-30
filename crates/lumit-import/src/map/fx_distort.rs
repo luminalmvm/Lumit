@@ -132,10 +132,13 @@ fn transform(fx: &mut Fx<'_, '_>) {
     let uniform = fx.still(11).unwrap_or(1.0) != 0.0;
     fx.carry(3, "scale_y", Unit::Direct);
     fx.carry(if uniform { 3 } else { 4 }, "scale_x", Unit::Direct);
+    // Skew and Skew Axis are the pair Lumit grew in K-666, built to After
+    // Effects' own shear and its own order (anchor, scale, skew, rotation,
+    // position), so both numbers carry unchanged.
+    fx.carry(5, "skew", Unit::Direct);
+    fx.carry(6, "skew_axis", Unit::Direct);
     fx.carry(7, "rotation", Unit::Direct);
     fx.carry(8, "opacity", Unit::Direct);
-    fx.drop_ae(5); // Skew
-    fx.drop_ae(6); // Skew Axis
     fx.drop_ae(9); // Use Composition's Shutter Angle
     fx.drop_ae(10); // Shutter Angle
     fx.drop_ae(12); // Sampling
@@ -1440,7 +1443,7 @@ mod tests {
     }
 
     #[test]
-    fn transform_carries_the_two_points_the_scales_and_reports_the_skew() {
+    fn transform_carries_the_two_points_the_scales_and_the_skew() {
         let ae = "ADBE Geometry2";
         let r = run(&fx(
             ae,
@@ -1467,7 +1470,9 @@ mod tests {
             keys_of(&r, "rotation"),
             vec![(0.0, 0.0, 0.0), (2.0, 90.0, 45.0)]
         );
-        assert!(dropped(&r, "Skew") && dropped(&r, "Skew Axis") && dropped(&r, "Sampling"));
+        // The skew pair carries unchanged (K-666): same shear, same order.
+        assert_eq!((f(&r, "skew"), f(&r, "skew_axis")), (15.0, 45.0));
+        assert!(dropped(&r, "Sampling"));
     }
 
     /// AE's Uniform Scale hides Scale Width; the tie is resolved rather than

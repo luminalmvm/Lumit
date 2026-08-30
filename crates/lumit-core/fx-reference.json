@@ -3235,6 +3235,25 @@
           "slider_max": 400.0
         },
         {
+          "id": "skew",
+          "label": "Skew",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -70.0,
+          "slider_max": 70.0,
+          "hard_min": -89.0,
+          "hard_max": 89.0
+        },
+        {
+          "id": "skew_axis",
+          "label": "Skew axis",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
           "id": "rotation",
           "label": "Rotation",
           "kind": "angle",

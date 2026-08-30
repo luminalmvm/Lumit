@@ -25,7 +25,7 @@
 use crate::fx::{
     cpu, shake_affine, shake_mb_offsets, shake_noise, transform_op, EdgesMode, EffectDef,
     EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, ShakeSample, Value,
-    SHAKE_MB_SAMPLES,
+    NO_SKEW, SHAKE_MB_SAMPLES,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
@@ -464,14 +464,18 @@ impl EffectDef for ShakeDef {
             Shaken::Plain { wobble, edge, mix } => {
                 let (anchor, position, scale, rot) =
                     shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
-                cpu::transform(rgba, w, h, anchor, position, scale, rot, edge, 1.0, mix);
+                // A wobble is an offset, a turn and a zoom; the Shake has no
+                // Skew control, so it passes none.
+                cpu::transform(
+                    rgba, w, h, anchor, position, scale, rot, NO_SKEW, edge, 1.0, mix,
+                );
             }
             Shaken::Blurred { samples, edge, mix } => {
                 let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
                 for (op, s) in ops.iter_mut().zip(samples.iter()) {
                     let (anchor, position, scale, rot) =
                         shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-                    let (m, o, _opacity) = transform_op(anchor, position, scale, rot, 1.0);
+                    let (m, o, _opacity) = transform_op(anchor, position, scale, rot, NO_SKEW, 1.0);
                     *op = (m, o);
                 }
                 cpu::transform_average(rgba, w, h, &ops, edge, mix);

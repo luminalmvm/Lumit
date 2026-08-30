@@ -150,7 +150,7 @@ pub fn glow(
 }
 
 /// Transform (docs/08 §3.5, K-090): resample the input through the
-/// inverse of `position + R·S·(p − anchor)` — one bilinear tap per
+/// inverse of `position + R·K·S·(p − anchor)` — one bilinear tap per
 /// output pixel, the revealed border handled by `edge` (0 Transparent,
 /// 1 Repeat, 2 Mirror — the same shared policy the blur family uses,
 /// [`EdgesMode`](super::EdgesMode)), premultiplied throughout, with
@@ -161,6 +161,9 @@ pub fn glow(
 /// exactly that pixel, and opacity/mix 1 multiply by exact 1.0 — the
 /// WGSL twin follows the identical arithmetic. A degenerate scale
 /// (|s| < 1e-6) renders fully transparent, never a division blow-up.
+/// `skew` is `[amount, axis_deg]` and a zero amount is the pre-skew path to
+/// the byte (K-258) — see [`super::transform_inverse`] for the shear itself
+/// and for why it sits between the scale and the rotation.
 #[allow(clippy::too_many_arguments)]
 pub fn transform(
     rgba: &mut [f32],
@@ -170,6 +173,7 @@ pub fn transform(
     position: [f32; 2],
     scale: [f32; 2],
     rotation_deg: f32,
+    skew: [f32; 2],
     edge: u32,
     opacity: f32,
     mix: f32,
@@ -182,6 +186,7 @@ pub fn transform(
         position,
         scale,
         rotation_deg,
+        skew,
         edge,
         opacity,
         mix,
@@ -207,6 +212,7 @@ pub fn transform_matted(
     position: [f32; 2],
     scale: [f32; 2],
     rotation_deg: f32,
+    skew: [f32; 2],
     edge: u32,
     opacity: f32,
     mix: f32,
@@ -215,7 +221,7 @@ pub fn transform_matted(
     let original = rgba.to_vec();
     // A collapsed (zero-scale) image is invisible: opacity 0, and the
     // sample point no longer matters (super::transform_op's rule).
-    let (m, o, opacity) = super::transform_op(anchor, position, scale, rotation_deg, opacity);
+    let (m, o, opacity) = super::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;

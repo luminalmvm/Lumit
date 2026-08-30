@@ -57,31 +57,71 @@ pub fn hue_matrix_rgb(deg: f64) -> [f32; 9] {
     ]
 }
 
+/// No shear, for the callers of [`transform_inverse`] that have no Skew control
+/// to offer it — the Shake (docs/08 §3.4) being the one in the shipped build.
+/// Named rather than spelled `[0.0, 0.0]` at each site so that "this effect does
+/// not skew" reads differently from "this effect skews by nothing".
+pub const NO_SKEW: [f32; 2] = [0.0, 0.0];
+
 /// The inverse affine of a Transform effect (docs/08 §3.5): the forward map
-/// is `p_out = position + R(rotation) · S(scale) · (p_in − anchor)` — the
-/// layer transform's own shape — so each output pixel centre `p` samples the
-/// input at `q = m·p + o` with `m = S⁻¹·R⁻¹` (row-major 2×2) and
-/// `o = anchor − m·position`. Host-computed so the WGSL kernel never runs
+/// is `p_out = position + R(rotation) · K(skew) · S(scale) · (p_in − anchor)`
+/// — the layer transform's own shape — so each output pixel centre `p`
+/// samples the input at `q = m·p + o` with `m = S⁻¹·K⁻¹·R⁻¹` (row-major 2×2)
+/// and `o = anchor − m·position`. Host-computed so the WGSL kernel never runs
 /// its own trigonometry (its `cos`/`sin` are not correctly rounded) and the
 /// CPU reference consumes bit-identical numbers. `None` when a scale axis is
 /// degenerate (|s| < 1e-6): the image has collapsed to nothing and renders
 /// fully transparent — never a division blow-up (docs/14 no-panic rule).
+///
+/// **The order is After Effects' own** (K-666): anchor, scale, skew,
+/// rotation, position, which is the order its Transform effect lists the
+/// controls in and the order its layer transform composes them. So a skew
+/// leans the *scaled* picture and the rotation then turns the leaned one —
+/// skewing after rotating would give a different frame, and does in engines
+/// that get this wrong.
+///
+/// `skew` is `[amount, axis_deg]`. The shear is
+/// `K = R(axis) · Shx(−tan(amount°)) · R(−axis)`: at the default axis of 0 it
+/// is a horizontal shear, positive amounts leaning the top to the right (the
+/// italic direction), and the axis turns that lean clockwise on screen, the
+/// same sense as the Rotation dial. `K` has determinant 1, so a skew never
+/// collapses the picture and adds no degenerate case. **A zero amount skips
+/// the multiply entirely**, which is what keeps a stack saved before the pair
+/// existed byte-identical (K-258): `R(a)·I·R(−a)` is only *approximately* the
+/// identity in floating point, and approximately is not byte-identical.
 pub fn transform_inverse(
     anchor: [f32; 2],
     position: [f32; 2],
     scale: [f32; 2],
     rotation_deg: f32,
+    skew: [f32; 2],
 ) -> Option<([f32; 4], [f32; 2])> {
     if scale[0].abs() < 1e-6 || scale[1].abs() < 1e-6 {
         return None;
     }
     let rad = (rotation_deg as f64).to_radians();
     let (sin, cos) = (rad.sin() as f32, rad.cos() as f32);
+    // R(−rotation), row-major.
+    let mut r = [cos, sin, -sin, cos];
+    if skew[0] != 0.0 {
+        // K⁻¹ = R(a)·Shx(t)·R(−a) with t = tan(amount°), multiplied out in
+        // f64: [[1 − t·sa·ca, t·ca²], [−t·sa², 1 + t·sa·ca]].
+        let (sa, ca) = (skew[1] as f64).to_radians().sin_cos();
+        let t = (skew[0] as f64).to_radians().tan();
+        let x = t * sa * ca;
+        let k = [1.0 - x, t * ca * ca, -t * sa * sa, 1.0 + x];
+        r = [
+            (k[0] * r[0] as f64 + k[1] * r[2] as f64) as f32,
+            (k[0] * r[1] as f64 + k[1] * r[3] as f64) as f32,
+            (k[2] * r[0] as f64 + k[3] * r[2] as f64) as f32,
+            (k[2] * r[1] as f64 + k[3] * r[3] as f64) as f32,
+        ];
+    }
     let m = [
-        cos / scale[0],
-        sin / scale[0],
-        -sin / scale[1],
-        cos / scale[1],
+        r[0] / scale[0],
+        r[1] / scale[0],
+        r[2] / scale[1],
+        r[3] / scale[1],
     ];
     let o = [
         anchor[0] - (m[0] * position[0] + m[1] * position[1]),
@@ -100,9 +140,10 @@ pub fn transform_op(
     position: [f32; 2],
     scale: [f32; 2],
     rotation_deg: f32,
+    skew: [f32; 2],
     opacity: f32,
 ) -> ([f32; 4], [f32; 2], f32) {
-    match transform_inverse(anchor, position, scale, rotation_deg) {
+    match transform_inverse(anchor, position, scale, rotation_deg, skew) {
         Some((m, o)) => (m, o, opacity),
         None => ([1.0, 0.0, 0.0, 1.0], [0.0, 0.0], 0.0),
     }

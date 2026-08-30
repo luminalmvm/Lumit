@@ -946,12 +946,23 @@ keeps the strength dissolve.
 
 ### 3.5 Transform — the transform properties as an effect (K-090)
 
-Position, Anchor, Scale, Rotation, Opacity — the layer transform group, as a stack entry.
+Position, Anchor, Scale, Skew, Rotation, Opacity — the layer transform group, as a stack entry.
 Its point is adjustment layers: applied there, it transforms the composite of everything
 below, which is the montage punch-in/whip gesture without touching per-layer transforms.
-Parameters mirror the transform group exactly (same names, units, animatability); an
-additional Skew pair arrives post-v1. Cost `trivial`, ROI `exact` under pure translation
-and `full-frame` otherwise, `{0}` temporal.
+Parameters mirror the transform group exactly (same names, units, animatability). Cost
+`trivial`, ROI `exact` under pure translation and `full-frame` otherwise, `{0}` temporal.
+
+**Skew and Skew axis (K-666).** After Effects' own pair, with After Effects' own composition
+order — anchor, scale, **skew**, rotation, position — so the lean is applied to the scaled
+picture and the rotation then turns the leaned one. Skew is its unitless amount, read as the
+lean angle in degrees (45 shears by one unit of x per unit of y) and hard-limited short of
+±90 where the lean would be infinite; Skew axis is a degree dial, 0 giving a horizontal shear
+with positive amounts leaning the top to the right, the axis turning that lean clockwise on
+screen like the Rotation dial. The shear has determinant 1, so it leans a frame without
+resizing it and adds no degenerate case to the zero-scale one. **A zero amount is skipped
+entirely**, which is what makes a stack saved before the pair existed render byte for byte
+what it did (K-258) — `R(axis)·I·R(−axis)` is only approximately the identity in floating
+point, and approximately is not byte-identical.
 
 ### 3.6 RGB split
 

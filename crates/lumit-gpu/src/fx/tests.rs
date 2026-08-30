@@ -1936,33 +1936,116 @@ fn wgsl_transform_matches_the_cpu_oracle() {
     // The last column is the Edges policy (P3, K-145): the Transform effect
     // itself always passes 0, but Shake dispatches this same kernel with 1
     // (Repeat) and 2 (Mirror), so the oracle exercises all three here.
-    for (name, anchor, position, scale, rotation, opacity, mix, edge) in [
+    // The skew column is `[amount, axis]` (K-666); `NO_SKEW` is the pre-skew
+    // road, and the last two rows are the ones that lean.
+    for (name, anchor, position, scale, rotation, skew, opacity, mix, edge) in [
         (
-            "identity", [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0, 0u32,
+            "identity",
+            [0.0; 2],
+            [0.0; 2],
+            [1.0; 2],
+            0.0,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+            1.0,
+            0u32,
         ),
-        ("shift", [0.0; 2], [2.5, -1.5], [1.0; 2], 0.0, 1.0, 1.0, 0),
-        ("punch-in", centre, centre, [1.4, 1.4], 12.0, 1.0, 1.0, 0),
-        ("flip-fade", centre, centre, [-1.0, 1.0], 0.0, 0.5, 0.8, 0),
-        ("collapsed", centre, centre, [0.0, 1.0], 0.0, 1.0, 0.6, 0),
+        (
+            "shift",
+            [0.0; 2],
+            [2.5, -1.5],
+            [1.0; 2],
+            0.0,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+            1.0,
+            0,
+        ),
+        (
+            "punch-in",
+            centre,
+            centre,
+            [1.4, 1.4],
+            12.0,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+            1.0,
+            0,
+        ),
+        (
+            "flip-fade",
+            centre,
+            centre,
+            [-1.0, 1.0],
+            0.0,
+            lumit_core::fx::NO_SKEW,
+            0.5,
+            0.8,
+            0,
+        ),
+        (
+            "collapsed",
+            centre,
+            centre,
+            [0.0, 1.0],
+            0.0,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+            0.6,
+            0,
+        ),
         (
             "shift-repeat",
             [0.0; 2],
             [5.0, -4.0],
             [1.0; 2],
             0.0,
+            lumit_core::fx::NO_SKEW,
             1.0,
             1.0,
             1,
         ),
-        ("spin-mirror", centre, centre, [1.0; 2], 8.0, 1.0, 1.0, 2),
+        (
+            "spin-mirror",
+            centre,
+            centre,
+            [1.0; 2],
+            8.0,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+            1.0,
+            2,
+        ),
+        (
+            "skew",
+            centre,
+            centre,
+            [1.0; 2],
+            0.0,
+            [20.0, 0.0],
+            1.0,
+            1.0,
+            0,
+        ),
+        (
+            "skew-axis-and-spin",
+            centre,
+            centre,
+            [1.2, 0.8],
+            15.0,
+            [-30.0, 55.0],
+            1.0,
+            1.0,
+            2,
+        ),
     ] {
         let mut cpu = img.clone();
         lumit_core::fx::cpu::transform(
-            &mut cpu, w, h, anchor, position, scale, rotation, edge, opacity, mix,
+            &mut cpu, w, h, anchor, position, scale, rotation, skew, edge, opacity, mix,
         );
 
         let (m, off, opacity) =
-            lumit_core::fx::transform_op(anchor, position, scale, rotation, opacity);
+            lumit_core::fx::transform_op(anchor, position, scale, rotation, skew, opacity);
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = TransformOp {
             m,
@@ -2089,8 +2172,14 @@ fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
         assert_eq!((packed_edge, packed_mix), (edge, mix));
         let (anchor, position, scale, rotation) =
             lumit_core::fx::shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
-        let (m, off, opacity) =
-            lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+        let (m, off, opacity) = lumit_core::fx::transform_op(
+            anchor,
+            position,
+            scale,
+            rotation,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+        );
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = TransformOp {
             m,
@@ -2200,8 +2289,14 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         for (t, s) in taps.iter_mut().zip(packed_samples.iter()) {
             let (anchor, position, scale, rotation) =
                 lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-            let (m, off, _opacity) =
-                lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+            let (m, off, _opacity) = lumit_core::fx::transform_op(
+                anchor,
+                position,
+                scale,
+                rotation,
+                lumit_core::fx::NO_SKEW,
+                1.0,
+            );
             *t = ShakeMbTap { m, off };
         }
         let op = ShakeMbOp {
@@ -2228,7 +2323,14 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     // kernel at count 1 matches the Transform kernel within the cheap bound.
     let (anchor, position, scale, rotation) =
         lumit_core::fx::shake_affine(w, h, centre.offset_px, centre.rotation_deg, centre.zoom);
-    let (m, off, opacity) = lumit_core::fx::transform_op(anchor, position, scale, rotation, 1.0);
+    let (m, off, opacity) = lumit_core::fx::transform_op(
+        anchor,
+        position,
+        scale,
+        rotation,
+        lumit_core::fx::NO_SKEW,
+        1.0,
+    );
     let tex = upload_linear_f32(&ctx, &img, w, h);
     let mut taps = [ShakeMbTap {
         m: [1.0, 0.0, 0.0, 1.0],
@@ -13654,7 +13756,8 @@ fn the_matte_scales_the_shake_displacement() {
     let (edge, mix) = (1u32, 1.0f32);
     let (anchor, position, scale, rot) =
         lumit_core::fx::shake_affine(w, h, wobble.offset_px, wobble.rotation_deg, wobble.zoom);
-    let (m, off, opacity) = lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+    let (m, off, opacity) =
+        lumit_core::fx::transform_op(anchor, position, scale, rot, lumit_core::fx::NO_SKEW, 1.0);
     let op = TransformOp {
         m,
         off,
@@ -13671,12 +13774,33 @@ fn the_matte_scales_the_shake_displacement() {
             img: &img,
             cpu: &|px, mt| {
                 lumit_core::fx::cpu::transform_matted(
-                    px, w, h, anchor, position, scale, rot, edge, 1.0, mix, mt,
+                    px,
+                    w,
+                    h,
+                    anchor,
+                    position,
+                    scale,
+                    rot,
+                    lumit_core::fx::NO_SKEW,
+                    edge,
+                    1.0,
+                    mix,
+                    mt,
                 );
             },
             plain: &|px| {
                 lumit_core::fx::cpu::transform(
-                    px, w, h, anchor, position, scale, rot, edge, 1.0, mix,
+                    px,
+                    w,
+                    h,
+                    anchor,
+                    position,
+                    scale,
+                    rot,
+                    lumit_core::fx::NO_SKEW,
+                    edge,
+                    1.0,
+                    mix,
                 );
             },
             gpu: &|t, mt| fx.transform(&ctx, t, w, h, mt, &op),
@@ -13692,9 +13816,34 @@ fn the_matte_scales_the_shake_displacement() {
     let n = (w * h) as usize;
     let flat: Vec<f32> = (0..n).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
     let mut matted = img.clone();
-    lumit_core::fx::cpu::transform_matted(&mut matted, w, h, a1, p1, s1, r1, edge, 1.0, 1.0, &flat);
+    lumit_core::fx::cpu::transform_matted(
+        &mut matted,
+        w,
+        h,
+        a1,
+        p1,
+        s1,
+        r1,
+        lumit_core::fx::NO_SKEW,
+        edge,
+        1.0,
+        1.0,
+        &flat,
+    );
     let mut half = img.clone();
-    lumit_core::fx::cpu::transform(&mut half, w, h, a2, p2, s2, r2, edge, 1.0, 1.0);
+    lumit_core::fx::cpu::transform(
+        &mut half,
+        w,
+        h,
+        a2,
+        p2,
+        s2,
+        r2,
+        lumit_core::fx::NO_SKEW,
+        edge,
+        1.0,
+        1.0,
+    );
     assert!(
         worst_diff(&matted, &half) < 1e-5,
         "a half matte on a 6,4 shove must be the 3,2 shove"
@@ -13718,7 +13867,14 @@ fn the_matte_scales_the_shake_displacement() {
     for ((t, o), s) in taps.iter_mut().zip(ops.iter_mut()).zip(samples.iter()) {
         let (anchor, position, scale, rot) =
             lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-        let (m, off, _opacity) = lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+        let (m, off, _opacity) = lumit_core::fx::transform_op(
+            anchor,
+            position,
+            scale,
+            rot,
+            lumit_core::fx::NO_SKEW,
+            1.0,
+        );
         *t = ShakeMbTap { m, off };
         *o = (m, off);
     }

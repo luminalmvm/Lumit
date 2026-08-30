@@ -1,5 +1,6 @@
-//! Transform (docs/08 §3.5): an anchor, a position, a scale, a rotation and an
-//! opacity applied inside the effect stack, rather than to the layer as a whole.
+//! Transform (docs/08 §3.5): an anchor, a position, a scale, a skew, a rotation
+//! and an opacity applied inside the effect stack, rather than to the layer as a
+//! whole.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
 use lumit_fx_macros::Effect;
@@ -51,6 +52,28 @@ pub struct Transform {
     #[slider(label = "Scale y %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_y: f32,
 
+    /// After Effects' unitless Skew amount (K-666), read as the lean angle in
+    /// degrees: 45 shears the picture by one unit of x per unit of y, 0 is no
+    /// shear at all and is byte-identical to a stack that has never heard of
+    /// the control (K-258). Hard-limited short of ±90, where the lean would be
+    /// infinite.
+    #[slider(
+        min = -70.0,
+        max = 70.0,
+        default = 0.0,
+        hard_min = -89.0,
+        hard_max = 89.0,
+        unit = Raw
+    )]
+    pub skew: f32,
+
+    /// The axis the lean is measured from, degrees on a dial like Rotation and
+    /// unbounded for the same reason. At 0 the shear is horizontal, positive
+    /// Skew leaning the top to the right; the axis turns that lean clockwise on
+    /// screen.
+    #[dial(default = 0.0, step = 15.0)]
+    pub skew_axis: f32,
+
     /// Degrees on a dial (docs/07 §6), unbounded — whip transitions spin whole
     /// turns, and a dial that stopped at 360 could not.
     #[dial(default = 0.0, step = 15.0)]
@@ -80,19 +103,24 @@ pub struct Transform {
     pub mix: f32,
 }
 
+/// What [`Transform::packed`] hands the kernel, in order: anchor, position,
+/// scale, rotation in degrees, skew as `[amount, axis_deg]`, opacity and mix.
+pub type TransformPacked = ([f32; 2], [f32; 2], [f32; 2], f32, [f32; 2], f32, f32);
+
 impl Transform {
-    /// The anchor, position, scale, rotation, opacity and mix the kernel wants
-    /// (docs/impl/effect-registry.md §2.4). The two points arrive already scaled
-    /// by the §2.3 preview factor; the per-cent pairs become plain fractions,
-    /// exactly as the old resolve arm's `px`/`pct` helpers made them. Both render
-    /// paths read this one method, so the CPU reference and the WGSL kernel
-    /// cannot drift apart.
-    pub fn packed(self) -> ([f32; 2], [f32; 2], [f32; 2], f32, f32, f32) {
+    /// The anchor, position, scale, rotation, skew, opacity and mix the kernel
+    /// wants (docs/impl/effect-registry.md §2.4). The two points arrive already
+    /// scaled by the §2.3 preview factor; the per-cent pairs become plain
+    /// fractions, exactly as the old resolve arm's `px`/`pct` helpers made them.
+    /// Both render paths read this one method, so the CPU reference and the WGSL
+    /// kernel cannot drift apart.
+    pub fn packed(self) -> TransformPacked {
         (
             [self.anchor_x, self.anchor_y],
             [self.position_x, self.position_y],
             [self.scale_x / 100.0, self.scale_y / 100.0],
             self.rotation,
+            [self.skew, self.skew_axis],
             (self.opacity / 100.0).clamp(0.0, 1.0),
             (self.mix / 100.0).clamp(0.0, 1.0),
         )
@@ -108,7 +136,8 @@ impl EffectDef for TransformDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        let (anchor, position, scale, rotation_deg, opacity, mix) = Transform::read(p).packed();
+        let (anchor, position, scale, rotation_deg, skew, opacity, mix) =
+            Transform::read(p).packed();
         cpu::transform(
             rgba,
             w,
@@ -117,6 +146,7 @@ impl EffectDef for TransformDef {
             position,
             scale,
             rotation_deg,
+            skew,
             // The Transform effect has no Edges control: a transparent border,
             // its long-standing behaviour.
             0,

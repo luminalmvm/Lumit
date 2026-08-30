@@ -2665,12 +2665,12 @@ impl GpuEffect for Transform {
         p: Params<'_>,
         _aux: AuxSlot<'_>,
     ) -> Tex {
-        let (anchor, position, scale, rotation_deg, opacity, mix) =
+        let (anchor, position, scale, rotation_deg, skew, opacity, mix) =
             effects::transform::Transform::read(p).packed();
         // The affine is the one lumit-core helper both paths build through, so
         // the CPU reference and the kernel consume identical numbers (K-031).
         let (m, off, opacity) =
-            lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, opacity);
+            lumit_core::fx::transform_op(anchor, position, scale, rotation_deg, skew, opacity);
         // No matte: the Transform keeps the strength dissolve (scaling a
         // whole-frame move is not a picture a per-pixel matte should draw;
         // the Shake is the one that claims this kernel's matte, K-427).
@@ -2727,8 +2727,14 @@ impl GpuEffect for Shake {
                     wobble.rotation_deg,
                     wobble.zoom,
                 );
-                let (m, off, opacity) =
-                    lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                let (m, off, opacity) = lumit_core::fx::transform_op(
+                    anchor,
+                    position,
+                    scale,
+                    rot,
+                    lumit_core::fx::NO_SKEW,
+                    1.0,
+                );
                 // **The shake claims its matte** (K-427): it scales the
                 // displacement the wobble gives each pixel, read where the
                 // pixel lands, so a soft matte turns the shove into a warp.
@@ -2755,8 +2761,14 @@ impl GpuEffect for Shake {
                 for (t, s) in taps.iter_mut().zip(samples.iter()) {
                     let (anchor, position, scale, rot) =
                         lumit_core::fx::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
-                    let (m, off, _opacity) =
-                        lumit_core::fx::transform_op(anchor, position, scale, rot, 1.0);
+                    let (m, off, _opacity) = lumit_core::fx::transform_op(
+                        anchor,
+                        position,
+                        scale,
+                        rot,
+                        lumit_core::fx::NO_SKEW,
+                        1.0,
+                    );
                     *t = lumit_gpu::fx::ShakeMbTap { m, off };
                 }
                 fx.shake_mb(

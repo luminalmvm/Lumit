@@ -656,6 +656,8 @@ Map<String, String> get _table => {
       "Shutter phase": l10n.fxShutterPhase,
       "Sine": l10n.fxSine,
       "Size": l10n.fxSize,
+      "Skew": l10n.fxSkew,
+      "Skew axis": l10n.fxSkewAxis,
       "Slice repeat": l10n.fxSliceRepeat,
       "Soft colour": l10n.fxSoftColour,
       "Soft light": l10n.fxSoftLight,

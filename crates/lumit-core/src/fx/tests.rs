@@ -3695,7 +3695,7 @@ fn transform_instantiates_and_resolves_with_the_preview_factor() {
     };
     assert_eq!(
         packed(&e, 1000.0, 1.0),
-        ([0.0; 2], [0.0; 2], [1.0; 2], 0.0, 1.0, 1.0)
+        ([0.0; 2], [0.0; 2], [1.0; 2], 0.0, [0.0; 2], 1.0, 1.0)
     );
 
     // px@comp parameters scale by the §2.3 preview factor; percentages
@@ -3712,7 +3712,15 @@ fn transform_instantiates_and_resolves_with_the_preview_factor() {
     }
     assert_eq!(
         packed(&e, 500.0, 0.5),
-        ([20.0, 0.0], [50.0, 0.0], [2.0, 1.0], 90.0, 1.0, 1.0)
+        (
+            [20.0, 0.0],
+            [50.0, 0.0],
+            [2.0, 1.0],
+            90.0,
+            [0.0; 2],
+            1.0,
+            1.0
+        )
     );
 }
 
@@ -4028,7 +4036,9 @@ fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     cpu::apply_stack(&mut s, w, h, &shaken);
     let (anchor, position, scale, rot) = shake_affine(w, h, [2.0, -1.0], 0.0, 1.0);
     let mut t = img.clone();
-    cpu::transform(&mut t, w, h, anchor, position, scale, rot, 0, 1.0, 1.0);
+    cpu::transform(
+        &mut t, w, h, anchor, position, scale, rot, NO_SKEW, 0, 1.0, 1.0,
+    );
     assert_eq!(s, t);
     assert_ne!(s, img, "the wobble actually moves pixels");
 
@@ -4465,11 +4475,90 @@ fn shake_amplitude_rescales_as_the_old_offsets_did() {
 
 #[test]
 fn transform_inverse_is_exact_at_identity_and_none_at_zero_scale() {
-    let (m, o) = transform_inverse([0.0; 2], [0.0; 2], [1.0; 2], 0.0).unwrap();
+    let (m, o) = transform_inverse([0.0; 2], [0.0; 2], [1.0; 2], 0.0, NO_SKEW).unwrap();
     assert_eq!(m, [1.0, 0.0, -0.0, 1.0]);
     assert_eq!(o, [0.0, 0.0]);
-    assert!(transform_inverse([0.0; 2], [0.0; 2], [0.0, 1.0], 0.0).is_none());
-    assert!(transform_inverse([0.0; 2], [0.0; 2], [1.0, 0.0], 0.0).is_none());
+    assert!(transform_inverse([0.0; 2], [0.0; 2], [0.0, 1.0], 0.0, NO_SKEW).is_none());
+    assert!(transform_inverse([0.0; 2], [0.0; 2], [1.0, 0.0], 0.0, NO_SKEW).is_none());
+}
+
+/// The Skew pair (K-666): the shear is After Effects' — between the scale and
+/// the rotation — a zero amount is the pre-skew road **to the bit** whatever
+/// the axis says (the K-258 gate: a stack saved before the pair existed
+/// backfills both at 0 and must render what it always did), and the shear
+/// preserves area, so a skewed frame is leaned rather than resized.
+#[test]
+fn transform_skew_leans_after_the_scale_and_is_free_at_zero() {
+    let (a, p, s) = ([3.0, -2.0], [11.0, 5.0], [1.3f32, 0.7]);
+
+    // K-258. The axis is a dial with no neutral of its own, so the amount is
+    // the whole gate: at 0 the shear multiply is skipped entirely, and any
+    // axis gives the identical bits.
+    let plain = transform_inverse(a, p, s, 24.0, NO_SKEW).unwrap();
+    for axis in [0.0, 37.0, -90.0, 180.0] {
+        assert_eq!(
+            transform_inverse(a, p, s, 24.0, [0.0, axis]).unwrap(),
+            plain,
+            "skew 0 at axis {axis} must be the pre-skew bits"
+        );
+    }
+
+    // Area is preserved: |det| of the inverse is 1/(sx·sy) with or without the
+    // lean, because the shear's own determinant is exactly 1.
+    let det = |m: [f32; 4]| (m[0] * m[3] - m[1] * m[2]) as f64;
+    let leaned = transform_inverse(a, p, s, 24.0, [35.0, 61.0]).unwrap();
+    assert!(
+        (det(leaned.0) - det(plain.0)).abs() < 1e-6,
+        "a shear must not resize the picture"
+    );
+
+    // The order is anchor, scale, skew, rotation, position — so leaning a
+    // *non-uniform* scale is not the same frame as leaning after the turn.
+    // Rotating by 0 isolates the shear itself, which at axis 0 is horizontal:
+    // a point 2 px above the anchor moves 2 px right at skew 45 (tan 45 = 1).
+    let (w, h) = (17u32, 9u32);
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+    img[at(8, 2)..at(8, 2) + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+    let centre = [8.5, 4.5];
+    let mut t = img.clone();
+    cpu::transform(
+        &mut t,
+        w,
+        h,
+        centre,
+        centre,
+        [1.0; 2],
+        0.0,
+        [45.0, 0.0],
+        0,
+        1.0,
+        1.0,
+    );
+    assert_eq!(t[at(10, 2)], 1.0, "the top leans right by its height");
+    assert_eq!(t[at(8, 2)], 0.0, "and left its old home");
+
+    // The axis turns that lean by a quarter turn: at 90° the shear is vertical
+    // instead, so a point 2 px to the *right* of the anchor drops 2 px and
+    // stays in its column.
+    let mut img2 = vec![0.0f32; (w * h * 4) as usize];
+    img2[at(10, 4)..at(10, 4) + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+    let mut v = img2.clone();
+    cpu::transform(
+        &mut v,
+        w,
+        h,
+        centre,
+        centre,
+        [1.0; 2],
+        0.0,
+        [45.0, 90.0],
+        0,
+        1.0,
+        1.0,
+    );
+    assert!(v[at(10, 6)] > 0.999, "the right leans down by its reach");
+    assert!(v[at(10, 4)] < 1e-3, "and left its old home");
 }
 
 /// A varied premultiplied test card for the transform: gradient, an HDR
@@ -4499,7 +4588,7 @@ fn cpu_transform_identity_is_bit_exact() {
     // Identity parameters: the docs/08 §3.5 bit-exact passthrough pin.
     let mut id = img.clone();
     cpu::transform(
-        &mut id, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 0, 1.0, 1.0,
+        &mut id, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, NO_SKEW, 0, 1.0, 1.0,
     );
     assert_eq!(id, img);
     // Mix 0 is the exact identity whatever the parameters.
@@ -4512,6 +4601,7 @@ fn cpu_transform_identity_is_bit_exact() {
         [9.0, 1.0],
         [2.0, 0.5],
         33.0,
+        NO_SKEW,
         0,
         0.4,
         0.0,
@@ -4539,6 +4629,7 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
         [2.0, 0.0],
         [1.0; 2],
         0.0,
+        NO_SKEW,
         0,
         1.0,
         1.0,
@@ -4560,19 +4651,35 @@ fn cpu_transform_moves_scales_rotates_and_fades() {
     let mut r = img.clone();
     img[at(10, 4)..at(10, 4) + 4].copy_from_slice(&[0.0, 1.0, 0.0, 1.0]);
     r.copy_from_slice(&img);
-    cpu::transform(&mut r, w, h, centre, centre, [1.0; 2], 90.0, 0, 1.0, 1.0);
+    cpu::transform(
+        &mut r, w, h, centre, centre, [1.0; 2], 90.0, NO_SKEW, 0, 1.0, 1.0,
+    );
     assert_eq!(r[mid], 1.0, "the centre pixel stays put");
     assert!(r[at(8, 6) + 1] > 0.999, "+2x lands at +2y");
 
     // Scale 0 is degenerate: the image collapses to nothing and renders
     // fully transparent — never a division fault (docs/14).
     let mut z = img.clone();
-    cpu::transform(&mut z, w, h, centre, centre, [0.0, 0.0], 0.0, 0, 1.0, 1.0);
+    cpu::transform(
+        &mut z,
+        w,
+        h,
+        centre,
+        centre,
+        [0.0, 0.0],
+        0.0,
+        NO_SKEW,
+        0,
+        1.0,
+        1.0,
+    );
     assert!(z.iter().all(|v| *v == 0.0), "zero scale collapses to clear");
 
     // Opacity halves all four channels (premultiplied).
     let mut o = img.clone();
-    cpu::transform(&mut o, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, 0, 0.5, 1.0);
+    cpu::transform(
+        &mut o, w, h, [0.0; 2], [0.0; 2], [1.0; 2], 0.0, NO_SKEW, 0, 0.5, 1.0,
+    );
     for c in 0..4 {
         assert_eq!(o[mid + c], 0.5, "channel {c} at half");
     }
@@ -11155,6 +11262,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
                 [3.0, 1.0],
                 [2.0, 0.5],
                 30.0,
+                NO_SKEW,
                 0,
                 0.8,
                 0.75,

@@ -1143,7 +1143,9 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // Red, which is a row rather than a placeholder now. One more
             // since K-625: the fixture's camera is a two-node one, and the
             // point of interest that aims it is named rather than dropped.
-            adjusted: 60,
+            // Two fewer since K-666: the Transform effect has a Skew pair now,
+            // so the fixture's Skew and Skew Axis carry rather than report.
+            adjusted: 58,
             placeholders: 1,
             skipped: 1,
         }

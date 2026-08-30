@@ -1599,6 +1599,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   engine code never faults. Its Anchor and Position are measured in comp pixels, so
   the resolver now carries the preview-resolution factor as well as the diagonal:
   half-resolution preview frames exactly like full, only softer (design rule §2.3).
+- **Skew, the transform's fourth move** (K-666). Scale resizes, rotation turns, position
+  shifts — a *skew* leans, the way italic type leans. Picture the frame drawn on a deck of
+  cards: hold the bottom card still and slide each card above it a little further across,
+  and the square becomes a parallelogram. That is all a shear is, and it is why a skewed
+  frame is never bigger or smaller than it was — you slid the cards, you did not add any.
+  Two controls say how: **Skew** is how far to slide (0 is not at all; 45 slides each card
+  by exactly its own height, and the limit stops short of 90, where the lean would run off
+  to infinity), and **Skew axis** is which way the cards are stacked — 0 is the horizontal
+  lean, and turning the axis turns the lean with it, clockwise, like the Rotation dial.
+  The order matters, and ours is After Effects': the picture is scaled, then leaned, then
+  turned. Lean-then-turn and turn-then-lean give different frames, and copying After
+  Effects' order is what makes an imported project look like it did there. One detail is
+  worth knowing because it is the kind of thing that quietly breaks old projects: a
+  project saved before Skew existed has no such control in it, so it loads at zero — and
+  the code *skips the shear arithmetic entirely* at zero rather than multiplying by a
+  do-nothing matrix. Multiplying by a computed "do nothing" is only ever *nearly* nothing
+  in floating-point maths, and nearly is enough to change the last bit of a pixel. Skipping
+  it means an old project renders the identical file it always did.
 - **Blur grows a Directional mode.** The Blur effect now has a Mode switch: *Gaussian*
   (the soft circular blur it has always been) or *Directional* — a streak along an
   angle, the speed-line look. Under the hood directional blur is a *line integral*:
@@ -6933,9 +6951,9 @@ worth touching; leave Width at zero and nothing happens at all.
 resolution dropdown says how many pixels the engine is asked to *make* — which
 is not the same as how big the picture is drawn. **Auto** makes only the pixels
 the current magnification can actually show, so a Viewer in a small panel is
-cheap; it is the default because it is what Lumit has always quietly done.
-**Full** makes them all, whatever the panel is showing, which is what you want
-when you are judging fine detail. **Half**, **Third** and **Quarter** are real
+cheap. **Full** makes them all, whatever the panel is showing, which is what
+you want when you are judging fine detail, and it is the default: what the
+picture is made of should not depend on how wide the panel happens to be. **Half**, **Third** and **Quarter** are real
 reductions of the composition — Half makes a quarter of the pixels — for when a
 shot is too heavy to preview smoothly. None of them can reach an export.
 

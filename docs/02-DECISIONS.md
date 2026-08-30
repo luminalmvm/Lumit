@@ -20701,3 +20701,47 @@ more row and no code.
 Regression test: `a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads`
 (lumit-import) — the curve at seven hand-computed points, a keyframed case converting key by
 key with its eases intact, and the same curve again once the plug-in is installed.
+
+## K-666 — The Transform effect skews, in After Effects' order
+
+**Status: DECIDED (2026-08-30).** docs/08 §3.5 has said since K-090 that "an additional Skew
+pair arrives post-v1". It arrives here, as two rows on the Transform effect — **Skew** and
+**Skew axis** — and the ruling is about which shear and in what order, because those are the
+two things that cannot be guessed later without changing every project that used the effect.
+
+**Which shear.** After Effects' own: `K = R(axis)·Shx(−tan(amount°))·R(−axis)`. Skew is the
+unitless amount After Effects uses, read as the lean angle in degrees, hard-limited short of
+±90 where the lean would be infinite; Skew axis is a degree dial like Rotation. At the
+default axis of 0 the shear is horizontal and positive amounts lean the top to the right —
+the italic direction — and the axis turns that lean clockwise on screen, the Rotation dial's
+sense. The shear's determinant is exactly 1, so it leans a frame without resizing it and adds
+no degenerate case beyond the zero-scale one already there.
+
+**In what order.** Anchor, scale, **skew**, rotation, position — After Effects' own
+composition, and the order its Transform effect lists the controls in. The forward map is
+`p_out = position + R(rotation)·K(skew)·S(scale)·(p_in − anchor)`, so a lean is applied to
+the *scaled* picture and the rotation then turns the *leaned* one. Skew-after-rotate is a
+different frame, and an engine that picks the other order imports an After Effects project
+into a picture that is subtly not the one it was.
+
+**One road, both paths.** The shear lands in `lumit_core::fx::transform_inverse` — the single
+host-side function that already builds the inverse affine both the CPU reference and the WGSL
+kernel consume — so `fx_transform.wgsl` is untouched and cannot drift. Effects with no Skew
+control (the Shake, docs/08 §3.4, which dispatches this same kernel) pass the named
+`NO_SKEW`.
+
+**A zero amount skips the multiply.** `R(axis)·I·R(−axis)` is only approximately the identity
+in floating point, so composing it unconditionally would change the last bit of every
+transformed pixel in every project that predates this entry. The guard is the K-258 gate: an
+instance saved without the two rows backfills both at 0, the shear arithmetic is skipped
+entirely, and the frame is byte-identical to the one that stack always rendered.
+
+**The After Effects import carries both numbers unchanged**, where it previously reported
+them dropped (`ADBE Geometry2` slots 5 and 6): same shear, same order, so there is nothing to
+convert.
+
+Regression tests: `transform_skew_leans_after_the_scale_and_is_free_at_zero` (lumit-core) —
+the K-258 byte-identity at four axes, the preserved determinant, and the lean itself at two
+axes; `wgsl_transform_matches_the_cpu_oracle` (lumit-gpu) gains a `skew` and a
+`skew-axis-and-spin` case, so the GPU agrees with the oracle to the same 2 fp16 ULP;
+`transform_carries_the_two_points_the_scales_and_the_skew` (lumit-import).
