@@ -13,6 +13,10 @@
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."
   },
+  "aeFilterAll": "Барлығы",
+  "@aeFilterAll": {
+    "description": "Import report window — the filter button that shows rows of every outcome."
+  },
   "animated": "анимацияланған",
   "@animated": {
     "description": "Shown in place of a number when the value is animated rather than fixed. Lower case on purpose — it sits where a value would."
@@ -150,6 +154,18 @@
   "@columnSwitches": {
     "description": "Timeline column heading, over the per-layer on/off controls."
   },
+  "compBackground": "Фон",
+  "@compBackground": {
+    "description": "New composition / Composition settings dialog: row label: the colour behind everything in the composition."
+  },
+  "compGroupFrame": "Кадр",
+  "@compGroupFrame": {
+    "description": "New composition / Composition settings dialog: the section naming the size, rate, length and background."
+  },
+  "compGroupMotionBlur": "Қозғалыс бұлдыратуы",
+  "@compGroupMotionBlur": {
+    "description": "New composition / Composition settings dialog: the section naming the shutter every blurred layer is drawn through."
+  },
   "compositionSettings": "Композиция баптаулары",
   "@compositionSettings": {
     "description": "Title of the dialogue that edits an existing composition."
@@ -217,6 +233,18 @@
   "@create": {
     "description": "Button that confirms a dialogue by making something new."
   },
+  "curveGraphSizeLarge": "Үлкен",
+  "@curveGraphSizeLarge": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its largest. One word."
+  },
+  "curveGraphSizeMedium": "Орташа",
+  "@curveGraphSizeMedium": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its middle size. One word."
+  },
+  "curveGraphSizeSmall": "Кішкентай",
+  "@curveGraphSizeSmall": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its smallest. One word."
+  },
   "custom": "Реттелмелі",
   "@custom": {
     "description": "Shown in a preset picker when the values match no preset."
@@ -233,19 +261,19 @@
   "@deleteAllMarkers": {
     "description": "Context-menu item."
   },
-  "deleteKey": "Delete key",
+  "deleteKey": "Кілттік кадрды өшіру",
   "@deleteKey": {
     "description": "Menu item: remove this keyframe."
   },
-  "deleteMarker": "Delete marker",
+  "deleteMarker": "Маркерді өшіру",
   "@deleteMarker": {
     "description": "Context-menu item."
   },
-  "deleteMask": "Delete mask",
+  "deleteMask": "Масканы өшіру",
   "@deleteMask": {
     "description": "Context-menu item."
   },
-  "deleteShape": "Delete shape",
+  "deleteShape": "Пішінді өшіру",
   "@deleteShape": {
     "description": "Context-menu item."
   },
@@ -261,11 +289,11 @@
   "@discard": {
     "description": "Button that throws away unsaved changes."
   },
-  "diskTier": "Disk",
+  "diskTier": "Диск",
   "@diskTier": {
     "description": "Bottom strip: the name of the disk cache tier, beside RAM and VRAM."
   },
-  "done": "Done",
+  "done": "Дайын",
   "@done": {
     "description": "Button that closes a window when there is nothing to confirm."
   },
@@ -281,7 +309,7 @@
   "@dropperThatLayer": {
     "description": "Shown where a layer's name would be, when the eyedropper is sampling a layer that has none."
   },
-  "duration": "Duration",
+  "duration": "Ұзақтығы",
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
@@ -353,29 +381,61 @@
   "@effectControlsNoLayer": {
     "description": "Empty-state line in the Effect controls panel when no layer is selected."
   },
-  "exportAction": "Export",
+  "exportAction": "Экспорттау",
   "@exportAction": {
     "description": "Button that starts the export."
+  },
+  "exportAddToQueue": "Кезекке қосу",
+  "@exportAddToQueue": {
+    "description": "Export dialog: button that puts the export on the queue without starting it."
+  },
+  "exportAlpha": "Альфа",
+  "@exportAlpha": {
+    "description": "Export dialog, Picture group: how the colour channels relate to the alpha channel in the written file."
   },
   "exportAudioBitRate": "Audio bit rate",
   "@exportAudioBitRate": {
     "description": "Export dialogue: how many bits per second the sound is given."
   },
+  "exportAudioOff": "Өшірулі",
+  "@exportAudioOff": {
+    "description": "Export dialog: audio: no sound is written."
+  },
+  "exportAudioOn": "Қосулы",
+  "@exportAudioOn": {
+    "description": "Export dialog: audio: sound is written with the picture."
+  },
+  "exportAudioStereo": "Стерео",
+  "@exportAudioStereo": {
+    "description": "Export dialog, Audio row: the channel layout every export is mixed to. Disabled — there is nothing to choose."
+  },
   "exportBitRate": "Bit rate",
   "@exportBitRate": {
     "description": "Export dialogue: how many bits per second the video is given."
   },
-  "exportCancel": "Cancel export",
+  "exportBrowse": "Шолу",
+  "@exportBrowse": {
+    "description": "Export dialog: button that opens the system file picker to choose where to write."
+  },
+  "exportCancel": "Экспортты тоқтату",
   "@exportCancel": {
     "description": "Button that stops an export that is running."
   },
-  "exportCancelled": "Export cancelled",
+  "exportCancelled": "Экспорт тоқтатылды",
   "@exportCancelled": {
     "description": "Bottom strip, when the user stopped an export."
+  },
+  "exportColourDepth": "Түс тереңдігі",
+  "@exportColourDepth": {
+    "description": "Export dialog, Composition group: how many bits each colour channel of the written file carries. The same setting as the Picture group's Depth row."
   },
   "exportComposition": "Export composition",
   "@exportComposition": {
     "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
+  },
+  "exportDepth": "Тереңдік",
+  "@exportDepth": {
+    "description": "Export dialog, Picture group: how many bits each colour channel of the written file carries."
   },
   "exportFailed": "Export failed: {error}",
   "@exportFailed": {
@@ -386,7 +446,7 @@
       }
     }
   },
-  "exportFormat": "Format",
+  "exportFormat": "Формат",
   "@exportFormat": {
     "description": "Export dialogue: the container and codec to write."
   },
@@ -409,6 +469,30 @@
   "@exportFromFrame": {
     "description": "Export dialogue: the first frame to write."
   },
+  "exportGroupAudio": "Аудио",
+  "@exportGroupAudio": {
+    "description": "Export dialog: the group naming the sound written with the picture."
+  },
+  "exportGroupColour": "Түс",
+  "@exportGroupColour": {
+    "description": "Export dialog: the Colour section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportGroupComposition": "Композиция",
+  "@exportGroupComposition": {
+    "description": "Export dialog: the group of settings the composition is rendered with."
+  },
+  "exportGroupMetadata": "Метадеректер",
+  "@exportGroupMetadata": {
+    "description": "Export dialog: the Metadata section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportGroupOutput": "Шығыс",
+  "@exportGroupOutput": {
+    "description": "Export dialog: the group naming what is written and where."
+  },
+  "exportGroupTime": "Уақыт",
+  "@exportGroupTime": {
+    "description": "Export dialog: the group naming how much is written and at what rate."
+  },
   "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
   "@exportImageSequenceNote": {
     "description": "Export dialogue: note under the file name when the format writes a still per frame. {extension} is a file extension in capitals, e.g. 'PNG'.",
@@ -422,9 +506,21 @@
   "@exportIncludeAudio": {
     "description": "Export dialogue: whether sound is written alongside the picture."
   },
+  "exportMetadataRemove": "Алып тастау",
+  "@exportMetadataRemove": {
+    "description": "Export dialog, Metadata section: takes one field's row off the list. The button at the end of every row."
+  },
+  "exportMotionBlur": "Қозғалыс бұлдыратуы",
+  "@exportMotionBlur": {
+    "description": "Export dialog, Time group: whether blurred layers blur. Disabled — it is the composition's own setting, and an export renders what the composition renders."
+  },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
+  },
+  "exportOpenFolder": "Буманы ашу",
+  "@exportOpenFolder": {
+    "description": "Export dialog: tick beside \"When done\": show the finished file in the file manager."
   },
   "exportPreparing": "Preparing… ({encoder})",
   "@exportPreparing": {
@@ -439,9 +535,57 @@
   "@exportPreset": {
     "description": "Export dialogue: a saved set of encoder options."
   },
+  "exportPresetEdit": "Өңдеу",
+  "@exportPresetEdit": {
+    "description": "Export dialog, Preset row: opens the name field for the preset in force so it can be renamed or written over. Short — the button is 48 px wide."
+  },
+  "exportPresetSaveAs": "Басқаша сақтау…",
+  "@exportPresetSaveAs": {
+    "description": "Export dialog, Preset row: saves the settings on screen as a preset under a name of one's own."
+  },
+  "exportQuality": "Сапа",
+  "@exportQuality": {
+    "description": "Export dialog, Composition group: the resolution the export renders at, as opposed to the size of the file it writes."
+  },
+  "exportQueueDone": "Дайын",
+  "@exportQueueDone": {
+    "description": "Export queue window: an item’s state once its file has been written."
+  },
+  "exportQueueRemove": "Алып тастау",
+  "@exportQueueRemove": {
+    "description": "Export queue window: tooltip on the mark that takes a finished item off the list."
+  },
+  "exportQueueStart": "Бастау",
+  "@exportQueueStart": {
+    "description": "Export queue window: the filled action: let the queue run."
+  },
+  "exportQueueTitle": "Экспорт кезегі",
+  "@exportQueueTitle": {
+    "description": "Export queue window: the window’s title."
+  },
+  "exportQueueWaiting": "Күтуде",
+  "@exportQueueWaiting": {
+    "description": "Export queue window: an item’s state before it starts."
+  },
+  "exportResolution": "Ажыратымдылық",
+  "@exportResolution": {
+    "description": "Export dialog: row label: what fraction of the composition size is rendered."
+  },
   "exportToFrame": "To frame",
   "@exportToFrame": {
     "description": "Export dialogue: the last frame to write."
+  },
+  "exportType": "Түрі",
+  "@exportType": {
+    "description": "Export dialog: row label: what kind of thing is written — a video, or one image per frame."
+  },
+  "exportTypeImageSequence": "Кескіндер тізбегі",
+  "@exportTypeImageSequence": {
+    "description": "Export dialog: output type: one numbered still image per frame."
+  },
+  "exportTypeVideo": "Бейне",
+  "@exportTypeVideo": {
+    "description": "Export dialog: output type: a single video file."
   },
   "exportWriteTo": "Write to",
   "@exportWriteTo": {
@@ -532,19 +676,19 @@
   "@flowAlwaysOn": {
     "description": "Flow group: the name of the switch that keeps frame synthesis on even at ordinary speeds."
   },
-  "flowDetailHigh": "High",
+  "flowDetailHigh": "Жоғары",
   "@flowDetailHigh": {
     "description": "A choice of the Flow group's Vector detail option."
   },
-  "flowDetailLow": "Low",
+  "flowDetailLow": "Төмен",
   "@flowDetailLow": {
     "description": "A choice of the Flow group's Vector detail option."
   },
-  "flowDetailMedium": "Medium",
+  "flowDetailMedium": "Орташа",
   "@flowDetailMedium": {
     "description": "A choice of the Flow group's Vector detail option."
   },
-  "flowDetailUltra": "Ultra",
+  "flowDetailUltra": "Ультра",
   "@flowDetailUltra": {
     "description": "A choice of the Flow group's Vector detail option."
   },
@@ -552,11 +696,11 @@
   "@flowFallback": {
     "description": "Flow group: the name of the option saying what to show where motion cannot be estimated."
   },
-  "flowFallbackBlend": "Blend",
+  "flowFallbackBlend": "Араластыру",
   "@flowFallbackBlend": {
     "description": "A choice of the Flow group's Fallback option: cross-fade the two nearest frames."
   },
-  "flowFallbackNearest": "Nearest",
+  "flowFallbackNearest": "Ең жақыны",
   "@flowFallbackNearest": {
     "description": "A choice of the Flow group's Fallback option: hold the nearest frame."
   },
@@ -657,6 +801,10 @@
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
   },
+  "formatM4aPicker": "M4A аудио",
+  "@formatM4aPicker": {
+    "description": "Export dialog: the file type shown in the system save dialog when writing sound to an .m4a."
+  },
   "formatMp4Picker": "MP4 видео",
   "@formatMp4Picker": {
     "description": "The file type shown in the system Save dialogue. MP4 stays as it is."
@@ -677,6 +825,10 @@
   "@formatTiffSequence": {
     "description": "Export format: one numbered TIFF per frame. TIFF stays as it is."
   },
+  "formatWavPicker": "WAV аудио",
+  "@formatWavPicker": {
+    "description": "Export dialog: the file type shown in the system save dialog when writing sound to a .wav."
+  },
   "frameRate": "Кадр жиілігі",
   "@frameRate": {
     "description": "Field label: frames per second."
@@ -685,7 +837,11 @@
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxAlpha": "Alpha",
+  "fxAllEdges": "Барлық шеттер",
+  "@fxAllEdges": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxAlpha": "Альфа",
   "@fxAlpha": {
     "description": "Effect controls — a depth-channel option on Depth of field."
   },
@@ -700,6 +856,10 @@
   "fxAmplitude": "Амплитуда",
   "@fxAmplitude": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxAnalyse": "Талдау",
+  "@fxAnalyse": {
+    "description": "Effect controls — the button that starts the camera solve on Camera track."
   },
   "fxAnamorphicSqueeze": "Анаморфты сығу",
   "@fxAnamorphicSqueeze": {
@@ -717,6 +877,10 @@
   "@fxAngle": {
     "description": "Effect controls — a control on Directional blur."
   },
+  "fxAnticlockwise": "Сағат тіліне қарсы",
+  "@fxAnticlockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
+  },
   "fxAperture": "Диафрагма",
   "@fxAperture": {
     "description": "Effect controls — a control on Depth of field."
@@ -725,9 +889,29 @@
   "@fxAspectRatio": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxAsymmetric": "Асимметриялы",
+  "@fxAsymmetric": {
+    "description": "Effect controls — a Type option on Ripple."
+  },
+  "fxAudio": "Аудио",
+  "@fxAudio": {
+    "description": "Effect controls — the layer whose sound the Audio level driver measures."
+  },
+  "fxBackwards": "Артқа",
+  "@fxBackwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
+  "fxBeam": "Сәуле",
+  "@fxBeam": {
+    "description": "Effect name in the Add effect menu — draws a tapered shaft of light."
+  },
   "fxBehind": "Артында",
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxBlackAndWhite": "Ақ-қара",
+  "@fxBlackAndWhite": {
+    "description": "Effect name in the Add effect menu — six weights, one grey."
   },
   "fxBlades": "Қалақшалар",
   "@fxBlades": {
@@ -757,6 +941,30 @@
   "@fxBlurAndSharpen": {
     "description": "Add-effect menu category heading."
   },
+  "fxBoth": "Екеуі де",
+  "@fxBoth": {
+    "description": "Effect controls — a Wipe option on Radial wipe: the wedge opens both ways at once."
+  },
+  "fxBottomEdge": "Төменгі шеті",
+  "@fxBottomEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxBottomToTop": "Төменнен жоғары",
+  "@fxBottomToTop": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxBrightness": "Жарықтық",
+  "@fxBrightness": {
+    "description": "Effect controls — the name of an effect, and its own first control."
+  },
+  "fxCancel": "Болдырмау",
+  "@fxCancel": {
+    "description": "Effect controls — the button that stops a running camera solve on Camera track."
+  },
+  "fxCentre": "Орталық",
+  "@fxCentre": {
+    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured."
+  },
   "fxCentreX": "Орталық X",
   "@fxCentreX": {
     "description": "Effect controls — a control on Radial blur."
@@ -765,6 +973,10 @@
   "@fxCentreY": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxChannel": "Канал",
+  "@fxChannel": {
+    "description": "Effect controls — a control on Set matte: which channel of the matte layer becomes the alpha."
+  },
   "fxChannelOffset": "Каналдар ығысуы",
   "@fxChannelOffset": {
     "description": "Effect controls — a control on Block glitch."
@@ -772,6 +984,10 @@
   "fxChromaticAberration": "Хроматикалық аберрация",
   "@fxChromaticAberration": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxCircle": "Шеңбер",
+  "@fxCircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
   },
   "fxClipBlack": "Қара түсті қию",
   "@fxClipBlack": {
@@ -784,6 +1000,10 @@
   "fxClipWhite": "Ақ түсті қию",
   "@fxClipWhite": {
     "description": "Effect controls — a control on Matte key."
+  },
+  "fxClockwise": "Сағат тілімен",
+  "@fxClockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
   },
   "fxCoating": "Қаптама",
   "@fxCoating": {
@@ -809,6 +1029,18 @@
   "@fxColourBalance": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxColourCorrection": "Түсті түзету",
+  "@fxColourCorrection": {
+    "description": "Effect controls — a control on Shadow highlight."
+  },
+  "fxColourNoise": "Түсті шу",
+  "@fxColourNoise": {
+    "description": "Effect controls — a switch on Noise."
+  },
+  "fxColumns": "Бағандар",
+  "@fxColumns": {
+    "description": "Effect controls — a control on Card wipe: how many cards across the frame."
+  },
   "fxConfidence": "Сенімділік",
   "@fxConfidence": {
     "description": "Effect controls — a control on Posterize time."
@@ -820,6 +1052,10 @@
   "fxConsoleAddToComp": "Add to comp",
   "@fxConsoleAddToComp": {
     "description": "The FX console radial menu with a Project panel item picked: places the item in the open composition."
+  },
+  "fxConsoleAll": "Барлығы",
+  "@fxConsoleAll": {
+    "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
   },
   "fxConsoleCompositions": "Compositions",
   "@fxConsoleCompositions": {
@@ -849,6 +1085,10 @@
   "@fxContrast": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxCount": "Саны",
+  "@fxCount": {
+    "description": "Graph panel — an output socket on the Points sample driver: how many particles are alive this frame."
+  },
   "fxDarken": "Қараңғылау",
   "@fxDarken": {
     "description": "Effect controls — a control on Echo."
@@ -860,6 +1100,26 @@
   "fxDecay": "Өшу",
   "@fxDecay": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxDeepBlue": "Қою көк",
+  "@fxDeepBlue": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepRed": "Қою қызыл",
+  "@fxDeepRed": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepYellow": "Қою сары",
+  "@fxDeepYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDensity": "Тығыздық",
+  "@fxDensity": {
+    "description": "Effect controls — a control on Photo filter (how strong the coloured glass is) and on Scatter (how many points are thrown at each hundred-pixel square of the composition)."
+  },
+  "fxDepth": "Тереңдік",
+  "@fxDepth": {
+    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it."
   },
   "fxDepthChannel": "Depth channel",
   "@fxDepthChannel": {
@@ -897,11 +1157,11 @@
   "@fxDetectEdgeThreshold": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxDifference": "Difference",
+  "fxDifference": "Айырма",
   "@fxDifference": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxDirectionalBlur": "Directional blur",
+  "fxDirectionalBlur": "Бағытталған бұлдырату",
   "@fxDirectionalBlur": {
     "description": "Effect controls — the name of an effect."
   },
@@ -917,19 +1177,27 @@
   "@fxDisplay": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxDistortion": "Distortion",
+  "fxDistance": "Қашықтық",
+  "@fxDistance": {
+    "description": "Effect controls — a control on Drop shadow: how far the shadow is offset."
+  },
+  "fxDistortion": "Бұрмалау",
   "@fxDistortion": {
     "description": "Add-effect menu category heading."
   },
-  "fxDivide": "Divide",
+  "fxDivide": "Бөлу",
   "@fxDivide": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxDots": "Нүктелер",
+  "@fxDots": {
+    "description": "Effect controls — a Style option on Trail: the tail is drawn as one dab per remembered place, rather than as a joined-up ribbon."
   },
   "fxDraft": "Draft",
   "@fxDraft": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxDuration": "Duration",
+  "fxDuration": "Ұзақтығы",
   "@fxDuration": {
     "description": "Effect controls — a control on Flash."
   },
@@ -945,6 +1213,14 @@
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxEllipse": "Эллипс",
+  "@fxEllipse": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
+  },
+  "fxEndColour": "Соңғы түс",
+  "@fxEndColour": {
+    "description": "Effect controls — a control on Gradient and on Particulate: the colour a particle dies at."
+  },
   "fxEveryNthBeat": "Every Nth beat",
   "@fxEveryNthBeat": {
     "description": "Effect controls — a control on Flash."
@@ -953,7 +1229,7 @@
   "@fxExclusion": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxExposure": "Exposure",
+  "fxExposure": "Экспозиция",
   "@fxExposure": {
     "description": "Effect controls — the name of an effect."
   },
@@ -976,6 +1252,10 @@
   "fxFile": "File",
   "@fxFile": {
     "description": "Effect controls — a control on LUT."
+  },
+  "fxFilter": "Сүзгі",
+  "@fxFilter": {
+    "description": "Effect controls — a control on Photo filter: which coloured glass."
   },
   "fxFinalResult": "Final result",
   "@fxFinalResult": {
@@ -1017,11 +1297,15 @@
   "@fxForceOnAllLayers": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxForwards": "Алға",
+  "@fxForwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
   "fxFrameRate": "Frame rate",
   "@fxFrameRate": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxFrequency": "Frequency",
+  "fxFrequency": "Жиілік",
   "@fxFrequency": {
     "description": "Effect controls — a control on Shake."
   },
@@ -1029,7 +1313,7 @@
   "@fxGain": {
     "description": "Effect controls — a control on Colour balance."
   },
-  "fxGamma": "Gamma",
+  "fxGamma": "Гамма",
   "@fxGamma": {
     "description": "Effect controls — a control on Colour balance."
   },
@@ -1049,9 +1333,17 @@
   "@fxGlow": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxGreen": "Green",
+  "fxGradient": "Градиент",
+  "@fxGradient": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxGreen": "Жасыл",
   "@fxGreen": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxGrid": "Тор",
+  "@fxGrid": {
+    "description": "Effect controls — the name of the Grid effect, which makes a lattice of points, and the heading of its first group of controls."
   },
   "fxHard": "Hard",
   "@fxHard": {
@@ -1065,7 +1357,11 @@
   "@fxHardLight": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxHigh": "High",
+  "fxHeight": "Биіктігі",
+  "@fxHeight": {
+    "description": "Effect controls — a control on Particulate: how tall the shape particles are born inside is."
+  },
+  "fxHigh": "Жоғары",
   "@fxHigh": {
     "description": "Effect controls — a control on Lens flare."
   },
@@ -1081,13 +1377,29 @@
   "@fxHighlights": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
+  "fxHorizontal": "Көлденең",
+  "@fxHorizontal": {
+    "description": "Effect controls — a Displacement option on Turbulent displace, and an Orientation option on Lens distort."
+  },
+  "fxHorizontalAxis": "Көлденең ось",
+  "@fxHorizontalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
+  },
   "fxHueShift": "Hue shift",
   "@fxHueShift": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxImage": "Кескін",
+  "@fxImage": {
+    "description": "Graph panel — the name of a socket that carries a picture."
+  },
   "fxInFront": "In front",
   "@fxInFront": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxInput": "Кіріс",
+  "@fxInput": {
+    "description": "Graph panel — the name of the socket a box takes its picture in by."
   },
   "fxIntensity": "Intensity",
   "@fxIntensity": {
@@ -1105,7 +1417,19 @@
   "@fxIris": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
-  "fxLength": "Length",
+  "fxLeftAndRight": "Сол және оң жақ",
+  "@fxLeftAndRight": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxLeftEdge": "Сол жақ шеті",
+  "@fxLeftEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxLeftToRight": "Солдан оңға",
+  "@fxLeftToRight": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxLength": "Ұзындығы",
   "@fxLength": {
     "description": "Effect controls — a control on Directional blur."
   },
@@ -1124,6 +1448,14 @@
   "fxLensOptions": "Lens options",
   "@fxLensOptions": {
     "description": "Effect controls — a control on Tint."
+  },
+  "fxLevel": "Деңгей",
+  "@fxLevel": {
+    "description": "Effect controls — a control on Threshold: where the cut between black and white sits."
+  },
+  "fxLevels": "Деңгейлер",
+  "@fxLevels": {
+    "description": "Effect controls — the name of an effect, and a control on Posterize: how many steps the tone range keeps."
   },
   "fxLift": "Lift",
   "@fxLift": {
@@ -1145,13 +1477,25 @@
   "@fxLighten": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxLightning": "Найзағай",
+  "@fxLightning": {
+    "description": "Effect name in the Add effect menu — draws a forked bolt of lightning."
+  },
   "fxLights": "Lights",
   "@fxLights": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxLine": "Сызық",
+  "@fxLine": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along a straight line."
+  },
   "fxLinePeriod": "Line period",
   "@fxLinePeriod": {
     "description": "Effect controls — a control on Scanlines."
+  },
+  "fxLow": "Төмен",
+  "@fxLow": {
+    "description": "Effect controls — a Feature density option on Camera track."
   },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
@@ -1197,6 +1541,18 @@
   "@fxMaxGhosts": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxMaximum": "Максимум",
+  "@fxMaximum": {
+    "description": "Effect controls — a Math driver operation: the larger of the two numbers."
+  },
+  "fxMedian": "Медиана",
+  "@fxMedian": {
+    "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
+  },
+  "fxMinimum": "Минимум",
+  "@fxMinimum": {
+    "description": "Effect controls — a Math driver operation: the smaller of the two numbers."
+  },
   "fxMirror": "Mirror",
   "@fxMirror": {
     "description": "Effect controls — a control on an effect."
@@ -1205,11 +1561,19 @@
   "@fxMix": {
     "description": "Effect controls — a control on an effect."
   },
-  "fxMode": "Mode",
+  "fxMode": "Режим",
   "@fxMode": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxMotionBlur": "Motion blur",
+  "fxMonochrome": "Монохромды",
+  "@fxMonochrome": {
+    "description": "Effect controls — a switch on Add grain: draw one grain field for all three channels."
+  },
+  "fxMosaic": "Мозаика",
+  "@fxMosaic": {
+    "description": "Effect name in the Add effect menu — the frame in flat rectangular blocks."
+  },
+  "fxMotionBlur": "Қозғалыс бұлдыратуы",
   "@fxMotionBlur": {
     "description": "Effect controls — a control on an effect."
   },
@@ -1217,7 +1581,7 @@
   "@fxMotionVectors": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxMultiply": "Multiply",
+  "fxMultiply": "Көбейту",
   "@fxMultiply": {
     "description": "Effect controls — a control on Echo."
   },
@@ -1225,7 +1589,11 @@
   "@fxNearBlur": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxNone": "None",
+  "fxNoise": "Шу",
+  "@fxNoise": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxNone": "Жоқ",
   "@fxNone": {
     "description": "Effect controls — a control on Matte key."
   },
@@ -1233,9 +1601,33 @@
   "@fxNormal": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxOffset": "Ығысу",
+  "@fxOffset": {
+    "description": "Effect name in the Add effect menu — slides the frame, wrapping round."
+  },
+  "fxOffsetX": "Ығысу X",
+  "@fxOffsetX": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxOffsetY": "Ығысу Y",
+  "@fxOffsetY": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
   "fxOpacityPct": "Opacity %",
   "@fxOpacityPct": {
     "description": "Effect controls — a control on Transform."
+  },
+  "fxOperation": "Амал",
+  "@fxOperation": {
+    "description": "Effect controls — which arithmetic the Math driver does."
+  },
+  "fxOrange": "Қызғылт сары",
+  "@fxOrange": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxOutput": "Шығыс",
+  "@fxOutput": {
+    "description": "Graph panel — the name of the socket a box hands its picture on by."
   },
   "fxOverlay": "Overlay",
   "@fxOverlay": {
@@ -1253,6 +1645,10 @@
   "@fxPhaseOffset": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxPoint": "Нүкте",
+  "@fxPoint": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: every particle is born at the same spot."
+  },
   "fxPositionX": "Position x",
   "@fxPositionX": {
     "description": "Effect controls — a control on Transform."
@@ -1265,19 +1661,23 @@
   "@fxPosterizeTime": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxPower": "Дәреже",
+  "@fxPower": {
+    "description": "Effect controls — a Math driver operation: the first number raised to the second."
+  },
   "fxPreserveLuminance": "Preserve luminance",
   "@fxPreserveLuminance": {
     "description": "Effect controls — a control on Hue shift."
   },
-  "fxQuality": "Quality",
+  "fxQuality": "Сапа",
   "@fxQuality": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxRadialBlur": "Radial blur",
+  "fxRadialBlur": "Радиалды бұлдырату",
   "@fxRadialBlur": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxRadius": "Radius",
+  "fxRadius": "Радиус",
   "@fxRadius": {
     "description": "Effect controls — a control on Gaussian blur."
   },
@@ -1285,7 +1685,19 @@
   "@fxRamp": {
     "description": "Effect controls — a control on Vignette."
   },
-  "fxRed": "Red",
+  "fxRandom": "Кездейсоқ",
+  "@fxRandom": {
+    "description": "Effect controls — a Flip axis and Flip direction option on Card wipe."
+  },
+  "fxRandomness": "Кездейсоқтық",
+  "@fxRandomness": {
+    "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
+  },
+  "fxRectangle": "Тіктөртбұрыш",
+  "@fxRectangle": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside a rectangle."
+  },
+  "fxRed": "Қызыл",
   "@fxRed": {
     "description": "Effect controls — a control on RGB split."
   },
@@ -1321,6 +1733,14 @@
   "@fxRgbSplit": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxRightEdge": "Оң жақ шеті",
+  "@fxRightEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxRightToLeft": "Оңнан солға",
+  "@fxRightToLeft": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
   "fxRimBrightness": "Rim brightness",
   "@fxRimBrightness": {
     "description": "Effect controls — a control on Depth of field."
@@ -1345,6 +1765,10 @@
   "@fxRoundness": {
     "description": "Effect controls — a control on Vignette."
   },
+  "fxRows": "Жолдар",
+  "@fxRows": {
+    "description": "Effect controls — a control on Card wipe: how many cards down the frame."
+  },
   "fxRowsColumnsJitter": "Rows/columns jitter",
   "@fxRowsColumnsJitter": {
     "description": "Effect controls — a control on Block glitch."
@@ -1353,11 +1777,11 @@
   "@fxSamples": {
     "description": "Effect controls — a control on RGB split."
   },
-  "fxSaturation": "Saturation",
+  "fxSaturation": "Қанықтылық",
   "@fxSaturation": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxScale": "Scale",
+  "fxScale": "Масштаб",
   "@fxScale": {
     "description": "Effect controls — a control on Lens flare."
   },
@@ -1397,6 +1821,10 @@
   "@fxSeed": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxSepia": "Сепия",
+  "@fxSepia": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
   "fxShake": "Shake",
   "@fxShake": {
     "description": "Effect controls — the name of an effect."
@@ -1405,9 +1833,13 @@
   "@fxShape": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxSharpen": "Sharpen",
+  "fxSharpen": "Айқындау",
   "@fxSharpen": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxShowPoints": "Нүктелерді көрсету",
+  "@fxShowPoints": {
+    "description": "Effect controls — a control on Camera track."
   },
   "fxShutter": "Shutter",
   "@fxShutter": {
@@ -1420,6 +1852,14 @@
   "fxShutterPhase": "Shutter phase",
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxSine": "Синус",
+  "@fxSine": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSize": "Өлшемі",
+  "@fxSize": {
+    "description": "Effect controls — a control on Turbulent displace."
   },
   "fxSliceRepeat": "Slice repeat",
   "@fxSliceRepeat": {
@@ -1445,9 +1885,21 @@
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxSquare": "Шаршы",
+  "@fxSquare": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxStar": "Жұлдыз",
+  "@fxStar": {
+    "description": "Effect controls — a switch on Radio waves: make a star of the polygon."
+  },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxStartColour": "Бастапқы түс",
+  "@fxStartColour": {
+    "description": "Effect controls — a control on Gradient."
   },
   "fxStatus": "Status",
   "@fxStatus": {
@@ -1461,21 +1913,33 @@
   "@fxStrobe": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxStyle": "Стиль",
+  "@fxStyle": {
+    "description": "Effect controls — a control on Warp."
+  },
   "fxStylise": "Stylise",
   "@fxStylise": {
     "description": "Add-effect menu category heading."
   },
-  "fxSubtract": "Subtract",
+  "fxSubtract": "Азайту",
   "@fxSubtract": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxTemperature": "Temperature",
+  "fxSymmetric": "Симметриялы",
+  "@fxSymmetric": {
+    "description": "Effect controls — a Type option on Ripple."
+  },
+  "fxTemperature": "Температура",
   "@fxTemperature": {
     "description": "Effect controls — the name of an effect."
   },
   "fxTemporal": "Temporal",
   "@fxTemporal": {
     "description": "Add-effect menu category heading."
+  },
+  "fxTexture": "Текстура",
+  "@fxTexture": {
+    "description": "Effect controls — a control on Texturize: the layer pressed into this one as relief."
   },
   "fxThreshold": "Threshold",
   "@fxThreshold": {
@@ -1485,29 +1949,57 @@
   "@fxThresholdSoftness": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxTint": "Tint",
+  "fxTime": "Уақыт",
+  "@fxTime": {
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock."
+  },
+  "fxTint": "Реңк",
   "@fxTint": {
     "description": "Effect controls — a control on Glow."
+  },
+  "fxTopAndBottom": "Жоғарғы және төменгі",
+  "@fxTopAndBottom": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxTopEdge": "Жоғарғы шеті",
+  "@fxTopEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxTopToBottom": "Жоғарыдан төмен",
+  "@fxTopToBottom": {
+    "description": "Effect controls — a Flip order option on Card wipe."
   },
   "fxTransform": "Transform",
   "@fxTransform": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxTransition": "Ауысу",
+  "@fxTransition": {
+    "description": "Add-effect menu category heading."
+  },
   "fxTransparent": "Transparent",
   "@fxTransparent": {
     "description": "Effect controls — a control on an effect."
+  },
+  "fxTriangle": "Үшбұрыш",
+  "@fxTriangle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
   },
   "fxTrigger": "Trigger",
   "@fxTrigger": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxType": "Type",
+  "fxType": "Түрі",
   "@fxType": {
     "description": "Effect controls — a control on Radial blur."
   },
-  "fxUltra": "Ultra",
+  "fxUltra": "Ультра",
   "@fxUltra": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxUnderwater": "Су асты",
+  "@fxUnderwater": {
+    "description": "Effect controls — a Filter option on Photo filter."
   },
   "fxUnsharpMask": "Unsharp mask",
   "@fxUnsharpMask": {
@@ -1517,6 +2009,10 @@
   "@fxUseFocusPoint": {
     "description": "Effect controls — a control on Depth of field."
   },
+  "fxUseMasks": "Маскаларды пайдалану",
+  "@fxUseMasks": {
+    "description": "Effect controls — a control on Camera track."
+  },
   "fxUseSourceColour": "Use source colour",
   "@fxUseSourceColour": {
     "description": "Effect controls — a control on Lens flare."
@@ -1524,6 +2020,14 @@
   "fxUtility": "Utility",
   "@fxUtility": {
     "description": "Add-effect menu category heading."
+  },
+  "fxVertical": "Тік",
+  "@fxVertical": {
+    "description": "Effect controls — a Displacement option on Turbulent displace, and an Orientation option on Lens distort."
+  },
+  "fxVerticalAxis": "Тік ось",
+  "@fxVerticalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
   },
   "fxVibrancy": "Vibrancy",
   "@fxVibrancy": {
@@ -1537,9 +2041,33 @@
   "@fxVignette": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxViolet": "Күлгін",
+  "@fxViolet": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxWave": "Толқын",
+  "@fxWave": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxWaveHeight": "Толқын биіктігі",
+  "@fxWaveHeight": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
+  "fxWaveType": "Толқын түрі",
+  "@fxWaveType": {
+    "description": "Effect controls — a control on Wave warp."
+  },
+  "fxWaveWidth": "Толқын ені",
+  "@fxWaveWidth": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxWidth": "Ені",
+  "@fxWidth": {
+    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
   },
   "fxXAmount": "X amount",
   "@fxXAmount": {
@@ -1556,6 +2084,10 @@
   "fxYFrequency": "Y frequency",
   "@fxYFrequency": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxYellow": "Сары",
+  "@fxYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
   },
   "fxZAmount": "Z amount",
   "@fxZAmount": {
@@ -1577,9 +2109,29 @@
   "@graphEditorEmpty": {
     "description": "Empty state in the graph editor. Ctrl and Shift are key names and stay as they are."
   },
-  "graphSpeed": "Speed",
+  "graphKeyFrameField": "Кадр",
+  "@graphKeyFrameField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact frame, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphKeyValueField": "Мәні",
+  "@graphKeyValueField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact value, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphSpeed": "Жылдамдық",
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
+  },
+  "graphTypeAudio": "аудио",
+  "@graphTypeAudio": {
+    "description": "Graph panel legend: what a green wire carries. Lower case."
+  },
+  "graphTypeColour": "түс",
+  "@graphTypeColour": {
+    "description": "Graph panel legend: what a magenta wire carries. Lower case."
+  },
+  "graphTypeNumber": "сан",
+  "@graphTypeNumber": {
+    "description": "Graph panel legend: what an amber wire carries. Lower case."
   },
   "hierarchyEmpty": "This composition has no layers yet",
   "@hierarchyEmpty": {
@@ -1589,15 +2141,15 @@
   "@importFootage": {
     "description": "Button, menu item and tooltip: bring media files into the project."
   },
-  "interpBlend": "Blend",
+  "interpBlend": "Араластыру",
   "@interpBlend": {
     "description": "In-between frames: mix the two neighbouring source frames."
   },
-  "interpNearest": "Nearest",
+  "interpNearest": "Ең жақыны",
   "@interpNearest": {
     "description": "In-between frames: repeat the closest source frame."
   },
-  "interpOpticalFlow": "Optical flow",
+  "interpOpticalFlow": "Оптикалық ағын",
   "@interpOpticalFlow": {
     "description": "In-between frames: work out how the picture moved and warp between frames."
   },
@@ -1613,35 +2165,35 @@
   "@keyAnchorPointTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyAnywhere": "Anywhere",
+  "keyAnywhere": "Кез келген жерде",
   "@keyAnywhere": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyBackTenFrames": "Back ten frames",
+  "keyBackTenFrames": "Он кадр артқа",
   "@keyBackTenFrames": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyBrushTool": "Brush tool",
+  "keyBrushTool": "Қылқалам құралы",
   "@keyBrushTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCameraTool": "Camera tool",
+  "keyCameraTool": "Камера құралы",
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCompositionSettings": "Composition settings",
+  "keyCompositionSettings": "Композиция баптаулары",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCopyTheSelection": "Copy the selection",
+  "keyCopyTheSelection": "Таңдалғанды көшіру",
   "@keyCopyTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCutTheSelection": "Cut the selection",
+  "keyCutTheSelection": "Таңдалғанды қиып алу",
   "@keyCutTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyDeleteTheSelection": "Delete the selection",
+  "keyDeleteTheSelection": "Таңдалғанды өшіру",
   "@keyDeleteTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1669,7 +2221,7 @@
   "@keyEffectControls": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyExportTheComposition": "Export the composition",
+  "keyExportTheComposition": "Композицияны экспорттау",
   "@keyExportTheComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1693,7 +2245,7 @@
   "@keyFocusThePreviousPanel": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyForwardTenFrames": "Forward ten frames",
+  "keyForwardTenFrames": "Он кадр алға",
   "@keyForwardTenFrames": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1705,7 +2257,7 @@
   "@keyGiveTheLayerARetime": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyGoToTheEnd": "Go to the end",
+  "keyGoToTheEnd": "Соңына өту",
   "@keyGoToTheEnd": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1717,7 +2269,7 @@
   "@keyGoToTheLayerSOutPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyGoToTheStart": "Go to the start",
+  "keyGoToTheStart": "Басына өту",
   "@keyGoToTheStart": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1737,7 +2289,7 @@
   "@keyHalfResolution": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyHandTool": "Hand tool",
+  "keyHandTool": "Қол құралы",
   "@keyHandTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1757,11 +2309,11 @@
   "@keyMoveTheLayerSOutPointToThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewComposition": "New composition",
+  "keyNewComposition": "Жаңа композиция",
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewProject": "New project",
+  "keyNewProject": "Жаңа проект",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1769,23 +2321,23 @@
   "@keyNextEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNextFrame": "Next frame",
+  "keyNextFrame": "Келесі кадр",
   "@keyNextFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNextKeyframe": "Next keyframe",
+  "keyNextKeyframe": "Келесі кілттік кадр",
   "@keyNextKeyframe": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenAProject": "Open a project",
+  "keyOpenAProject": "Проектіні ашу",
   "@keyOpenAProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenProjectSettings": "Open Project settings",
+  "keyOpenProjectSettings": "Проект баптауларын ашу",
   "@keyOpenProjectSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenSettings": "Open Settings",
+  "keyOpenSettings": "Баптауларды ашу",
   "@keyOpenSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1797,19 +2349,19 @@
   "@keyOpenTheFxConsole": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPanels": "Panels",
+  "keyPanels": "Панельдер",
   "@keyPanels": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyPaste": "Paste",
+  "keyPaste": "Қою",
   "@keyPaste": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPenTool": "Pen tool",
+  "keyPenTool": "Қалам құралы",
   "@keyPenTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPlayOrPause": "Play or pause",
+  "keyPlayOrPause": "Ойнату немесе кідірту",
   "@keyPlayOrPause": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1821,11 +2373,11 @@
   "@keyPreviousEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPreviousFrame": "Previous frame",
+  "keyPreviousFrame": "Алдыңғы кадр",
   "@keyPreviousFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPreviousKeyframe": "Previous keyframe",
+  "keyPreviousKeyframe": "Алдыңғы кілттік кадр",
   "@keyPreviousKeyframe": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1841,7 +2393,7 @@
   "@keyQuarterResolution": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRazorTool": "Razor tool",
+  "keyRazorTool": "Лезвие құралы",
   "@keyRazorTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1849,7 +2401,7 @@
   "@keyRedo": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRenameTheLayer": "Rename the layer",
+  "keyRenameTheLayer": "Қабаттың атын өзгерту",
   "@keyRenameTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1909,7 +2461,7 @@
   "@keyRotoBrushTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySaveTheProject": "Save the project",
+  "keySaveTheProject": "Проектіні сақтау",
   "@keySaveTheProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1917,11 +2469,11 @@
   "@keySaveTheProjectSomewhereElse": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySelectEveryLayer": "Select every layer",
+  "keySelectEveryLayer": "Барлық қабаттарды таңдау",
   "@keySelectEveryLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySelectionTool": "Selection tool",
+  "keySelectionTool": "Таңдау құралы",
   "@keySelectionTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1933,7 +2485,7 @@
   "@keySetWorkAreaStartToThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShapeTool": "Shape tool",
+  "keyShapeTool": "Пішін құралы",
   "@keyShapeTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1941,15 +2493,15 @@
   "@keyShowOrHideTheGraphEditor": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheGrid": "Show or hide the grid",
+  "keyShowOrHideTheGrid": "Торды көрсету немесе жасыру",
   "@keyShowOrHideTheGrid": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheLayer": "Show or hide the layer",
+  "keyShowOrHideTheLayer": "Қабатты көрсету немесе жасыру",
   "@keyShowOrHideTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheRulers": "Show or hide the rulers",
+  "keyShowOrHideTheRulers": "Сызғыштарды көрсету немесе жасыру",
   "@keyShowOrHideTheRulers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1969,11 +2521,11 @@
   "@keySplitTheLayerAtThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyTimeline": "Timeline",
+  "keyTimeline": "Уақыт шкаласы",
   "@keyTimeline": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyTools": "Tools",
+  "keyTools": "Құралдар",
   "@keyTools": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
@@ -1997,11 +2549,11 @@
   "@keyViewer": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyZoomIn": "Zoom in",
+  "keyZoomIn": "Жақындату",
   "@keyZoomIn": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyZoomOut": "Zoom out",
+  "keyZoomOut": "Алыстату",
   "@keyZoomOut": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -2009,7 +2561,7 @@
   "@keyZoomToFit": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyZoomTool": "Zoom tool",
+  "keyZoomTool": "Масштаб құралы",
   "@keyZoomTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -2093,7 +2645,7 @@
   "@loadPresetEllipsis": {
     "description": "Button that applies an effect stack from a file."
   },
-  "marker": "Marker",
+  "marker": "Маркер",
   "@marker": {
     "description": "Title of the dialogue that edits one marker."
   },
@@ -2117,23 +2669,23 @@
   "@maskInvertMark": {
     "description": "Very short marker on a mask row meaning it is inverted. Abbreviate in your language too — the cell is about three characters wide."
   },
-  "maskModeAdd": "Add",
+  "maskModeAdd": "Қосу",
   "@maskModeAdd": {
     "description": "Mask mode: this mask adds its shape to what the masks above it let through."
   },
-  "maskModeDifference": "Difference",
+  "maskModeDifference": "Айырма",
   "@maskModeDifference": {
     "description": "Mask mode: what one of this mask and the masks above it cover, but not both."
   },
-  "maskModeIntersect": "Intersect",
+  "maskModeIntersect": "Қиылысу",
   "@maskModeIntersect": {
     "description": "Mask mode: only where this mask and the masks above it overlap."
   },
-  "maskModeNone": "None",
+  "maskModeNone": "Жоқ",
   "@maskModeNone": {
     "description": "Mask mode: the shape is editable but gates nothing."
   },
-  "maskModeSubtract": "Subtract",
+  "maskModeSubtract": "Азайту",
   "@maskModeSubtract": {
     "description": "Mask mode: this mask takes its shape away from what the masks above it let through."
   },
@@ -2154,11 +2706,11 @@
   "@maskPath": {
     "description": "The name of a mask's shape row in the Timeline fold-out — the row that keyframes the drawn shape itself."
   },
-  "menu3dLayer": "3D layer",
+  "menu3dLayer": "3D қабат",
   "@menu3dLayer": {
     "description": "Menu item."
   },
-  "menuAboutLumit": "About Lumit",
+  "menuAboutLumit": "Lumit туралы",
   "@menuAboutLumit": {
     "description": "Menu item."
   },
@@ -2186,7 +2738,7 @@
   "@menuAnimateText": {
     "description": "Menu item."
   },
-  "menuAnimation": "Animation",
+  "menuAnimation": "Анимация",
   "@menuAnimation": {
     "description": "Menu item."
   },
@@ -2202,11 +2754,11 @@
   "@menuAutoOutline": {
     "description": "Menu item."
   },
-  "menuBlendingMode": "Blending mode",
+  "menuBlendingMode": "Араластыру режимі",
   "@menuBlendingMode": {
     "description": "Menu item."
   },
-  "menuCamera": "Camera",
+  "menuCamera": "Камера",
   "@menuCamera": {
     "description": "Menu item."
   },
@@ -2214,7 +2766,7 @@
   "@menuClearBeatMarkers": {
     "description": "Menu item."
   },
-  "menuCloseProject": "Close project",
+  "menuCloseProject": "Проектіні жабу",
   "@menuCloseProject": {
     "description": "Menu item."
   },
@@ -2222,7 +2774,7 @@
   "@menuCommandPalette": {
     "description": "Menu item."
   },
-  "menuComposition": "Composition",
+  "menuComposition": "Композиция",
   "@menuComposition": {
     "description": "Menu item."
   },
@@ -2234,11 +2786,11 @@
   "@menuConvertToSequenceLayer": {
     "description": "Menu item: turn a Footage layer into a Sequence layer, whose clips can be cut and retimed."
   },
-  "menuCopy": "Copy",
+  "menuCopy": "Көшіру",
   "@menuCopy": {
     "description": "Menu item."
   },
-  "menuCreate": "Create",
+  "menuCreate": "Жасау",
   "@menuCreate": {
     "description": "Menu item."
   },
@@ -2246,7 +2798,7 @@
   "@menuCropCompToWorkArea": {
     "description": "Menu item."
   },
-  "menuCut": "Cut",
+  "menuCut": "Қиып алу",
   "@menuCut": {
     "description": "Menu item."
   },
@@ -2266,11 +2818,11 @@
   "@menuDuplicate": {
     "description": "Menu item."
   },
-  "menuEdit": "Edit",
+  "menuEdit": "Өңдеу",
   "@menuEdit": {
     "description": "Menu item."
   },
-  "menuEffect": "Effect",
+  "menuEffect": "Эффект",
   "@menuEffect": {
     "description": "Menu item."
   },
@@ -2282,11 +2834,15 @@
   "@menuEnableRetime": {
     "description": "Menu item. Retime is Lumit's name for time-remapping and is a product term — keep it recognisable."
   },
-  "menuExport": "Export…",
+  "menuExport": "Экспорттау…",
   "@menuExport": {
     "description": "Menu item."
   },
-  "menuFile": "File",
+  "menuExportQueue": "Экспорт кезегі…",
+  "@menuExportQueue": {
+    "description": "Window menu: opens the export queue window."
+  },
+  "menuFile": "Файл",
   "@menuFile": {
     "description": "Menu item."
   },
@@ -2306,15 +2862,15 @@
   "@menuHalf": {
     "description": "Menu item."
   },
-  "menuHelp": "Help",
+  "menuHelp": "Анықтама",
   "@menuHelp": {
     "description": "Menu item."
   },
-  "menuHistory": "History",
+  "menuHistory": "Тарих",
   "@menuHistory": {
     "description": "Menu item."
   },
-  "menuImport": "Import…",
+  "menuImport": "Импорттау…",
   "@menuImport": {
     "description": "Menu item."
   },
@@ -2326,7 +2882,7 @@
   "@menuKeyframeSpeed": {
     "description": "Menu item (a feature that is not built yet). Speed, never velocity (docs/01-GLOSSARY.md)."
   },
-  "menuLayer": "Layer",
+  "menuLayer": "Қабат",
   "@menuLayer": {
     "description": "Menu item."
   },
@@ -2338,7 +2894,7 @@
   "@menuLayerStyles": {
     "description": "Menu item."
   },
-  "menuLumitHelp": "Lumit help",
+  "menuLumitHelp": "Lumit анықтамасы",
   "@menuLumitHelp": {
     "description": "Menu item."
   },
@@ -2346,11 +2902,11 @@
   "@menuLumitOnlineGuides": {
     "description": "Menu item."
   },
-  "menuMarkers": "Markers",
+  "menuMarkers": "Маркерлер",
   "@menuMarkers": {
     "description": "Menu item."
   },
-  "menuMask": "Mask",
+  "menuMask": "Маска",
   "@menuMask": {
     "description": "Menu item."
   },
@@ -2358,7 +2914,7 @@
   "@menuMaskAndShapePath": {
     "description": "Menu item."
   },
-  "menuNew": "New",
+  "menuNew": "Жаңа",
   "@menuNew": {
     "description": "Menu item."
   },
@@ -2374,17 +2930,21 @@
   "@menuNull": {
     "description": "Menu item."
   },
-  "menuOpenProject": "Open project…",
+  "menuOpenProject": "Проектіні ашу…",
   "@menuOpenProject": {
     "description": "Menu item."
   },
-  "menuOpenRecent": "Open recent",
+  "menuOpenRecent": "Соңғыларды ашу",
   "@menuOpenRecent": {
     "description": "Menu item."
   },
-  "menuPaste": "Paste",
+  "menuPaste": "Қою",
   "@menuPaste": {
     "description": "Menu item."
+  },
+  "menuPointLight": "Нүктелік жарық",
+  "@menuPointLight": {
+    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
   },
   "menuPreCompose": "Pre-compose…",
   "@menuPreCompose": {
@@ -2398,7 +2958,7 @@
   "@menuPreviousBlendingMode": {
     "description": "Menu item."
   },
-  "menuProjectSettings": "Project settings…",
+  "menuProjectSettings": "Проект баптаулары…",
   "@menuProjectSettings": {
     "description": "Menu item."
   },
@@ -2418,7 +2978,7 @@
   "@menuResetWorkspace": {
     "description": "Menu item."
   },
-  "menuResolution": "Resolution",
+  "menuResolution": "Ажыратымдылық",
   "@menuResolution": {
     "description": "Menu item."
   },
@@ -2442,7 +3002,7 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuSave": "Save",
+  "menuSave": "Сақтау",
   "@menuSave": {
     "description": "Menu item."
   },
@@ -2450,11 +3010,11 @@
   "@menuSaveAnimationPreset": {
     "description": "Menu item."
   },
-  "menuSaveAs": "Save as…",
+  "menuSaveAs": "Басқаша сақтау…",
   "@menuSaveAs": {
     "description": "Menu item."
   },
-  "menuSelectAll": "Select all",
+  "menuSelectAll": "Барлығын таңдау",
   "@menuSelectAll": {
     "description": "Menu item."
   },
@@ -2470,15 +3030,15 @@
   "@menuSetKeyframe": {
     "description": "Menu item."
   },
-  "menuSettings": "Settings…",
+  "menuSettings": "Баптаулар…",
   "@menuSettings": {
     "description": "Menu item."
   },
-  "menuShowGrid": "Show grid",
+  "menuShowGrid": "Торды көрсету",
   "@menuShowGrid": {
     "description": "Menu item."
   },
-  "menuShowRuler": "Show ruler",
+  "menuShowRuler": "Сызғышты көрсету",
   "@menuShowRuler": {
     "description": "Menu item."
   },
@@ -2530,25 +3090,37 @@
   "@menuUndo": {
     "description": "Menu item."
   },
-  "menuView": "View",
+  "menuView": "Көрініс",
   "@menuView": {
     "description": "Menu item."
   },
-  "menuWindow": "Window",
+  "menuWindow": "Терезе",
   "@menuWindow": {
     "description": "Menu item."
   },
-  "menuWorkspace": "Workspace",
+  "menuWorkspace": "Жұмыс кеңістігі",
   "@menuWorkspace": {
     "description": "Menu item."
   },
-  "menuZoomIn": "Zoom in",
+  "menuZoomIn": "Жақындату",
   "@menuZoomIn": {
     "description": "Menu item."
   },
-  "menuZoomOut": "Zoom out",
+  "menuZoomOut": "Алыстату",
   "@menuZoomOut": {
     "description": "Menu item."
+  },
+  "metadataAuthor": "Авторы",
+  "@metadataAuthor": {
+    "description": "Export dialog, Metadata section: who made the piece, written into the file."
+  },
+  "metadataCopyright": "Авторлық құқық",
+  "@metadataCopyright": {
+    "description": "Export dialog, Metadata section: the copyright line written into the file."
+  },
+  "metadataTitle": "Тақырыбы",
+  "@metadataTitle": {
+    "description": "Export dialog, Metadata section: the name of the piece, written into the file."
   },
   "missingFileCount": "{count, plural, =1{1 missing file} other{{count} missing files}}",
   "@missingFileCount": {
@@ -2571,7 +3143,7 @@
   "@motionMinimal": {
     "description": "Settings window: the Motion setting with animation reduced."
   },
-  "moveDown": "Move down",
+  "moveDown": "Төмен жылжыту",
   "@moveDown": {
     "description": "Context-menu item: move an effect one place down the stack."
   },
@@ -2587,19 +3159,24 @@
   "@moveToTop": {
     "description": "Context-menu item: move an effect to the top of the stack."
   },
-  "moveUp": "Move up",
+  "moveUp": "Жоғары жылжыту",
   "@moveUp": {
     "description": "Context-menu item: move an effect one place up the stack."
   },
-  "name": "Name",
+  "name": "Атауы",
   "@name": {
     "description": "Field label."
   },
-  "newComposition": "New composition",
+  "newComposition": "Жаңа композиция",
   "@newComposition": {
     "description": "Button, menu item and tooltip: create a composition."
   },
-  "newLayer": "New layer",
+  "newFolder": "Жаңа бума",
+  "@newFolder": {
+    "description": "Tooltip on the Project panel's bottom-bar button that makes a new folder.",
+    "type": "text"
+  },
+  "newLayer": "Жаңа қабат",
   "@newLayer": {
     "description": "Button that opens the list of layer kinds."
   },
@@ -2619,11 +3196,11 @@
   "@noEffectsYet": {
     "description": "Empty-state line in the Effect controls panel."
   },
-  "noMarkersYet": "No markers yet",
+  "noMarkersYet": "Әзірге маркерлер жоқ",
   "@noMarkersYet": {
     "description": "Empty state in the marker list."
   },
-  "noMatches": "No matches",
+  "noMatches": "Сәйкестік жоқ",
   "@noMatches": {
     "description": "Shown in a picker when the search finds nothing."
   },
@@ -2631,11 +3208,11 @@
   "@noMatte": {
     "description": "Shown in the matte picker when a layer is not gated by another."
   },
-  "noProject": "No project",
+  "noProject": "Проект жоқ",
   "@noProject": {
     "description": "Bottom strip: no project is open."
   },
-  "none": "None",
+  "none": "Жоқ",
   "@none": {
     "description": "The empty choice in a picker — no layer, no matte, nothing selected."
   },
@@ -2652,11 +3229,11 @@
       }
     }
   },
-  "notSavedYet": "Not saved yet",
+  "notSavedYet": "Әлі сақталмаған",
   "@notSavedYet": {
     "description": "Bottom strip: a new project that has never been saved."
   },
-  "off": "Off",
+  "off": "Өшірулі",
   "@off": {
     "description": "A setting that is switched off."
   },
@@ -2680,11 +3257,11 @@
   "@panelEffectsAndPresets": {
     "description": "The name of the panel listing every effect and saved preset."
   },
-  "panelHierarchy": "Hierarchy",
+  "panelHierarchy": "Иерархия",
   "@panelHierarchy": {
     "description": "The name of the panel showing how layers are parented to each other."
   },
-  "panelProject": "Project",
+  "panelProject": "Проект",
   "@panelProject": {
     "description": "The name of the panel listing the project's footage and compositions."
   },
@@ -2692,7 +3269,7 @@
   "@panelScopes": {
     "description": "The name of the panel with the waveform and vectorscope."
   },
-  "panelTimeline": "Timeline",
+  "panelTimeline": "Уақыт шкаласы",
   "@panelTimeline": {
     "description": "The name of the panel holding layers against time."
   },
@@ -2704,7 +3281,7 @@
   "@pasteSequenceShape": {
     "description": "Context-menu item: apply a copied speed curve."
   },
-  "playbackAdaptive": "Adaptive",
+  "playbackAdaptive": "Бейімделмелі",
   "@playbackAdaptive": {
     "description": "Playback setting: keep time and lower the resolution when the machine cannot keep up."
   },
@@ -2712,7 +3289,7 @@
   "@playbackAdaptiveShort": {
     "description": "Button in the Viewer naming the playback mode that lowers resolution to keep time. Short — it sits in a narrow button."
   },
-  "playbackEveryFrame": "Every frame",
+  "playbackEveryFrame": "Әр кадр",
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
   },
@@ -2786,9 +3363,30 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
+  "projectColumnItems": "Элементтер",
+  "@projectColumnItems": {
+    "description": "Project panel column heading: how many things a folder holds. Shown in capitals by the style, so write it sentence case."
+  },
+  "projectColumnSize": "Өлшемі",
+  "@projectColumnSize": {
+    "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
+  },
   "projectEmpty": "No items yet — import footage or create a composition",
   "@projectEmpty": {
     "description": "Empty-state line in the Project panel."
+  },
+  "projectFooterComposition": "Композиция",
+  "@projectFooterComposition": {
+    "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
+  },
+  "projectFooterFolder": "Бума",
+  "@projectFooterFolder": {
+    "description": "Label on the Project panel's bottom-bar button that makes a new folder. Shown in capitals by the style.",
+    "type": "text"
+  },
+  "projectFooterImport": "Импорт",
+  "@projectFooterImport": {
+    "description": "Label on the Project panel's bottom-bar button that brings footage into the project. Shown in capitals by the style."
   },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
@@ -2807,15 +3405,15 @@
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
   },
-  "projectSettings": "Project settings",
+  "projectSettings": "Проект баптаулары",
   "@projectSettings": {
     "description": "Title of the window holding settings that travel with the project file."
   },
-  "projectTypeComposition": "composition",
+  "projectTypeComposition": "композиция",
   "@projectTypeComposition": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
-  "projectTypeFolder": "folder",
+  "projectTypeFolder": "бума",
   "@projectTypeFolder": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
@@ -2839,19 +3437,19 @@
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
   },
-  "removeEffect": "Remove effect",
+  "removeEffect": "Эффектіні алып тастау",
   "@removeEffect": {
     "description": "Context-menu item: delete an effect from the layer."
   },
-  "rename": "Rename",
+  "rename": "Атын өзгерту",
   "@rename": {
     "description": "Context-menu item."
   },
-  "renameEllipsis": "Rename…",
+  "renameEllipsis": "Атын өзгерту…",
   "@renameEllipsis": {
     "description": "Button that opens a dialogue asking for a new name."
   },
-  "reset": "Reset",
+  "reset": "Қалпына келтіру",
   "@reset": {
     "description": "Button that puts an effect's parameters back to their defaults."
   },
@@ -2872,7 +3470,7 @@
       }
     }
   },
-  "save": "Save",
+  "save": "Сақтау",
   "@save": {
     "description": "Button that confirms a dialogue by writing the change."
   },
@@ -2880,7 +3478,7 @@
   "@savePresetEllipsis": {
     "description": "Button that writes the current effect stack to a file."
   },
-  "saved": "Saved",
+  "saved": "Сақталды",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."
   },
@@ -2897,15 +3495,15 @@
       }
     }
   },
-  "schemeDark": "Dark",
+  "schemeDark": "Қараңғы",
   "@schemeDark": {
     "description": "The name of a colour scheme."
   },
-  "schemeDarkBlue": "Dark blue",
+  "schemeDarkBlue": "Қара көк",
   "@schemeDarkBlue": {
     "description": "The name of a colour scheme."
   },
-  "schemeLight": "Light",
+  "schemeLight": "Ашық",
   "@schemeLight": {
     "description": "The name of a colour scheme."
   },
@@ -2913,7 +3511,7 @@
   "@scopeEverything": {
     "description": "Choice in the Applies to picker: every project on this machine."
   },
-  "scopeHistogram": "Histogram",
+  "scopeHistogram": "Гистограмма",
   "@scopeHistogram": {
     "description": "The name of a scope counting how many pixels sit at each brightness."
   },
@@ -2925,7 +3523,7 @@
   "@scopeThisProject": {
     "description": "Choice in the Applies to picker: only the project that is open."
   },
-  "scopeVectorscope": "Vectorscope",
+  "scopeVectorscope": "Векторскоп",
   "@scopeVectorscope": {
     "description": "The name of a scope showing colour as angle and distance."
   },
@@ -2933,7 +3531,7 @@
   "@scopesWaiting": {
     "description": "Shown in the Scopes panel before the first frame has been measured."
   },
-  "search": "Search",
+  "search": "Іздеу",
   "@search": {
     "description": "Placeholder in a search box that has nothing more specific to say."
   },
@@ -2946,7 +3544,7 @@
       }
     }
   },
-  "searchLayers": "Search layers",
+  "searchLayers": "Қабаттарды іздеу",
   "@searchLayers": {
     "description": "Placeholder in the Timeline's search box."
   },
@@ -2990,7 +3588,7 @@
   "@settingsAppliesTo": {
     "description": "Settings window: the name of the row choosing which projects a cache setting covers."
   },
-  "settingsAutomaticUpdates": "Automatic updates",
+  "settingsAutomaticUpdates": "Автоматты жаңартулар",
   "@settingsAutomaticUpdates": {
     "description": "Settings window: the name of one setting."
   },
@@ -2998,7 +3596,7 @@
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
   },
-  "settingsColourScheme": "Colour scheme",
+  "settingsColourScheme": "Түс схемасы",
   "@settingsColourScheme": {
     "description": "Settings window: the name of one setting."
   },
@@ -3018,11 +3616,15 @@
   "@settingsGraphicsMemoryReserved": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsGroupColour": "Түс",
+  "@settingsGroupColour": {
+    "description": "A section heading in the Project settings window, over the colour-management rows."
+  },
   "settingsGroupDisplay": "Display",
   "@settingsGroupDisplay": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupEditing": "Editing",
+  "settingsGroupEditing": "Өңдеу",
   "@settingsGroupEditing": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3030,15 +3632,15 @@
   "@settingsGroupFramesParkedOnDisk": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupMemory": "Memory",
+  "settingsGroupMemory": "Жады",
   "@settingsGroupMemory": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupPanels": "Panels",
+  "settingsGroupPanels": "Панельдер",
   "@settingsGroupPanels": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupPlayback": "Playback",
+  "settingsGroupPlayback": "Ойнату",
   "@settingsGroupPlayback": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3062,7 +3664,7 @@
   "@settingsGroupTheme": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupUpdates": "Updates",
+  "settingsGroupUpdates": "Жаңартулар",
   "@settingsGroupUpdates": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3070,7 +3672,7 @@
   "@settingsGroupViewer": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupWorkspace": "Workspace",
+  "settingsGroupWorkspace": "Жұмыс кеңістігі",
   "@settingsGroupWorkspace": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3276,11 +3878,11 @@
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
   },
-  "settingsInterfaceScale": "Interface scale",
+  "settingsInterfaceScale": "Интерфейс масштабы",
   "@settingsInterfaceScale": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsLanguage": "Language",
+  "settingsLanguage": "Тіл",
   "@settingsLanguage": {
     "description": "Settings window: the name of the row that chooses the interface language."
   },
@@ -3328,11 +3930,19 @@
   "@settingsPageAppearance": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageGeneral": "General",
+  "settingsPageAudio": "Аудио",
+  "@settingsPageAudio": {
+    "description": "Settings window: name of a page in the sidebar — where sound comes out."
+  },
+  "settingsPageExport": "Экспорт",
+  "@settingsPageExport": {
+    "description": "Name of the Export page in the Settings window's sidebar of pages."
+  },
+  "settingsPageGeneral": "Жалпы",
   "@settingsPageGeneral": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageInterface": "Interface",
+  "settingsPageInterface": "Интерфейс",
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
@@ -3340,7 +3950,7 @@
   "@settingsPageKeymap": {
     "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
   },
-  "settingsPagePerformance": "Performance",
+  "settingsPagePerformance": "Өнімділік",
   "@settingsPagePerformance": {
     "description": "Settings window: name of a page in the sidebar."
   },
@@ -3368,6 +3978,14 @@
   "@settingsRetimeValuesInSeconds": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsScale": "Масштаб",
+  "@settingsScale": {
+    "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
+  },
+  "settingsShape": "Пішін",
+  "@settingsShape": {
+    "description": "Settings window, Appearance: the name of the row choosing between square and rounded corners throughout the interface."
+  },
   "settingsShowTheToneMapButton": "Show the tone map button",
   "@settingsShowTheToneMapButton": {
     "description": "Settings window: the name of one setting."
@@ -3375,6 +3993,10 @@
   "settingsSmoothThePictureWhenZoomed": "Smooth the picture when zoomed in",
   "@settingsSmoothThePictureWhenZoomed": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsStyle": "Стиль",
+  "@settingsStyle": {
+    "description": "Settings window, Appearance: the name of the row choosing how an audio waveform is drawn."
   },
   "settingsSurroundTakesThemeColours": "Surround takes theme colours",
   "@settingsSurroundTakesThemeColours": {
@@ -3388,7 +4010,7 @@
   "@settingsThisVersion": {
     "description": "Settings window: the name of the row showing which version of Lumit is installed."
   },
-  "settingsTitle": "Settings",
+  "settingsTitle": "Баптаулар",
   "@settingsTitle": {
     "description": "Title of the settings window."
   },
@@ -3436,7 +4058,115 @@
   "@settingsYourThemes": {
     "description": "Settings window: heading over the theme duplicate/rename/import/export buttons."
   },
-  "shapeMask": "Mask",
+  "shaderNodeAdd": "Қосу",
+  "@shaderNodeAdd": {
+    "description": "Name of the 'Add' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeCos": "Косинус",
+  "@shaderNodeCos": {
+    "description": "Name of the 'Cosine' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeDistance": "Қашықтық",
+  "@shaderNodeDistance": {
+    "description": "Name of the 'Distance' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the distance between two points. Also a row of the box search that adds one."
+  },
+  "shaderNodeDivide": "Бөлу",
+  "@shaderNodeDivide": {
+    "description": "Name of the 'Divide' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeLength": "Ұзындығы",
+  "@shaderNodeLength": {
+    "description": "Name of the 'Length' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — a vector's length. Also a row of the box search that adds one."
+  },
+  "shaderNodeMatte": "Маска",
+  "@shaderNodeMatte": {
+    "description": "Name of the 'Matte' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the effect's matte strength at each point. Also a row of the box search that adds one."
+  },
+  "shaderNodeMax": "Максимум",
+  "@shaderNodeMax": {
+    "description": "Name of the 'Maximum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMin": "Минимум",
+  "@shaderNodeMin": {
+    "description": "Name of the 'Minimum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMultiply": "Көбейту",
+  "@shaderNodeMultiply": {
+    "description": "Name of the 'Multiply' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodePow": "Дәреже",
+  "@shaderNodePow": {
+    "description": "Name of the 'Power' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — raises one value to another. Also a row of the box search that adds one."
+  },
+  "shaderNodeResult": "Нәтиже",
+  "@shaderNodeResult": {
+    "description": "Name of the 'Result' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the one box every graph ends at: the picture going out. Also a row of the box search that adds one."
+  },
+  "shaderNodeSin": "Синус",
+  "@shaderNodeSin": {
+    "description": "Name of the 'Sine' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeSqrt": "Квадрат түбір",
+  "@shaderNodeSqrt": {
+    "description": "Name of the 'Square root' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeSubtract": "Азайту",
+  "@shaderNodeSubtract": {
+    "description": "Name of the 'Subtract' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeTime": "Уақыт",
+  "@shaderNodeTime": {
+    "description": "Name of the 'Time' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the layer time in seconds. Also a row of the box search that adds one."
+  },
+  "shaderNodeTint": "Реңк",
+  "@shaderNodeTint": {
+    "description": "Name of the 'Tint' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — multiplies a colour by a tint colour. Also a row of the box search that adds one."
+  },
+  "shaderPortAmount": "мөлшер",
+  "@shaderPortAmount": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — how strongly the blend applies, 0..1. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortColour": "түс",
+  "@shaderPortColour": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — a colour value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortSeconds": "секунд",
+  "@shaderPortSeconds": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — the time in seconds. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortValue": "мән",
+  "@shaderPortValue": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — a plain value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortVector": "вектор",
+  "@shaderPortVector": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph — a vector value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shapeCombineIntersect": "Қиылысу",
+  "@shapeCombineIntersect": {
+    "description": "One choice on a shape layer's Combine row: only what both paths covered is kept."
+  },
+  "shapeCombineSubtract": "Азайту",
+  "@shapeCombineSubtract": {
+    "description": "One choice on a shape layer's Combine row: this path is taken out of the one above it."
+  },
+  "shapeFill": "Толтыру",
+  "@shapeFill": {
+    "description": "Timeline row under a shape layer's art: the colour inside its path."
+  },
+  "shapeGradient": "Градиент",
+  "@shapeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its fill is a flat colour or a ramp, and which kind of ramp."
+  },
+  "shapeGradientLinear": "Сызықтық",
+  "@shapeGradientLinear": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps along a line."
+  },
+  "shapeGradientRadial": "Радиалды",
+  "@shapeGradientRadial": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
+  },
+  "shapeMask": "Маска",
   "@shapeMask": {
     "description": "What a shape used to cut a layer out is called."
   },
@@ -3444,11 +4174,15 @@
   "@shapePath": {
     "description": "What a pen-drawn shape is called."
   },
-  "size": "Size",
+  "shapeRepeatCopies": "Көшірмелер",
+  "@shapeRepeatCopies": {
+    "description": "Timeline row under a shape layer's art: how many copies of it are drawn. One is no repeater at all."
+  },
+  "size": "Өлшемі",
   "@size": {
     "description": "Field label: width and height in pixels."
   },
-  "skip": "Skip",
+  "skip": "Өткізіп жіберу",
   "@skip": {
     "description": "Button that passes over an optional step."
   },
@@ -3488,7 +4222,7 @@
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "Effects",
+  "switchEffects": "Эффекттер",
   "@switchEffects": {
     "description": "Layer switch: whether this layer's effects are applied."
   },
@@ -3508,11 +4242,11 @@
   "@switchHidden": {
     "description": "Layer switch: the layer is not drawn."
   },
-  "switchLock": "Lock",
+  "switchLock": "Құлыптау",
   "@switchLock": {
     "description": "Layer switch: refuse edits to this layer."
   },
-  "switchLocked": "Locked",
+  "switchLocked": "Құлыпталған",
   "@switchLocked": {
     "description": "Layer switch, when the layer is already locked."
   },
@@ -3520,7 +4254,7 @@
   "@switchMarkShy": {
     "description": "Layer switch, when the layer is not shy yet."
   },
-  "switchMotionBlur": "Motion blur",
+  "switchMotionBlur": "Қозғалыс бұлдыратуы",
   "@switchMotionBlur": {
     "description": "Layer switch: blur this layer as it moves."
   },
@@ -3540,7 +4274,7 @@
   "@switchSoloed": {
     "description": "Layer switch, when this layer is one of the soloed ones."
   },
-  "switchThreeD": "3D layer",
+  "switchThreeD": "3D қабат",
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
   },
@@ -3688,13 +4422,101 @@
       }
     }
   },
-  "timeColumn": "Time",
+  "timeColumn": "Уақыт",
   "@timeColumn": {
     "description": "Heading of the Timeline's render-time column when nothing is being measured."
   },
   "timelineEmpty": "Open a composition, or drop footage here to make one.",
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
+  },
+  "timelineModeGraph": "График",
+  "@timelineModeGraph": {
+    "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
+  },
+  "timelineModeLayers": "Қабаттар",
+  "@timelineModeLayers": {
+    "description": "Label on the left-hand mode segment in the Timeline's top row: the view showing each layer as a bar against time. Drawn in capitals; one word."
+  },
+  "tipAddKeyframe": "Кілттік кадр қосу",
+  "@tipAddKeyframe": {
+    "description": "Tooltip. One or two words."
+  },
+  "tipBlendMode": "Араластыру режимі",
+  "@tipBlendMode": {
+    "description": "Tooltip on the blend cell. One or two words."
+  },
+  "tipBrushSize": "Қылқалам өлшемі",
+  "@tipBrushSize": {
+    "description": "Tooltip. Keep it to the control's name — one or two words."
+  },
+  "tipFrameNumber": "Кадр нөмірі",
+  "@tipFrameNumber": {
+    "description": "Tooltip on the Timeline's frame readout. One or two words."
+  },
+  "tipMaskMode": "Маска режимі",
+  "@tipMaskMode": {
+    "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
+  },
+  "tipMatte": "Маска",
+  "@tipMatte": {
+    "description": "Tooltip on the matte cell. One or two words."
+  },
+  "tipMovePanel": "Панельді жылжыту",
+  "@tipMovePanel": {
+    "description": "Tooltip on a panel's drag handle. One or two words."
+  },
+  "tipParent": "Аталық",
+  "@tipParent": {
+    "description": "Tooltip on the parent cell. One or two words."
+  },
+  "tipPlayheadTime": "Плейхед уақыты",
+  "@tipPlayheadTime": {
+    "description": "Tooltip on the Timeline's time readout. One or two words."
+  },
+  "tipRemove": "Алып тастау",
+  "@tipRemove": {
+    "description": "Tooltip on the cross that deletes an effect from the stack. One or two words."
+  },
+  "tipRemoveKeyframe": "Кілттік кадрды алып тастау",
+  "@tipRemoveKeyframe": {
+    "description": "Tooltip. One or two words."
+  },
+  "tipRenderTime": "Рендер уақыты",
+  "@tipRenderTime": {
+    "description": "Tooltip on the Timeline's render-time column. One or two words."
+  },
+  "tipTransportEnd": "Соңына",
+  "@tipTransportEnd": {
+    "description": "Tooltip on the Viewer transport's last button, an icon with no words: it takes the playhead to the composition's last frame."
+  },
+  "tipTransportNext": "Келесі кадр",
+  "@tipTransportNext": {
+    "description": "Tooltip on the Viewer transport's step-forward button, an icon with no words: it moves the playhead on by one frame."
+  },
+  "tipTransportPause": "Кідірту",
+  "@tipTransportPause": {
+    "description": "Tooltip on the Viewer transport's play button while playback is running, an icon with no words: pressing it stops."
+  },
+  "tipTransportPlay": "Ойнату",
+  "@tipTransportPlay": {
+    "description": "Tooltip on the Viewer transport's play button while playback is stopped, an icon with no words: pressing it starts."
+  },
+  "tipTransportPrevious": "Алдыңғы кадр",
+  "@tipTransportPrevious": {
+    "description": "Tooltip on the Viewer transport's step-back button, an icon with no words: it moves the playhead back by one frame."
+  },
+  "tipTransportStart": "Басына",
+  "@tipTransportStart": {
+    "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
+  },
+  "tipZoomIn": "Жақындату",
+  "@tipZoomIn": {
+    "description": "Tooltip on the large landscape glyph at the right end of the Timeline's zoom slider. Clicking it zooms one step in."
+  },
+  "tipZoomOut": "Алыстату",
+  "@tipZoomOut": {
+    "description": "Tooltip on the small landscape glyph at the left end of the Timeline's zoom slider. Clicking it zooms one step out."
   },
   "tokenAccent": "Accent",
   "@tokenAccent": {
@@ -3733,7 +4555,7 @@
   "@tokenCurveHelp": {
     "description": "Theme editor: the sentence under the graph curve colours."
   },
-  "tokenError": "Error",
+  "tokenError": "Қате",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3785,7 +4607,7 @@
   "@tokenHairlinestrongHelp": {
     "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
-  "tokenLayercamera": "Camera",
+  "tokenLayercamera": "Камера",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3833,7 +4655,7 @@
   "@tokenLayertextHelp": {
     "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
-  "tokenMarker": "Marker",
+  "tokenMarker": "Маркер",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3857,7 +4679,7 @@
   "@tokenSuccessHelp": {
     "description": "Theme editor: the sentence under the \"Success\" colour, saying where it is used."
   },
-  "tokenSurface0": "Background",
+  "tokenSurface0": "Фон",
   "@tokenSurface0": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3937,7 +4759,7 @@
   "@tokenTimelineoutofrangeHelp": {
     "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
   },
-  "tokenWarning": "Warning",
+  "tokenWarning": "Ескерту",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3981,7 +4803,7 @@
   "@toolAnchor": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolBrush": "Brush",
+  "toolBrush": "Қылқалам",
   "@toolBrush": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4001,19 +4823,19 @@
   "@toolCloneStamp": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolEraser": "Eraser",
+  "toolEraser": "Өшіргіш",
   "@toolEraser": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolFill": "Fill",
+  "toolFill": "Толтыру",
   "@toolFill": {
     "description": "Toolbar options strip — label beside the fill colour swatch."
   },
-  "toolHand": "Hand",
+  "toolHand": "Қол",
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolHardness": "Hardness",
+  "toolHardness": "Қаттылығы",
   "@toolHardness": {
     "description": "Toolbar options strip — label beside the brush hardness field."
   },
@@ -4021,7 +4843,7 @@
   "@toolOpacity": {
     "description": "Toolbar options strip — label beside the brush opacity field."
   },
-  "toolPen": "Pen",
+  "toolPen": "Қалам",
   "@toolPen": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4057,7 +4879,7 @@
   "@toolPuppetStarch": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolRazor": "Razor",
+  "toolRazor": "Лезвие",
   "@toolRazor": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4073,31 +4895,35 @@
   "@toolRotoBrush": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolSelect": "Selection",
+  "toolSelect": "Таңдау",
   "@toolSelect": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeEllipse": "Ellipse",
+  "toolShape": "Пішін",
+  "@toolShape": {
+    "description": "Toolbar options strip — label beside the brush shape picker."
+  },
+  "toolShapeEllipse": "Эллипс",
   "@toolShapeEllipse": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapePolygon": "Polygon",
+  "toolShapePolygon": "Көпбұрыш",
   "@toolShapePolygon": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeRectangle": "Rectangle",
+  "toolShapeRectangle": "Тіктөртбұрыш",
   "@toolShapeRectangle": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeRoundedRectangle": "Rounded rectangle",
+  "toolShapeRoundedRectangle": "Дөңгелектелген тіктөртбұрыш",
   "@toolShapeRoundedRectangle": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeStar": "Star",
+  "toolShapeStar": "Жұлдыз",
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolSize": "Size",
+  "toolSize": "Өлшемі",
   "@toolSize": {
     "description": "Toolbar options strip — label beside the brush size field."
   },
@@ -4113,11 +4939,11 @@
   "@toolTypeVertical": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolWidth": "Width",
+  "toolWidth": "Ені",
   "@toolWidth": {
     "description": "Toolbar options strip — label beside the shape outline width field."
   },
-  "toolZoom": "Zoom",
+  "toolZoom": "Масштаб",
   "@toolZoom": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4169,7 +4995,7 @@
   "@typeVerticalNotBuilt": {
     "description": "Notice when the vertical type tool is used."
   },
-  "unitDegrees": "degrees",
+  "unitDegrees": "градус",
   "@unitDegrees": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
@@ -4185,15 +5011,24 @@
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
   },
-  "unitPercent": "percent",
+  "unitMinutes": "минут",
+  "@unitMinutes": {
+    "description": "The minutes unit, shown after a number of minutes — Settings → Autosave's interval."
+  },
+  "unitPercent": "пайыз",
   "@unitPercent": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
-  "unitPixels": "pixels",
+  "unitPixels": "пиксель",
   "@unitPixels": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
-  "unsavedChanges": "Unsaved changes",
+  "unitSymbolFrames": "кадр",
+  "@unitSymbolFrames": {
+    "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unsavedChanges": "Сақталмаған өзгерістер",
   "@unsavedChanges": {
     "description": "Bottom strip: the project has edits that are not written to disk."
   },
@@ -4221,11 +5056,11 @@
   "@updateCheckFailed": {
     "description": "Notice: looking for a new version failed."
   },
-  "updateCheckFor": "Check for updates",
+  "updateCheckFor": "Жаңартуларды тексеру",
   "@updateCheckFor": {
     "description": "Help menu row that starts looking for a new version."
   },
-  "updateChecking": "Checking for updates…",
+  "updateChecking": "Жаңартулар тексерілуде…",
   "@updateChecking": {
     "description": "Help menu row, while a check is running."
   },
@@ -4242,7 +5077,7 @@
       }
     }
   },
-  "updateDownload": "Download",
+  "updateDownload": "Жүктеп алу",
   "@updateDownload": {
     "description": "Button that fetches an update."
   },
@@ -4311,7 +5146,7 @@
       }
     }
   },
-  "updateLater": "Later",
+  "updateLater": "Кейінірек",
   "@updateLater": {
     "description": "Button that puts off installing a downloaded update."
   },
@@ -4319,7 +5154,7 @@
   "@updateNoneAvailable": {
     "description": "Notice: the version installed is the newest there is."
   },
-  "updateNotNow": "Not now",
+  "updateNotNow": "Қазір емес",
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
@@ -4399,7 +5234,7 @@
   "@updateRestartFailed": {
     "description": "Shown when an update worked but the restart did not."
   },
-  "updateRestartNow": "Restart now",
+  "updateRestartNow": "Қазір қайта іске қосу",
   "@updateRestartNow": {
     "description": "Button: restart into the new version."
   },
@@ -4424,7 +5259,7 @@
       }
     }
   },
-  "updateShowTheFile": "Show the file",
+  "updateShowTheFile": "Файлды көрсету",
   "@updateShowTheFile": {
     "description": "Button: open the folder holding the downloaded update."
   },
@@ -4462,13 +5297,37 @@
       }
     }
   },
-  "volume": "Volume",
+  "volume": "Дыбыс деңгейі",
   "@volume": {
     "description": "Row label: how loud a layer's sound is."
   },
   "vramTier": "VRAM",
   "@vramTier": {
     "description": "Bottom strip: the name of the graphics-card cache tier, beside RAM and Disk. An abbreviation most languages keep."
+  },
+  "welcomeClearRecent": "Тазалау",
+  "@welcomeClearRecent": {
+    "description": "Welcome screen: the quiet word beside the Recent heading that empties the whole list. The projects themselves are untouched."
+  },
+  "welcomeManual": "Нұсқаулық",
+  "@welcomeManual": {
+    "description": "Welcome screen: the outlined button at the bottom right that opens the documentation site in the machine's own browser."
+  },
+  "welcomeNewProject": "Жаңа проект",
+  "@welcomeNewProject": {
+    "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
+  },
+  "welcomeOpenProject": "Ашу",
+  "@welcomeOpenProject": {
+    "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
+  },
+  "welcomeRecent": "Соңғылар",
+  "@welcomeRecent": {
+    "description": "Welcome screen: the heading over the list of recently opened projects. Drawn in capitals, so give the sentence-case word."
+  },
+  "welcomeToday": "Бүгін",
+  "@welcomeToday": {
+    "description": "Welcome screen: shown in a recent project's date column when it was last opened today. Fits 70px of mono type."
   },
   "workAreaClear": "Clear work area",
   "@workAreaClear": {
@@ -4482,19 +5341,19 @@
   "@workAreaStart": {
     "description": "Menu item: set the start of the stretch of time being previewed."
   },
-  "workspaceAudio": "Audio",
+  "workspaceAudio": "Аудио",
   "@workspaceAudio": {
     "description": "The name of a panel arrangement, tuned for sound."
   },
-  "workspaceColour": "Colour",
+  "workspaceColour": "Түс",
   "@workspaceColour": {
     "description": "The name of a panel arrangement, tuned for grading."
   },
-  "workspaceEdit": "Edit",
+  "workspaceEdit": "Өңдеу",
   "@workspaceEdit": {
     "description": "The name of a panel arrangement, tuned for cutting."
   },
-  "workspaceEffects": "Effects",
+  "workspaceEffects": "Эффекттер",
   "@workspaceEffects": {
     "description": "The name of a panel arrangement, tuned for working on effects."
   },
