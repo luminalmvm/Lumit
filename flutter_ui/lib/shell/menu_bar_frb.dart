@@ -55,6 +55,9 @@ import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
 import 'fx_console_frb.dart';
+import 'layer_settings_frb.dart';
+import 'menu_animation_frb.dart';
+import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
@@ -672,7 +675,12 @@ List<MenuSection> lumitMenus(
               MenuEntry(path, () => app.openProject(path)),
         ]),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuCloseProject),
+        // Closing a project puts an empty one in its place, because the shell
+        // always has a document: the engine's `close` is what `newProject`
+        // already does to the one it replaces, so this is the same road the
+        // application takes at launch, walked deliberately.
+        MenuEntry(l10n.menuCloseProject,
+            project == null ? null : app.newProject),
         // Save is only meaningful once there is a project; without a path it
         // behaves as Save as, which is what the engine's empty-path refusal
         // makes us handle explicitly.
@@ -849,11 +857,20 @@ List<MenuSection> lumitMenus(
           MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer())),
           MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
         ]),
-        MenuEntry.todo(l10n.menuLayerSettings),
+        // What the layer *is*, as opposed to what it is doing: its name, and a
+        // Solid's own size and colour (K-444's dialogue pattern).
+        MenuEntry(
+            l10n.menuLayerSettings,
+            onLayer((l) async {
+              if (await showLayerSettingsFrb(context: context, layer: l)) {
+                app.notifyDocumentChanged();
+              }
+            })),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuMask),
-        MenuEntry.todo(l10n.menuMaskAndShapePath),
-        MenuEntry.todo(l10n.menuTransform),
+        MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
+        MenuEntry.submenu(
+            l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
+        MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
         // The selected layer's Retime (K-197). In the menu as well as on the
         // keyboard (K-198's lesson: a command whose only route is a chord has no
         // route the day something intercepts the chord). The command names what
@@ -890,15 +907,15 @@ List<MenuSection> lumitMenus(
                   })
                 : null,
             action: 'layer.sequence.convert'),
-        MenuEntry.todo(l10n.menuFlow),
-        MenuEntry.todo(l10n.menu3dLayer),
-        MenuEntry.todo(l10n.menuMarkers),
+        flowRow(app, ui),
+        threeDRow(app, ui),
+        MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuPreserveTransparency),
-        MenuEntry.todo(l10n.menuBlendingMode),
-        MenuEntry.todo(l10n.menuNextBlendingMode),
-        MenuEntry.todo(l10n.menuPreviousBlendingMode),
-        MenuEntry.todo(l10n.menuTrackMatte),
+        MenuEntry.submenu(l10n.menuBlendingMode, blendRows(app, ui)),
+        blendStepRow(app, ui, by: 1),
+        blendStepRow(app, ui, by: -1),
+        MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
         MenuEntry.todo(l10n.menuLayerStyles),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuReveal),
@@ -959,17 +976,24 @@ List<MenuSection> lumitMenus(
         MenuEntry.todo(l10n.menuSaveAnimationPreset),
         MenuEntry.todo(l10n.menuApplyAnimationPreset),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuSetKeyframe),
-        MenuEntry.todo(l10n.menuToggleHoldKeyframe),
-        MenuEntry.todo(l10n.menuKeyframeInterpolation),
-        MenuEntry.todo(l10n.menuKeyframeSpeed),
+        // The four keyframe commands act on the property rows the Timeline has
+        // picked, and on the keys those rows carry **under the playhead**: the
+        // key selection itself is the panel's and is never published, so a
+        // menu claiming to act on it would be guessing.
+        setKeyframeRow(app, ui),
+        toggleHoldRow(app, ui),
+        keyframeInterpolationRow(context, app, ui),
+        keyframeSpeedRow(context, app, ui),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuAnimateText),
+        animateTextRow(app, ui),
+        // A K-609 animator carries exactly one range selector and it arrives
+        // with the animator, so there is nothing for this to add until more
+        // than one selector exists to have.
         MenuEntry.todo(l10n.menuAddTextSelector),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuAddExpression),
-        MenuEntry.todo(l10n.menuSeparateDimensions),
-        MenuEntry.todo(l10n.menuTrackCamera),
+        addExpressionRow(context, app, ui),
+        MenuEntry.submenu(l10n.menuSeparateDimensions, axisModeRows(app, ui)),
+        trackCameraRow(app, ui),
         MenuEntry.todo(l10n.menuTrackMotion),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuRevealPropertiesWithKeyframes,

@@ -906,6 +906,10 @@
   "@effectControlsNoLayer": {
     "description": "Empty-state line in the Effect controls panel when no layer is selected."
   },
+  "expressionHint": "value * 2",
+  "@expressionHint": {
+    "description": "Placeholder text in the Add expression dialogue's code well, standing in for a small Rhai expression while the well is empty. Not a translated sentence — it is example code."
+  },
   "exportAction": "Export",
   "@exportAction": {
     "description": "Button that starts the export."
@@ -3554,6 +3558,38 @@
   "@keyZoomTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyInfluenceIn": "Influence in",
+  "@keyInfluenceIn": {
+    "description": "Field in the Keyframe speed dialogue: how far the handle on the arriving side of the keyframe reaches, as a per cent of the span before it."
+  },
+  "keyInfluenceOut": "Influence out",
+  "@keyInfluenceOut": {
+    "description": "Field in the Keyframe speed dialogue: how far the handle on the leaving side of the keyframe reaches, as a per cent of the span after it."
+  },
+  "keyInterpAuto": "Automatic",
+  "@keyInterpAuto": {
+    "description": "Choice in the Keyframe interpolation dialogue: the engine aims the curve, pointing it the way the animation is already going."
+  },
+  "keyInterpBezier": "Bezier",
+  "@keyInterpBezier": {
+    "description": "Choice in the Keyframe interpolation dialogue: a curve the user aims by dragging its handle."
+  },
+  "keyInterpHold": "Hold",
+  "@keyInterpHold": {
+    "description": "Choice in the Keyframe interpolation dialogue: the value stays put until the next keyframe, then jumps."
+  },
+  "keyInterpIn": "In",
+  "@keyInterpIn": {
+    "description": "Row label in the Keyframe interpolation dialogue: the side the animation arrives on."
+  },
+  "keyInterpLinear": "Linear",
+  "@keyInterpLinear": {
+    "description": "Choice in the Keyframe interpolation dialogue: a straight line to the next keyframe."
+  },
+  "keyInterpOut": "Out",
+  "@keyInterpOut": {
+    "description": "Row label in the Keyframe interpolation dialogue: the side the animation leaves by."
+  },
   "keymapAfterEffects": "After Effects",
   "@keymapAfterEffects": {
     "description": "Button that loads shortcuts matching Adobe After Effects. A product name — leave it as it is."
@@ -3784,6 +3820,10 @@
   "@menuCamera": {
     "description": "Menu item."
   },
+  "menuCentreInView": "Centre in view",
+  "@menuCentreInView": {
+    "description": "Layer ▸ Transform submenu item: moves the selected layers so each sits in the middle of the composition."
+  },
   "menuClearBeatMarkers": "Clear beat markers",
   "@menuClearBeatMarkers": {
     "description": "Menu item."
@@ -3795,6 +3835,16 @@
   "menuCloseProject": "Close project",
   "@menuCloseProject": {
     "description": "Menu item."
+  },
+  "menuCombineAxesOf": "Combine {property} axes",
+  "@menuCombineAxesOf": {
+    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: puts a transform property's separated axes back on one row. {property} is the property's own name — Anchor point, Position or Scale.",
+    "placeholders": {
+      "property": {
+        "type": "String",
+        "example": "Position"
+      }
+    }
   },
   "menuCommandPalette": "Command palette…",
   "@menuCommandPalette": {
@@ -3880,6 +3930,14 @@
   "@menuFit": {
     "description": "Menu item."
   },
+  "menuFlipHorizontally": "Flip horizontally",
+  "@menuFlipHorizontally": {
+    "description": "Layer ▸ Transform submenu item: mirrors the selected layers left to right."
+  },
+  "menuFlipVertically": "Flip vertically",
+  "@menuFlipVertically": {
+    "description": "Layer ▸ Transform submenu item: mirrors the selected layers top to bottom."
+  },
   "menuFlow": "Flow",
   "@menuFlow": {
     "description": "Menu item."
@@ -3947,6 +4005,30 @@
   "menuMaskAndShapePath": "Mask and shape path",
   "@menuMaskAndShapePath": {
     "description": "Menu item."
+  },
+  "menuMaskFeather": "Feather…",
+  "@menuMaskFeather": {
+    "description": "Layer ▸ Mask submenu item: opens a small dialogue asking for the soft edge's width, in layer pixels, for the mask whose row is picked in the Timeline."
+  },
+  "menuMaskOpacity": "Opacity…",
+  "@menuMaskOpacity": {
+    "description": "Layer ▸ Mask submenu item: opens a small dialogue asking how strongly the picked mask gates, 0 to 100."
+  },
+  "menuMatteAlpha": "Alpha matte",
+  "@menuMatteAlpha": {
+    "description": "Layer ▸ Matte submenu item: gate the selected layers with the transparency of the layer above each of them."
+  },
+  "menuMatteAlphaInverted": "Alpha inverted matte",
+  "@menuMatteAlphaInverted": {
+    "description": "Layer ▸ Matte submenu item: the same as Alpha matte, with the gate turned inside out."
+  },
+  "menuMatteLuma": "Luma matte",
+  "@menuMatteLuma": {
+    "description": "Layer ▸ Matte submenu item: gate the selected layers with the brightness of the layer above each of them."
+  },
+  "menuMatteLumaInverted": "Luma inverted matte",
+  "@menuMatteLumaInverted": {
+    "description": "Layer ▸ Matte submenu item: the same as Luma matte, with the gate turned inside out."
   },
   "menuNew": "New",
   "@menuNew": {
@@ -4052,6 +4134,16 @@
   "@menuSelectAll": {
     "description": "Menu item."
   },
+  "menuSeparateAxesOf": "Separate {property} axes",
+  "@menuSeparateAxesOf": {
+    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: gives a transform property's axes a row and a curve each. {property} is the property's own name — Anchor point, Position or Scale.",
+    "placeholders": {
+      "property": {
+        "type": "String",
+        "example": "Position"
+      }
+    }
+  },
   "menuSeparateDimensions": "Separate dimensions",
   "@menuSeparateDimensions": {
     "description": "Menu item."
@@ -4103,6 +4195,10 @@
   "menuText": "Text",
   "@menuText": {
     "description": "Menu item."
+  },
+  "menuTogglePathKey": "Add or remove key at playhead",
+  "@menuTogglePathKey": {
+    "description": "Layer ▸ Mask and shape path submenu item: keys the picked path's shape at the playhead, or takes away the key already there."
   },
   "menuToggleHoldKeyframe": "Toggle hold keyframe",
   "@menuToggleHoldKeyframe": {

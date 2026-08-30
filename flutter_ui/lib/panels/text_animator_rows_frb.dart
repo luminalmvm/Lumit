@@ -97,12 +97,9 @@ class TextAnimatorRowsFrb extends StatelessWidget {
       control: HouseButton(
         key: const ValueKey('text-animator-add'),
         small: true,
-        onPressed: () => write([
-          ...document.animators,
-          _freshAnimator(l10n.textAnimatorDefaultName(
-            document.animators.length + 1,
-          )),
-        ]),
+        onPressed: () {
+          if (addTextAnimator(layer)) onChanged();
+        },
         child: Text(l10n.textAnimatorAdd),
       ),
     ));
@@ -312,6 +309,34 @@ class TextAnimatorRowsFrb extends StatelessWidget {
       control: SizedBox(width: _cellWidth + 60, child: control),
     );
   }
+}
+
+/// Give a Text layer one more animator (K-609): the card's *Add animator*
+/// button, and Animation ▸ Animate text, which must mean the same thing.
+///
+/// The whole document is rewritten because that is the only shape the engine
+/// takes — and adding the **first** animator moves the layer's anchor in the
+/// same op, so the words do not jump. Returns whether one was added: a layer
+/// that is not Type has no document to add to, and says so by doing nothing.
+bool addTextAnimator(LayerReference layer) {
+  final document = layer.getText();
+  if (document == null) return false;
+  layer.setText(
+    document: BridgeTextDocument(
+      text: document.text,
+      expression: document.expression,
+      size: document.size,
+      fill: document.fill,
+      path: document.path,
+      pathOffset: document.pathOffset,
+      animators: [
+        ...document.animators,
+        _freshAnimator(
+            l10n.textAnimatorDefaultName(document.animators.length + 1)),
+      ],
+    ),
+  );
+  return true;
 }
 
 /// A fresh animator: the whole set of properties, every one of them at a value

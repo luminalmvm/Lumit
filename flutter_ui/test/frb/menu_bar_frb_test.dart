@@ -170,7 +170,7 @@ void main() {
         'Import…',
         'Export…',
         'Project settings…',
-        'Close project (Not implemented)',
+        'Close project',
       ]) {
         expect(find.text(item), findsOneWidget, reason: 'File ▸ $item');
       }
@@ -698,10 +698,10 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey<String>('menu-Animation')));
       await tester.pump();
-      expect(find.text('Keyframe speed… (Not implemented)'), findsOneWidget);
+      expect(find.text('Track motion (Not implemented)'), findsOneWidget);
       expect(
         tester
-            .widget<Text>(find.text('Keyframe speed… (Not implemented)'))
+            .widget<Text>(find.text('Track motion (Not implemented)'))
             .style
             ?.color,
         t.textDisabled,
