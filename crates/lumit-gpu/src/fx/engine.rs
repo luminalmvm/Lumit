@@ -717,6 +717,7 @@ impl FxEngine {
             matte_prepare,
             blend_mix,
             lut,
+            custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             layout,
             adjust_layout,
             mb_layout,

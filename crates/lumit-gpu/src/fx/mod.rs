@@ -13,6 +13,8 @@ use crate::{GpuContext, WORKING_FORMAT};
 mod blur;
 mod colour;
 mod common;
+/// The Custom shader's GPU half (K-650): validate, compile, cache, dispatch.
+mod custom_shader;
 mod distort;
 mod dof;
 mod engine;
@@ -29,6 +31,7 @@ mod utility;
 pub use blur::*;
 pub use colour::*;
 pub use common::*;
+pub use custom_shader::*;
 pub use distort::*;
 // `dof` exposes its `impl FxEngine` methods, which are reachable without a
 // re-export — but it also houses the `DofOp` parameter struct that carries the
@@ -51,6 +54,11 @@ mod tests;
 /// The effect-pass engine: compiled kernels plus their layouts, one per
 /// device (owned alongside the Compositor by whoever renders).
 pub struct FxEngine {
+    /// The Custom shader (docs/08 §3.95, K-650): its own seven-entry bind group
+    /// layout, and one compiled pipeline per distinct source. Its own layout
+    /// rather than the shared fx five, exactly as the LUT's is — the two extra
+    /// pictures and the user's own uniform have nowhere to go on that one.
+    custom_shader: custom_shader::CustomShaderPipelines,
     blur: wgpu::ComputePipeline,
     dir_blur: wgpu::ComputePipeline,
     radial_blur: wgpu::ComputePipeline,

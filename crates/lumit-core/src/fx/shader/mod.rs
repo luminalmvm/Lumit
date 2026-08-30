@@ -249,6 +249,62 @@ impl std::fmt::Display for ShaderRefusal {
     }
 }
 
+impl ShaderProgram {
+    /// A compiler's message about the assembled module, rewritten to name the
+    /// lines of **the user's own text** (§2.1).
+    ///
+    /// naga's `emit_to_string` writes `wgsl:LINE:COLUMN`, counted from the top of
+    /// the module it was given — which begins with forty-odd lines of the host's
+    /// prologue. Subtracting them is what turns "an error on line 47" into "an
+    /// error on line 3", which is the only line number the person typing has.
+    ///
+    /// An error that lands inside the prologue or the epilogue is **not**
+    /// renumbered into nonsense: it is labelled as what it is, a bug in Lumit's
+    /// own wrapper, and reads like one.
+    #[must_use]
+    pub fn remap_error(&self, message: &str) -> String {
+        let user_lines = self
+            .assembled
+            .lines()
+            .count()
+            .saturating_sub(self.prologue_lines as usize)
+            .saturating_sub(EPILOGUE.lines().count());
+        let mut out = String::with_capacity(message.len());
+        let mut host = false;
+        for chunk in message.split_inclusive('\n') {
+            match chunk.find("wgsl:") {
+                None => out.push_str(chunk),
+                Some(at) => {
+                    let rest = chunk.get(at + 5..).unwrap_or("");
+                    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+                    match digits.parse::<usize>() {
+                        Ok(line) if line > self.prologue_lines as usize => {
+                            let moved = line - self.prologue_lines as usize;
+                            if moved > user_lines {
+                                host = true;
+                                out.push_str(chunk);
+                            } else {
+                                out.push_str(chunk.get(..at + 5).unwrap_or(""));
+                                out.push_str(&moved.to_string());
+                                out.push_str(rest.get(digits.len()..).unwrap_or(""));
+                            }
+                        }
+                        _ => {
+                            host = true;
+                            out.push_str(chunk);
+                        }
+                    }
+                }
+            }
+        }
+        if host {
+            format!("in the host's own wrapper — please report this\n{out}")
+        } else {
+            out
+        }
+    }
+}
+
 /// FNV-1a 64 over bytes — the same hash [`ParamId`] is, used here for the source
 /// (§3.1) rather than for an id.
 #[must_use]
@@ -357,9 +413,19 @@ pub fn build(source: &str) -> Result<ShaderProgram, ShaderRefusal> {
         None => source.to_owned(),
     };
 
-    let head = PROLOGUE.replace(PARAMS_MARKER, &struct_text);
-    let prologue_lines = head.lines().count() as u32;
-    let assembled = format!("{head}\n{user}\n{EPILOGUE}");
+    // The user's first line is the line after the prologue's last, exactly —
+    // `prologue_lines` is what a compiler's line numbers are shifted by, so an
+    // off-by-one here is an off-by-one in every message a person reads.
+    let mut assembled = PROLOGUE.replace(PARAMS_MARKER, &struct_text);
+    if !assembled.ends_with('\n') {
+        assembled.push('\n');
+    }
+    let prologue_lines = assembled.lines().count() as u32;
+    assembled.push_str(&user);
+    if !assembled.ends_with('\n') {
+        assembled.push('\n');
+    }
+    assembled.push_str(EPILOGUE);
 
     Ok(ShaderProgram {
         source_hash: hash64(source.as_bytes()),

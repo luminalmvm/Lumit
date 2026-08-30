@@ -19,6 +19,14 @@ thiserror = "2"
 # unlike the allocator report, which is Vulkan and D3D12 only and answers
 # nothing at all on Metal, where the memory question was asked.
 wgpu = { version = "24", features = ["counters"] }
+# The shader front end wgpu itself is built on. The Custom shader (K-650) parses
+# and validates a user's text through it BEFORE a pipeline is built, on
+# `Capabilities::empty()` — the settings the shipped kernels are held to (K-263)
+# — because that is the only road that produces a sentence a person can act on
+# rather than a device error on a stranger's adapter. Pinned to wgpu 24's own
+# naga so the two agree about what is valid. It was a dev-dependency until this
+# effect wanted it at run time; `tests/wgsl_validates.rs` reads the same one.
+naga = { version = "24", features = ["wgsl-in"] }
 
 # The Windows-only, zero-copy Viewer path (K-177). Off by default so every
 # existing build is byte-for-byte unchanged; the bridge turns it on to build the
@@ -85,12 +93,6 @@ core-foundation = { version = "0.9", optional = true }
 [dev-dependencies]
 # The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
 lumit-core = { path = "../lumit-core" }
-# The shader front end wgpu itself is built on, used by tests/wgsl_validates.rs
-# to parse and validate every kernel WITHOUT a graphics card (K-263) — until
-# that test existed, a broken shader could only be caught by a machine with a
-# GPU, at pipeline-creation time. Pinned to wgpu 24's own naga so the two agree
-# about what is valid.
-naga = { version = "24", features = ["wgsl-in"] }
 # The walking-skeleton proof that the eval executor drives these kernels
 # through the 05 §1.1 trait seams (tests/exec_skeleton.rs). Dev-only: the
 # production dependency direction stays eval-independent-of-gpu.
