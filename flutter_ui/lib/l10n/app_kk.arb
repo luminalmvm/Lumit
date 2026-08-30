@@ -425,9 +425,29 @@
   "@exportCancelled": {
     "description": "Bottom strip, when the user stopped an export."
   },
+  "exportChannelsRgb": "RGB",
+  "@exportChannelsRgb": {
+    "description": "Export dialog, Channels list: colour only. RGB stays as it is."
+  },
   "exportColourDepth": "Түс тереңдігі",
   "@exportColourDepth": {
     "description": "Export dialog, Composition group: how many bits each colour channel of the written file carries. The same setting as the Picture group's Depth row."
+  },
+  "exportColourSpaceDisplayP3": "Display P3",
+  "@exportColourSpaceDisplayP3": {
+    "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
+  },
+  "exportColourSpaceRec2020": "Rec. 2020",
+  "@exportColourSpaceRec2020": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.2020 wide-gamut space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceRec709": "Rec. 709",
+  "@exportColourSpaceRec709": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.709 broadcast space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceSrgb": "sRGB / Rec.709",
+  "@exportColourSpaceSrgb": {
+    "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
   "exportComposition": "Export composition",
   "@exportComposition": {
@@ -800,6 +820,10 @@
   "formatHevc": "HEVC видео (.mp4)",
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
+  },
+  "formatM4a": "M4A (AAC)",
+  "@formatM4a": {
+    "description": "Export dialog, Format list: compressed sound in an .m4a container. The codec name AAC stays as it is."
   },
   "formatM4aPicker": "M4A аудио",
   "@formatM4aPicker": {
@@ -1601,6 +1625,10 @@
   "@fxNormal": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxNtsc": "NTSC",
+  "@fxNtsc": {
+    "description": "Effect controls — a Standard option on Broadcast safe. NTSC is a broadcast television standard and is not translated."
+  },
   "fxOffset": "Ығысу",
   "@fxOffset": {
     "description": "Effect name in the Add effect menu — slides the frame, wrapping round."
@@ -1632,6 +1660,10 @@
   "fxOverlay": "Overlay",
   "@fxOverlay": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxPal": "PAL",
+  "@fxPal": {
+    "description": "Effect controls — a Standard option on Broadcast safe. PAL is a broadcast television standard and is not translated."
   },
   "fxPerAxisWobble": "Per-axis wobble",
   "@fxPerAxisWobble": {
@@ -1692,6 +1724,10 @@
   "fxRandomness": "Кездейсоқтық",
   "@fxRandomness": {
     "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
+  },
+  "fxRec709": "Rec. 709",
+  "@fxRec709": {
+    "description": "Effect controls — an Input space option on LUT: the ITU-R BT.709 transfer function."
   },
   "fxRectangle": "Тіктөртбұрыш",
   "@fxRectangle": {
@@ -1888,6 +1924,10 @@
   "fxSquare": "Шаршы",
   "@fxSquare": {
     "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSrgb": "sRGB",
+  "@fxSrgb": {
+    "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
   },
   "fxStar": "Жұлдыз",
   "@fxStar": {
@@ -2132,6 +2172,15 @@
   "graphTypeNumber": "сан",
   "@graphTypeNumber": {
     "description": "Graph panel legend: what an amber wire carries. Lower case."
+  },
+  "graphZoom": "{percent}%",
+  "@graphZoom": {
+    "description": "Graph panel toolbar: the canvas zoom readout, a percentage.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
   },
   "hierarchyEmpty": "This composition has no layers yet",
   "@hierarchyEmpty": {
@@ -3237,6 +3286,15 @@
   "@off": {
     "description": "A setting that is switched off."
   },
+  "openingPercent": "{percent}%",
+  "@openingPercent": {
+    "description": "The percentage beside the phase line on the card shown while a project is being opened. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "paletteComps": "Comp",
   "@paletteComps": {
     "description": "Command palette: heading over the compositions you can jump to. Short — it sits in a narrow column."
@@ -4121,6 +4179,10 @@
   "shaderNodeTint": "Реңк",
   "@shaderNodeTint": {
     "description": "Name of the 'Tint' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — multiplies a colour by a tint colour. Also a row of the box search that adds one."
+  },
+  "shaderNodeUv": "UV",
+  "@shaderNodeUv": {
+    "description": "Name of the 'UV' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the position of the pixel being drawn, 0..1 across the frame. Also a row of the box search that adds one."
   },
   "shaderPortAmount": "мөлшер",
   "@shaderPortAmount": {
