@@ -23,6 +23,7 @@ exactly those.
 | `.\scripts\codegen.ps1` | The whole bridge regeneration cycle, in the right order |
 | `.\scripts\manual-pages.ps1` | The manual's effect pages, and optionally their pictures |
 | `.\scripts\shots.ps1` | One screenshot sweep through the real application |
+| `.\scripts\translations.ps1` | Reads in a translation file, and says where each language stands |
 
 Every script accepts `-?` for its own help:
 
@@ -596,6 +597,30 @@ build, regenerates the Dart from the file.
 3. **Never hand-edit `app_de.arb`, `app_uk.arb`, `app_zh.arb`, `app_zh_Hant.arb`
    or `app_kk.arb`.** Those belong to the ingest tool. A fix typed here is
    overwritten by the next run; make it on the translation page instead.
+
+**When a translation arrives.** Somebody opens an issue with a `.json` from
+lumitlab.com/translate. Download it and run the two commands:
+
+```powershell
+.\scripts\translations.ps1 ingest .\lumit-de.json
+.\scripts\translations.ps1 status
+```
+
+The first reads the file and refuses the whole of it if anything is wrong — an
+unknown language, a key `app_en.arb` does not have, a sentence that dropped a
+`{placeholder}` — so a bad line never lands half-applied. What it accepts goes
+into `app_de.arb`, and the English each entry was translated from goes into
+`flutter_ui/lib/l10n/translation-state.json` beside it. The second prints where
+every language stands: translated, stale, missing. Commit both files together and
+say in the message which language gained how many strings.
+
+Two more, run rarely. `seed` records today's English for translations already in
+the files and is safe to run again — it only fills in what the sidecar is missing.
+`prune` deletes translations of keys English no longer has, and expires the stale
+ones (K-653: a translation whose English moved on falls back to English rather
+than answering the old question), so run it after a sweep that rewords strings.
+`.\scripts\translations.ps1 -SelfTest` runs the whole round trip against a
+throwaway folder in `%TEMP%` and touches nothing here.
 
 **A string the engine sends needs two entries, not one.** Effect labels, category
 names and keymap action descriptions are English text that Rust hands over, so
