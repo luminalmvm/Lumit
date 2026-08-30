@@ -38,6 +38,7 @@
 // shape exists.
 
 import 'dart:async';
+import 'dart:io' show File;
 
 import 'package:flutter/foundation.dart' show ValueListenable, mapEquals;
 import 'package:flutter/services.dart';
@@ -66,6 +67,7 @@ import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
+import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import 'placeholder.dart';
@@ -142,6 +144,40 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   /// The effect whose heading is an inline rename editor, or null (K-321).
   UuidValue? _renamingEffect;
+
+  /// Read a `.wgsl` somebody sent and copy its text onto `effect`
+  /// (docs/impl/custom-shader.md §1.1, §6).
+  ///
+  /// The **text** is copied, not a reference to the file: a project must be one
+  /// file that opens on another machine, so the path is kept only as a memory of
+  /// where it came from and is never read at render. Staged on one handle and
+  /// committed with the stack, which makes loading a shader one
+  /// `SetLayerEffects` and one undo step, the shape every other stack edit has.
+  ///
+  /// A file that will not read leaves the instance exactly as it was: the
+  /// dialogue was the gesture, and half a shader is worse than none.
+  Future<void> _loadShaderInto(LayerReference layer, UuidValue effect) async {
+    final path = await pickShaderToOpen();
+    if (path == null || !mounted) return;
+    final String text;
+    try {
+      text = File(path).readAsStringSync();
+    } catch (_) {
+      return;
+    }
+    final stack = layer.getEffects();
+    for (final instance in stack) {
+      if (instance.id() != effect) continue;
+      instance.setShaderSource(source: text, origin: path);
+      try {
+        layer.setEffects(effects: stack);
+      } catch (_) {
+        // The stack changed under us; re-reading is the recovery.
+      }
+      break;
+    }
+    if (mounted) context.read<LumitUiState>().model.refresh();
+  }
 
   /// How many Action buttons have been pressed in this panel's life (K-417).
   ///
@@ -752,6 +788,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           curvePlotSize: ui.workspace.curvePlotSize,
                           onCurvePlotSize: ui.workspace.setCurvePlotSize,
                           onAction: (effect, param) {
+                            // The Custom shader's `Load from file…` is the
+                            // frontend's own button (docs/impl/custom-shader.md
+                            // §1.1): it opens a native dialogue and copies the
+                            // text onto the instance, neither of which is an
+                            // event the engine could answer. Every other Action
+                            // row goes back as one, which is what the kind is.
+                            if (param == 'load_from_file' &&
+                                info.effects[index].name == 'custom_shader') {
+                              _loadShaderInto(layer, effect);
+                              return;
+                            }
                             try {
                               fireEffectAction(
                                   layer: layer, effect: effect, param: param);
@@ -1154,6 +1201,17 @@ class _EffectSection extends StatelessWidget {
     onStackChanged();
   }
 
+  /// **Every row this instance draws**, in order: the ones its effect declares,
+  /// then the ones its own state derives (docs/impl/custom-shader.md §1.5).
+  ///
+  /// One road, so nothing below here can tell a derived row from a declared one
+  /// — same widgets, same keyframes, same reset. The declared half is memoised
+  /// under the match name because it never changes; the derived half rides the
+  /// read model beside the values, because it is a fact about the instance and
+  /// a fetch per card per rebuild is the traffic the budget test forbids.
+  List<BridgeParamInfo> get _rows =>
+      [...cachedListParameters(info.name), ...info.derivedParams];
+
   /// Put every parameter back to the value its schema declares, and drop any
   /// curve on it — one op, so one undo step for the whole reset.
   ///
@@ -1164,7 +1222,7 @@ class _EffectSection extends StatelessWidget {
     final stack = layer.getEffects();
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
-      for (final param in cachedListParameters(info.name)) {
+      for (final param in _rows) {
         // A button has no value to put back (K-417).
         if (defaultEffectValue(param.kind) case final value?) {
           instance.setValue(id: param.id, value: value);
@@ -1316,7 +1374,7 @@ class _EffectSection extends StatelessWidget {
   /// - two adjacent Float params `foo_x`, `foo_y` fold into one point row
   ///   (with the position dropper for the declared %-of-frame pairs).
   List<Widget> _paramRows(UuidValue id, Map<String, BridgeEffectValue> values) {
-    final params = cachedListParameters(info.name);
+    final params = _rows;
     final groups = cachedListParameterGroups(info.name);
     final byFirstMember = <String, BridgeParamGroup>{};
     final memberOf = <String, BridgeParamGroup>{};

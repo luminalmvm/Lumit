@@ -1045,6 +1045,10 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
+  "fileTypeShader": "WGSL shader",
+  "@fileTypeShader": {
+    "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
+  },
   "fileTypeNodeGroup": "Lumit node group",
   "@fileTypeNodeGroup": {
     "description": "A file type in the system's file dialogues: a saved .lumgrp set of Graph panel boxes and the wires between them."
@@ -10193,6 +10197,10 @@
   "badgeUnknownEffect": "This build does not know this effect",
   "@badgeUnknownEffect": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."
+  },
+  "badgeShaderFailed": "This shader did not compile",
+  "@badgeShaderFailed": {
+    "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
   },
   "menuRowTicked": "Ticked",
   "@menuRowTicked": {

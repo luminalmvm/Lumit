@@ -2103,7 +2103,7 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceRevealGroups(that: this, kind: kind);
 
-  /// The JSON text of a **node group** gathered from `nodes` (K-646) — the
+  /// The JSON text of a **node group** gathered from `nodes` (K-651) — the
   /// mirror of `save_preset` for the graph canvas.
   ///
   /// The engine hands back the text and Dart chooses where it goes, exactly

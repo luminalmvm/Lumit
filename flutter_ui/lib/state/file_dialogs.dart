@@ -91,6 +91,19 @@ Future<String?> pickPresetToOpen() async {
   return file?.path;
 }
 
+/// The WGSL type group — what `Load from file…` on a Custom shader offers
+/// (docs/impl/custom-shader.md §1.1). A bare shader somebody sent you; the text
+/// is **copied into the instance**, because a project must be one file that
+/// opens on another machine.
+XTypeGroup _shaderGroup() =>
+    XTypeGroup(label: l10n.fileTypeShader, extensions: const ['wgsl']);
+
+/// Pick one `.wgsl` shader to load, or null when cancelled.
+Future<String?> pickShaderToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);
+  return file?.path;
+}
+
 /// Choose where to save a `.lumfx` preset, defaulting the name to
 /// [suggestedName] and the folder to [initialDirectory] (the preset library,
 /// so a plain save lands where the browser lists), or null when cancelled.

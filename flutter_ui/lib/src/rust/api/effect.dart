@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_unit`, `catalogue`, `clamp_animation`, `document_for`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -101,7 +101,7 @@ List<BridgePresetInfo> listPresets() =>
     BridgeLib.instance.api.crateApiEffectListPresets();
 
 /// Every `.lumgrp` **node group** in the same library folder, sorted by name
-/// (K-646) — what the graph canvas's search offers beside the drivers.
+/// (K-651) — what the graph canvas's search offers beside the drivers.
 ///
 /// The same folder as the effect presets, because it is the same kind of thing:
 /// something this person saved to use again, on any project.
@@ -214,6 +214,23 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// [`crate::api::layer::LayerReference`] address it by.
   UuidValue id();
 
+  /// Every row **this instance** draws, in order: the rows its effect
+  /// declares, then the rows its own state derives (docs/impl/custom-shader.md
+  /// §1.5, docs/impl/effect-registry.md §4).
+  ///
+  /// The owed half of [`list_parameters`], which is keyed by match name and so
+  /// can only ever answer the first half. For every effect but the Custom
+  /// shader the two lists are the same list; for a Custom shader the tail is
+  /// the uniforms the source it holds declares, and nothing downstream can
+  /// tell a derived row from a declared one — same widgets, same keyframes,
+  /// same expressions.
+  ///
+  /// **Not the panel's per-rebuild road.** The panel reads the declared half
+  /// from its Dart-side memo and the derived half off
+  /// [`BridgeEffectInstanceInfo::derived_params`], which it already holds; this
+  /// is the one-piece answer for a caller that has a handle and no read model.
+  List<BridgeParamInfo> listParameters();
+
   String name();
 
   /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
@@ -245,6 +262,22 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// live, and the document's business is only which pairs are tied.
   bool setPairLinked({required String stem, required bool linked});
 
+  /// Stage this instance's shader source on the **staged** copy, exactly as
+  /// `set_custom_name` and `set_value` do: `LayerReference::set_effects` is the
+  /// commit, so a shader edit is one `SetLayerEffects` and one undo step like
+  /// every other effect-stack edit.
+  ///
+  /// `origin` is the file the text was read from, or `None` for text the user
+  /// typed — which is the honest answer once they have typed it, since it no
+  /// longer says what that file says. An empty `source` clears the block back
+  /// to a fresh instance: a passthrough with no badge (K-111).
+  ///
+  /// The rows the new source declares are **offered**, not adopted: the
+  /// document keeps the values it has, an id that has gone keeps its row and
+  /// its expression, and an id that is new draws at its default until the user
+  /// touches it (§1.5).
+  void setShaderSource({required String source, String? origin});
+
   /// Overwrite a parameter on this staged copy. Nothing is committed — see the
   /// type's own documentation; `LayerReference::set_effects` is the commit.
   ///
@@ -261,6 +294,30 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// not deciding for it; a control that forgets to can no longer render a
   /// value the parameter does not have.
   void setValue({required String id, required BridgeEffectValue value});
+
+  /// Where the text came from, when it was loaded from a file — remembered for
+  /// reload and **never read at render**: a project must be one file that opens
+  /// on another machine.
+  String? shaderOrigin();
+
+  /// The WGSL text this instance holds, or `None` when it holds none
+  /// (docs/impl/custom-shader.md §1.2).
+  ///
+  /// The source is **instance state, not a parameter**: `Value` is `Copy` and
+  /// hashed field by field, a kilobyte of text is neither, and two shader
+  /// sources cannot be interpolated. So it does not ride
+  /// [`BridgeEffectInstanceInfo::values`] with the numbers; it is read here,
+  /// on the gesture that opens an editor, rather than per rebuild.
+  String? shaderSource();
+
+  /// Whether this instance's shader will draw, and why not when it will not
+  /// (docs/impl/custom-shader.md §2.1, §2.2).
+  ///
+  /// The per-instance answer the badge wears and the editor anchors its
+  /// message to. `error` is `None` for a shader that compiles **and** for an
+  /// instance with no source at all, because an effect the user has not filled
+  /// in yet is a passthrough rather than a failure.
+  BridgeShaderStatus shaderStatus();
 }
 
 /// An **automatic** bezier side ([`SideInterp::Auto`]): its speed is computed
@@ -453,6 +510,19 @@ class BridgeEffectInstanceInfo {
   /// is somebody else's sentence about somebody else's code.
   final String? badgeDetail;
 
+  /// The rows **this instance** has beyond its effect's schema
+  /// (docs/impl/custom-shader.md §1.5) — the Custom shader's own uniforms,
+  /// read off the source it holds, and empty for every other effect.
+  ///
+  /// Here rather than asked for per card, and for the reason every other
+  /// field of this struct is: the panel draws its rows on every rebuild, and
+  /// a call apiece is exactly the traffic `bridge_call_budget_test` forbids.
+  /// The declared half stays memoised Dart-side under the match name
+  /// ([`list_parameters`]); this is the half that cannot be, because it is a
+  /// fact about the instance. The two concatenated are what
+  /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
+  final List<BridgeParamInfo> derivedParams;
+
   const BridgeEffectInstanceInfo({
     required this.id,
     required this.name,
@@ -462,6 +532,7 @@ class BridgeEffectInstanceInfo {
     required this.linkedPairs,
     this.badgeReason,
     this.badgeDetail,
+    required this.derivedParams,
   });
 
   @override
@@ -473,7 +544,8 @@ class BridgeEffectInstanceInfo {
       values.hashCode ^
       linkedPairs.hashCode ^
       badgeReason.hashCode ^
-      badgeDetail.hashCode;
+      badgeDetail.hashCode ^
+      derivedParams.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -487,7 +559,8 @@ class BridgeEffectInstanceInfo {
           values == other.values &&
           linkedPairs == other.linkedPairs &&
           badgeReason == other.badgeReason &&
-          badgeDetail == other.badgeDetail;
+          badgeDetail == other.badgeDetail &&
+          derivedParams == other.derivedParams;
 }
 
 @freezed
@@ -1016,6 +1089,46 @@ sealed class BridgeScalar with _$BridgeScalar {
   const factory BridgeScalar.expression(
     String field0,
   ) = BridgeScalar_Expression;
+}
+
+/// What became of the shader one Custom shader instance holds
+/// (docs/impl/custom-shader.md §2.2).
+///
+/// # In plain terms
+///
+/// Somebody typed a program. Either it works, or the compiler has something to
+/// say about it — and the words are the compiler's own, untranslated, because it
+/// is somebody else's sentence about somebody else's code (K-303). The line
+/// numbers in it have been moved back onto the text the user is looking at, so
+/// "line 3" means the third line they typed rather than the third line of the
+/// wrapper Lumit put around it.
+///
+/// A shader that is merely *unfinished* is not a failure: `error` is `None` for
+/// an instance with no source, which renders as a passthrough and wears no badge.
+class BridgeShaderStatus {
+  /// The refusal or the compiler's message, or `None` when the shader draws.
+  final String? error;
+
+  /// One calm sentence per annotation that would not parse. A typo in a doc
+  /// comment costs that row and not the other eight (§2.2), so these are
+  /// notes beside working rows rather than an error instead of them.
+  final List<String> notes;
+
+  const BridgeShaderStatus({
+    this.error,
+    required this.notes,
+  });
+
+  @override
+  int get hashCode => error.hashCode ^ notes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShaderStatus &&
+          runtimeType == other.runtimeType &&
+          error == other.error &&
+          notes == other.notes;
 }
 
 @freezed

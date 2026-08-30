@@ -106,4 +106,11 @@ pub use lumit_gpu::video_memory_bytes;
 /// bridge sets it on [`HeadlessRenderer::set_display_view`] and would otherwise
 /// need a `lumit-gpu` dependency to name the type it is passing.
 pub use lumit_gpu::DisplayParams;
+
+/// Whether an assembled Custom shader compiles (docs/impl/custom-shader.md
+/// §2.1), re-exported for the same reason again: the panel seam asks it to draw
+/// the calm badge, and it is a **CPU** answer — naga on K-263's settings, no
+/// graphics card involved — so a bridge that has never opened an adapter can
+/// still tell the user their shader has a typo on line three.
+pub use lumit_gpu::fx::validate as validate_shader;
 pub use source::{SourceProbe, SourceProbes};

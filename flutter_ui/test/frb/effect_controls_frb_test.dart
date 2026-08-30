@@ -2566,6 +2566,68 @@ void main() {
       expect(find.textContaining('2. ${names[1]}'), findsOneWidget);
     });
 
+    /// **A Custom shader's rows are the ones its own source declares**
+    /// (docs/impl/custom-shader.md §1.5, CS2). Every other effect's controls are
+    /// the same on every layer they are dropped on; this one's come from the
+    /// shader *this copy of it* holds, and they have to be ordinary rows once
+    /// they get here — same widgets, same labels, same everything.
+    testWidgets("a Custom shader's rows come from the shader it holds",
+        (tester) async {
+      const twoRows = r"""
+struct Params {
+    /// @slider(0, 200) @default(25) @unit(px) Ripple radius
+    radius: f32,
+    /// @colour @default(1, 0.5, 0.2, 1) Ripple tint
+    tint: vec4<f32>,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv) * p.tint * p.radius;
+}
+""";
+
+      final p = withLayer();
+      p.layer.addEffect(name: 'custom_shader');
+      await mount(tester, p, transform: false);
+
+      // A fresh instance draws its declared rows and nothing else: an effect
+      // the user has not filled in yet is a passthrough, not a failure (K-111).
+      expect(heading('Custom shader'), findsOneWidget);
+      expect(find.text('Edit shader…'), findsOneWidget,
+          reason: 'the two Action rows are declared (K-417), so they draw');
+      expect(find.text('Load from file…'), findsOneWidget);
+      expect(find.text('Ripple radius'), findsNothing);
+
+      // Load a shader the way `Load from file…` does: staged on one handle,
+      // committed with the stack.
+      final stack = p.layer.getEffects();
+      stack.single.setShaderSource(source: twoRows, origin: null);
+      p.layer.setEffects(effects: stack);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ripple radius'), findsOneWidget,
+          reason: "the source's own uniforms are rows in the panel");
+      expect(find.text('Ripple tint'), findsOneWidget);
+
+      // A shader that will not compile wears the calm badge, with the
+      // compiler's own sentence beneath it and its line numbers moved onto the
+      // text the user typed — and the rows below it stay live.
+      final broken = p.layer.getEffects();
+      broken.single.setShaderSource(
+        source: 'fn shade(uv: vec2<f32>) -> vec4<f32> {\n'
+            '    let a = 1.0;\n'
+            '    return nonesuch(uv);\n}\n',
+        origin: null,
+      );
+      p.layer.setEffects(effects: broken);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('wgsl:3:'), findsOneWidget,
+          reason: 'the compiler names line 3 of the three lines they wrote');
+    });
+
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
   }, skip: !engineAvailable);

@@ -662,8 +662,6 @@ pub enum BridgeParamKind {
 /// simply has no rows to draw.
 #[frb(sync)]
 pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
-    use lumit_core::fx::ParamKind;
-
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
     // half alone (K-593/K-594).
@@ -674,97 +672,102 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
         return Vec::new();
     };
 
-    schema
-        .params
-        .iter()
-        .map(|param| {
-            let kind = match param.kind {
-                ParamKind::Float {
-                    default,
-                    slider,
-                    hard,
-                } => BridgeParamKind::Float {
-                    default,
-                    slider_min: slider.0,
-                    slider_max: slider.1,
-                    hard_min: hard.0,
-                    hard_max: hard.1,
-                },
-                // A closed range (K-414) crosses as its own kind now that the
-                // panel draws one: a track and thumb with the value beside it.
-                // The *value* still crosses as a Float scalar, so the row keeps
-                // every float path — keyframes, the graph editor, the
-                // expression seed — exactly as an Int row does.
-                ParamKind::Slider { default, range } => BridgeParamKind::Slider {
-                    default,
-                    min: range.0,
-                    max: range.1,
-                },
-                ParamKind::Int {
-                    default,
-                    slider,
-                    hard,
-                } => BridgeParamKind::Int {
-                    default,
-                    slider_min: slider.0,
-                    slider_max: slider.1,
-                    hard_min: hard.0,
-                    hard_max: hard.1,
-                },
-                ParamKind::Choice {
-                    options,
-                    default,
-                    dividers_after,
-                } => BridgeParamKind::Choice {
-                    options: options.iter().map(|o| (*o).to_owned()).collect(),
-                    default,
-                    dividers_after: dividers_after.to_vec(),
-                },
-                ParamKind::Bool { default } => BridgeParamKind::Bool { default },
-                ParamKind::Colour { default, range } => BridgeParamKind::Colour {
-                    default: default.to_vec(),
-                    min: range.0,
-                    max: range.1,
-                },
-                ParamKind::Seed => BridgeParamKind::Seed,
-                ParamKind::File {
-                    filter,
-                    filter_name,
-                } => BridgeParamKind::File {
-                    filter: filter.iter().map(|f| (*f).to_owned()).collect(),
-                    filter_name: filter_name.to_owned(),
-                },
-                ParamKind::Angle { default, dial_step } => {
-                    BridgeParamKind::Angle { default, dial_step }
-                }
-                // `self_default` is an engine-side instantiation detail
-                // (K-288) — the panel draws the same picker either way, and
-                // the value it edits already carries the layer id.
-                ParamKind::Layer { .. } => BridgeParamKind::Layer,
-                // `self_default` is an engine-side resolution detail here too
-                // (K-408): the panel always offers "First mask" as its unset
-                // entry, and what an unset row comes to is the render's answer,
-                // not a control the panel draws differently.
-                ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
-                // The declared default is not sent: a fresh instance is born
-                // with it written into the document (`default_param_value`),
-                // so the panel draws the curve it stores, never one the seam
-                // had to describe.
-                ParamKind::Curve { .. } => BridgeParamKind::Curve,
-                // A button (K-417). The row crosses so the panel can draw one;
-                // the *value* never does, because there is none — the press
-                // goes back as an event on the owning layer
-                // (`fire_effect_action`), not as a write.
-                ParamKind::Action => BridgeParamKind::Action,
-            };
-            BridgeParamInfo {
-                id: param.id.to_owned(),
-                label: param.label.to_owned(),
-                kind,
-                unit: bridge_unit(param.unit),
-            }
-        })
-        .collect()
+    schema.params.iter().map(bridge_param).collect()
+}
+
+/// One declared row, as the panel reads it.
+///
+/// Lifted out of [`list_parameters`] so the **derived** rows an instance carries
+/// (docs/impl/custom-shader.md §1.5) cross by the identical road: a derived
+/// parameter is an ordinary `ParamSchema`, and nothing downstream of here may
+/// be able to tell the two apart.
+#[frb(ignore)]
+pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamInfo {
+    use lumit_core::fx::ParamKind;
+
+    let kind = match param.kind {
+        ParamKind::Float {
+            default,
+            slider,
+            hard,
+        } => BridgeParamKind::Float {
+            default,
+            slider_min: slider.0,
+            slider_max: slider.1,
+            hard_min: hard.0,
+            hard_max: hard.1,
+        },
+        // A closed range (K-414) crosses as its own kind now that the
+        // panel draws one: a track and thumb with the value beside it.
+        // The *value* still crosses as a Float scalar, so the row keeps
+        // every float path — keyframes, the graph editor, the
+        // expression seed — exactly as an Int row does.
+        ParamKind::Slider { default, range } => BridgeParamKind::Slider {
+            default,
+            min: range.0,
+            max: range.1,
+        },
+        ParamKind::Int {
+            default,
+            slider,
+            hard,
+        } => BridgeParamKind::Int {
+            default,
+            slider_min: slider.0,
+            slider_max: slider.1,
+            hard_min: hard.0,
+            hard_max: hard.1,
+        },
+        ParamKind::Choice {
+            options,
+            default,
+            dividers_after,
+        } => BridgeParamKind::Choice {
+            options: options.iter().map(|o| (*o).to_owned()).collect(),
+            default,
+            dividers_after: dividers_after.to_vec(),
+        },
+        ParamKind::Bool { default } => BridgeParamKind::Bool { default },
+        ParamKind::Colour { default, range } => BridgeParamKind::Colour {
+            default: default.to_vec(),
+            min: range.0,
+            max: range.1,
+        },
+        ParamKind::Seed => BridgeParamKind::Seed,
+        ParamKind::File {
+            filter,
+            filter_name,
+        } => BridgeParamKind::File {
+            filter: filter.iter().map(|f| (*f).to_owned()).collect(),
+            filter_name: filter_name.to_owned(),
+        },
+        ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
+        // `self_default` is an engine-side instantiation detail
+        // (K-288) — the panel draws the same picker either way, and
+        // the value it edits already carries the layer id.
+        ParamKind::Layer { .. } => BridgeParamKind::Layer,
+        // `self_default` is an engine-side resolution detail here too
+        // (K-408): the panel always offers "First mask" as its unset
+        // entry, and what an unset row comes to is the render's answer,
+        // not a control the panel draws differently.
+        ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
+        // The declared default is not sent: a fresh instance is born
+        // with it written into the document (`default_param_value`),
+        // so the panel draws the curve it stores, never one the seam
+        // had to describe.
+        ParamKind::Curve { .. } => BridgeParamKind::Curve,
+        // A button (K-417). The row crosses so the panel can draw one;
+        // the *value* never does, because there is none — the press
+        // goes back as an event on the owning layer
+        // (`fire_effect_action`), not as a write.
+        ParamKind::Action => BridgeParamKind::Action,
+    };
+    BridgeParamInfo {
+        id: param.id.to_owned(),
+        label: param.label.to_owned(),
+        kind,
+        unit: bridge_unit(param.unit),
+    }
 }
 
 /// The unit a parameter's number is in (K-443) — what the row draws as its
@@ -1524,6 +1527,18 @@ pub struct BridgeEffectInstanceInfo {
     /// are any — shown beneath the badge, verbatim and untranslated, because it
     /// is somebody else's sentence about somebody else's code.
     pub badge_detail: Option<String>,
+    /// The rows **this instance** has beyond its effect's schema
+    /// (docs/impl/custom-shader.md §1.5) — the Custom shader's own uniforms,
+    /// read off the source it holds, and empty for every other effect.
+    ///
+    /// Here rather than asked for per card, and for the reason every other
+    /// field of this struct is: the panel draws its rows on every rebuild, and
+    /// a call apiece is exactly the traffic `bridge_call_budget_test` forbids.
+    /// The declared half stays memoised Dart-side under the match name
+    /// ([`list_parameters`]); this is the half that cannot be, because it is a
+    /// fact about the instance. The two concatenated are what
+    /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
+    pub derived_params: Vec<BridgeParamInfo>,
 }
 
 /// Every value [`BridgeEffectInstanceInfo::badge_reason`] can take.
@@ -1537,6 +1552,7 @@ pub const BADGE_REASONS: &[&str] = &[
     "plugin_disabled",
     "plugin_missing",
     "unknown_effect",
+    "shader_failed",
 ];
 
 /// Why this instance is not doing its own work, if it is not.
@@ -1557,6 +1573,13 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
             (Some("plugin_failed".to_owned()), Some(why))
         };
     }
+    // A Custom shader that does not compile is the one built-in that can wear a
+    // badge (docs/impl/custom-shader.md §2.2). It is not a fault in Lumit and it
+    // is not modal: the effect renders as identity, the values below are still
+    // live and still saved, and the compiler's own sentence goes underneath.
+    if let Some(why) = shader_error(effect) {
+        return (Some("shader_failed".to_owned()), Some(why));
+    }
     if lumit_core::fx::BUILTIN_DEFS.get(name).is_some() {
         return (None, None);
     }
@@ -1570,6 +1593,138 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     } else {
         (Some("unknown_effect".to_owned()), None)
     }
+}
+
+/// What became of the shader one Custom shader instance holds
+/// (docs/impl/custom-shader.md §2.2).
+///
+/// # In plain terms
+///
+/// Somebody typed a program. Either it works, or the compiler has something to
+/// say about it — and the words are the compiler's own, untranslated, because it
+/// is somebody else's sentence about somebody else's code (K-303). The line
+/// numbers in it have been moved back onto the text the user is looking at, so
+/// "line 3" means the third line they typed rather than the third line of the
+/// wrapper Lumit put around it.
+///
+/// A shader that is merely *unfinished* is not a failure: `error` is `None` for
+/// an instance with no source, which renders as a passthrough and wears no badge.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeShaderStatus {
+    /// The refusal or the compiler's message, or `None` when the shader draws.
+    pub error: Option<String>,
+    /// One calm sentence per annotation that would not parse. A typo in a doc
+    /// comment costs that row and not the other eight (§2.2), so these are
+    /// notes beside working rows rather than an error instead of them.
+    pub notes: Vec<String>,
+}
+
+/// Why this instance's shader will not draw, in the compiler's own words, or
+/// `None` when it will (docs/impl/custom-shader.md §2.1, §2.2).
+///
+/// Two failures, and the seam reports them as one sentence because the person
+/// reading it is looking at one text box:
+///
+/// - a **refusal** — the source binds its own group, shadows a host name,
+///   declares no `shade`, or declares a parameter the grammar cannot carry.
+///   Read straight off the §1.4 line reader, so it answers on a machine with no
+///   graphics card.
+/// - a **compile error** — naga's own message about the assembled module, with
+///   its line numbers moved back onto the user's own text, which is the only
+///   numbering the person typing has.
+///
+/// A fresh instance with no source is **not** a failure: an effect the user has
+/// not filled in yet is a passthrough, not a fault (K-111), and it wears no
+/// badge.
+#[frb(ignore)]
+fn shader_error(effect: &EffectInstance) -> Option<String> {
+    let source = lumit_core::fx::effects::custom_shader::source_of(effect)?;
+    if source.trim().is_empty() {
+        return None;
+    }
+    let program = match lumit_core::fx::shader::program_for(source) {
+        Ok(program) => program,
+        Err(refusal) => return Some(refusal.to_string()),
+    };
+    validated(program).clone()
+}
+
+/// Whether an assembled module compiles, answered once per distinct source.
+///
+/// The read model rebuilds on every document change and asks this per Custom
+/// shader instance; a naga parse and validation is milliseconds, which is a
+/// frame's whole budget, so a stack of two instances sharing a source would pay
+/// it twice per refresh for an answer that cannot have moved. Keyed by the
+/// source hash, exactly as the pipeline cache is (§3.1).
+///
+/// ponytail: never evicts, one small entry per distinct source this session —
+/// the same ceiling `program_for`'s own parse cache carries, and it is bounded
+/// by the same thing (how many shaders one sitting types). Bound the two
+/// together if a heap profile ever names either.
+#[frb(ignore)]
+fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option<String> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    static SEEN: OnceLock<Mutex<HashMap<u64, &'static Option<String>>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(map) = seen.lock() {
+        if let Some(hit) = map.get(&program.source_hash) {
+            return hit;
+        }
+    }
+    let answer: &'static Option<String> = Box::leak(Box::new(
+        lumit_render::validate_shader(&program.assembled)
+            .err()
+            .map(|message| program.remap_error(&message)),
+    ));
+    if let Ok(mut map) = seen.lock() {
+        map.insert(program.source_hash, answer);
+    }
+    answer
+}
+
+/// Give a **staged or displayed** copy of an instance the derived rows its own
+/// source declares (docs/impl/custom-shader.md §1.5), at their defaults.
+///
+/// The sibling of `backfill_builtin_params`, and deliberately not part of it:
+/// that one is also the project reader's forward migration, and a derived row
+/// written into the document at load would be the parameter set changing with
+/// nobody's edit behind it — the one thing §1.5 forbids. Here it reaches only
+/// the two copies the bridge makes: the clone `read_instance_info` reads, so a
+/// derived row draws its value rather than a dash, and the staged copy a handle
+/// holds, so `set_value` can write one. A staged copy reaches the document only
+/// alongside an edit the user actually made, which is what makes adopting a row
+/// the user's act rather than the panel's.
+#[frb(ignore)]
+fn fill_derived(effect: &mut EffectInstance) {
+    let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(effect.effect.match_name.as_str()) else {
+        return;
+    };
+    // `derived` answers `&'static [ParamSchema]` — a session-lived parse cache,
+    // not a borrow of the instance — so the read is over before the write.
+    for param in def.derived(effect) {
+        let Some(value) = lumit_core::fx::default_param_value(&param.kind) else {
+            continue; // a button has nothing to fill (K-417)
+        };
+        if !effect.params.iter().any(|have| have.id == param.id) {
+            effect.params.push(EffectParam {
+                id: param.id.to_owned(),
+                value,
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+}
+
+/// The rows an instance's own source declares, as the panel reads them.
+#[frb(ignore)]
+fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
+    lumit_core::fx::BUILTIN_DEFS
+        .get(effect.effect.match_name.as_str())
+        .map(|def| def.derived(effect).iter().map(bridge_param).collect())
+        .unwrap_or_default()
 }
 
 /// Build one instance's [`BridgeEffectInstanceInfo`] — the shared body of
@@ -1589,6 +1744,7 @@ pub(crate) fn read_instance_info(
     // lands for real when the user changes it, through the staged copy.
     let mut filled = effect.clone();
     lumit_core::fx::backfill_builtin_params(std::slice::from_mut(&mut filled));
+    fill_derived(&mut filled);
     let effect = &filled;
     let (badge_reason, badge_detail) = badge_of(effect);
     BridgeEffectInstanceInfo {
@@ -1607,6 +1763,7 @@ pub(crate) fn read_instance_info(
         linked_pairs: effect.linked_pairs.clone(),
         badge_reason,
         badge_detail,
+        derived_params: derived_params_of(effect),
     }
 }
 
@@ -1633,6 +1790,10 @@ impl BridgeEffectInstance {
         // placeholder) is left exactly as it is.
         let mut effect = effect;
         lumit_core::fx::backfill_builtin_params(std::slice::from_mut(&mut effect));
+        // And the rows this instance's *own* source declares (§1.5), so a
+        // derived control is as live as a declared one: `get_value` answers it,
+        // `set_value` writes it, and the commit is the ordinary one.
+        fill_derived(&mut effect);
         BridgeEffectInstance { effect, offset }
     }
 
@@ -1699,6 +1860,121 @@ impl BridgeEffectInstance {
     #[frb(sync)]
     pub fn set_pair_linked(&mut self, stem: String, linked: bool) -> bool {
         self.effect.set_pair_linked(&stem, linked)
+    }
+
+    /// Every row **this instance** draws, in order: the rows its effect
+    /// declares, then the rows its own state derives (docs/impl/custom-shader.md
+    /// §1.5, docs/impl/effect-registry.md §4).
+    ///
+    /// The owed half of [`list_parameters`], which is keyed by match name and so
+    /// can only ever answer the first half. For every effect but the Custom
+    /// shader the two lists are the same list; for a Custom shader the tail is
+    /// the uniforms the source it holds declares, and nothing downstream can
+    /// tell a derived row from a declared one — same widgets, same keyframes,
+    /// same expressions.
+    ///
+    /// **Not the panel's per-rebuild road.** The panel reads the declared half
+    /// from its Dart-side memo and the derived half off
+    /// [`BridgeEffectInstanceInfo::derived_params`], which it already holds; this
+    /// is the one-piece answer for a caller that has a handle and no read model.
+    #[frb(sync)]
+    pub fn list_parameters(&self) -> Vec<BridgeParamInfo> {
+        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(self.effect.effect.match_name.as_str())
+        else {
+            return Vec::new();
+        };
+        def.schema()
+            .params
+            .iter()
+            .chain(def.derived(&self.effect))
+            .map(bridge_param)
+            .collect()
+    }
+
+    /// The WGSL text this instance holds, or `None` when it holds none
+    /// (docs/impl/custom-shader.md §1.2).
+    ///
+    /// The source is **instance state, not a parameter**: `Value` is `Copy` and
+    /// hashed field by field, a kilobyte of text is neither, and two shader
+    /// sources cannot be interpolated. So it does not ride
+    /// [`BridgeEffectInstanceInfo::values`] with the numbers; it is read here,
+    /// on the gesture that opens an editor, rather than per rebuild.
+    #[frb(sync)]
+    pub fn shader_source(&self) -> Option<String> {
+        lumit_core::fx::effects::custom_shader::source_of(&self.effect).map(str::to_owned)
+    }
+
+    /// Where the text came from, when it was loaded from a file — remembered for
+    /// reload and **never read at render**: a project must be one file that opens
+    /// on another machine.
+    #[frb(sync)]
+    pub fn shader_origin(&self) -> Option<String> {
+        self.effect
+            .extra
+            .get(lumit_core::fx::effects::custom_shader::EXTRA_KEY)?
+            .get("origin")?
+            .as_str()
+            .map(str::to_owned)
+    }
+
+    /// Stage this instance's shader source on the **staged** copy, exactly as
+    /// `set_custom_name` and `set_value` do: `LayerReference::set_effects` is the
+    /// commit, so a shader edit is one `SetLayerEffects` and one undo step like
+    /// every other effect-stack edit.
+    ///
+    /// `origin` is the file the text was read from, or `None` for text the user
+    /// typed — which is the honest answer once they have typed it, since it no
+    /// longer says what that file says. An empty `source` clears the block back
+    /// to a fresh instance: a passthrough with no badge (K-111).
+    ///
+    /// The rows the new source declares are **offered**, not adopted: the
+    /// document keeps the values it has, an id that has gone keeps its row and
+    /// its expression, and an id that is new draws at its default until the user
+    /// touches it (§1.5).
+    #[frb(sync)]
+    pub fn set_shader_source(&mut self, source: String, origin: Option<String>) {
+        use lumit_core::fx::effects::custom_shader::EXTRA_KEY;
+        if source.trim().is_empty() {
+            self.effect.extra.remove(EXTRA_KEY);
+            return;
+        }
+        let mut block = serde_json::Map::new();
+        // Written from the first commit and read by nothing yet (§5): the day
+        // `glsl-in` is turned on, an older project says which language its text
+        // is in rather than being guessed at.
+        block.insert("language".to_owned(), json!("wgsl"));
+        block.insert("source".to_owned(), json!(source));
+        if let Some(path) = origin {
+            block.insert("origin".to_owned(), json!(path));
+        }
+        // Anything else already under the key — §4's `graph`, a field a newer
+        // Lumit wrote (K-065) — is kept: this call owns the text, not the block.
+        if let Some(serde_json::Value::Object(had)) = self.effect.extra.get(EXTRA_KEY) {
+            for (key, value) in had {
+                block.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+        self.effect
+            .extra
+            .insert(EXTRA_KEY.to_owned(), serde_json::Value::Object(block));
+    }
+
+    /// Whether this instance's shader will draw, and why not when it will not
+    /// (docs/impl/custom-shader.md §2.1, §2.2).
+    ///
+    /// The per-instance answer the badge wears and the editor anchors its
+    /// message to. `error` is `None` for a shader that compiles **and** for an
+    /// instance with no source at all, because an effect the user has not filled
+    /// in yet is a passthrough rather than a failure.
+    #[frb(sync)]
+    pub fn shader_status(&self) -> BridgeShaderStatus {
+        BridgeShaderStatus {
+            error: shader_error(&self.effect),
+            notes: lumit_core::fx::effects::custom_shader::source_of(&self.effect)
+                .and_then(|source| lumit_core::fx::shader::program_for(source).ok())
+                .map(|program| program.notes.clone())
+                .unwrap_or_default(),
+        }
     }
 
     #[frb(ignore)]

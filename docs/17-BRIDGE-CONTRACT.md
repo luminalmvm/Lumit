@@ -373,6 +373,47 @@ undo step like every other effect-stack edit. The **proportional drag itself is 
 seam at all**: scaling y as x is dragged is UI-time arithmetic for the life of a gesture, and
 the document's business is only which pairs are tied together.
 
+### The Custom shader: rows that belong to the instance, not to the effect (K-642)
+
+Every list above is keyed by **match name**, so every one of them answers a fact about the
+*effect*. The Custom shader ([impl/custom-shader.md](impl/custom-shader.md)) is the one entry
+whose controls are a fact about the *instance*: they come from the shader that copy of it
+holds. Four instance-scoped members close that gap, and nothing else on the seam changes —
+a derived row is an ordinary `BridgeParamInfo` and the panel cannot tell it from a declared
+one.
+
+- `BridgeEffectInstance::list_parameters()` — the **owed call**: the effect's declared rows
+    followed by this instance's derived ones, in order, in one piece. For every effect but
+    the Custom shader it is the same list `list_parameters(effect)` gives.
+- `BridgeEffectInstanceInfo.derived_params` — the derived tail alone, carried in the **read
+    model** and empty for every other effect. That is the panel's road, and it is why the
+    rows cost no crossing: the declared half stays memoised Dart-side under the match name
+    (it never changes), and the half that could not be memoised there rides the model the
+    panel already holds. A fetch per card per rebuild is the traffic the budget test forbids.
+- `shader_source()` / `shader_origin()` / `set_shader_source(source, origin)` — the text
+    itself, which is **instance state and not a parameter** (§1.2 there): `Value` is `Copy`
+    and hashed field by field, a kilobyte of text is neither, and two shader sources cannot
+    be interpolated. So it does not ride `values` with the numbers; it is read on the gesture
+    that opens an editor and written on the **staged** copy, `LayerReference::set_effects`
+    being the commit — one `SetLayerEffects`, one undo step, exactly as `set_custom_name` is.
+    `origin` remembers the file the text was read from and is **never read at render**: the
+    text is copied in, because a project must be one file that opens on another machine.
+- `shader_status()` — `error` is the refusal (`@binding` declared, a host name shadowed, no
+    `shade`, a `vec3` field) or the compiler's own message with its **line numbers remapped
+    onto the user's text**, and `None` both for a shader that compiles and for an instance
+    with no source, because an effect nobody has filled in yet is a passthrough rather than a
+    failure. `notes` is one calm sentence per annotation that would not parse, beside the rows
+    that did. The same answer reaches the panel without a call as `badge_reason:
+    "shader_failed"` plus the message in `badge_detail` — the fifth `BADGE_REASONS` key, and
+    the only one that is not about somebody else's binary.
+
+**A derived row's value.** The document is not made to carry a row it has never been told
+about: the derived defaults are filled onto the two copies the bridge makes — the one
+`get_info` reads, so the row draws a value rather than a dash, and the staged one a handle
+holds, so `set_value` can write it. A staged copy reaches the document only alongside an edit
+the user actually made, which is what keeps §1.5's "nothing is added automatically" true while
+still leaving every derived control live.
+
 ### The layer graph: derived boxes down one way, stored wiring both (K-471)
 
 `api::graph` is the Graph panel's whole surface, and it is shaped by the one rule the

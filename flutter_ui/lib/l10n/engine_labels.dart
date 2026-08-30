@@ -1138,8 +1138,9 @@ bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
 // The calm badge an effect wears when the frame it drew was not its own work.
 //
 // The engine sends a *key*, not a sentence (`BADGE_REASONS` in
-// `crates/lumit-bridge/src/api/effect.rs`): four things it can say, all of them
-// about somebody else's code or about an effect this build has never heard of.
+// `crates/lumit-bridge/src/api/effect.rs`): five things it can say, four of them
+// about somebody else's code or about an effect this build has never heard of,
+// and one about a shader the user is still writing.
 // `test/l10n/engine_labels_test.dart` reads that declaration and fails if a
 // reason has no case below.
 
@@ -1155,6 +1156,11 @@ String? effectBadge(String key) {
       return l10n.badgePluginMissing;
     case 'unknown_effect':
       return l10n.badgeUnknownEffect;
+    // The one built-in that can wear a badge: a Custom shader whose text does
+    // not compile (docs/impl/custom-shader.md §2.2). The compiler's own
+    // sentence goes in the detail slot beneath, untranslated.
+    case 'shader_failed':
+      return l10n.badgeShaderFailed;
     default:
       return null;
   }

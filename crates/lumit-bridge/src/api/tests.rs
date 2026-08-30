@@ -11,8 +11,8 @@
 use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
     effect::{
-        list_effects, BridgeEffectInstance, BridgeEffectValue, BridgeKeyframe, BridgeRational,
-        BridgeScalar, BridgeSideInterp,
+        list_effects, BridgeEffectInstance, BridgeEffectValue, BridgeKeyframe, BridgeParamKind,
+        BridgeRational, BridgeScalar, BridgeSideInterp, BridgeUnit,
     },
     folder::FolderReference,
     footage::FootageReference,
@@ -10690,4 +10690,228 @@ fn a_plugin_that_fails_a_frame_badges_its_layer_and_the_next_frame_clears_it() {
 
     lumit_render::gpufx::ofx::clear_errored(instance.id);
     lumit_render::gpufx::ofx::clear_errored(off.id);
+}
+
+// ---------------------------------------------------------------------------
+// The Custom shader across the seam (docs/impl/custom-shader.md CS2).
+// ---------------------------------------------------------------------------
+
+/// A shader with two annotated uniforms, one of each shape the panel draws
+/// differently: a slider in pixels and a colour.
+const TWO_ROWS: &str = "\
+struct Params {
+    /// @slider(0, 200) @default(25) @unit(px) Radius
+    radius: f32,
+    /// @colour @default(1, 0.5, 0.2, 1) Tint
+    tint: vec4<f32>,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv) * p.tint * p.radius;
+}
+";
+
+/// Stage `source` on the layer's one effect and commit it — the panel's own
+/// road: one handle, one `set_effects`, one op.
+fn set_shader(layer: &LayerReference, source: &str, origin: Option<&str>) {
+    let stack = layer.get_effects().expect("stack");
+    let mut stack = stack;
+    stack[0].set_shader_source(source.to_owned(), origin.map(str::to_owned));
+    layer.set_effects(stack).expect("committed");
+}
+
+fn only_effect(layer: &LayerReference) -> BridgeEffectInstance {
+    layer
+        .get_effects()
+        .expect("stack")
+        .into_iter()
+        .next()
+        .expect("one effect")
+}
+
+/// **The derived rows cross, and they cross as ordinary rows.**
+///
+/// `list_parameters(match_name)` is per *effect* and can only ever answer the
+/// declared half; the uniforms a Custom shader shows are a fact about the
+/// instance. Both halves reach the panel — the instance-scoped call answers them
+/// in one piece, and the read model carries the derived tail beside the values
+/// so a rebuild costs no crossing.
+#[test]
+fn a_custom_shaders_rows_are_the_ones_its_own_source_declares() {
+    let (_project, layer) = project_with_layer();
+    layer
+        .add_effect("custom_shader".into())
+        .expect("the Custom shader is in the catalogue");
+
+    // Before there is a source there is nothing derived: a fresh instance is a
+    // passthrough with the four declared rows and no badge (K-111).
+    let fresh = only_effect(&layer);
+    assert!(fresh.get_info().derived_params.is_empty());
+    assert_eq!(fresh.get_info().badge_reason, None);
+    let declared: Vec<String> = fresh.list_parameters().into_iter().map(|p| p.id).collect();
+    assert!(
+        declared.iter().any(|id| id == "mix") && declared.iter().any(|id| id == "edit"),
+        "the declared rows are the schema's: {declared:?}"
+    );
+
+    set_shader(&layer, TWO_ROWS, None);
+    let instance = only_effect(&layer);
+
+    let derived = instance.get_info().derived_params;
+    assert_eq!(
+        derived.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+        ["radius", "tint"],
+        "the derived rows are the source's own, in declaration order"
+    );
+    assert_eq!(derived[0].label, "Radius", "the label is the annotation's");
+    assert_eq!(
+        derived[0].unit,
+        BridgeUnit::Px,
+        "@unit(px) is the one spatial unit and it travels with the row"
+    );
+    assert!(
+        matches!(
+            derived[0].kind,
+            BridgeParamKind::Float {
+                slider_min,
+                slider_max,
+                ..
+            } if slider_min == 0.0 && slider_max == 200.0
+        ),
+        "@slider carries its travel across (§1.4), and is typed past like any \
+         other float: {:?}",
+        derived[0].kind
+    );
+    assert!(matches!(derived[1].kind, BridgeParamKind::Colour { .. }));
+
+    // One road: declared then derived, in order.
+    let all: Vec<String> = instance
+        .list_parameters()
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(
+        all,
+        declared
+            .iter()
+            .cloned()
+            .chain(["radius".to_owned(), "tint".to_owned()])
+            .collect::<Vec<_>>(),
+        "the instance's list is the effect's followed by its own"
+    );
+
+    // A derived row is as live as a declared one: it has a value to draw and a
+    // value to write.
+    let info = instance.get_info();
+    assert!(
+        info.values.iter().any(|v| v.id == "radius"),
+        "a derived row draws its default rather than a dash"
+    );
+    let mut staged = only_effect(&layer);
+    staged
+        .set_value(
+            "radius".to_owned(),
+            BridgeEffectValue::Float(BridgeScalar::Static(40.0)),
+        )
+        .expect("a derived row takes a write like any other");
+    assert_eq!(
+        staged.get_value("radius".to_owned()).expect("read back"),
+        BridgeEffectValue::Float(BridgeScalar::Static(40.0))
+    );
+}
+
+/// **The compile state crosses in both directions**, and a refusal and a
+/// compile error read as one sentence because the person is looking at one text
+/// box (§2.1, §2.2).
+#[test]
+fn a_shaders_status_answers_both_states() {
+    let (_project, layer) = project_with_layer();
+    layer.add_effect("custom_shader".into()).expect("added");
+
+    set_shader(&layer, TWO_ROWS, Some("C:/shaders/warp.wgsl"));
+    let good = only_effect(&layer);
+    assert_eq!(good.shader_status().error, None, "this one compiles");
+    assert_eq!(good.get_info().badge_reason, None, "and wears no badge");
+    assert_eq!(good.shader_source().as_deref(), Some(TWO_ROWS));
+    assert_eq!(
+        good.shader_origin().as_deref(),
+        Some("C:/shaders/warp.wgsl"),
+        "where it came from is remembered for reload"
+    );
+
+    // A refusal: the one thing the contract asks for is missing, and the reader
+    // says so without a graphics card anywhere near it.
+    set_shader(
+        &layer,
+        "fn other(uv: vec2<f32>) -> f32 { return 0.0; }",
+        None,
+    );
+    let refused = only_effect(&layer);
+    let why = refused.shader_status().error.expect("refused");
+    assert!(
+        why.contains("shade"),
+        "the refusal names the contract: {why}"
+    );
+
+    // A compile error: valid enough to assemble, wrong once naga reads it. The
+    // line number is the user's own — line 3 of what they typed, not line 3 of
+    // the wrapper Lumit put around it.
+    set_shader(
+        &layer,
+        "fn shade(uv: vec2<f32>) -> vec4<f32> {\n    \
+         let a = 1.0;\n    \
+         return nonesuch(uv);\n}\n",
+        None,
+    );
+    let broken = only_effect(&layer);
+    let message = broken.shader_status().error.expect("it does not compile");
+    assert!(
+        message.contains("wgsl:3:"),
+        "the compiler's line numbers are remapped onto the user's text: {message}"
+    );
+    let info = broken.get_info();
+    assert_eq!(
+        info.badge_reason.as_deref(),
+        Some("shader_failed"),
+        "a shader that will not compile wears the calm badge, never an alarm"
+    );
+    assert_eq!(
+        info.badge_detail,
+        Some(message),
+        "the compiler's own sentence goes underneath, untranslated"
+    );
+
+    // Emptied: back to a passthrough, and a passthrough is not a failure.
+    set_shader(&layer, "", None);
+    let cleared = only_effect(&layer);
+    assert_eq!(cleared.shader_source(), None);
+    assert_eq!(cleared.shader_status().error, None);
+    assert_eq!(cleared.get_info().badge_reason, None);
+}
+
+/// **A shader edit is one `SetLayerEffects` and one undo step**, the shape every
+/// other effect-stack edit has. One that landed as two would leave the source
+/// half-restored here.
+#[test]
+fn setting_a_shader_source_is_one_undo_step() {
+    let (project, layer) = project_with_layer();
+    layer.add_effect("custom_shader".into()).expect("added");
+
+    set_shader(&layer, TWO_ROWS, None);
+    assert_eq!(
+        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0]),
+        Some(TWO_ROWS)
+    );
+
+    undo_once(&project);
+    assert_eq!(
+        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0]),
+        None,
+        "one undo takes the whole edit back"
+    );
+    assert_eq!(
+        stack_of(&layer).len(),
+        1,
+        "and leaves the effect it was made on"
+    );
 }

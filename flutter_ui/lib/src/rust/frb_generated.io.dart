@@ -606,6 +606,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSelectorShape dco_decode_bridge_selector_shape(dynamic raw);
 
   @protected
+  BridgeShaderStatus dco_decode_bridge_shader_status(dynamic raw);
+
+  @protected
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw);
 
   @protected
@@ -1632,6 +1635,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSelectorShape sse_decode_bridge_selector_shape(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShaderStatus sse_decode_bridge_shader_status(
       SseDeserializer deserializer);
 
   @protected
@@ -2785,6 +2792,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_selector_shape(
       BridgeSelectorShape self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shader_status(
+      BridgeShaderStatus self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_shape_item(

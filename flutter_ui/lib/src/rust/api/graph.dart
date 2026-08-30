@@ -109,7 +109,7 @@ class BridgeGraphWiring {
   /// is exposed or not.
   final List<BridgeNodeRef> exposed;
 
-  /// The named regions (K-646).
+  /// The named regions (K-651).
   final List<BridgeNodeGroup> groups;
 
   const BridgeGraphWiring({
@@ -178,7 +178,7 @@ class BridgeLayerGraph {
           wiring == other.wiring;
 }
 
-/// A named region of the canvas: a tinted wash behind a set of boxes (K-646).
+/// A named region of the canvas: a tinted wash behind a set of boxes (K-651).
 ///
 /// **No rectangle crosses**, and no colour: the wash is worked out from where
 /// the members are sitting, and `colour` is an index into the frontend's own
