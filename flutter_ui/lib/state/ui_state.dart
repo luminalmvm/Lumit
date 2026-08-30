@@ -412,16 +412,18 @@ class LumitUiState extends ChangeNotifier {
     if (comp == null) return;
     // The work area is the span being worked on, so it is the span playback
     // runs round: reaching its end goes back to its start and carries on,
-    // rather than playing out to the end of the comp and stopping — unless the
-    // playhead is parked past that end, where looping would mean never showing
-    // the frame the user is standing on ([playbackLoop]). Read once here rather
-    // than per frame — it cannot change while the transport is running, and
+    // and a comp nobody has narrowed runs round the whole of itself, because
+    // that is what its work area is (K-203) — unless the playhead is parked
+    // past that end, where looping would mean never showing the frame the user
+    // is standing on ([playbackLoop]). Read once here rather than per frame —
+    // it cannot change while the transport is running, and
     // [_arrived] fires at the comp's rate.
     final set = comp.getWorkArea();
     _loop = playbackLoop(
       workStart: set == null ? null : comp.frameAtTime(time: set.inPoint),
       workEnd: set == null ? null : comp.frameAtTime(time: set.outPoint),
       playhead: playheadFrame.value,
+      lastFrame: comp.durationFrames() - 1,
     );
     _playedFrom = playheadFrame.value;
     // Whatever the scrub before this was waiting for, it is not what the user
@@ -442,10 +444,10 @@ class LumitUiState extends ChangeNotifier {
   /// playback ends however it ends.
   int? _playedFrom;
 
-  /// The work area playback loops round this run, or null when this run does
-  /// not loop — the comp has not been narrowed, or the playhead was parked past
-  /// the work area's end, which makes the run a preview of the tail rather than
-  /// a pass round the span ([playbackLoop]).
+  /// The span playback loops round this run — the work area, or the whole comp
+  /// when none is set. Null only when the run cannot loop: the playhead was
+  /// parked past the span's end, which makes the run a preview of the tail
+  /// rather than a pass round the span ([playbackLoop]).
   ({int start, int end})? _loop;
 
   void _playFrom(CompositionReference comp, int frame) => comp.play(

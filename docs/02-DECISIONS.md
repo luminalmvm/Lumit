@@ -19928,7 +19928,7 @@ Regression test: `a hovered comp tab outlines, and does not move`
 (`timeline_extras_frb_test`) — an unfronted tab gains the one-pixel `hairline_strong`
 outline and keeps its size, and the fronted tab gains nothing.
 
-## K-637 — A shader the user writes is an ordinary effect, and entering it works like entering a precomp
+## K-642 — A shader the user writes is an ordinary effect, and entering it works like entering a precomp
 
 **Status: DECIDED (2026-08-30).** Commissioned by the owner from a conversation with a
 collaborator; supersedes nothing. The design is

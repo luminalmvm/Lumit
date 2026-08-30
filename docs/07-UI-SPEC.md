@@ -2225,7 +2225,10 @@ as the dockable **Preview panel**.
   however playback ends, the composition running out included. Settings ▸ Interface ▸
   Editing ▸ *Playhead stays where playback stopped* puts the older behaviour back (K-254).
   The exception is a ruler scrub, which stops playback in order to move the playhead (§4.6).
-- **Loop modes**: loop work area (default) / play once / ping-pong.
+- **Loop modes**: loop work area (default) / play once / ping-pong. The default holds for
+  **every** composition, narrowed or not: a comp nobody has set a work area in loops the
+  whole of itself, because the whole of itself is what its work area is (K-203). There is no
+  second behaviour for the untouched comp, and no per-comp memory of which it gets.
 - **Cache status**: a readout of how much of the work area is preview-ready (backed by the
   cache bar), plus a *fill cache* action that renders the work area ahead of playback while
   idle (K-016). Lumit has no separate "RAM preview" ritual — playback always plays, using

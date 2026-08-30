@@ -12787,3 +12787,99 @@ Each entry is one line even when the message it carries has several, so the file
 searched. And the write is a single call rather than several, because two threads failing at
 the same moment is not a rare coincidence — it is the usual case, one failure having caused
 the other — and interleaved halves of two messages are worse than either alone.
+
+## 39. Writing your own effect, in plain terms
+
+Every effect in Lumit is a small program that runs on the graphics card, and every one of
+them so far was written by us. The **Custom shader** effect is the one that lets somebody
+else write one — a person with an idea and twenty lines of code, who does not want to build
+a plugin, learn Rust, or ask us first. It is designed but not built;
+`docs/impl/custom-shader.md` is the plan and this section is the plain-English half of it.
+
+### What it looks like to use
+
+It is an ordinary entry in the effects menu. Drop it on a layer and nothing happens, because
+it has no program yet. Open it and type one — or load a file somebody sent you — and the
+layer starts doing whatever the program says.
+
+The part worth understanding is where the **controls** come from. In an ordinary effect, we
+write down the controls: Gaussian blur has a Radius because somebody typed "radius" into its
+declaration. A custom shader cannot work that way, because nobody knows in advance what the
+program will want. So the program says so itself, in comments above the numbers it uses:
+
+```
+struct Params {
+    /// @slider(0, 200) @default(25) @unit(px) Radius
+    radius: f32,
+    /// @colour @default(1, 0.5, 0.2, 1) Tint
+    tint: vec4<f32>,
+}
+```
+
+Lumit reads those comments and grows two rows in the Effect controls panel: a Radius slider
+that runs from 0 to 200 and knows its number is in pixels, and a Tint colour swatch. They
+are not second-class rows. They keyframe, expressions can read them, they save in the project,
+they copy and paste. The mechanism behind them — parameters that belong to *this copy* of an
+effect rather than to the effect itself — was designed a while ago for exactly this and has
+been sitting unused; this is what it was for.
+
+### Boxes instead of typing
+
+Writing shader code is a skill. Wiring boxes together is not. So the effect also holds a
+**graph** — the same kind of canvas the Graph panel already draws, but inside the effect
+rather than beside it. Boxes for the picture coming in, boxes for adding and multiplying and
+mixing colours, one box for the picture going out.
+
+Double-clicking the effect opens that inner graph, in exactly the way double-clicking a
+Precomp layer opens the composition inside it, with a trail of names at the top to get back
+by. That was not a coincidence — it is the owner's own description of how it should feel, and
+the code that does it for precomps is the code that will do it here.
+
+The graph does not run directly. It **writes shader code**, and Lumit runs that. So the boxes
+and the text are two views of the same thing, and you can look at the code a graph produced.
+When both exist, the graph is the real one and the text is its output: turning boxes into text
+always works, and turning arbitrary text back into boxes does not, so the arrow points one way
+only. If you want to hand-edit the text of something you built with boxes, you say so
+explicitly and the boxes go away.
+
+### The three things that were hard
+
+**Where the program is kept.** Not as a control. Controls in Lumit are numbers that can be
+keyframed and that get copied around by the thousand every frame, and a page of text is
+neither of those. So it is kept as a piece of extra baggage on the effect — a place the file
+format already has, and already carries through saving, undo, copy/paste and old versions of
+Lumit without any new work. The catch, which is written down in big letters in the note, is
+that this baggage is currently *invisible* to the thing that names cached frames. Left alone,
+editing your shader would change the picture without changing its name, and Lumit would keep
+showing you the old one out of the cache. So the name has to be taught to include it.
+
+**Typing is broken most of the time.** Half-written code does not compile. If the composition
+went black on every keystroke the editor would be unusable, so instead the last version that
+*did* compile keeps drawing, with a calm note over it carrying the compiler's actual
+complaint. That sounds simple and is not, because it means the picture on screen is briefly
+not what the project says — and a frame that is not what the project says must never end up
+in the cache, or it will come back tomorrow when the shader is fine. So those frames are
+drawn, shown, and thrown away. And when you **export**, there is no falling back at all: a
+shader that will not compile exports as "no effect" with the error in the log, because an
+export that quietly used yesterday's shader would be much worse than one that admits the
+problem.
+
+**A program from a stranger must behave the same on every machine.** The shader language has
+no clock and no random-number generator — you cannot ask it what time it is — which means the
+only things that can vary are the things Lumit hands in. There are two: the time of the frame,
+and a seed. The seed is deliberately fixed for the life of that effect rather than counting up
+per frame, because a number that changed every frame would make the same frame render two
+different ways, and Lumit's whole caching story depends on that never happening. Lumit also
+checks the shader's answer for the arithmetic equivalent of nonsense (the value you get from
+dividing zero by zero) and replaces it with black, because one such pixel spreads: it poisons
+every effect above it, turns the composition black, and gives you nothing to go on.
+
+### Why this is not a plugin
+
+Lumit will one day host plugins — other people's compiled programs, running in their own
+process so that when they crash they do not take Lumit with them. A custom shader is a
+different thing on purpose. It is *text*, checked by the same shader compiler Lumit uses on
+its own effects, and it can only touch the handful of pictures and numbers it was handed. It
+cannot read your disc, reach the network, or run when a project is merely opened. That is why
+a shared shader can travel inside an ordinary preset file, and a plugin cannot: one is data,
+the other is code.
