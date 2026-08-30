@@ -5865,6 +5865,41 @@ crates. Dart displays values and forwards calls; when something has to be
 | `docs/17-BRIDGE-CONTRACT.md` | The normative front/back boundary. Read it before touching the seam |
 | `docs/archive/flutter-port/` | Frozen notes from the port itself |
 
+### Before the first second: the window itself
+
+There is a moment before any of this that belongs to no Dart file. The operating
+system has to be told how big to make Lumit's window and where to put it, and
+that happens in the **runner** — the small piece of native code that starts the
+process and hands it to Flutter. On Windows it is
+`flutter_ui/windows/runner/win32_window.cpp`, and its siblings are
+`macos/Runner/MainFlutterWindow.swift` and `linux/runner/my_application.cc`.
+
+Lumit **opens maximised**, and on every run after the first it opens where you
+left it — the same size, the same place, and maximised again if that is how you
+closed it. The reason this is decided in the runner rather than in Dart is
+timing. The window is created invisible and only shown once Flutter has a first
+frame to put in it, so whatever size the runner asks for is the size the engine
+lays itself out at. Ask for the right size up front and the window simply
+appears, correct. Ask for the wrong one and fix it afterwards, and you watch the
+whole interface re-flow the moment it comes up.
+
+What is remembered is one Windows structure called a *window placement*: a
+maximised flag plus the rectangle the window goes back to when you un-maximise
+it. That is why the two questions are answered by one thing rather than two
+fields that can disagree. It is written, exactly as the system hands it over,
+to `%APPDATA%\lumit\window-placement.bin` — beside `flutter-workspace.json`,
+where the interface already keeps its arrangement, because this is a fact about
+your machine and never about the project. Losing the file costs nothing: a first
+run, a file from an older build, and a window last seen on a monitor that has
+since been unplugged all take the same road back to maximised on the main
+screen.
+
+macOS does the remembering for us — AppKit keeps a window's frame under a name
+in the user's defaults, and pulls a restored window back onto a screen that
+still exists — so the Swift side is two lines and no file. Linux gets the
+maximised default only: GTK has no equivalent, and following window moves by
+hand there can wait until somebody is running Lumit on Linux to ask.
+
 ### The first second: the boot splash
 
 Lumit opens on a small centred card that lists what came up, then gives way to

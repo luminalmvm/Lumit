@@ -28,12 +28,14 @@ class Win32Window {
   Win32Window();
   virtual ~Win32Window();
 
-  // Creates a win32 window with |title| that is positioned and sized using
-  // |origin| and |size|. New windows are created on the default monitor. Window
-  // sizes are specified to the OS in physical pixels, hence to ensure a
+  // Creates a win32 window with |title|, maximised on the default monitor.
+  // |origin| and |size| are the position and size it un-maximises to on a first
+  // run; they are specified to the OS in physical pixels, hence to ensure a
   // consistent size this function will scale the inputted width and height as
-  // as appropriate for the default monitor. The window is invisible until
-  // |Show| is called. Returns true if the window was created successfully.
+  // as appropriate for the default monitor. A run that has a remembered
+  // geometry (see win32_window.cpp) uses that instead, on whichever monitor it
+  // was left on. The window is invisible until |Show| is called. Returns true
+  // if the window was created successfully.
   bool Create(const std::wstring& title, const Point& origin, const Size& size);
 
   // Show the current window. Returns true if the window was successfully shown.
@@ -91,6 +93,12 @@ class Win32Window {
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+
+  // Whether this window is to be shown maximised — the default, and what the
+  // last run left behind on every run after the first. Set in |Create|, which
+  // has already given the window the matching geometry; |Show| only needs to
+  // agree with it.
+  bool restore_maximized_ = true;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

@@ -3,6 +3,8 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
+#include <fstream>
+
 #include "resource.h"
 
 namespace {
@@ -51,6 +53,84 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+// Where the window's size, position and maximised state are remembered between
+// runs: one file beside the interface's own settings, in the folder
+// `Workspace.storeFile()` writes `flutter-workspace.json` into
+// (`%APPDATA%\lumit`). This is machine state, never project state — nothing
+// about a window's geometry belongs in a `.lum`.
+//
+// The file is a `WINDOWPLACEMENT` struct written raw. That is not laziness for
+// its own sake: it is a fixed-size record with no pointers in it, it carries
+// its own size in its first field so a struct from another build is spotted
+// rather than misread, and it is the one structure that already describes a
+// maximised window *and* the rectangle it un-maximises to. Losing it costs a
+// window opening maximised, which is where it opens anyway.
+//
+// The folder is created here rather than in the save alone, so both halves go
+// through one function; on every run after the first that is one failed
+// `CreateDirectory` call at startup. Empty when `%APPDATA%` is unset or absurd,
+// in which case nothing is remembered and nothing is an error.
+std::wstring WindowPlacementPath() {
+  wchar_t app_data[MAX_PATH];
+  DWORD length = GetEnvironmentVariable(L"APPDATA", app_data, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return std::wstring();
+  }
+  std::wstring directory = std::wstring(app_data, length) + L"\\lumit";
+  CreateDirectory(directory.c_str(), nullptr);
+  return directory + L"\\window-placement.bin";
+}
+
+// The geometry the last run closed at, or false when there is nothing to
+// restore: a first run, a file from a build whose struct was a different size,
+// or a window remembered on a monitor that has since been unplugged. Each of
+// those opens maximised on the primary monitor instead.
+bool LoadWindowPlacement(WINDOWPLACEMENT* placement) {
+  const std::wstring path = WindowPlacementPath();
+  if (path.empty()) {
+    return false;
+  }
+  WINDOWPLACEMENT saved{};
+  std::ifstream file(path.c_str(), std::ios::binary);
+  if (!file.read(reinterpret_cast<char*>(&saved), sizeof(saved)) ||
+      saved.length != sizeof(saved)) {
+    return false;
+  }
+  // MONITOR_DEFAULTTONULL is the whole of the vanished-monitor check: it
+  // answers with nothing when the rectangle touches no monitor that exists.
+  if (MonitorFromRect(&saved.rcNormalPosition, MONITOR_DEFAULTTONULL) ==
+      nullptr) {
+    return false;
+  }
+  *placement = saved;
+  return true;
+}
+
+// Remember where this window is, for the next run. Best effort throughout: a
+// machine that will not give up `%APPDATA%` or will not take the file simply
+// opens maximised next time.
+void SaveWindowPlacement(HWND window) {
+  WINDOWPLACEMENT placement{};
+  placement.length = sizeof(placement);
+  if (!GetWindowPlacement(window, &placement)) {
+    return;
+  }
+  // Closing a minimised window must not reopen it minimised. Come back the way
+  // it would have come back off the taskbar — which is the one thing the flags
+  // field is remembering for us.
+  if (placement.showCmd == SW_SHOWMINIMIZED) {
+    placement.showCmd = (placement.flags & WPF_RESTORETOMAXIMIZED)
+                            ? SW_SHOWMAXIMIZED
+                            : SW_SHOWNORMAL;
+  }
+  const std::wstring path = WindowPlacementPath();
+  if (path.empty()) {
+    return;
+  }
+  std::ofstream file(path.c_str(), std::ios::binary | std::ios::trunc);
+  file.write(reinterpret_cast<const char*>(&placement), sizeof(placement));
 }
 
 }  // namespace
@@ -134,11 +214,39 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  HWND window = CreateWindow(
-      window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
-      Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
-      nullptr, nullptr, GetModuleHandle(nullptr), this);
+  int left = Scale(origin.x, scale_factor);
+  int top = Scale(origin.y, scale_factor);
+  int width = Scale(size.width, scale_factor);
+  int height = Scale(size.height, scale_factor);
+
+  // What the last run closed at, if anything. Its rectangle is already in
+  // physical pixels and already on the monitor the window was last on, so it
+  // replaces the scaled default outright rather than being scaled a second
+  // time.
+  WINDOWPLACEMENT saved{};
+  const bool restoring = LoadWindowPlacement(&saved);
+  if (restoring) {
+    left = saved.rcNormalPosition.left;
+    top = saved.rcNormalPosition.top;
+    width = saved.rcNormalPosition.right - saved.rcNormalPosition.left;
+    height = saved.rcNormalPosition.bottom - saved.rcNormalPosition.top;
+  }
+
+  // Maximised is what Lumit opens on, and what it falls back to whenever there
+  // is nothing to restore. WS_MAXIMIZE at creation rather than a ShowWindow
+  // afterwards, because the window is invisible until Flutter's first frame:
+  // the engine boots straight into the size it will be seen at, so there is no
+  // resize to watch once it comes up. The rectangle above stays as the restore
+  // position, so un-maximising lands where the window last was.
+  restore_maximized_ = !restoring || saved.showCmd == SW_SHOWMAXIMIZED;
+  DWORD window_style = WS_OVERLAPPEDWINDOW;
+  if (restore_maximized_) {
+    window_style |= WS_MAXIMIZE;
+  }
+
+  HWND window =
+      CreateWindow(window_class, title.c_str(), window_style, left, top, width,
+                   height, nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
     return false;
@@ -150,7 +258,11 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  // Create settled the geometry; this only makes the window visible. The show
+  // command still has to name the state the window was created in, because
+  // SW_SHOWNORMAL would un-maximise it on the way out.
+  return ShowWindow(window_handle_,
+                    restore_maximized_ ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL);
 }
 
 // static
@@ -180,6 +292,10 @@ Win32Window::MessageHandler(HWND hwnd,
                             LPARAM const lparam) noexcept {
   switch (message) {
     case WM_DESTROY:
+      // Last moment the window still has a geometry to read. Every close path
+      // — the button, Alt+F4, the taskbar — arrives here, so this is the one
+      // place the next run's opening size is written.
+      SaveWindowPlacement(hwnd);
       window_handle_ = nullptr;
       Destroy();
       if (quit_on_close_) {

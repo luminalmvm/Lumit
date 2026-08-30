@@ -55,6 +55,13 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // Lumit opens maximised, as it does on Windows (windows/runner/
+  // win32_window.cpp) and macOS. Only the default, though: GTK has nothing like
+  // AppKit's frame autosave, so remembering the size and position between runs
+  // would mean following configure-events and writing a file by hand here.
+  // ponytail: default only, add the remembering when a Linux user asks.
+  gtk_window_maximize(window);
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);

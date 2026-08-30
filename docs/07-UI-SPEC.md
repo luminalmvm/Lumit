@@ -288,6 +288,21 @@ panel layout is.
   handed to Flatpak with the install command, in which case Lumit MUST NOT offer to restart
   because it is not replacing anything.
 
+### 1.9 The application window
+
+- Lumit MUST open **maximised**. This is the first-run state and the fallback for every
+  case below.
+- On close, the main window's size, position and maximised state MUST be remembered, and
+  the next launch MUST open on them. This is machine state: it lives beside the workspace
+  settings (§1.5), never in the project and never in a file under version control.
+- A remembered position that lies on no monitor the machine still has MUST be discarded in
+  favour of maximised on the primary monitor. A window closed minimised MUST reopen the way
+  it would have been restored from the taskbar, never minimised.
+- The geometry MUST be settled before the first frame is drawn, so that no resize is visible
+  after startup. On platforms whose window toolkit remembers frames itself, that mechanism
+  MAY be used instead; where a platform offers neither cheaply, the maximised default alone
+  is sufficient.
+
 ---
 
 ## 2. Viewer
