@@ -1858,13 +1858,17 @@ fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
         },
     ];
     for l in &c.layers {
-        ops.push(Op::SetLayerSpan {
+        ops.extend(through_lock(
             comp,
-            layer: l.id,
-            in_point: shift(l.in_point)?,
-            out_point: shift(l.out_point)?,
-            start_offset: shift(l.start_offset)?,
-        });
+            l,
+            vec![Op::SetLayerSpan {
+                comp,
+                layer: l.id,
+                in_point: shift(l.in_point)?,
+                out_point: shift(l.out_point)?,
+                start_offset: shift(l.start_offset)?,
+            }],
+        ));
     }
     // Comp markers are on the comp's own clock, so they travel with the
     // picture. A layer's markers are in layer time (§11, K-254) and move with
@@ -1917,21 +1921,54 @@ fn crop_comp_to_region(
         if l.parent.is_some() {
             continue;
         }
-        for (prop, animation, delta) in [
+        let moves: Vec<Op> = [
             (TransformProp::PositionX, &l.transform.position_x, x),
             (TransformProp::PositionY, &l.transform.position_y, y),
-        ] {
-            if let Some(moved) = shifted(&animation.animation, -delta) {
-                ops.push(Op::SetTransformProperty {
-                    comp,
-                    layer: l.id,
-                    prop,
-                    animation: moved,
-                });
-            }
+        ]
+        .into_iter()
+        .filter_map(|(prop, property, delta)| {
+            shifted(&property.animation, -delta).map(|animation| Op::SetTransformProperty {
+                comp,
+                layer: l.id,
+                prop,
+                animation,
+            })
+        })
+        .collect();
+        if !moves.is_empty() {
+            ops.extend(through_lock(comp, l, moves));
         }
     }
     Ok(Op::Batch { ops })
+}
+
+/// `ops` for one layer, with the lock lifted around them when the layer has one.
+///
+/// **A comp-level reshape moves the whole world, and a locked layer rides with
+/// it** — which is what After Effects does, and the only behaviour that keeps
+/// the picture together: a locked layer left where it was would sit at the
+/// wrong time, or in the wrong place, beside everything that moved. Without
+/// this the whole command would refuse, because the lock guard (K-291) reads
+/// each member of the batch on its own way through [`apply`] and a span or a
+/// position is exactly what a lock protects.
+///
+/// The lock comes off and goes back on **inside the same batch**, so it is one
+/// undo step and the journal holds no unlocked moment anyone can stop at — and
+/// the batch's own reversal puts the switch back the same way.
+fn through_lock(comp: Uuid, layer: &Layer, ops: Vec<Op>) -> Vec<Op> {
+    if !layer.switches.locked {
+        return ops;
+    }
+    let switch = |locked| Op::SetLayerLocked {
+        comp,
+        layer: layer.id,
+        locked,
+    };
+    let mut out = Vec::with_capacity(ops.len() + 2);
+    out.push(switch(false));
+    out.extend(ops);
+    out.push(switch(true));
+    out
 }
 
 /// `animation` with every value moved by `delta`, or `None` when there is

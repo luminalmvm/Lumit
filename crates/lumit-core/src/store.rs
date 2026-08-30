@@ -3519,6 +3519,65 @@ mod tests {
         );
     }
 
+    /// **A locked layer rides the reshape** (K-686, K-687) rather than
+    /// refusing it: the lock comes off and goes back on inside the same batch,
+    /// so the whole comp moves together and the switch is where it was when the
+    /// step ends. Without this the lock guard (K-291) would refuse a member of
+    /// the batch and take the whole command down with it.
+    #[test]
+    fn a_locked_layer_moves_with_the_comp_and_stays_locked() {
+        let store = DocumentStore::new(Document::new());
+        let mut comp = test_comp();
+        let comp_id = comp.id;
+        let mut locked = test_layer(Uuid::now_v7());
+        locked.switches.locked = true;
+        locked.transform.position_x = crate::anim::Property::fixed(960.0);
+        let locked_id = locked.id;
+        comp.layers = vec![locked];
+        comp.work_area = Some((t(2, 1), t(12, 1)));
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        let before = json(&store.snapshot());
+
+        store
+            .commit(Op::TrimCompToWorkArea { comp: comp_id })
+            .unwrap();
+        store
+            .commit(Op::CropCompToRegion {
+                comp: comp_id,
+                x: 200.0,
+                y: 0.0,
+                width: 640,
+                height: 480,
+            })
+            .unwrap();
+
+        let doc = store.snapshot();
+        let l = doc
+            .comp(comp_id)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == locked_id)
+            .cloned()
+            .unwrap();
+        assert_eq!(l.in_point, t(-2, 1), "the trim moved it");
+        assert_eq!(
+            l.transform.position_x.value_at(0.0),
+            760.0,
+            "so did the crop"
+        );
+        assert!(l.switches.locked, "and it is locked again at the end");
+
+        store.undo().unwrap();
+        store.undo().unwrap();
+        assert_eq!(json(&store.snapshot()), before, "two undos, both exact");
+    }
+
     /// A comp with no work area is already its own work area (K-203), so there
     /// is nothing to trim to and nothing changes.
     #[test]

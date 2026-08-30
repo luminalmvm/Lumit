@@ -10716,6 +10716,12 @@ Both commands are built out of the ordinary edits — change the comp settings, 
 layer — bundled into a single step. So each is one Ctrl-Z, and if any part of it were to
 fail, none of it happens.
 
+A **locked** layer moves too. That sounds like a contradiction, but it is not: a lock stops
+*you* editing a layer, and these two commands move the ground under every layer at once —
+one left behind would sit at the wrong time, or in the wrong place, beside everything that
+moved. The lock is lifted and put back inside the same step, so it is still one Ctrl-Z and
+the layer is still locked when it ends.
+
 ### Letting go of a drag half way: Escape
 
 Everything in the Timeline that you drag — a layer's bar, a keyframe, the handle at the

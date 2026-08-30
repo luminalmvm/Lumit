@@ -21441,6 +21441,15 @@ where `SetWorkArea`'s clamp cannot cut it down to the shortened comp.
 
 Layer markers need no move — they are in layer time (K-254) and travel with their layer.
 
+**A locked layer rides the reshape** rather than refusing it, here and in K-687.
+The lock guard (K-291) reads every member of a batch on its own way through `apply`, and a
+span is exactly what a lock protects — so without this the whole command would refuse
+because one layer was locked, which is not what AE does and not what a lock is for. A lock
+protects the work from *your* edits; this moves the timeline under all of it. The switch
+comes off and goes back on **inside the same batch** (`through_lock`), so it is still one
+undo step, the journal holds no unlocked moment anyone can stop at, and the batch's own
+reversal puts the switch back the same way.
+
 Tests: `store.rs` — `trimming_a_comp_to_its_work_area_round_trips` (duration, spans,
 markers, an outside layer kept, one undo restoring the document byte for byte) and
 `trimming_a_comp_with_no_work_area_changes_nothing`.
@@ -21476,9 +21485,12 @@ centre, so a 3D scene may want the camera re-aimed by the difference. The upgrad
 to fold that difference into the active camera's own position; it is not here because a
 half-right camera move is harder to notice and undo than none.
 
+A **locked** layer moves with everything else, by K-686's rule and for its reason.
+
 Tests: `store.rs` — `cropping_a_comp_to_a_region_round_trips`: the new size, an unparented
 layer moved by the corner, a parented one untouched, the duration unchanged, and one undo
-restoring the document byte for byte.
+restoring the document byte for byte; `a_locked_layer_moves_with_the_comp_and_stays_locked`
+covers both commands.
 
 ## K-688 — The History list is the journal, named at commit and jumped one op at a time
 
