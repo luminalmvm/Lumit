@@ -9487,6 +9487,158 @@
   "@panelNode": {
     "description": "The name of the panel listing the parameter rows of whichever box is picked in the Graph panel. A panel name, so a noun, singular: it shows one node at a time."
   },
+  "panelMixer": "Mixer",
+  "@panelMixer": {
+    "description": "The name of the panel drawing one volume strip per sounding layer plus a Master strip - the audio mixing desk. A panel name, so a noun."
+  },
+  "panelAudio": "Audio",
+  "@panelAudio": {
+    "description": "The name of the panel holding the output level meters, the beat-detection controls and the selected layer's sound controls. A panel name, so a noun."
+  },
+  "mixerMaster": "Master",
+  "@mixerMaster": {
+    "description": "The Mixer panel's right-hand strip: the fader over the summed mix, ahead of the limiter. A mixing-desk term."
+  },
+  "mixerNoSound": "No layer in this composition makes a sound",
+  "@mixerNoSound": {
+    "description": "Empty-state line in the Mixer panel when the fronted composition has no audio-capable layers, so there are no strips to draw."
+  },
+  "mixerLimiter": "Limiter",
+  "@mixerLimiter": {
+    "description": "Tooltip on the Master strip's LIM lamp while it is unlit: the safety limiter that stops the mix exceeding full scale."
+  },
+  "mixerLimiterClipped": "The limiter held the mix back. Click to reset.",
+  "@mixerLimiterClipped": {
+    "description": "Tooltip on the Master strip's LIM lamp while it is lit: something reached the ceiling since the light was last reset, and clicking the lamp puts the light out (the mix itself is unchanged)."
+  },
+  "mixerLufsPending": "LUFS —",
+  "@mixerLufsPending": {
+    "description": "The Master strip's muted loudness readout: loudness measurement is a planned later feature, so the value is an em dash rather than a number. LUFS is the standard loudness unit and stays untranslated."
+  },
+  "audioSectionLevels": "Levels",
+  "@audioSectionLevels": {
+    "description": "Audio panel section header over the output level meters. A noun, plural."
+  },
+  "audioSectionBeats": "Beats",
+  "@audioSectionBeats": {
+    "description": "Audio panel section header over the beat-detection controls. A noun, plural."
+  },
+  "audioSectionSelectedLayer": "Selected layer",
+  "@audioSectionSelectedLayer": {
+    "description": "Audio panel section header over the selected layer's sound controls (volume, pan, fades)."
+  },
+  "audioClip": "Clip",
+  "@audioClip": {
+    "description": "Audio panel, Levels section: the label beside the clip lamp, which lights when the mix reaches full scale. Audio-engineering sense of clip (distortion), not a timeline clip."
+  },
+  "audioPeakHold": "peak hold 3 s",
+  "@audioPeakHold": {
+    "description": "Audio panel, Levels section: small caption saying the thin line above each meter rests on the loudest recent peak for three seconds. Lower case."
+  },
+  "audioPan": "Pan",
+  "@audioPan": {
+    "description": "Audio panel, Selected layer: the stereo balance row's label. A noun."
+  },
+  "audioFadeIn": "Fade in",
+  "@audioFadeIn": {
+    "description": "Audio panel, Selected layer: the row that writes a volume fade at the layer's start."
+  },
+  "audioFadeOut": "Fade out",
+  "@audioFadeOut": {
+    "description": "Audio panel, Selected layer: the row that writes a volume fade at the layer's end."
+  },
+  "audioLayerSilent": "This layer makes no sound.",
+  "@audioLayerSilent": {
+    "description": "Audio panel, Selected layer: shown instead of the sound controls when the selected layer has no audio (a solid, a title, image-only footage)."
+  },
+  "audioDriveWith": "Drive with audio…",
+  "@audioDriveWith": {
+    "description": "Audio panel button: opens a list of the selected layer's effect parameters, and wires an Audio level driver chain onto the chosen one, so the parameter follows the music. Ellipsis because a choice follows."
+  },
+  "audioDuckUnder": "Duck under…",
+  "@audioDuckUnder": {
+    "description": "Audio panel button: opens a list of the other layers, and wires an inverted Audio level chain onto this layer's Volume so its sound dips while the chosen layer sounds - ducking, the radio/mixing term. Ellipsis because a choice follows."
+  },
+  "audioDriveNoTargets": "No free number parameters on this layer's effects.",
+  "@audioDriveNoTargets": {
+    "description": "Audio panel, the Drive with audio menu when the selected layer has no effect parameter a wire could land on (none of its effects have an unwired number parameter)."
+  },
+  "audioDuckNoSources": "No other layer to duck under.",
+  "@audioDuckNoSources": {
+    "description": "Audio panel, the Duck under menu when the composition has no other layer to listen to."
+  },
+  "fadeShapeEase": "Ease",
+  "@fadeShapeEase": {
+    "description": "Audio panel fade rows: the eased fade shape chip (gentle at both ends). Kept short - it is a small chip."
+  },
+  "fadeShapeLinear": "Lin",
+  "@fadeShapeLinear": {
+    "description": "Audio panel fade rows: the straight-line fade shape chip. An abbreviation of linear; keep it about three letters."
+  },
+  "fadeShapeExponential": "Exp",
+  "@fadeShapeExponential": {
+    "description": "Audio panel fade rows: the exponential fade shape chip (hangs at the loud end, then falls away). An abbreviation of exponential; keep it about three letters."
+  },
+  "beatsSource": "Source",
+  "@beatsSource": {
+    "description": "Audio panel, Beats section: which sound the beat detector listens to - the whole mix, or one layer."
+  },
+  "beatsSensitivity": "Sensitivity",
+  "@beatsSensitivity": {
+    "description": "Audio panel, Beats section: the 0-100 slider for how keenly onsets are detected; higher finds more beats."
+  },
+  "beatsRange": "Range",
+  "@beatsRange": {
+    "description": "Audio panel, Beats section: where generated beat markers are kept - the whole composition, or only the work area."
+  },
+  "beatsRangeWholeComp": "Whole comp",
+  "@beatsRangeWholeComp": {
+    "description": "Audio panel, Beats section, Range dropdown: keep beats across the whole composition. Comp is the standard short form of composition."
+  },
+  "beatsRangeWorkArea": "Work area",
+  "@beatsRangeWorkArea": {
+    "description": "Audio panel, Beats section, Range dropdown: keep only the beats inside the composition's work area."
+  },
+  "beatsMinSpacing": "Min spacing",
+  "@beatsMinSpacing": {
+    "description": "Audio panel, Beats section: the smallest allowed gap between two generated beat markers, in milliseconds; of a closer pair the louder one is kept. Min is short for minimum."
+  },
+  "beatsBpm": "BPM",
+  "@beatsBpm": {
+    "description": "Audio panel, Beats section: the tempo well - beats per minute. Zero follows the detector's own estimate. BPM stays untranslated as the standard unit."
+  },
+  "beatsTap": "Tap",
+  "@beatsTap": {
+    "description": "Audio panel, Beats section: the tap-tempo button - press it in time with the music and the BPM well takes the tapped tempo."
+  },
+  "beatsGridOn": "Grid on",
+  "@beatsGridOn": {
+    "description": "Audio panel, Beats section: small caption shown while a typed or tapped BPM overrides the estimate, so generated beats snap to that grid."
+  },
+  "beatsPhaseEarlier": "Nudge beats 10 ms earlier",
+  "@beatsPhaseEarlier": {
+    "description": "Tooltip on the left phase chip beside the BPM well: the whole set of generated beat markers lands ten milliseconds earlier on the next generate."
+  },
+  "beatsPhaseLater": "Nudge beats 10 ms later",
+  "@beatsPhaseLater": {
+    "description": "Tooltip on the right phase chip beside the BPM well: the whole set of generated beat markers lands ten milliseconds later on the next generate."
+  },
+  "beatsGenerate": "Generate beat markers",
+  "@beatsGenerate": {
+    "description": "Audio panel, Beats section: the button that runs beat detection and places the markers."
+  },
+  "beatsClearGenerated": "Clear generated",
+  "@beatsClearGenerated": {
+    "description": "Audio panel, Beats section: the button that removes every generated beat marker, keeping the ones a person placed by hand."
+  },
+  "panCentre": "C",
+  "@panCentre": {
+    "description": "The pan value when the sound sits in the middle - a single-letter abbreviation of centre, shown in the pan well and tooltip. Sides read L 50 / R 50."
+  },
+  "volumeNegInf": "-inf",
+  "@volumeNegInf": {
+    "description": "What a volume well reads at or below the -100 dB knee, where the sound is exactly off - an abbreviation of negative infinity."
+  },
   "nodeNoSelection": "Pick a node in the Graph panel.",
   "@nodeNoSelection": {
     "description": "Empty-state line in the Node panel when no box has been picked on the graph canvas, so there are no parameters to list."

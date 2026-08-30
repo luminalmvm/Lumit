@@ -30,7 +30,19 @@ enum Panel {
   /// The parameter rows of whichever box the Graph panel has picked (K-471) —
   /// the Nodes workspace's lower-right column. The Effect controls panel lists
   /// the whole stack; this one answers "what is selected", drivers included.
-  node;
+  node,
+
+  /// The desk (docs/09 §3.1, K-690/K-691): one strip per audible row of the
+  /// fronted comp — fader, pan pot, meters off the engine's tap, mute and
+  /// solo — and the Master strip with its limiter lamp. The Audio workspace's
+  /// left column fronts it.
+  mixer,
+
+  /// The Audio panel (docs/09, the approved AudioWorkspace board): output
+  /// levels with the clip lamp, the Beats section over the beat engine, and
+  /// the selected layer's sound — volume, pan, fades, and the two
+  /// graph-template buttons.
+  audio;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -43,6 +55,8 @@ enum Panel {
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
         Panel.node => l10n.panelNode,
+        Panel.mixer => l10n.panelMixer,
+        Panel.audio => l10n.panelAudio,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -194,15 +208,14 @@ DockSplit defaultLayout() => DockSplit(
     );
 
 /// The shipped workspace presets (docs/07 §1.6): much the same panel
-/// inventory, arranged for different work. Structure only, per the spec; the
-/// Audio preset stands in with a taller Timeline (whose waveform lanes are the
-/// v1 audio surface) until the Audio panel itself is built.
+/// inventory, arranged for different work. Structure only, per the spec.
 ///
-/// Retiming and Nodes are the two presets that change the inventory rather
-/// than only the arrangement (K-349, K-471): the Easing panel is in no other
-/// arrangement, and neither are the Graph and Node panels, because a panel
-/// nobody asked for should not appear in an arrangement they already know.
-/// Hierarchy is in none of them at all (K-614), for the same reason.
+/// Retiming, Nodes and Audio are the presets that change the inventory rather
+/// than only the arrangement (K-349, K-471, the AudioWorkspace board): the
+/// Easing panel is in no other arrangement, and neither are the Graph, Node,
+/// Mixer and Audio panels, because a panel nobody asked for should not appear
+/// in an arrangement they already know. Hierarchy is in none of them at all
+/// (K-614), for the same reason.
 ///
 /// The order is the strip's order, which is the drawing's: Nodes sits third,
 /// beside Effects, because both are about what an effect does rather than
@@ -302,8 +315,12 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.72, 0.28],
         ),
-      // The Timeline taller than Edit with its waveform lanes; the Viewer
-      // reduced. The Audio panel joins this arrangement when it is built.
+      // Audio (the approved AudioWorkspace board): the Mixer fronting the
+      // left column over Project and Effect controls, the Audio panel taking
+      // the right column outright with Effects & presets tabbed behind, the
+      // Viewer reduced between them, and the Timeline taller than Edit's with
+      // its waveform lanes open. Shares are the board's own proportions:
+      // 260 / 840 / 340 across a 1440 drawing, the Timeline band 420 of 900.
       WorkspacePreset.audio => DockSplit(
           DockAxis.vertical,
           [
@@ -311,21 +328,21 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               DockAxis.horizontal,
               [
                 DockTabs([
+                  DockPane(Panel.mixer),
                   DockPane(Panel.project),
                   DockPane(Panel.effectControls),
-                  DockPane(Panel.effectsAndPresets),
                 ]),
                 DockPane(Panel.viewer),
                 DockTabs([
-                  DockPane(Panel.scopes),
-                  DockPane(Panel.debug),
+                  DockPane(Panel.audio),
+                  DockPane(Panel.effectsAndPresets),
                 ]),
               ],
-              [0.24, 0.56, 0.20],
+              [0.18, 0.58, 0.24],
             ),
             DockPane(Panel.timeline),
           ],
-          [0.55, 0.45],
+          [0.53, 0.47],
         ),
       // Retiming (K-349): the arrangement for shaping movement. The **Easing**
       // panel takes the right-hand column outright rather than tabbing behind

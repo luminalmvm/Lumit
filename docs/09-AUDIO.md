@@ -17,9 +17,9 @@ master fader** (K-690, K-691), and **fade in / fade out and clip crossfades** (K
 
 Out (explicitly, §7): audio effects, mixer **buses and sends**, and audio retiming.
 
-The engine layer (`lumit-audio`, `lumit-bridge`) is built; the Flutter Audio panel is not.
-The sections below describe the intended design, and [TODO.md](TODO.md) is the one document
-that says what exists.
+The engine layer (`lumit-audio`, `lumit-bridge`) is built, and so are the Flutter **Mixer**
+and **Audio** panels with the Audio workspace preset that hosts them (the approved
+AudioWorkspace board). [TODO.md](TODO.md) is the one document that says what remains.
 
 ## 2. Import and decode
 

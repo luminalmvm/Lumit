@@ -46,12 +46,21 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.timeline => 220,
       // A parameter row: its name, its wells and its keyframe marks.
       Panel.effectControls => 300,
-      Panel.graph => 320,
+      // The toolbar's fixed controls — save group, the two toggles, the snap
+      // magnet and the view cluster — measure 471 px once the magnet landed
+      // (K-689); the sweep overflowed at the old 320 floor. Below this the
+      // floor slides, which is what a canvas panel wants anyway.
+      Panel.graph => 480,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
       Panel.scopes => 160,
       Panel.hierarchy => 180,
       Panel.easing => 220,
+      // Two strips and the Master: below that a desk is a list of names.
+      Panel.mixer => 190,
+      // The Beats section's widest row: a label, the BPM well, Tap and the
+      // phase chips.
+      Panel.audio => 260,
       Panel.debug => 180,
     };
 

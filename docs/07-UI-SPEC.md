@@ -131,10 +131,12 @@ Window menu, exactly as Easing, Graph and Node are.
 - **Colour**: Scopes given a wide right-hand column showing waveform and vectorscope
   simultaneously (two panels stacked); Effect Controls left; Effects & Presets tabbed away;
   Viewer centre-dominant.
-- **Audio**: Audio panel promoted to a tall right column; Timeline taller than Edit with
-  audio waveforms expanded by default; Viewer reduced. This is the v1 audio surface — the
-  future Composer workspace is specified in [09-AUDIO.md](09-AUDIO.md) and deliberately not
-  here.
+- **Audio** (the approved AudioWorkspace board): the **Mixer** panel fronting the left
+  column over Project and Effect controls; the **Audio** panel taking the right column
+  with Effects & presets tabbed behind; the Viewer reduced between them; the Timeline
+  taller than Edit with audio waveforms expanded by default. This is the v1 audio
+  surface — the future Composer workspace is specified in [09-AUDIO.md](09-AUDIO.md) and
+  deliberately not here.
 - **Retiming** (K-349): the arrangement for shaping how things move. The **Easing** panel
   takes the right-hand column outright — a bare pane, not tabbed, because the point of the
   panel over the popup is that it stays on screen while the selection changes underneath
@@ -2369,9 +2371,17 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
   snap targets everywhere (§4.5, §5.3). Manual beat tapping: pressing `8` during playback
   drops a beat marker at the playhead.
 - **Volume keyframes**: each audio-capable layer has a Volume property (dB) with normal
-  keyframe/graph-editor behaviour; the Audio panel shows the selected layer's volume and
-  pan? — pan is deferred; v1 exposes volume and mute/solo only.
-- **Level meters**: output meters for playback, peak-hold, in the panel header.
+  keyframe/graph-editor behaviour; the Audio panel's Selected layer section shows the
+  selected layer's Volume and Pan (K-694 — pan shipped, reversing the earlier deferral)
+  with their stopwatches, fade in/out wells with the three curve chips (K-695), and the
+  two graph-template buttons — *Drive with audio…* (Audio level → Remap → Smooth onto a
+  picked parameter) and *Duck under…* (the inverted chain onto this layer's Volume
+  socket, K-697).
+- **Level meters**: the Audio panel's Levels section draws the output's stereo bars with
+  the panel-side peak hold and the sticky clip lamp; the **Mixer** panel (docs/09 §3.1,
+  K-690/K-691) draws a strip per sounding row — name in the layer's label colour, pan
+  pot, fader beside the stereo meters, dB well, mute and solo — and the Master strip
+  with its fader, limiter lamp and the muted LUFS placeholder.
 
 ---
 

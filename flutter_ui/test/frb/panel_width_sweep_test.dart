@@ -19,7 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
+import 'package:lumit_flutter/panels/audio_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
+import 'package:lumit_flutter/panels/mixer_panel_frb.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -184,6 +186,24 @@ void main() {
       await sweepWidths(tester,
           panel: Panel.node,
           build: () => const NodePanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    testWidgets('Mixer', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.mixer,
+          build: () => const MixerPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    testWidgets('Audio', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.audio,
+          build: () => const AudioPanelFrb(),
           state: p.state,
           uiState: p.uiState);
     });

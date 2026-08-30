@@ -12,11 +12,13 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/panels/debug_panel.dart';
 
 import '../state/dock.dart';
+import 'audio_panel_frb.dart';
 import 'easing_panel_frb.dart';
 import 'effect_controls_panel_frb.dart';
 import 'effects_presets_panel_frb.dart';
 import 'graph_panel.dart';
 import 'hierarchy_panel_frb.dart';
+import 'mixer_panel_frb.dart';
 import 'node_panel.dart';
 import 'project_panel_frb.dart';
 import 'scopes_panel_frb.dart';
@@ -34,5 +36,7 @@ Widget buildPanelBodyFrb(BuildContext context, Panel panel) => switch (panel) {
       Panel.easing => const EasingPanelFrb(),
       Panel.graph => const GraphPanelFrb(),
       Panel.node => const NodePanelFrb(),
+      Panel.mixer => const MixerPanelFrb(),
+      Panel.audio => const AudioPanelFrb(),
       Panel.debug => const DebugPanel(),
     };

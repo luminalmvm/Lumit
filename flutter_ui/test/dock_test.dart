@@ -48,15 +48,16 @@ void main() {
   /// named one by one on purpose: a fifth wanting the same exemption must be
   /// added here rather than this loosening to "some panels are missing".
   ///
-  /// Four panels are deliberately not in the default arrangement, and all for
+  /// Six panels are deliberately not in the default arrangement, and all for
   /// the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
   /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
-  /// K-471); and **Hierarchy** belongs to no shipped arrangement at all
-  /// (K-614). All four are one tick away in the Window menu.
+  /// K-471); the **Mixer** and **Audio** panels to the Audio workspace (the
+  /// AudioWorkspace board); and **Hierarchy** belongs to no shipped
+  /// arrangement at all (K-614). All six are one tick away in the Window menu.
   test(
-      'no panel appears twice in the default workspace, and only Easing, '
-      'Graph, Node and Hierarchy are absent', () {
+      'no panel appears twice in the default workspace, and only the '
+      'specialist panels are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
     expect(
@@ -67,6 +68,8 @@ void main() {
             Panel.graph,
             Panel.node,
             Panel.hierarchy,
+            Panel.mixer,
+            Panel.audio,
           ]));
   });
 
