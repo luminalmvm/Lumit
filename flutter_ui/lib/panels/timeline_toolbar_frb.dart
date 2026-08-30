@@ -26,6 +26,7 @@ import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
+import 'timeline_navigator.dart';
 
 /// **A control standing in one of the Timeline's two chrome rows**, grown to
 /// the height the density states for them (K-512).
@@ -53,11 +54,15 @@ Widget timelineChromeControl(LumitTheme t, Widget child) {
 /// the well and the segments.
 ///
 /// **The Timeline's first chrome row**, and so `t.density.timelineChromeRow` —
-/// **24** under Regular, 18 under Compact (K-512, docs/15 §12A.6). It used to
-/// be a plain secondary row at 19 either way; the owner's ruling after desktop
-/// testing is that this row is aimed at all day and 19 was too small to hit
-/// comfortably. It plus the header row under it are still exactly what the
-/// lane side spends on its ruler, which is what makes the two halves meet.
+/// **24** under Regular, 18 under Compact (K-512, docs/15 §12A.6) — **plus the
+/// navigator's band** (K-682, the owner's ruling): the time navigator (K-648)
+/// stands over the lane area alone, and this row grows by exactly its band to
+/// meet the panel top, where the strip's blank half used to leave a sliver of
+/// dead ground above it. The row used to be a plain secondary row at 19 either
+/// way; the owner's ruling after desktop testing is that this row is aimed at
+/// all day and 19 was too small to hit comfortably. It plus the header row
+/// under it face exactly what the lane side spends on the strip and its ruler,
+/// which is what makes the two halves meet.
 ///
 /// **This is where the hit floor gives way** (§7.2, K-452): the buttons in
 /// this row are the row's own height, well under the 32 nothing interactive is
@@ -101,7 +106,8 @@ class Toolbar extends StatelessWidget {
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
     return Container(
-      height: t.density.timelineChromeRow,
+      key: const ValueKey('tl-toolbar'),
+      height: t.density.timelineChromeRow + TimelineNavigator.band,
       // The panel's own surface, ruled off from the column header below it —
       // the mockup draws both chrome rows on the panel ground with a
       // hairline under each, not as a raised strip.

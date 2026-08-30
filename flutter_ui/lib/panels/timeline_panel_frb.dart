@@ -2977,65 +2977,69 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // editing recognisers over these surfaces exclude the
                   // trackpad in turn, so they cannot take it back
                   // (`dragDevices` in widgets/controls.dart).
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // The time navigator (T5): the whole comp as a strip,
-                      // with the slice the lanes are showing drawn on it.
-                      //
-                      // **Above both halves, not above the lanes alone.** The
-                      // ruler's height is derived from the outline's two header
-                      // rows precisely so the two sides line up row for row
-                      // (docs/15 §12A.1); a strip inserted on the lane side
-                      // would push every lane half a band below its own name.
-                      // It stands the full width and draws only over the lane
-                      // area, which is also where After Effects puts it.
-                      TimelineNavigator(
-                        leading: outlineViewport,
-                        trailing: scrollGutterWidth,
-                        frames: frames,
-                        zoom: _zoomMotion,
-                        hScroll: _hLane,
-                        playhead: ui.playheadFrame,
-                        onWindow: _navigateTo,
-                        onWindowEnd: _zoomDragEnd,
-                      ),
-                      Expanded(
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context).copyWith(
-                              dragDevices: const {PointerDeviceKind.trackpad},
-                              scrollbars: false),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  return ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                        dragDevices: const {PointerDeviceKind.trackpad},
+                        scrollbars: false),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // **The outline redraws under a seam drag** (T4): while
+                        // a seam is in hand this half is built at the live
+                        // width, so the Layers column's names widen with the
+                        // gesture and a switch column's cells go away as the
+                        // seam passes them. Only this half listens — nothing
+                        // right of the seam depends on a column width, and
+                        // rebuilding the lanes and bars per pointer move is
+                        // what made this drag lag when it was tried before.
+                        ValueListenableBuilder<
+                            MapEntry<TimelineGroup, double>?>(
+                          valueListenable: _liveResize,
+                          builder: (context, live, _) {
+                            final widths =
+                                _liveWidths(groupWidths, live, anyMatte);
+                            return _outlineHalf(context, ui, comp,
+                                rows: rows,
+                                layers: layers,
+                                blockHeights: blockHeights,
+                                groupOrder: groupOrder,
+                                groupWidths: widths,
+                                matteToggles: anyMatte,
+                                graphColours: graphColours,
+                                outlineViewport: outlineViewport,
+                                channels: channels,
+                                outlineWidth: live == null
+                                    ? outlineWidth
+                                    : outlineWidthOf(widths));
+                          },
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // **The outline redraws under a seam drag** (T4): while
-                              // a seam is in hand this half is built at the live
-                              // width, so the Layers column's names widen with the
-                              // gesture and a switch column's cells go away as the
-                              // seam passes them. Only this half listens — nothing
-                              // right of the seam depends on a column width, and
-                              // rebuilding the lanes and bars per pointer move is
-                              // what made this drag lag when it was tried before.
-                              ValueListenableBuilder<
-                                  MapEntry<TimelineGroup, double>?>(
-                                valueListenable: _liveResize,
-                                builder: (context, live, _) {
-                                  final widths =
-                                      _liveWidths(groupWidths, live, anyMatte);
-                                  return _outlineHalf(context, ui, comp,
-                                      rows: rows,
-                                      layers: layers,
-                                      blockHeights: blockHeights,
-                                      groupOrder: groupOrder,
-                                      groupWidths: widths,
-                                      matteToggles: anyMatte,
-                                      graphColours: graphColours,
-                                      outlineViewport: outlineViewport,
-                                      channels: channels,
-                                      outlineWidth: live == null
-                                          ? outlineWidth
-                                          : outlineWidthOf(widths));
-                                },
+                              // The time navigator (T5, K-648): the
+                              // whole comp as a strip, with the slice
+                              // the lanes are showing drawn on it.
+                              //
+                              // **Over the lane area alone** (K-682, the
+                              // owner's ruling): it spanned the whole
+                              // panel and stood blank over the outline,
+                              // which read as a sliver of dead ground
+                              // above the timecode row. That row is now
+                              // taller by exactly this band, so the two
+                              // halves still spend the same height above
+                              // their first layer row. Outside the
+                              // zoom's ListenableBuilder below — the
+                              // strip listens to the zoom, the scroll
+                              // and the playhead for itself.
+                              TimelineNavigator(
+                                trailing: scrollGutterWidth,
+                                frames: frames,
+                                zoom: _zoomMotion,
+                                hScroll: _hLane,
+                                playhead: ui.playheadFrame,
+                                onWindow: _navigateTo,
+                                onWindowEnd: _zoomDragEnd,
                               ),
                               Expanded(
                                 // **Only this half rebuilds when the zoom moves**
@@ -3081,8 +3085,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 },
               ),
@@ -3252,8 +3256,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     controller: _vOutline,
                     showThumb: _graph,
                     header: [
+                      // The toolbar's block carries the navigator band the
+                      // toolbar itself does (K-682), or the gutter's thumb
+                      // would start a band above the rows it scrolls.
                       Container(
-                          height: t.density.timelineChromeRow,
+                          height: t.density.timelineChromeRow +
+                              TimelineNavigator.band,
                           color: t.surface1),
                       Container(
                           height: t.density.timelineHeaderRow,
@@ -3267,9 +3275,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               // phased by the scroll so they travel with the
               // rows they separate.
               Positioned(
-                // Below the outline's own two chrome rows —
-                // level with the foot of the lane side's ruler.
-                top: t.density.ruler,
+                // Below the outline's own two chrome rows — the first of
+                // which carries the navigator's band (K-682) — level with
+                // the foot of the lane side's ruler.
+                top: TimelineNavigator.band + t.density.ruler,
                 left: 0,
                 right: 0,
                 bottom: 0,

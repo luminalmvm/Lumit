@@ -1649,12 +1649,15 @@ arithmetic is the one shared pure module (`panels/timeline_snap.dart`).
   on the track to bring the window there. AE's gestures, so nobody has to learn them.
   It carries **no numbers, ticks, markers or work area**: everything on it is about the
   *view*, and drawing the document too would be a second ruler at the wrong scale two pixels
-  above the real one. It stands the **full panel width and draws only over the lane area** —
-  the ruler's height is derived from the outline's two header rows so the halves line up row
-  for row (§12A.1), and a strip on the lane side alone would drop every lane half a band
-  below its own name. Its look is the ruler band's: the lane ground, a closing hairline, and
-  a window edged with the work-area handles' own drawn tabs, a step stronger under the
-  pointer.
+  above the real one. It stands **over the lane area alone, above the ruler**, and the
+  outline's timecode row is **taller by exactly the strip's band** (K-682, the owner's
+  ruling): the ruler's height is derived from the outline's two chrome rows so the halves
+  line up row for row (§12A.1), and both halves spend the same band above that pair — the
+  strip on the lane side, the grown row on the outline's. The strip first shipped spanning
+  the whole panel and standing blank over the outline, which kept the rows level but read
+  as a sliver of dead ground above the timecode row. Its look is the ruler band's: the lane
+  ground, a closing hairline, and a window edged with the work-area handles' own drawn
+  tabs, a step stronger under the pointer.
 
 **Shipped (K-189, K-190):** the outline and lanes scroll vertically as one table — one
 linked scroll, the visible thumb on the lane side; in graph view each side scrolls alone

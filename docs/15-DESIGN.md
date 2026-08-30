@@ -1511,7 +1511,11 @@ outline side spends on its two chrome rows, which is the whole reason the two ha
 the Timeline line up row for row. The mockup's own ruler measures a pixel under the sum of
 the two rows it faces — the artboard disagrees with itself there — and of the two readings
 only this one can be true of a panel whose halves have to meet. Grow either row and the
-ruler grows with it, which is exactly what K-512 did.
+ruler grows with it, which is exactly what K-512 did. The time navigator (K-648) stands
+above the derivation rather than inside it: the lane side spends the strip's band above
+its ruler, and the outline spends the same band growing its timecode row to the panel top
+(K-682, the owner's ruling), so the halves still meet and no dead ground stands beside the
+strip.
 
 **The Timeline's chrome rows are the owner's, not the manifests'** (K-512). Every other
 number in this table is measured off the approved artboards; these three are not. The

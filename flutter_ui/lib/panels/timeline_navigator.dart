@@ -117,16 +117,17 @@ enum NavigatorGrab { start, end, body }
 
 /// The strip itself.
 ///
-/// [leading] and [trailing] are the widths it must leave blank at each side to
-/// stand exactly over the lane area — the outline's columns and the lanes'
-/// scroll gutter. It spans the whole panel rather than only the lanes because
-/// the two halves are one table: a strip on the lane side alone would push the
-/// ruler down past the outline's header and every row would sit half a band
-/// below its own name.
+/// It stands over the lane area alone, above the ruler; [trailing] is the
+/// width it leaves blank over the lanes' scroll gutter. The two halves are one
+/// table, so the outline spends exactly this widget's [band] growing its
+/// toolbar row to the panel top (K-682, the owner's ruling): the strip first
+/// spanned the whole panel and stood blank over the outline, which read as a
+/// sliver of dead ground above the timecode row. Either way the halves spend
+/// the same height above the chrome pair the ruler is derived from, which is
+/// what keeps every row level with its own name.
 class TimelineNavigator extends StatefulWidget {
   const TimelineNavigator({
     super.key,
-    required this.leading,
     required this.trailing,
     required this.frames,
     required this.zoom,
@@ -136,7 +137,6 @@ class TimelineNavigator extends StatefulWidget {
     this.onWindowEnd,
   });
 
-  final double leading;
   final double trailing;
 
   /// The composition's length. A comp of no frames draws an empty track.
@@ -267,9 +267,8 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           Expanded(
             child: Row(
               children: [
-                // Blank over the outline and over the lanes' gutter: the strip
-                // draws only where the time it is describing is drawn.
-                SizedBox(width: widget.leading),
+                // Blank over the lanes' gutter: the strip draws only where the
+                // time it is describing is drawn.
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {

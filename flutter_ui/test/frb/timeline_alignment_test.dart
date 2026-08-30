@@ -24,6 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
+import 'package:lumit_flutter/panels/timeline_navigator.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -655,12 +656,29 @@ void main() {
 
       // The outline's two chrome rows — timecode/search/mode, then the
       // column header — stand between the top of the panel's table and its
-      // first row, and the ruler starts at that same top on the lane side.
-      // **That equality is the ruler's whole derivation** (§12A.6): the lane
-      // side spends on its ruler exactly what the outline spends on its two
-      // rows, so the two halves meet.
+      // first row, and the ruler faces them on the lane side. **That equality
+      // is the ruler's whole derivation** (§12A.6): the lane side spends on
+      // its ruler exactly what the outline spends on its two rows, so the two
+      // halves meet. Above that pair both halves spend the navigator's band —
+      // the strip on the lane side, a taller timecode row on the outline's
+      // (K-682) — so the derivation is measured from the ruler, one band down.
       expect(outlineRow(tester, layer).top - ruler.top, closeTo(d.ruler, 0.5),
           reason: 'two chrome rows sit above the first layer row');
+      // **The toolbar row fills the navigator's band** (K-682, the owner's
+      // ruling; it amends K-648's full-width strip). The strip stands over
+      // the lane area alone, and the outline's top row grows by exactly its
+      // band to meet the panel top — both halves' chrome starts at one y,
+      // and no dead ground stands beside the strip.
+      final strip = tester.getRect(find.byKey(const ValueKey('tl-navigator')));
+      final toolbar = tester.getRect(find.byKey(const ValueKey('tl-toolbar')));
+      expect(toolbar.top, closeTo(strip.top, 0.5),
+          reason: 'the timecode row starts where the navigator strip does');
+      expect(toolbar.height,
+          closeTo(d.timelineChromeRow + TimelineNavigator.band, 0.5),
+          reason: 'grown by the band the lane side spends on the strip');
+      expect(ruler.top - strip.top, closeTo(TimelineNavigator.band, 0.5),
+          reason: 'and the ruler starts one band down, facing the rest of '
+              'the toolbar row and the column header');
       // And they are the two the density states, at K-512's own numbers: the
       // row that is aimed at all day is the taller of the pair.
       expect(
@@ -921,6 +939,12 @@ void main() {
           reason: 'two 18px chrome rows stand above the first layer row');
       expect(d.timelineChromeRow, 18);
       expect(d.timelineHeaderRow, 18);
+      // The toolbar row carries the navigator's band under Compact too
+      // (K-682): the strip is no denser there, so the grown row is not
+      // either.
+      expect(tester.getRect(find.byKey(const ValueKey('tl-toolbar'))).height,
+          closeTo(d.timelineChromeRow + TimelineNavigator.band, 0.5),
+          reason: 'the timecode row fills the band beside the strip');
       expect(
           tester
               .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))

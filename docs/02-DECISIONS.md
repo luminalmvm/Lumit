@@ -21268,3 +21268,26 @@ so frame rate, raster median and span cannot be asserted at any window size. The
 rule instead: a change that touches a Timeline paint path re-runs the note's §6 probe in
 the owner's conditions and quotes §2.3's rows for the gestures it touched, before and
 after. The counts are the leading indicator; the probe is the measurement.
+
+## K-682 — The outline's timecode row grows by the navigator's band, and the strip stands over the lanes alone
+
+**Status: DECIDED (2026-08-30, the owner's ruling).** Amends the layout half of K-648's
+first ruling; the derivation that ruling protected stands.
+
+K-648 laid the time navigator across the whole panel and left it blank over the outline,
+so the band could not push the lane rows below their own names. Living with it, the owner:
+the blank half reads as what it is — a sliver of dead ground above the timecode row — and
+the fix is to "expand that top row in the outline area to fill that gap vertically".
+
+So the strip now stands over the lane area alone, above the ruler, and the outline's first
+chrome row is taller by exactly the strip's band (`TimelineNavigator.band`). Both halves
+spend the same band above the chrome pair the ruler is derived from — the strip on one
+side, the grown row on the other — so every row is still level with its own name, and the
+panel's top-left corner is the toolbar's own ground rather than nothing. The row's
+controls centre in the grown row; the header row under it, the ruler opposite, and every
+number in K-451's table are untouched, and Compact grows by the same band, because the
+strip is no denser there.
+
+Pinned in `timeline_alignment_test`'s K-451 heights test: the toolbar row's top is the
+strip's top, its height is the chrome row plus the band (under Regular and Compact both),
+and the ruler starts one band below either.
