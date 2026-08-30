@@ -4810,6 +4810,65 @@ void main() {
           reason: 'the edge itself did move');
     });
 
+    /// **The line is the pointer's, never the picture's** (P1's rule, applied
+    /// to the playhead itself; the owner's "dragging the playhead over
+    /// uncached areas is visually laggy").
+    ///
+    /// A scrub tells the engine where the playhead now is and paints the line
+    /// there; what the engine does about it — a frame that may take half a
+    /// second on ground nothing has rendered — is the picture's business and
+    /// never the line's. Nothing here is mounted that asks for a frame, so no
+    /// frame can arrive: **every pointer event must still move the line**, and
+    /// move it on screen and not only in the notifier.
+    ///
+    /// The line's own drawn position is read, not only the frame the notifier
+    /// holds: the playhead is painted through a transform behind its own layer
+    /// (K-649), so what a test that read the notifier alone would prove is that
+    /// a number changed.
+    testWidgets(
+        'a scrub moves the line on every pointer event, with no frame '
+        'served', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      p.uiState.playheadFrame.value = 0;
+      await tester.pump();
+
+      final served = p.uiState.frameArrived.value;
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      double lineX() => tester.getTopLeft(find.byType(PlayheadMarker).first).dx;
+
+      // A mouse, which is what a scrub is made with; near the ruler's left end
+      // so ten steps stay inside the composition, but clear of the work area's
+      // start handle, whose ten pixels are its own.
+      final gesture = await tester.startGesture(
+          Offset(ruler.left + 60, ruler.top + 4),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      final frames = <int>[];
+      final drawn = <double>[];
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(8, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+        frames.add(p.uiState.playheadFrame.value);
+        drawn.add(lineX());
+      }
+      await gesture.up();
+      await tester.pump();
+
+      expect(p.uiState.frameArrived.value, served,
+          reason: 'a frame arrived, so this measured nothing');
+      expect(frames.first, greaterThan(0),
+          reason: 'the first pointer event moved the pointer and not the line');
+      for (var i = 1; i < frames.length; i++) {
+        expect(frames[i], greaterThan(frames[i - 1]),
+            reason: 'pointer event $i left the playhead where it was');
+        expect(drawn[i], greaterThan(drawn[i - 1]),
+            reason: 'pointer event $i left the line drawn where it was');
+      }
+    });
+
     /// The lane area is rows all the way down. One layer used to leave the
     /// ground, the seams and the marquee stopping 22 px in, so most of the
     /// area was a hole: nothing to look at and nothing to click on.

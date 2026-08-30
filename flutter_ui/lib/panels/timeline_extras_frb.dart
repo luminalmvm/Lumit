@@ -1420,6 +1420,15 @@ class _TimelineRulerState extends State<TimelineRuler> {
     return GestureDetector(
       key: const ValueKey('tl-ruler'),
       behavior: HitTestBehavior.opaque,
+      // **The scrub begins where the button went down**, not where the
+      // recogniser finally admitted it was a drag. A drag's default is to take
+      // its origin from the point at which the pointer had travelled far
+      // enough to win the arena and to throw that travel away — so the first
+      // movement of every scrub moved the pointer and not the playhead, and
+      // the line only caught up on the second. A scrub is not a gesture that
+      // has to be told apart from a tap by how far it goes: the press already
+      // seeks, and from there the line is the pointer's.
+      dragStartBehavior: DragStartBehavior.down,
       onTapDown: (d) {
         // **A press on a work-area handle is that handle's** (owner, desk
         // test): grabbing an edge used to drag the playhead to the pointer
