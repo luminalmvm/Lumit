@@ -1647,9 +1647,20 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// `painting` is what tells a *row* drag's provisional value from the keys
   /// that really exist: the curve is drawn through it, the diamonds are not, so
   /// dragging an unkeyed value moves the line without appearing to key it.
+  ///
+  /// It is also what decides the ORDER (T3). [_withMove] deliberately keeps a
+  /// dragged key at its index, because the selection and the handle geometry
+  /// are indexed into this list — but the evaluator behind the curve walks
+  /// spans in time order, so a marquee dragged past a key it is not moving left
+  /// the line unable to be drawn either side of that key until the pointer came
+  /// up. The painter takes the same keys sorted ([keysInTimeOrder]); everything
+  /// that holds an index takes them as they are.
   List<BridgeKeyframe> _shownKeys(GraphChannel channel,
-          {bool painting = false}) =>
-      _withMove(channel, _keysWithSideDrags(channel, painting: painting));
+      {bool painting = false}) {
+    final keys =
+        _withMove(channel, _keysWithSideDrags(channel, painting: painting));
+    return painting ? keysInTimeOrder(keys) : keys;
+  }
 
   /// The move a gesture in flight is making, or null when none is — the key
   /// drag's delta, or the transform box's scale.

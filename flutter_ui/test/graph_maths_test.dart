@@ -28,8 +28,8 @@ void main() {
   /// middle of a held run quietly turned that run into a ramp.
   group('keyframeAmong', () {
     const hold = BridgeSideInterp.hold();
-    const ease = BridgeSideInterp.bezier(
-        BridgeBezierSide(speed: 0, influence: 0.5));
+    const ease =
+        BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
 
     test('with nothing around it, linear both sides', () {
       final made = keyframeAmong(const [], rat(1, 1), 5);
@@ -691,6 +691,29 @@ void envelopeShapeTests() {
         closeTo(300, 1e-9),
         closeTo(50, 1e-9),
       ]);
+    });
+  });
+
+  group('the order the curve is drawn through', () {
+    /// **T3.** A key drag keeps its index for the length of the gesture, so a
+    /// marquee dragged past a key it is not moving leaves the list out of time
+    /// order — and the evaluator, which walks spans assuming that order, could
+    /// not draw the curve either side of the crossed key until the pointer came
+    /// up. The painter sorts; nothing that holds an index does.
+    test('a key dragged past one it is not moving still evaluates', () {
+      final crossed = [key(0, 1, 0.0), key(3, 1, 30.0), key(2, 1, 20.0)];
+      // Unsorted, the evaluator answers off the wrong span: it takes the last
+      // entry for the end of the curve and holds everything past 2 s flat.
+      expect(evaluateKeys(crossed, 2.5), 20);
+      final sorted = keysInTimeOrder(crossed);
+      expect(sorted.map((k) => rationalSeconds(k.time)).toList(), [0, 2, 3]);
+      expect(evaluateKeys(sorted, 2.5), closeTo(25, 1e-9));
+    });
+
+    test('a list already in order is handed back untouched', () {
+      final keys = [key(0, 1, 0.0), key(2, 1, 20.0)];
+      expect(identical(keysInTimeOrder(keys), keys), isTrue);
+      expect(keysInTimeOrder(const <BridgeKeyframe>[]), isEmpty);
     });
   });
 }

@@ -26,6 +26,32 @@ const BridgeSideInterp easyEase = BridgeSideInterp.bezier(
   BridgeBezierSide(speed: 0, influence: 1 / 3),
 );
 
+/// `keys` in time order — what [evaluateKeys] and [evaluateKeysSpeed] both
+/// require, and what a drag in flight can break.
+///
+/// **Why a list of keys is ever out of order.** A key drag holds its index for
+/// the length of the gesture: the selection, the glyph loop and the tangent
+/// handles are all indexed into the shown list, and re-sorting under them
+/// mid-drag would re-aim them at each other's keys. So a marquee of selected
+/// keys dragged past a key it is *not* moving leaves the list in the moved
+/// order, not in time order — and the evaluator, which walks spans assuming
+/// time order, then drew nothing across the crossed key while the drag ran.
+/// The *drawing* wants time order and has no indices to protect, so it sorts
+/// here and the gesture's own bookkeeping is left alone.
+///
+/// The list is returned untouched when it is already in order, which is every
+/// paint but the ones during such a crossing.
+List<BridgeKeyframe> keysInTimeOrder(List<BridgeKeyframe> keys) {
+  for (var i = 1; i < keys.length; i++) {
+    if (rationalSeconds(keys[i - 1].time) <= rationalSeconds(keys[i].time)) {
+      continue;
+    }
+    return [...keys]..sort(
+        (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
+  }
+  return keys;
+}
+
 /// The keys of a scalar, or empty for a static one.
 List<BridgeKeyframe> keysOf(BridgeScalar scalar) => switch (scalar) {
       BridgeScalar_Keyframed(:final field0) => field0,
@@ -944,8 +970,8 @@ List<double> gridValues(double lo, double hi, double height) {
 /// anyway.
 BridgeSideInterp inheritedSide(BridgeSideInterp? facing) => switch (facing) {
       BridgeSideInterp_Hold() => const BridgeSideInterp.hold(),
-      BridgeSideInterp_Bezier() => BridgeSideInterp.bezier(
-          BridgeBezierSide(speed: 0, influence: 1 / 3)),
+      BridgeSideInterp_Bezier() =>
+        BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3)),
       BridgeSideInterp_Auto() => facing,
       _ => const BridgeSideInterp.linear(),
     };
@@ -963,8 +989,7 @@ BridgeKeyframe keyframeAmong(
   BridgeKeyframe? after;
   for (final key in keys) {
     final at = rationalSeconds(key.time);
-    if (at < seconds &&
-        (before == null || at > rationalSeconds(before.time))) {
+    if (at < seconds && (before == null || at > rationalSeconds(before.time))) {
       before = key;
     }
     if (at > seconds && (after == null || at < rationalSeconds(after.time))) {
