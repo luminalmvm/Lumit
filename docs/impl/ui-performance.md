@@ -872,6 +872,25 @@ owner's behalf. Re-measure before filing if the Flutter version has moved.
 
 ### 7.2 WP-7 — the Impeller gap, still open
 
+**Reconciled against the community 120fps guidance the owner supplied (2026-08-30;
+the Shinde piece).** Its checklist and this note agree rather than argue: repaint
+boundaries around what animates (landed, WP-2/3), fixed-extent lazy lists (LazyBlocks
+with precomputed heights is that pattern), pre-compiled shaders, the 8.33 ms budget,
+and adapting the cap to the refresh rate. Two of its lines bear directly on our gap
+and support K-677's reading: "texture usage can still perform worse on Impeller" (our
++18 ms live-preview term, from a pro-Impeller source), and its premise that Impeller's
+wins come from NATIVE modern APIs - Metal, Vulkan - while its own desktop line says
+support "is still limited or experimental"; Windows today is GLES over ANGLE over
+D3D11, which is the gap, not the app. Const coverage was checked against its advice:
+flutter_lints' const rules already report clean across the app.
+
+**Canvas-band rewrite, promotion trigger (from the same reconciliation):** the ~16 ms
+content share of a maximised raster frame (par. 2's Graph-mode control) is the piece a
+one-CustomPaint lane band would shrink. It stays parked while the embedder floor (~34
+ms) dwarfs it - and it is PROMOTED to an active package the day any of WP-7's watches
+fire (partial repaint, a Vulkan compositor, or the MSAA fix), so our side is under
+budget the day the platform's side is.
+
 WP-1 ran out of levers inside Lumit, not out of mandate. What is left is a raster-thread
 floor of ~34 ms per maximised frame that a single `CustomPaint` pays as surely as 57
 widget-built rows, plus ~18 ms more whenever the Viewer's texture republishes. The
