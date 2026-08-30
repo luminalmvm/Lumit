@@ -19,7 +19,6 @@ import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'timeline_extras_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
-import 'timeline_metrics_frb.dart';
 
 /// [m] with one or two fields changed. The engine takes the whole mask, so
 /// every edit and every preview here is "the mask, with this changed".

@@ -203,8 +203,8 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     if (scalar == null) return fallback;
     if (scalar is BridgeScalar_Static) return scalar.field0;
     if (scalar is BridgeScalar_Expression) return fallback;
-    return sampleScalar(
-        scalar: scalar, time: timeOfFrame(widget.comp, widget.playheadFrame));
+    return sampledScalar(
+        scalar, timeOfFrame(widget.comp, widget.playheadFrame));
   }
 
   /// Write a parameter the way every row writes one: into the key under the

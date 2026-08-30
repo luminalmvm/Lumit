@@ -23,7 +23,6 @@ import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
-import 'timeline_metrics_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 
 /// One piece of a shape layer's art in the Timeline (K-237), on the shared

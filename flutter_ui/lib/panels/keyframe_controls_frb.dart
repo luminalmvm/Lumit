@@ -302,7 +302,7 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// one never moves anything.
   List<double> _valuesNow(int frame) {
     final time = timeOfFrame(comp, frame);
-    return [for (final s in scalars) sampleScalar(scalar: s, time: time)];
+    return [for (final s in scalars) sampledScalar(s, time)];
   }
 
   /// The key sitting exactly on `frame`, if there is one.

@@ -20135,3 +20135,40 @@ the graph* — which is not the same question as what may be applied to a layer.
 Regression tests: `the_drivers_listing_is_the_family_filed_under_controls` and
 `applying_a_driver_adds_a_graph_node_rather_than_a_stack_effect` (lumit_bridge);
 `the Tab search is the console, in the canvas's words` (graph_panel_metrics_test).
+
+
+## K-647 — One sampling call a frame, however many lanes are open
+
+**Status: DECIDED (2026-08-30).** Closes the standing note in [TODO.md](TODO.md) that
+playback's remaining bridge chatter scaled with the rows on screen.
+
+Every animated row shows what its curve reads under the playhead, and it asked the engine
+for that itself: one `sample_scalar` per animated row per frame. Memoising the answers
+(K-184) did not touch it, because a scrub asks a **new** question every frame — a new time
+— of every row at once. So the cost grew with the number of lanes a `U` had opened, and
+that is why scrubbing and playback could lag over frames the cache already held.
+
+**The batch is pulled, not pushed.** There is a new `sample_scalars(scalars, time)` on the
+bridge — the same answers `sample_scalar` gives, in one crossing — and `sampledScalar` in
+`state/comp_time.dart` is what calls it: the first row to miss at a new time samples the
+whole set the *previous* frame drew, and every row after it reads its answer out of memory.
+Nothing registers or unregisters. A row that appears misses once and joins the set; a row
+that goes falls out of it on the next move. The alternative — a panel that gathers its
+visible rows and primes the cache before they build — needs the primer to run before every
+listener that might ask, which is an ordering the framework does not promise.
+
+**The sampler moved to `state/comp_time.dart`**, beside the frame↔time memory it was always
+modelled on. It had lived in `panels/timeline_metrics_frb.dart`, and the Effect controls
+panel's rows want the same batch: reaching into the Timeline's metrics for it would have
+been the wrong way round. Every playhead-following read now goes through it — the Timeline's
+lanes, the transform rows, the effect parameter rows, the levels and flow rows.
+`sample_scalar_with_context` is untouched: an expression needs the layer it runs on, which
+is a different question.
+
+The **first frame after a mount is not batched** — nothing has been asked for yet, so it
+costs one call per row, exactly as before. That is one frame, and the frame after it is one
+call.
+
+Regression tests: `moving the playhead converts the frame once` (extended: no
+`sample_scalar` at all, at most one `sample_scalars`) and `a scrub costs the same with
+twice the rows open`, both in `bridge_call_budget_test.dart`.

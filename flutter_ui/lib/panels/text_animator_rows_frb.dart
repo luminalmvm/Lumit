@@ -256,7 +256,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     double shown(BridgeScalar s) => switch (s) {
           BridgeScalar_Static(:final field0) => field0,
           BridgeScalar_Keyframed() || BridgeScalar_Expression() =>
-            sampleScalar(scalar: s, time: timeOfFrame(comp, at)),
+            sampledScalar(s, timeOfFrame(comp, at)),
         };
     void commit(int axis, num value) => write([
           for (var i = 0; i < scalars.length; i++)

@@ -202,7 +202,7 @@ class FlowRowsFrb extends StatelessWidget {
       // own here — `sampleScalar` is the one place either is evaluated.
       BridgeScalar_Keyframed() ||
       BridgeScalar_Expression() =>
-        sampleScalar(scalar: rate, time: timeOfFrame(comp, playheadFrame)),
+        sampledScalar(rate, timeOfFrame(comp, playheadFrame)),
     };
 
     void writeRate(double fps) {

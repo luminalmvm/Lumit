@@ -7328,6 +7328,19 @@ counter moves, and every panel that commits refreshes it directly. `comp_time.da
 memoises frame↔time conversions the same way, and `timecode.dart` is the single
 `HH:MM:SS:FF` formatter everything displays through.
 
+`comp_time.dart` also answers "what does this curve read right now?" for every
+animated row, and that one is worth a paragraph, because remembering is not
+enough for it. Remembering helps when the same question is asked twice; a scrub
+asks a *new* question every frame — a new time — and it asks it of every row on
+screen at once. So the engine was being called once per animated row per frame,
+and the bill grew with the number of lanes a `U` had opened, which is why
+scrubbing could lag over frames the cache already held. The fix is to ask once:
+the first row to reach a new time carries every curve the previous frame drew
+with it, in a single call, and the rest of the rows read their answers out of
+memory. Nothing has to register or unregister — the list of curves is simply
+what was asked for last, so a row that appears joins it after one frame and a
+row that goes falls out of it.
+
 - **Project** — items in folders, multi-select, drag onto the Timeline or onto
   New composition (which prefills size, rate and duration from what you dropped).
 - **Viewer** — the picture, the transport, the resolution picker, the on-picture

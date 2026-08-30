@@ -1,6 +1,11 @@
-// The Timeline's shared numbers: the sampled-scalar cache, the column and
-// keyframe metrics, the zoom step, the layer-drag model and the row list both
-// halves of the table are built from.
+// The Timeline's shared numbers: the column and keyframe metrics, the zoom
+// step, the layer-drag model and the row list both halves of the table are
+// built from.
+//
+// The sampled-scalar cache moved to state/comp_time.dart, beside the frame↔time
+// memory it was always modelled on — the Effect controls panel's rows want the
+// same batching, and reaching into the Timeline's own metrics for it would have
+// been the wrong way round.
 //
 // Split out of timeline_panel_frb.dart, which the outline, the lanes and the
 // panel itself all read these from.
@@ -16,20 +21,6 @@ import '../widgets/controls.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
-
-/// The engine's answers to "what does this curve read at this time",
-/// remembered per (scalar, time) — the same bargain state/comp_time.dart
-/// strikes for frame↔time: the engine still computes each answer, once,
-/// rather than once per rebuild of every animated row (K-184). A freezed
-/// scalar compares by value, so an edited curve is a new question here, never
-/// a stale answer; the ceiling only stops a long session growing forever.
-final Map<(BridgeScalar, BridgeRational), double> _scalarSamples = {};
-
-double sampledScalar(BridgeScalar scalar, BridgeRational time) {
-  if (_scalarSamples.length >= 8192) _scalarSamples.clear();
-  return _scalarSamples[(scalar, time)] ??=
-      sampleScalar(scalar: scalar, time: time);
-}
 
 /// The layer-number column: the mockup's own 18 (K-451), shared by the column
 /// header's `#` and the muted mono number under it so the two stack.

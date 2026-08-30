@@ -1,5 +1,6 @@
-// One answer to "what time is frame N?" — and to "what markers does this comp
-// have?" — shared by everything that draws.
+// One answer to "what time is frame N?", to "what markers does this comp
+// have?" and to "what does this curve read now?" — shared by everything that
+// draws.
 //
 // The conversion belongs to the engine (docs/17 §, `CompositionReference::
 // time_of_frame` exists so no frontend does frame-rate arithmetic itself), but
@@ -79,9 +80,78 @@ void writeMarkers(CompositionReference comp, List<BridgeMarker> markers) {
   _markers.remove(comp);
 }
 
+/// The engine's answers to "what does this curve read at this time",
+/// remembered per (scalar, time): the engine still computes each answer, once,
+/// rather than once per rebuild of every animated row (K-184). A freezed
+/// scalar compares by value, so an edited curve is a new question here, never
+/// a stale answer; the ceiling only stops a long session growing forever.
+final Map<(BridgeScalar, BridgeRational), double> _scalarSamples = {};
+
+/// The scalars asked for at [_hotTime] — which is to say the animated rows on
+/// screen, as of the last frame anything drew.
+///
+/// **What makes the sampling one call a frame rather than one call a row.**
+/// Remembering an answer helps a rebuild that asks the same question twice; it
+/// cannot help a scrub, where every frame is a new time and so a new question
+/// for every row at once. Playback with a `U` open therefore crossed the
+/// boundary once per animated row per frame, and the crossings grew with the
+/// number of lanes open — which is why frames the cache already held could
+/// still arrive late.
+///
+/// So the *first* row to miss at a new time samples the whole set the previous
+/// frame used, in one crossing, and every row after it reads its answer out of
+/// memory. A row that has just appeared misses once and joins the set; one that
+/// has gone falls out of it the next time the playhead moves. Nothing registers
+/// or unregisters — the set is simply what was asked for last.
+Set<BridgeScalar> _hot = {};
+BridgeRational? _hotTime;
+
+/// What [scalar] reads at [time], from memory when it is there and from one
+/// batched call across the whole screen when it is not.
+///
+/// Prefer this to `sampleScalar` anywhere a row shows the value under the
+/// playhead. `sampleScalarWithContext` is a different question — an expression
+/// needs the layer it runs on — and stays as it is.
+double sampledScalar(BridgeScalar scalar, BridgeRational time) {
+  if (_scalarSamples.length >= 8192) _scalarSamples.clear();
+  final held = _scalarSamples[(scalar, time)];
+  if (held != null) {
+    _markHot(scalar, time);
+    return held;
+  }
+  // The miss, and everything the last frame wanted that this one has not been
+  // asked for yet: one call for the lot.
+  final wanted = <BridgeScalar>[
+    scalar,
+    for (final other in _hot)
+      if (other != scalar && !_scalarSamples.containsKey((other, time))) other,
+  ];
+  final values = sampleScalars(scalars: wanted, time: time);
+  for (var i = 0; i < wanted.length && i < values.length; i++) {
+    _scalarSamples[(wanted[i], time)] = values[i];
+  }
+  _markHot(scalar, time);
+  return values.isEmpty ? 0 : values.first;
+}
+
+/// Note that [scalar] was wanted at [time], starting the set over when the time
+/// has moved on.
+void _markHot(BridgeScalar scalar, BridgeRational time) {
+  if (_hotTime != time) {
+    _hotTime = time;
+    _hot = {};
+  }
+  _hot.add(scalar);
+}
+
 /// Forget everything. Called on every committed engine change.
 void clearCompTimeCache() {
   _times.clear();
   _frames.clear();
   _markers.clear();
+  _scalarSamples.clear();
+  // [_hot] deliberately survives: it is not an answer that can go stale, only
+  // the list of curves something drew last. Emptying it would cost the next
+  // frame its batch — an edited scalar in it is sampled once for nothing and
+  // then drops out.
 }

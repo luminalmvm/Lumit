@@ -344,9 +344,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       double value, int frame) {
     final ratio = _linkRatio ??= () {
       final time = timeOfFrame(widget.comp, frame);
-      final x = sampleScalar(scalar: read(widget.transform, lead), time: time);
+      final x = sampledScalar(read(widget.transform, lead), time);
       final y =
-          sampleScalar(scalar: read(widget.transform, partner), time: time);
+          sampledScalar(read(widget.transform, partner), time);
       return x == 0 ? 1.0 : y / x;
     }();
     return value * ratio;
@@ -644,7 +644,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     }
 
     final sampled =
-        sampleScalar(scalar: scalar, time: timeOfFrame(widget.comp, frame));
+        sampledScalar(scalar, timeOfFrame(widget.comp, frame));
     // No live preview mid-drag: staging a keyframed transform through the
     // static-preview path would lie about the curve. The release commits one
     // op — the key at the playhead updated or planted.

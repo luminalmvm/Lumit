@@ -293,7 +293,19 @@ pub struct BridgePresetInfo {
 #[frb(sync)]
 pub fn list_presets() -> Vec<BridgePresetInfo> {
     lumit_project::presets_dir()
-        .map(|dir| presets_in(&dir))
+        .map(|dir| presets_in(&dir, lumit_core::preset::PRESET_EXTENSION))
+        .unwrap_or_default()
+}
+
+/// Every `.lumgrp` **node group** in the same library folder, sorted by name
+/// (K-646) — what the graph canvas's search offers beside the drivers.
+///
+/// The same folder as the effect presets, because it is the same kind of thing:
+/// something this person saved to use again, on any project.
+#[frb(sync)]
+pub fn list_node_groups() -> Vec<BridgePresetInfo> {
+    lumit_project::presets_dir()
+        .map(|dir| presets_in(&dir, lumit_core::preset::GROUP_EXTENSION))
         .unwrap_or_default()
 }
 
@@ -307,16 +319,20 @@ pub fn presets_dir_path() -> Option<String> {
     Some(dir.to_string_lossy().into_owned())
 }
 
-/// The listing itself, on any folder — split from [`list_presets`] so the scan
-/// is testable without touching the user's real library.
+/// The listing itself, on any folder and for either extension — split from
+/// [`list_presets`] so the scan is testable without touching the user's real
+/// library, and shared with [`list_node_groups`] so an effect preset and a node
+/// group are found, named and sorted by exactly the same rules.
 #[frb(ignore)]
-pub(crate) fn presets_in(dir: &std::path::Path) -> Vec<BridgePresetInfo> {
+pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePresetInfo> {
     #[derive(serde::Deserialize)]
     struct Named {
         name: Option<String>,
-        // Presence is the "is this actually a preset" check; the effects
-        // themselves are parsed properly at load time.
-        effects: serde_json::Value,
+        // Presence is the "is this actually one of ours" check — an effect
+        // preset carries `effects`, a node group carries `nodes`. What is in
+        // them is parsed properly at load time.
+        effects: Option<serde_json::Value>,
+        nodes: Option<serde_json::Value>,
     }
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -326,15 +342,20 @@ pub(crate) fn presets_in(dir: &std::path::Path) -> Vec<BridgePresetInfo> {
             let path = entry.ok()?.path();
             if !path
                 .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("lumfx"))
+                .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
             {
                 return None;
             }
             let text = std::fs::read_to_string(&path).ok()?;
-            // It must at least be preset JSON with an effects list; the saved
-            // display name wins, the file's stem stands in without one.
+            // It must at least be one of our documents with its list in it; the
+            // saved display name wins, the file's stem stands in without one.
             let named: Named = serde_json::from_str(&text).ok()?;
-            if !named.effects.is_array() {
+            if !named
+                .effects
+                .as_ref()
+                .or(named.nodes.as_ref())
+                .is_some_and(serde_json::Value::is_array)
+            {
                 return None;
             }
             let name = named

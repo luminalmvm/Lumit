@@ -696,6 +696,13 @@ void main() {
         await tester.pump();
       }
       await settleFrb(tester, minRounds: 4, maxRounds: 8);
+      // One move first: the batched sampler learns which curves are on screen
+      // from the frame before, so the very first frame after a mount is the
+      // one it cannot batch. What is measured below is the steady state — the
+      // second frame of a scrub onwards, and every frame of playback.
+      p.uiState.playheadFrame.value = 29;
+      await tester.pump();
+      await settleFrb(tester, minRounds: 2, maxRounds: 6);
 
       counter
         ..reset()
@@ -713,16 +720,113 @@ void main() {
         reason: 'each row converted the playhead frame for itself:\n'
             '${counter.ranking()}',
       );
-      // Measured at 7: one conversion, plus one sample per animated row —
-      // those are genuinely different questions. The keyframe rows used to
-      // walk their key lists asking `frame_at_time` per key as well, which is
-      // what put this at 67.
+      // **One sampling call, whatever the number of lanes open.** It used to be
+      // one per animated row — six here, and one per row on the owner's own
+      // projects, where a `U` opens dozens. Every row on screen wants the same
+      // question answered at the same time, so the first to ask carries the
+      // rest with it (`sampledScalar`).
+      expect(
+        counter.calls['sample_scalar'] ?? 0,
+        0,
+        reason: 'a row sampled its curve on its own:\n${counter.ranking()}',
+      );
+      expect(
+        counter.calls['sample_scalars'] ?? 0,
+        lessThanOrEqualTo(1),
+        reason: 'the sampling was not batched into one call:\n'
+            '${counter.ranking()}',
+      );
+      // Measured at 7 when it was one call per row; two now — the conversion
+      // and the batch. The keyframe rows used to walk their key lists asking
+      // `frame_at_time` per key as well, which is what put this at 67.
       expect(
         counter.total,
         lessThan(20),
         reason: 'a scrub re-read too much across the bridge:\n'
             '${counter.ranking()}',
       );
+    });
+
+    /// **The batch does not grow with the lanes.** The test above pins the
+    /// shape on six rows; this one doubles the rows and asks for the same
+    /// number of calls, which is the claim that actually matters — the owner's
+    /// complaint was that scrubbing got worse the more lanes were open.
+    testWidgets('a scrub costs the same with twice the rows open',
+        (tester) async {
+      Future<int> callsForScrub(int layers) async {
+        final p = freshProject();
+        final comp = p.state.project!.newComposition(name: 'Scene');
+        for (var i = 0; i < layers; i++) {
+          final layer = comp.addSolidLayer();
+          final props = [
+            BridgeTransformProp.opacity,
+            BridgeTransformProp.rotation,
+            BridgeTransformProp.scaleX,
+          ];
+          for (var j = 0; j < props.length; j++) {
+            // A curve of its own per row, so no two rows ask the same question
+            // — a document where every layer animates identically would batch
+            // to one answer whatever the batching did.
+            final lift = i * props.length + j + 1;
+            layer.setTransform(
+              prop: props[j],
+              value: BridgeScalar.keyframed([
+                for (final (f, v) in [(0, 20.0 + lift), (60, 80.0 + lift)])
+                  BridgeKeyframe(
+                    time: comp.timeOfFrame(frame: f),
+                    value: v,
+                    interpIn: const BridgeSideInterp.linear(),
+                    interpOut: const BridgeSideInterp.linear(),
+                  ),
+              ]),
+            );
+          }
+        }
+        p.uiState.setSelectedComp(comp);
+        await tester.pumpWidget(hostPanel(
+          state: p.state,
+          uiState: p.uiState,
+          size: const Size(900, 700),
+          child: const TimelinePanelFrb(),
+        ));
+        await settleFrb(tester, minRounds: 8);
+        for (final layer in comp.getLayers()) {
+          final id = layer.internallayerId.toString();
+          await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+          await tester.pump();
+          await tapNearLeft(
+              tester, find.byKey(ValueKey<String>('tl-group-$id/transform')));
+          await tester.pump();
+        }
+        await settleFrb(tester, minRounds: 4, maxRounds: 8);
+
+        // One move to bring this comp's rows into the batch — the very first
+        // frame after a mount is the one nothing has been asked for yet — and
+        // then the move that is measured. That is playback's steady state, and
+        // it is what a scrub is after its first frame.
+        p.uiState.playheadFrame.value = 17;
+        await tester.pump();
+        await settleFrb(tester, minRounds: 2, maxRounds: 6);
+
+        // Nothing remembered at the frame about to be asked for, or the count
+        // would be answered out of memory and pass for free.
+        clearCompTimeCache();
+        counter
+          ..reset()
+          ..counting = true;
+        p.uiState.playheadFrame.value = 18;
+        await tester.pump();
+        await settleFrb(tester, minRounds: 2, maxRounds: 6);
+        counter.counting = false;
+        return counter.total;
+      }
+
+      final few = await callsForScrub(2);
+      final many = await callsForScrub(4);
+      // ignore: avoid_print
+      print('SCRUB COST 2 layers $few, 4 layers $many');
+      expect(many, lessThanOrEqualTo(few),
+          reason: 'the scrub got dearer as lanes were opened');
     });
 
     /// **The Viewer must ask the engine nothing to show a frame it has.**

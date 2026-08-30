@@ -815,7 +815,7 @@ class EffectParamRowFrb extends StatelessWidget {
 
     if (scalar case BridgeScalar_Keyframed()) {
       final sampled =
-          sampleScalar(scalar: scalar, time: timeOfFrame(comp, frame));
+          sampledScalar(scalar, timeOfFrame(comp, frame));
       return SizedBox(
         width: effectCellWidth,
         child: KeyedValueField(
@@ -968,7 +968,7 @@ class EffectParamRowFrb extends StatelessWidget {
 
     final animated = scalar is! BridgeScalar_Static;
     final shown = animated
-        ? sampleScalar(scalar: scalar, time: timeOfFrame(comp, frame))
+        ? sampledScalar(scalar, timeOfFrame(comp, frame))
         : scalar.field0;
 
     void write(double v) {
@@ -1041,7 +1041,7 @@ class EffectParamRowFrb extends StatelessWidget {
   }) {
     final animated = scalar is! BridgeScalar_Static;
     final shown = animated
-        ? sampleScalar(scalar: scalar, time: timeOfFrame(comp, frame))
+        ? sampledScalar(scalar, timeOfFrame(comp, frame))
         : scalar.field0;
 
     void write(double v) {
@@ -1101,7 +1101,7 @@ class EffectParamRowFrb extends StatelessWidget {
     // number field never did — so a colour with keys on it could be looked at
     // and not changed, which is half of "keyframe a colour" missing.
     double chan(BridgeScalar s) =>
-        sampleScalar(scalar: s, time: timeOfFrame(comp, frame));
+        sampledScalar(s, timeOfFrame(comp, frame));
     final t = ThemeScope.of(context).theme;
 
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
@@ -1583,7 +1583,7 @@ class EffectPointRowFrb extends StatelessWidget {
     double? currentOf(BridgeScalar? scalar) => switch (scalar) {
           BridgeScalar_Static(:final field0) => field0,
           final BridgeScalar_Keyframed keyed =>
-            sampleScalar(scalar: keyed, time: timeOfFrame(comp, frame)),
+            sampledScalar(keyed, timeOfFrame(comp, frame)),
           _ => null,
         };
 
@@ -1622,7 +1622,7 @@ class EffectPointRowFrb extends StatelessWidget {
       final speed = span <= 0 ? 0.5 : span / 200;
       if (scalar case BridgeScalar_Keyframed()) {
         final sampled =
-            sampleScalar(scalar: scalar, time: timeOfFrame(comp, frame));
+            sampledScalar(scalar, timeOfFrame(comp, frame));
         return SizedBox(
           width: effectCellWidth,
           child: KeyedValueField(

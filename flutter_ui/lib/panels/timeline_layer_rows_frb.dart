@@ -30,7 +30,6 @@ import 'flow_rows_frb.dart';
 import 'fx_section.dart';
 import 'timeline_timings.dart';
 import 'transform_rows_frb.dart';
-import 'timeline_metrics_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
 import 'timeline_retime_row_frb.dart';

@@ -112,8 +112,7 @@ class _RetimeRowState extends State<RetimeRow> {
         !scalar.field0
             .any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
       _planted = true;
-      final held = sampleScalar(
-          scalar: scalar, time: widget.comp.timeOfFrame(frame: frame));
+      final held = sampledScalar(scalar, timeOfFrame(widget.comp, frame));
       widget.layer.setRetimeProperty(
         value: scalarWithValueAt(scalar, held, widget.comp, frame),
       );
