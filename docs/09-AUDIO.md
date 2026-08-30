@@ -204,6 +204,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   waveforms account for the clip's trim and its speed map (they are bucketed in the clip's
   own placed time, so a ramp's transients land where they are heard) and travel with the
   clip when it is slid; they are the primary visual for beat-checking an edit.
+- **A clip join's crossfade is drawn and handled where it happens** (K-695): where two
+  clips overlap, the open Sequence view draws the opposed-fades pair across the overlap
+  — the board's X — with a small handle at either end. Each handle drags the edge of the
+  clip whose ramp it is (the incoming clip's start, the outgoing clip's end), so
+  adjusting the fade is the same trim the clip edges already commit; a butt cut has no
+  overlap, no ramps and no handles, which is what a hard cut on the beat is for. The
+  drawing is derived from the overlap, never stored, so sliding either clip carries the
+  fade exactly as the mixer's ramps move with it.
 
 ## 5. Markers and beat detection
 

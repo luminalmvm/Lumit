@@ -320,6 +320,11 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                 for (final c in _clips)
                   if (_clipGhost(t, c) case final ghost?) ghost,
                 for (final c in _clips) _clip(t, c),
+                // Where two clips overlap, the join is a crossfade (K-695)
+                // and the overlap wears the board's opposed-fades pair, with
+                // a handle at either end — dragging one adjusts the fade by
+                // trimming the clip whose ramp it is.
+                ..._crossfades(t),
                 // Where the clips end and the graph begins. Drawn *inside*
                 // the clip region rather than as a row of its own: a
                 // separator with a height of its own makes the view one pixel
@@ -362,6 +367,119 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
       ],
     );
   }
+
+  /// A clip's span as drawn right now — the document's frames plus whatever
+  /// a drag in flight has done to them, the same arithmetic [_clip] draws
+  /// its box with. The crossfades read this so a fade follows the edge being
+  /// dragged rather than jumping on release.
+  (int, int) _drawnSpan(BridgeClip clip) {
+    final drag = _drag;
+    final moving = drag != null && drag.clip.id == clip.id;
+    final shift = moving ? _draggedFrames(drag.dx) : 0;
+    return (
+      clip.startFrame.toInt() + (moving && drag.grab != _Grab.end ? shift : 0),
+      clip.endFrame.toInt() + (moving && drag.grab != _Grab.start ? shift : 0),
+    );
+  }
+
+  /// The joins where clips overlap, each drawn as the opposed-fades pair with
+  /// a handle at either end (K-695, the AudioWorkspace board).
+  ///
+  /// The overlap **is** the crossfade — the mixer ramps the outgoing clip out
+  /// and the incoming one in across exactly this span — so the drawing is
+  /// derived, never stored: sliding or trimming either clip moves the fade
+  /// because it moves the overlap. A butt cut has no overlap and gets no
+  /// ramps, which is what a hard cut on the beat is for; the fade is *made*
+  /// by trimming an end past the join, which the edge grabs already do.
+  List<Widget> _crossfades(LumitTheme t) {
+    final ordered = [..._clips]
+      ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
+    final out = <Widget>[];
+    for (var i = 0; i + 1 < ordered.length; i++) {
+      final outgoing = ordered[i];
+      final incoming = ordered[i + 1];
+      final (_, outEnd) = _drawnSpan(outgoing);
+      final (inStart, _) = _drawnSpan(incoming);
+      if (outEnd <= inStart) continue;
+      final left = _xOf(inStart);
+      final width = (_xOf(outEnd) - left).clamp(1.0, double.infinity);
+      out.add(Positioned(
+        key: ValueKey<String>('seq-crossfade-${outgoing.id}'),
+        left: left,
+        width: width,
+        top: 2,
+        bottom: 2,
+        child: IgnorePointer(
+          child: CustomPaint(painter: _CrossfadePainter(line: t.accent)),
+        ),
+      ));
+      // The two handles: each end of the fade is the end of one clip's ramp,
+      // so each drags that clip's own edge — the same trim the clip's edge
+      // grab commits, aimed by a target that stays grabbable when the two
+      // edges sit a few pixels apart.
+      out.add(_fadeHandle(
+        t,
+        key: 'seq-fade-in-${incoming.id}',
+        clip: incoming,
+        grab: _Grab.start,
+        x: left,
+      ));
+      out.add(_fadeHandle(
+        t,
+        key: 'seq-fade-out-${outgoing.id}',
+        clip: outgoing,
+        grab: _Grab.end,
+        x: left + width,
+      ));
+    }
+    return out;
+  }
+
+  Widget _fadeHandle(
+    LumitTheme t, {
+    required String key,
+    required BridgeClip clip,
+    required _Grab grab,
+    required double x,
+  }) =>
+      Positioned(
+        key: ValueKey<String>(key),
+        left: x - 6,
+        top: 0,
+        width: 12,
+        height: 14,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.resizeLeftRight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            supportedDevices: dragDevices,
+            onHorizontalDragStart: (_) =>
+                setState(() => _drag = (clip: clip, grab: grab, dx: 0)),
+            onHorizontalDragUpdate: (d) => setState(() {
+              final held = _drag;
+              if (held != null) {
+                _drag =
+                    (clip: held.clip, grab: held.grab, dx: held.dx + d.delta.dx);
+              }
+            }),
+            onHorizontalDragEnd: (_) => _commitDrag(),
+            onHorizontalDragCancel: () => setState(() => _drag = null),
+            child: Center(
+              child: Transform.rotate(
+                angle: math.pi / 4,
+                child: Container(
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: t.textSecondary),
+                    color: t.surface1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 
   /// Where this clip's **whole source** would sit if none of it had been
   /// trimmed away (K-441, docs/15 §12A.1) — the clip-level twin of the outline
@@ -669,6 +787,30 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
 
 /// What a clip drag has hold of.
 enum _Grab { body, start, end }
+
+/// The opposed-fades pair over one overlap: the outgoing clip's ramp falls,
+/// the incoming one's rises — the board's own X across the join. Straight
+/// lines, as the board draws them; the mixer's ramps underneath are the
+/// equal-power quarter-sines K-695 pins, and the picture's job is to say
+/// *where the fade is*, which the crossing does.
+class _CrossfadePainter extends CustomPainter {
+  final Color line;
+
+  const _CrossfadePainter({required this.line});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = line
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(0, 1), Offset(size.width, size.height - 1), paint);
+    canvas.drawLine(Offset(0, size.height - 1), Offset(size.width, 1), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CrossfadePainter old) => old.line != line;
+}
 
 /// How much of the view's height the divider itself takes.
 const double _dividerHeight = 5;
