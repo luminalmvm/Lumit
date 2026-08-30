@@ -13864,3 +13864,51 @@ The Master strip shows "LUFS —" where a loudness number will one day go. Loudn
 measurement (the number YouTube and Spotify normalise to) is planned for export; until
 it is really measured, the readout stays a dash rather than inventing a number with
 decimals on it.
+
+## 47. The beat band, in plain terms
+
+When Lumit detects beats, it drops a marker on each hit — that part is old news. What is
+new (K-698) is that the detection also writes down the *tempo it settled on* — 128 beats
+per minute, say, plus how far the first beat sits from the start — on the composition
+itself, like a note in the project's margin. That pair is called the **beat grid**.
+
+The Timeline's ruler uses it to draw the **beat band**: small bar numbers along the
+ruler's lower row (a bar is four beats), and a little gold tick where each detected beat
+landed, instead of the ordinary marker flag. Forty-six flags in a row would be an
+unreadable picket fence; forty-six ticks read as rhythm. The ticks are still real
+markers — you can drag one, right-click it, and everything that snaps to markers snaps
+to it.
+
+Why store the tempo in the project rather than just remembering it in the panel? Because
+the bar numbers are a claim about the *document*: if you cut a montage to bar 17 today,
+opening the project tomorrow must show bar 17 in the same place. Panel memory dies with
+the window; the document does not. Undo treats the markers and the grid as one step, so
+one Ctrl+Z never leaves you with markers from one run and a tempo from another. And when
+you press *Clear generated*, the grid goes with the markers it described — a ruler
+numbering bars for music that no longer has beat markers would just be making the tempo
+up.
+
+## 48. The spectrogram lane, in plain terms
+
+A waveform answers one question: *how loud is each moment?* A mastered song answers
+"very, throughout" — the wave is a solid sausage, and you cannot see the kick inside it.
+A **spectrogram** answers a better question: *what is in each moment?* It is a picture
+with time running along it and pitch running up it — kicks paint the bottom edge, hats
+sprinkle the top, a voice sits in the middle — with brightness for loudness. Audio
+people live in these; no mainstream editor draws one in the timeline, which is exactly
+why Lumit does (the Audio workspace board's decision 3, K-699).
+
+How it is made: the same short-window frequency analysis the beat detector already runs
+(slide a 43-millisecond window along the sound, ask "how much of each pitch is in this
+slice?") is run once when a lane first asks, and the answer is folded into 40 pitch
+bands and stored as a small grid of bytes — a few kilobytes per second of audio. Like
+the waveform's summary, the grid is kept at three levels of detail, each eight times
+coarser than the last, the way a GPU keeps shrinking copies of a texture: zoomed out,
+the lane reads the coarse copy; zoomed in, the fine one. The folding keeps the
+*loudest* value rather than the average, because the loud instant — the kick — is the
+thing you zoomed out to find.
+
+In the Timeline it is simply a third way to draw the lane you already have: the chip on
+a layer's Waveform row cycles plain wave → three-band stack → spectrogram, per layer,
+and the choice is remembered for the session the way an open twirl is. Nothing about
+the sound changes — it is the same audio wearing a different picture.

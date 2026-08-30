@@ -1517,6 +1517,41 @@ impl BridgeAudioPeaks {
     }
 }
 
+/// One window of a source as a spectrogram (K-699): `columns` columns of
+/// `bins` bytes, column-major, low band first — brightness is level in dB,
+/// 0 the −60 dB floor and 255 full scale. The window-fetch twin of
+/// [`BridgeAudioPeaks`], for the Timeline's spectral lane mode.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeSpectrogram {
+    /// How long the whole source runs, so a lane can tell where its window sits.
+    pub duration_seconds: f64,
+    /// The window these columns span, in the layer's own source clock.
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub columns: u32,
+    /// Bands per column (`lumit_audio::spectra::BINS`).
+    pub bins: u32,
+    /// `columns * bins` bytes; column `c`'s band `b` is at `c * bins + b`.
+    pub values: Vec<u8>,
+}
+
+impl BridgeSpectrogram {
+    /// The answer for a source with nothing to draw — no audio, no media
+    /// feature, a file gone missing. A lane draws it as an empty lane.
+    #[frb(ignore)]
+    fn empty() -> BridgeSpectrogram {
+        BridgeSpectrogram {
+            duration_seconds: 0.0,
+            start_seconds: 0.0,
+            end_seconds: 0.0,
+            columns: 0,
+            bins: 0,
+            values: Vec::new(),
+        }
+    }
+}
+
 /// A layer used as another layer's matte (docs/03 §5.1).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3944,6 +3979,86 @@ impl LayerReference {
             // not a failure (docs/17 §Feature gates).
             let _ = (item, start_seconds, end_seconds, buckets, multiwave);
             Ok(BridgeAudioPeaks::empty())
+        }
+    }
+
+    /// One window of this layer's audio as a **spectrogram** (K-699): what the
+    /// spectral lane mode draws, in the same window-fetch shape the peaks take
+    /// (K-280) — the visible stretch of the source, one column per pixel, so
+    /// the drawn detail follows the zoom.
+    ///
+    /// Columns are `lumit_audio::spectra::BINS` bytes each, column-major, low
+    /// band first: byte 0 of a column is the bottom of the picture. A retimed
+    /// layer's columns are taken through its map, exactly as its peaks are
+    /// (K-436).
+    ///
+    /// Deliberately not `#[frb(sync)]`: the first ask for a file decodes it
+    /// and runs the analysis. Every later ask, at every zoom, is served from
+    /// the session's spectrogram cache ([`crate::peaks`]). Empty when the
+    /// layer has no decodable audio.
+    pub fn audio_spectrogram(
+        &self,
+        start_seconds: f64,
+        end_seconds: f64,
+        columns: u32,
+    ) -> Result<BridgeSpectrogram, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Footage { item, .. } = layer.kind else {
+            return Ok(BridgeSpectrogram::empty());
+        };
+
+        #[cfg(feature = "media")]
+        {
+            // The read lock goes no further than resolving the path, exactly
+            // as for the peaks (docs/14 §3).
+            let path = {
+                let proj = self.project()?;
+                let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+                let snapshot = proj.store.snapshot();
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
+                else {
+                    return Ok(BridgeSpectrogram::empty());
+                };
+                crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            };
+            let Some(path) = path else {
+                return Ok(BridgeSpectrogram::empty());
+            };
+            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+                return Ok(BridgeSpectrogram::empty());
+            };
+
+            let bins = lumit_audio::spectra::BINS;
+            let columns = columns.clamp(1, MAX_PEAK_BUCKETS) as usize;
+            let values = match layer.retime.as_ref() {
+                None => grid.range(start_seconds, end_seconds, columns),
+                // Each column's edges through the layer's map (K-436): a slow
+                // passage is drawn wide because it *is* wide.
+                Some(_) => {
+                    let step = (end_seconds - start_seconds) / columns as f64;
+                    let mut values = vec![0u8; columns * bins];
+                    for (c, col) in values.chunks_exact_mut(bins).enumerate() {
+                        let a = layer.source_time_at(start_seconds + step * c as f64);
+                        let b = layer.source_time_at(start_seconds + step * (c + 1) as f64);
+                        grid.window_into(a.min(b), a.max(b), col);
+                    }
+                    values
+                }
+            };
+            Ok(BridgeSpectrogram {
+                duration_seconds: grid.duration_seconds(),
+                start_seconds,
+                end_seconds,
+                columns: columns as u32,
+                bins: bins as u32,
+                values,
+            })
+        }
+
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (item, start_seconds, end_seconds, columns);
+            Ok(BridgeSpectrogram::empty())
         }
     }
 

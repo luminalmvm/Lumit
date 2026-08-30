@@ -412,6 +412,7 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     let tb = TimeBase::fallback();
     Composition {
         master_volume_db: 0.0,
+        beat_grid: None,
         id,
         name: name.to_string(),
         width: 1920,
@@ -531,6 +532,7 @@ fn composition(
 
     Composition {
         master_volume_db: 0.0,
+        beat_grid: None,
         id,
         name: name.to_string(),
         width: ae.width.unwrap_or(1920).max(1),

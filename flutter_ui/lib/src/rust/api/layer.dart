@@ -18,8 +18,8 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -1141,6 +1141,56 @@ class BridgeSpan {
           startOffset == other.startOffset;
 }
 
+/// One window of a source as a spectrogram (K-699): `columns` columns of
+/// `bins` bytes, column-major, low band first — brightness is level in dB,
+/// 0 the −60 dB floor and 255 full scale. The window-fetch twin of
+/// [`BridgeAudioPeaks`], for the Timeline's spectral lane mode.
+class BridgeSpectrogram {
+  /// How long the whole source runs, so a lane can tell where its window sits.
+  final double durationSeconds;
+
+  /// The window these columns span, in the layer's own source clock.
+  final double startSeconds;
+  final double endSeconds;
+  final int columns;
+
+  /// Bands per column (`lumit_audio::spectra::BINS`).
+  final int bins;
+
+  /// `columns * bins` bytes; column `c`'s band `b` is at `c * bins + b`.
+  final Uint8List values;
+
+  const BridgeSpectrogram({
+    required this.durationSeconds,
+    required this.startSeconds,
+    required this.endSeconds,
+    required this.columns,
+    required this.bins,
+    required this.values,
+  });
+
+  @override
+  int get hashCode =>
+      durationSeconds.hashCode ^
+      startSeconds.hashCode ^
+      endSeconds.hashCode ^
+      columns.hashCode ^
+      bins.hashCode ^
+      values.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeSpectrogram &&
+          runtimeType == other.runtimeType &&
+          durationSeconds == other.durationSeconds &&
+          startSeconds == other.startSeconds &&
+          endSeconds == other.endSeconds &&
+          columns == other.columns &&
+          bins == other.bins &&
+          values == other.values;
+}
+
 /// One paint stroke on a layer (K-227): the path the pointer took, and how it
 /// was painted.
 ///
@@ -1518,6 +1568,30 @@ class LayerReference {
           endSeconds: endSeconds,
           buckets: buckets,
           multiwave: multiwave);
+
+  /// One window of this layer's audio as a **spectrogram** (K-699): what the
+  /// spectral lane mode draws, in the same window-fetch shape the peaks take
+  /// (K-280) — the visible stretch of the source, one column per pixel, so
+  /// the drawn detail follows the zoom.
+  ///
+  /// Columns are `lumit_audio::spectra::BINS` bytes each, column-major, low
+  /// band first: byte 0 of a column is the bottom of the picture. A retimed
+  /// layer's columns are taken through its map, exactly as its peaks are
+  /// (K-436).
+  ///
+  /// Deliberately not `#[frb(sync)]`: the first ask for a file decodes it
+  /// and runs the analysis. Every later ask, at every zoom, is served from
+  /// the session's spectrogram cache ([`crate::peaks`]). Empty when the
+  /// layer has no decodable audio.
+  Future<BridgeSpectrogram> audioSpectrogram(
+          {required double startSeconds,
+          required double endSeconds,
+          required int columns}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioSpectrogram(
+          that: this,
+          startSeconds: startSeconds,
+          endSeconds: endSeconds,
+          columns: columns);
 
   /// Stop the shape animating, keeping the shape it shows at `time` (K-340).
   ///

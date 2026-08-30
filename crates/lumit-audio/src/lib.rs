@@ -19,6 +19,7 @@ pub mod beat;
 pub mod meter;
 pub mod mix;
 pub mod peaks;
+pub mod spectra;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {

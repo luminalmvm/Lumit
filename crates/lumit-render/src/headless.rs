@@ -3187,6 +3187,7 @@ mod tests {
         };
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
             width: w,
@@ -3312,6 +3313,7 @@ mod tests {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id,
             name: name.into(),
             width: w,
@@ -3406,6 +3408,7 @@ mod tests {
             };
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 32,
@@ -5975,6 +5978,7 @@ surfaces:
             adjust.effects = vec![mb];
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 320,
@@ -6093,6 +6097,7 @@ surfaces:
             }
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 320,
@@ -6162,6 +6167,7 @@ surfaces:
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
             width: w,
@@ -7234,6 +7240,7 @@ surfaces:
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
             width: w,

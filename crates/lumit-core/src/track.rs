@@ -928,6 +928,7 @@ mod tests {
     fn comp(name: &str, layers: Vec<Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: name.into(),
             width: 1920,

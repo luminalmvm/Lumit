@@ -6,8 +6,35 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `commit_markers`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `commit_markers_and_grid`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+
+/// The comp's confirmed beat grid (docs/09 §5, K-698): what the last
+/// detection ran its grid at, for the Timeline's beat band to number bars
+/// from. Bars are the grid read four beats at a time.
+class BridgeBeatGrid {
+  /// Beats per minute; always positive on a grid that exists.
+  final double bpm;
+
+  /// Where beat zero falls, in comp seconds.
+  final double phaseSeconds;
+
+  const BridgeBeatGrid({
+    required this.bpm,
+    required this.phaseSeconds,
+  });
+
+  @override
+  int get hashCode => bpm.hashCode ^ phaseSeconds.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeBeatGrid &&
+          runtimeType == other.runtimeType &&
+          bpm == other.bpm &&
+          phaseSeconds == other.phaseSeconds;
+}
 
 /// The Audio panel's Beats section, as one crossing (docs/09 §5, the approved
 /// AudioWorkspace board): what to listen to, how keenly, where, and the grid.

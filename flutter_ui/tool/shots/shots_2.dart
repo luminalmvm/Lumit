@@ -366,6 +366,7 @@ Future<void> main() async {
         id: UuidValue.fromString(const Uuid().v4()),
         time: BridgeRational(num: at, den: 25),
         label: label,
+        isBeat: false,
       ),
   ]);
   // Detection at the sensitivity that marks the beat rather than every

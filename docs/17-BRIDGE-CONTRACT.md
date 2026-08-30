@@ -1022,6 +1022,22 @@ that read-back is gone.
     The analysis answers times and confidences; the marker ids are minted by
     the caller afterwards, which is what keeps "the same audio finds the same
     beats" a checkable claim (docs/impl/beat-detection.md §5.4).
+    A run that used a grid also commits the **confirmed beat grid** (K-698)
+    beside its markers, one undo step for the pair; `get_beat_grid` reads it
+    back (`BridgeBeatGrid`: bpm and phase seconds) for the Timeline's beat
+    band, `clear_beat_markers` takes it with the markers it describes, and a
+    marker crosses with `is_beat` so the ruler can draw a detected beat as a
+    tick rather than a flag — the flag stays read-only on a write-back, where
+    K-270's merge-by-id is what keeps a beat a beat.
+- **Audio pictures** are window fetches (K-280's shape): the lane asks for the
+    stretch of source it is showing at one bucket per pixel column, and asks
+    again when the window moves far enough to matter. `audio_peaks` /
+    `clip_audio_peaks` answer min/max/RMS buckets off the session peak cache;
+    `audio_spectrogram` (K-699) answers the same window as columns of
+    `lumit_audio::spectra::BINS` bytes, low band first, off its own bounded
+    cache — the spectral lane mode's picture. Both decode on first ask and are
+    served from memory after, and both map a retimed layer's columns through
+    its own clock (K-436).
 
 The historical record of the port that produced this seam is frozen in
 [archive/flutter-port/](archive/flutter-port/).

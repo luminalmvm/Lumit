@@ -377,6 +377,7 @@ void main() {
           id: UuidValue.fromString(const Uuid().v4()),
           time: p.comp.timeOfFrame(frame: 140),
           label: 'Beat',
+          isBeat: false,
         ),
       ]);
       await mountGraph(tester, p);

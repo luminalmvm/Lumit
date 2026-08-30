@@ -1151,6 +1151,7 @@ mod tests {
     fn test_comp() -> Composition {
         Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -2282,6 +2283,37 @@ mod tests {
         assert_eq!(master(&store), -4.5);
         store.undo().unwrap();
         assert_eq!(master(&store), 0.0);
+
+        // The confirmed beat grid (docs/09 §5, K-698) is comp state on the
+        // same pattern: set, read back exactly, undone to nothing — and a
+        // grid with no tempo in it is refused rather than stored.
+        let grid = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().beat_grid;
+        assert_eq!(grid(&store), None, "a comp opens with no beat grid");
+        let confirmed = crate::model::BeatGrid {
+            bpm: 128.0,
+            phase: crate::time::Rational::new(1, 100).unwrap(),
+        };
+        store
+            .commit(Op::SetBeatGrid {
+                comp: comp_id,
+                grid: Some(confirmed),
+            })
+            .unwrap();
+        assert_eq!(grid(&store), Some(confirmed));
+        store.undo().unwrap();
+        assert_eq!(grid(&store), None);
+        assert!(
+            store
+                .commit(Op::SetBeatGrid {
+                    comp: comp_id,
+                    grid: Some(crate::model::BeatGrid {
+                        bpm: 0.0,
+                        phase: crate::time::Rational::ZERO,
+                    }),
+                })
+                .is_err(),
+            "a grid with no tempo is no grid"
+        );
 
         store.undo().unwrap();
         store.undo().unwrap();

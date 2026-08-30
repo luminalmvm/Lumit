@@ -434,6 +434,15 @@ pub enum Op {
         comp: Uuid,
         db: f64,
     },
+    /// Set — or clear, with `None` — a composition's **confirmed beat grid**
+    /// (docs/09 §5, K-698): the tempo and phase the Timeline's beat band
+    /// numbers bars from. Committed by beat detection beside the markers it
+    /// generates, and cleared with them; trivially invertible like the
+    /// marker list itself.
+    SetBeatGrid {
+        comp: Uuid,
+        grid: Option<crate::model::BeatGrid>,
+    },
     /// Replace a layer's Retime property — local time → source time, in
     /// seconds (K-197). `None` removes it, which is "not retimed" rather than
     /// "retimed to exactly 1×": only the first skips the map. Same
@@ -661,6 +670,7 @@ impl Op {
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
             Op::SetMasterVolume { .. } => "Move master fader",
+            Op::SetBeatGrid { .. } => "Set beat grid",
             Op::SetRetimeProperty { .. } => "Edit Retime",
             Op::SetLayerInterpolation { .. } => "Set interpolation",
             Op::SetFolderChildren { .. } => "Move into folder",
@@ -1627,6 +1637,21 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetMasterVolume {
                 comp: *comp,
                 db: previous,
+            })
+        }
+        Op::SetBeatGrid { comp, grid } => {
+            // A grid with no tempo in it is no grid: refused rather than
+            // stored, so every held grid can be divided by (K-698).
+            if let Some(g) = grid {
+                if g.bpm.is_nan() || g.bpm <= 0.0 || !g.bpm.is_finite() {
+                    return Err(OpError::InvalidSpan);
+                }
+            }
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.beat_grid, *grid);
+            Ok(Op::SetBeatGrid {
+                comp: *comp,
+                grid: previous,
             })
         }
         Op::SetRetimeProperty {

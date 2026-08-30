@@ -277,10 +277,36 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// The **confirmed beat grid** (docs/09 §5, K-698): the tempo and phase
+    /// the last beat detection ran its grid at, kept so the Timeline's beat
+    /// band can number bars without re-running the analysis. `None` until a
+    /// detection with a grid lands, and cleared with the generated markers.
+    ///
+    /// Project data rather than panel state because the bar numbers are a
+    /// reading of the *document* — reopening a cut-to-the-grid project must
+    /// show the same bars it was cut against.
+    // Skipped while `None` so a project saved before the field existed
+    // re-saves byte-identical (K-040's quiet half; the round-trip test
+    // pins it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beat_grid: Option<BeatGrid>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A confirmed tempo grid over a composition's timeline (docs/09 §5, K-698):
+/// beats at `bpm`, the first of them `phase` seconds in. Bars are the grid
+/// read four beats at a time — v1 assumes common time, which is what the
+/// scene's material is in.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct BeatGrid {
+    /// Beats per minute. Always positive: a grid with no tempo is `None`
+    /// on the composition, never a zero here.
+    pub bpm: f64,
+    /// Where beat zero falls, in comp seconds — the detection's phase nudge.
+    pub phase: crate::time::Rational,
 }
 
 /// Comp-wide motion-blur settings (docs/06, K-120). Per-layer motion blur is a
@@ -3289,6 +3315,7 @@ mod tests {
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "cam test".into(),
             width: 1920,
@@ -3632,6 +3659,7 @@ mod tests {
     fn bare_comp(name: &str) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: name.into(),
             width: 64,

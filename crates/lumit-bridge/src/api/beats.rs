@@ -84,6 +84,18 @@ pub struct BridgeBeatsResult {
     pub bpm: f64,
 }
 
+/// The comp's confirmed beat grid (docs/09 §5, K-698): what the last
+/// detection ran its grid at, for the Timeline's beat band to number bars
+/// from. Bars are the grid read four beats at a time.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeBeatGrid {
+    /// Beats per minute; always positive on a grid that exists.
+    pub bpm: f64,
+    /// Where beat zero falls, in comp seconds.
+    pub phase_seconds: f64,
+}
+
 impl CompositionReference {
     /// Detect beats and replace this comp's beat markers.
     ///
@@ -102,6 +114,8 @@ impl CompositionReference {
             let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
             state.store.snapshot()
         };
+
+        let phase_ms = options.phase_ms;
 
         // The mixdown and the onset analysis, off this thread — and never with
         // the project lock held, which is why the snapshot above is taken and
@@ -128,14 +142,41 @@ impl CompositionReference {
         let placed = beats.len() as u32;
 
         let markers = lumit_core::markers::with_regenerated_beats(&composition.markers, beats);
-        self.commit_markers(markers)?;
+
+        // The grid the run confirmed (K-698): the tempo used — estimate or
+        // override — and the phase nudge, kept on the comp so the Timeline's
+        // beat band can number bars. A run that found no tempo clears it: a
+        // band numbering bars off a grid the audio no longer answers to would
+        // be the panel making the tempo up.
+        let grid = (found.bpm > 0.0 && placed > 0)
+            .then(|| {
+                lumit_core::Rational::from_f64_on_grid(phase_ms / 1000.0, 1000)
+                    .ok()
+                    .map(|phase| lumit_core::model::BeatGrid {
+                        bpm: found.bpm,
+                        phase,
+                    })
+            })
+            .flatten();
+        self.commit_markers_and_grid(markers, grid)?;
         Ok(BridgeBeatsResult {
             placed,
             bpm: found.bpm,
         })
     }
 
-    /// Remove every detected beat marker, keeping the ones a person made.
+    /// The comp's confirmed beat grid (K-698), or `None` while no detection
+    /// with a tempo has run — what the beat band numbers bars from.
+    #[frb(sync)]
+    pub fn get_beat_grid(&self) -> Result<Option<BridgeBeatGrid>, BridgeError> {
+        Ok(self.composition()?.beat_grid.map(|g| BridgeBeatGrid {
+            bpm: g.bpm,
+            phase_seconds: g.phase.to_f64(),
+        }))
+    }
+
+    /// Remove every detected beat marker, keeping the ones a person made —
+    /// and the confirmed grid with them, since it described the set that went.
     ///
     /// A comp with none is a calm no-op rather than an error — clearing twice is
     /// something a user does without thinking about it.
@@ -148,23 +189,42 @@ impl CompositionReference {
             .filter(|m| !matches!(m.kind, lumit_core::markers::MarkerKind::Beat { .. }))
             .cloned()
             .collect();
-        if kept.len() == composition.markers.len() {
+        if kept.len() == composition.markers.len() && composition.beat_grid.is_none() {
             return Ok(());
         }
-        self.commit_markers(kept)
+        self.commit_markers_and_grid(kept, None)
     }
 
+    /// One undo step for the pair (K-698): the markers and the grid change
+    /// together — detection writes both, clearing takes both away — and two
+    /// steps would leave `Ctrl+Z` a state nobody was ever shown.
     #[frb(ignore)]
-    fn commit_markers(&self, markers: Vec<lumit_core::markers::Marker>) -> Result<(), BridgeError> {
+    fn commit_markers_and_grid(
+        &self,
+        markers: Vec<lumit_core::markers::Marker>,
+        grid: Option<lumit_core::model::BeatGrid>,
+    ) -> Result<(), BridgeError> {
         let state = self.project()?;
         let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
-        state
-            .store
-            .commit(lumit_core::Op::SetCompMarkers {
-                comp: self.id,
-                markers,
-            })
-            .map_err(BridgeError::OpError)?;
-        Ok(())
+        state.store.begin_undo_group();
+        let outcome = (|| {
+            state
+                .store
+                .commit(lumit_core::Op::SetCompMarkers {
+                    comp: self.id,
+                    markers,
+                })
+                .map_err(BridgeError::OpError)?;
+            state
+                .store
+                .commit(lumit_core::Op::SetBeatGrid {
+                    comp: self.id,
+                    grid,
+                })
+                .map_err(BridgeError::OpError)?;
+            Ok(())
+        })();
+        state.store.end_undo_group();
+        outcome
     }
 }

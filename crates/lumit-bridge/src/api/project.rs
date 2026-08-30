@@ -277,6 +277,7 @@ impl ProjectReference {
 
         let comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name,
             width: settings.width.clamp(16, 16384),

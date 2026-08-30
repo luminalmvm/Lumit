@@ -2138,6 +2138,7 @@ mod tests {
         }
         let comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "main".into(),
             width: W as u32,
@@ -3027,6 +3028,7 @@ mod tests {
 
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: nested_id,
             name: "nested".into(),
             width: cw,
@@ -3465,6 +3467,7 @@ mod tests {
         let (tracked_id, target_id) = (shot.id, target.id);
         let comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "main".into(),
             width: W as u32,

@@ -105,6 +105,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
 fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     Composition {
         master_volume_db: 0.0,
+        beat_grid: None,
         id: Uuid::now_v7(),
         name: name.into(),
         width: COMP,

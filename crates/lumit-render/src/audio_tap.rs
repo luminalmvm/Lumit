@@ -372,6 +372,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
             width: 32,

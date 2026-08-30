@@ -187,6 +187,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         }
         items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: uid(2, ci),
             name: format!("Comp {ci}"),
             width: 3840,

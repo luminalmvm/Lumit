@@ -471,6 +471,7 @@ List<MenuEntry> markerRows(LumitState app, LumitUiState ui) {
                   id: UuidValue.fromString(const Uuid().v4()),
                   time: comp.timeOfFrame(frame: frame - offset),
                   label: '',
+                  isBeat: false,
                 ),
               ]);
             }),

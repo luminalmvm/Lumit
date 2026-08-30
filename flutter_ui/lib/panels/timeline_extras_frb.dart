@@ -287,7 +287,8 @@ Future<void> showMarkerMenuFrb({
                 id: m.id,
                 time: m.time,
                 label: label,
-                durationFrames: m.durationFrames)
+                durationFrames: m.durationFrames,
+                isBeat: m.isBeat)
           else
             m,
       ]);
@@ -1285,7 +1286,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
               id: m.id,
               time: m.time,
               label: label,
-              durationFrames: m.durationFrames)
+              durationFrames: m.durationFrames,
+              isBeat: m.isBeat)
         else
           m,
     ]);
@@ -2055,6 +2057,9 @@ List<BridgeMarker> markersWithFrb(
         // A marker being **moved** keeps the span it was carrying; a marker
         // being made is a moment, which is what every new cue is.
         durationFrames: id == null ? null : _spanOf(comp, id),
+        // Read-only across the seam: the engine's merge decides what stays a
+        // beat (K-270), so what is written here is never read back.
+        isBeat: false,
       ),
     ];
 

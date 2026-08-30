@@ -161,6 +161,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
     let comp_id = id("Reference");
     doc.items.push(ProjectItem::Composition(Composition {
         master_volume_db: 0.0,
+        beat_grid: None,
         id: comp_id,
         name: "Reference".into(),
         width: 1920,

@@ -2572,6 +2572,7 @@ mod tests {
         };
         let comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -2737,6 +2738,7 @@ mod tests {
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -2842,6 +2844,7 @@ mod tests {
                 (NodeRef::Out, [640.0, 0.0]),
             ],
             exposed: vec![NodeRef::Effect(blur_id)],
+            groups: Vec::new(),
         };
         let wanted = layer.graph.clone();
         let mut wired = doc.clone();

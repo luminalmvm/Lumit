@@ -189,6 +189,15 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   rise through. Only the painting reaches up: the row keeps its height, so the outline and
   the lanes stay level. A Sequence clip's wave is unchanged — it is drawn inside the clip's
   own box, which has no empty row beside it to borrow.
+- **The lane has three modes, per layer** (K-699, the AudioWorkspace canvas note's
+  decision 3): the plain wave, the multiwave stack, or a **spectrogram** — time along the
+  lane, frequency up it (40 log bands, 40 Hz to 12 kHz), brightness the level in dB. A
+  chip on the layer's Waveform row cycles them; the choice is session state, like a
+  twirl. The spectrogram is built once per file from the beat detector's own STFT
+  sizing and kept in a bounded session cache beside the peaks, at three levels of
+  detail folded down by maximum — so it answers the same window-fetch the peaks answer
+  (one column per pixel, K-280), gains detail as the zoom closes in, and a transient
+  survives every zoom.
 - Waveforms appear: on Audio layers (always), on Footage layers with audio (expandable
   lane), and **inside Sequence layer clips** — each clip draws the waveform of its own
   source range, so a cut's audio content is visible exactly where the clip sits. Clip
@@ -220,6 +229,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
     (`BridgeBeatOptions`), whose defaults are the one-click detection every menu entry runs.
 - Beat markers are ordinary markers with a `beat` label: deletable, draggable, and stored
   in the project file. Re-running detection offers replace or merge.
+- **The confirmed grid is kept, and the ruler wears it** (K-698). A detection that used a
+  grid stores its tempo and phase on the composition (`Composition.beat_grid`,
+  `Op::SetBeatGrid`) in the same undo step as the markers it placed, and *Clear generated*
+  takes both away. The Timeline's ruler draws the **beat band** from the pair, in its own
+  lower row: dim bar numbers from the grid (four beats to the bar, the labelling step
+  doubling until neighbours clear each other), and a small gold tick per generated beat
+  where an ordinary marker would wear a flag — a tick that still drags, still opens the
+  marker menu, and still snaps, because it is a marker in different clothing.
 - **While it runs**: detection is seconds-long on a long composition, so the shell puts up
   the same card it shows while a project opens, reading "Detecting beats", and takes it
   down when the markers land — or when the analysis finds nothing, which a composition

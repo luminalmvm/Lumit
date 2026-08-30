@@ -65,6 +65,7 @@ void main() {
           id: UuidValue.fromString(const Uuid().v4()),
           time: comp.timeOfFrame(frame: frame),
           label: label,
+          isBeat: false,
         ),
       ]);
       (p.uiState as LumitUiState).model.refresh();

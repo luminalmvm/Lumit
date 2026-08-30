@@ -1584,6 +1584,7 @@ mod tests {
     fn comp_with(layers: Vec<Layer>) -> Composition {
         Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 1920,

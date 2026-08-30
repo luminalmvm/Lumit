@@ -595,7 +595,8 @@ void main() {
           time: moment.time,
           label: moment.label,
           durationFrames: 20,
-        ),
+          isBeat: false,
+),
       ]);
       p.uiState.model.refresh();
       await tester.pumpAndSettle();

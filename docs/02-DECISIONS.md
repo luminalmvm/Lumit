@@ -21861,3 +21861,63 @@ Pinned in `lumit-core`'s `a_number_wire_may_land_on_the_layer_outs_volume`,
 `only_a_number_may_drive_the_volume_socket` and
 `a_wire_onto_the_volume_socket_answers_in_decibels`, and `lumit-render`'s
 `a_duck_wire_overrides_the_volume_in_the_bake`.
+
+## K-698 — The beat band numbers bars from a confirmed grid the document keeps
+
+**Status: DECIDED (2026-08-31).** Builds the beat band of the approved AudioWorkspace
+board — the strip under the ruler's clock carrying bar numbers and a gold tick per
+generated beat. Extends docs/09 §5; nothing is reversed.
+
+**The grid is project data.** `Composition.beat_grid` (`BeatGrid { bpm, phase }`,
+`Op::SetBeatGrid`) holds the tempo and phase the last detection ran its grid with —
+written beside the regenerated markers in **one undo step**, cleared with them by *Clear
+generated*, and skipped from the file while `None` so an old project re-saves
+byte-identical. Project data rather than panel state because the bar numbers are a
+reading of the document: reopening a cut-to-the-grid project must show the bars it was
+cut against. A detection that found no tempo, or placed nothing, clears the grid rather
+than keeping a stale one — a band numbering bars the audio no longer answers to would be
+the panel making the tempo up. Bars are the grid read four beats at a time; time
+signatures are the Composer's problem, not v1's.
+
+**A beat marker is a tick, not a flag.** `BridgeMarker` crosses with `is_beat`, and the
+ruler draws a detected beat as a small tick standing on the cache bar — the board's
+grammar — instead of a full marker flag, forty-six of which made the lower row
+unreadable. The tick still drags, still opens the marker menu, and still snaps everything
+that snaps to markers, because it *is* a marker; only its clothing changed. The flag on a
+write-back stays read-only: K-270's merge-by-id already decides what stays a beat.
+
+**Bar numbers live in the ruler's own lower row** — no third band. K-682 pinned the
+ruler's geometry to the chrome pair, and the board's separate 12 px strip would push
+every row under it; the lower row already carries the markers, the work-area band and
+the cache bar, and the bar numbers are the same kind of tenant. The labelling step
+doubles (1, 2, 4, 8 bars…) until neighbouring numbers clear each other, so a fitted
+comp reads sparse instead of smeared.
+
+## K-699 — The spectral lane is a mode per layer, drawn from a tiled spectrogram
+
+**Status: DECIDED (2026-08-31).** Implements the AudioWorkspace canvas note's decision 3
+("spectral view is a lane mode in the Timeline, not a separate editor page") and the
+board's per-layer lane chips. Extends K-280's window-fetch shape; nothing is reversed.
+
+**One grid per file, three tiers, bytes.** `lumit_audio::spectra::Spectrogram` runs the
+beat detector's own STFT sizing (~43 ms Hann window, quarter-window hop) over the
+decoded audio once, folds each frame into 40 log-spaced bands between 40 Hz and 12 kHz
+(the board's caption), and stores brightness as a byte of dB over a −60 dB floor. Two
+coarser tiers fold down **by maximum**, eight columns at a time — a mip chain, exactly
+the peak pyramid's bargain — so a lane fitted to a whole song and one zoomed to a bar
+both answer with a handful of merges per pixel column, and a transient survives every
+zoom, which averaging would blur away. The session keeps the grids in a bounded cache
+beside the peaks (`lumit-bridge::peaks`), keyed by path so two layers cut from one song
+analyse it once.
+
+**The fetch is the peaks' fetch.** `audio_spectrogram` answers the visible window at one
+column per pixel (K-280), maps a retimed layer's columns through its own clock (K-436),
+and comes back silent-not-missing outside the audio. Zooming asks again and *gains*
+detail, the same contract the waveform holds.
+
+**The mode is per layer and per session.** Plain wave / multiwave stack / spectrogram is
+a chip on the layer's Waveform row — session state like the twirls, not project data,
+because it changes no sample and no export. The Settings multiwave toggle keeps deciding
+what a fresh lane shows; the chip overrides it for one layer. The spectral painting sits
+in its own repaint boundary on the lane painters' existing layers, so the K-681 gates
+hold and flipping the mode repaints a lane rather than rebuilding the table.

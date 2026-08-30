@@ -256,6 +256,7 @@ mod tests {
         let under = layer(LayerKind::Solid { def: solid(16, 16) }, 16, 16);
         let comp = Composition {
             master_volume_db: 0.0,
+            beat_grid: None,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 64,

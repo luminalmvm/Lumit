@@ -494,6 +494,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
 
     let comp = lumit_core::model::Composition {
         master_volume_db: 0.0,
+        beat_grid: None,
         id: Uuid::now_v7(),
         name: name.into(),
         width: 1920,
@@ -3164,6 +3165,7 @@ fn markers_and_the_work_area_round_trip() {
     assert!(comp.get_markers().expect("markers").is_empty());
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational {
             num: 1001,
@@ -6499,6 +6501,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
 
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Chorus".into(),
@@ -6523,7 +6526,15 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
             })
             .expect("seeded");
     }
-    assert_eq!(comp.get_markers().expect("markers").len(), 2);
+    let read = comp.get_markers().expect("markers");
+    assert_eq!(read.len(), 2);
+    // The beat band reads the flag off the marker itself (K-698): the seeded
+    // beat says it is one, and the hand-made cue says it is not.
+    assert_eq!(
+        read.iter().filter(|m| m.is_beat).count(),
+        1,
+        "exactly the detected marker crosses as a beat"
+    );
 
     comp.clear_beat_markers().expect("cleared");
     let left = comp.get_markers().expect("markers");
@@ -6533,6 +6544,65 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
     // Clearing again is a calm no-op — something a user does without thinking.
     comp.clear_beat_markers().expect("no-op");
     assert_eq!(comp.get_markers().expect("markers").len(), 1);
+}
+
+/// The confirmed beat grid (K-698): comp state the beat band numbers bars
+/// from. Clearing the generated markers takes the grid with them — in **one**
+/// undo step, so `Ctrl+Z` brings back the pair rather than a state nobody was
+/// shown.
+#[test]
+fn the_beat_grid_clears_with_the_markers_as_one_step() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+
+    assert!(
+        comp.get_beat_grid().expect("grid").is_none(),
+        "a comp opens with no grid"
+    );
+
+    // A grid and its markers, seeded the way detection lands them.
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state.store.begin_undo_group();
+        state
+            .store
+            .commit(lumit_core::Op::SetCompMarkers {
+                comp: comp.id,
+                markers: vec![lumit_core::markers::Marker::beat(
+                    Uuid::now_v7(),
+                    lumit_core::Rational::new(1, 1).expect("1 s"),
+                    0.9,
+                )],
+            })
+            .expect("markers");
+        state
+            .store
+            .commit(lumit_core::Op::SetBeatGrid {
+                comp: comp.id,
+                grid: Some(lumit_core::model::BeatGrid {
+                    bpm: 128.0,
+                    phase: lumit_core::Rational::new(1, 100).expect("10 ms"),
+                }),
+            })
+            .expect("grid");
+        state.store.end_undo_group();
+    }
+    let grid = comp.get_beat_grid().expect("grid").expect("confirmed");
+    assert!((grid.bpm - 128.0).abs() < 1e-9);
+    assert!((grid.phase_seconds - 0.01).abs() < 1e-9);
+
+    comp.clear_beat_markers().expect("cleared");
+    assert!(comp.get_markers().expect("markers").is_empty());
+    assert!(
+        comp.get_beat_grid().expect("grid").is_none(),
+        "the grid described the set that went"
+    );
+
+    // One undo step brings back both halves of the pair.
+    project.undo().expect("undone");
+    assert_eq!(comp.get_markers().expect("markers").len(), 1);
+    assert!(comp.get_beat_grid().expect("grid").is_some());
 }
 
 /// **Dragging or renaming a beat marker must leave it a beat marker** (K-270).
@@ -6637,6 +6707,7 @@ fn a_marker_the_panel_just_made_is_a_user_marker() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Mine".into(),
@@ -6669,6 +6740,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
     source
         .set_markers(vec![BridgeMarker {
             duration_frames: None,
+            is_beat: false,
             id: seeded,
             time: BridgeRational { num: 1, den: 2 },
             label: "Drop".into(),
@@ -6703,6 +6775,7 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
         duration_frames: None,
+        is_beat: false,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Chorus".into(),
@@ -8224,12 +8297,14 @@ fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
             time: BridgeRational { num: 0, den: 1 },
             label: "moment".into(),
             duration_frames: None,
+            is_beat: false,
         },
         BridgeMarker {
             id: Uuid::now_v7(),
             time: BridgeRational { num: 1, den: 1 },
             label: "span".into(),
             duration_frames: Some(12),
+            is_beat: false,
         },
     ])
     .expect("written");

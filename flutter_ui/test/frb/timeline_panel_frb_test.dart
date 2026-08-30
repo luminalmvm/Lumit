@@ -2900,6 +2900,7 @@ void main() {
           id: UuidValue.fromString(const Uuid().v4()),
           time: p.comp.timeOfFrame(frame: markerFrame),
           label: 'Beat',
+          isBeat: false,
         ),
       ]);
       await mount(tester, p);
@@ -2979,6 +2980,7 @@ void main() {
           id: UuidValue.fromString(const Uuid().v4()),
           time: p.comp.timeOfFrame(frame: markerFrame),
           label: 'Beat',
+          isBeat: false,
         ),
       ]);
       await mount(tester, p);

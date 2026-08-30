@@ -139,6 +139,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAutoSide dco_decode_box_autoadd_bridge_auto_side(dynamic raw);
 
   @protected
+  BridgeBeatGrid dco_decode_box_autoadd_bridge_beat_grid(dynamic raw);
+
+  @protected
   BridgeBeatOptions dco_decode_box_autoadd_bridge_beat_options(dynamic raw);
 
   @protected
@@ -312,6 +315,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes dco_decode_bridge_axis_modes(dynamic raw);
+
+  @protected
+  BridgeBeatGrid dco_decode_bridge_beat_grid(dynamic raw);
 
   @protected
   BridgeBeatOptions dco_decode_bridge_beat_options(dynamic raw);
@@ -667,6 +673,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSpan dco_decode_bridge_span(dynamic raw);
 
   @protected
+  BridgeSpectrogram dco_decode_bridge_spectrogram(dynamic raw);
+
+  @protected
   BridgeStroke dco_decode_bridge_stroke(dynamic raw);
 
   @protected
@@ -971,6 +980,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   UuidValue? dco_decode_opt_Uuid(dynamic raw);
 
   @protected
+  BridgeBeatGrid? dco_decode_opt_box_autoadd_bridge_beat_grid(dynamic raw);
+
+  @protected
   BridgeColourRgba? dco_decode_opt_box_autoadd_bridge_colour_rgba(dynamic raw);
 
   @protected
@@ -1152,6 +1164,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAutoSide sse_decode_box_autoadd_bridge_auto_side(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBeatGrid sse_decode_box_autoadd_bridge_beat_grid(
       SseDeserializer deserializer);
 
   @protected
@@ -1365,6 +1381,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes sse_decode_bridge_axis_modes(SseDeserializer deserializer);
+
+  @protected
+  BridgeBeatGrid sse_decode_bridge_beat_grid(SseDeserializer deserializer);
 
   @protected
   BridgeBeatOptions sse_decode_bridge_beat_options(
@@ -1771,6 +1790,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSpan sse_decode_bridge_span(SseDeserializer deserializer);
 
   @protected
+  BridgeSpectrogram sse_decode_bridge_spectrogram(SseDeserializer deserializer);
+
+  @protected
   BridgeStroke sse_decode_bridge_stroke(SseDeserializer deserializer);
 
   @protected
@@ -2131,6 +2153,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   UuidValue? sse_decode_opt_Uuid(SseDeserializer deserializer);
 
   @protected
+  BridgeBeatGrid? sse_decode_opt_box_autoadd_bridge_beat_grid(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeColourRgba? sse_decode_opt_box_autoadd_bridge_colour_rgba(
       SseDeserializer deserializer);
 
@@ -2329,6 +2355,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_auto_side(
       BridgeAutoSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_beat_grid(
+      BridgeBeatGrid self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_beat_options(
@@ -2552,6 +2582,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_axis_modes(
       BridgeAxisModes self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_beat_grid(
+      BridgeBeatGrid self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_beat_options(
@@ -3009,6 +3043,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_span(BridgeSpan self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_spectrogram(
+      BridgeSpectrogram self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_stroke(BridgeStroke self, SseSerializer serializer);
 
   @protected
@@ -3384,6 +3422,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_opt_Uuid(UuidValue? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_beat_grid(
+      BridgeBeatGrid? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_colour_rgba(

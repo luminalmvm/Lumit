@@ -519,6 +519,8 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetMasterVolume { comp, .. }
         | Op::SetWorkArea { comp, .. }
         | Op::SetCompMarkers { comp, .. }
+        // The beat band redraws from it, and it travels with the markers.
+        | Op::SetBeatGrid { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
         // beneath it, and one that stops leaves those layers alone again — so
         // the comp is the honest scope, not the one row that changed.
