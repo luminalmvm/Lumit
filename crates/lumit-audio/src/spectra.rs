@@ -198,7 +198,8 @@ impl Spectrogram {
     #[must_use]
     pub fn range(&self, start_s: f64, end_s: f64, cols: usize) -> Vec<u8> {
         let mut out = vec![0u8; cols * BINS];
-        if self.tiers.is_empty() || end_s <= start_s || !(end_s - start_s).is_finite() || cols == 0 {
+        if self.tiers.is_empty() || end_s <= start_s || !(end_s - start_s).is_finite() || cols == 0
+        {
             return out;
         }
         let step = (end_s - start_s) / cols as f64;
