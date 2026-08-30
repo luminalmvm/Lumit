@@ -650,7 +650,14 @@ void main() {
           isNot(presetLayout(WorkspacePreset.colour).toJson()),
           reason: 'the presets are genuinely different arrangements');
 
-      await choose(tester, 'Window', 'Audio', under: 'Workspace');
+      // 'Audio' now names two rows of the Window menu — the workspace under
+      // its heading, and the Audio *panel* in the tick list — so this taps
+      // the flyout's own row, which is the one on top.
+      await tester.tap(find.byKey(const ValueKey<String>('menu-Window')));
+      await tester.pump();
+      await tester.tap(find.text('Workspace'));
+      await tester.pump();
+      await tester.tap(find.text('Audio').last);
       await tester.pump();
       expect(p.uiState.split.toJson(),
           presetLayout(WorkspacePreset.audio).toJson());
