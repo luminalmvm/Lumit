@@ -7706,6 +7706,30 @@ panel that may not even be on screen:
   render request and there is no third number to keep in step with the other
   two.
 
+**Drawing the frame smaller than it was made.** Because zooming out does not ask
+for a smaller frame, a Viewer below 100% is showing a picture that has more
+pixels than the space it is given, and something has to decide which of them
+survive. The cheapest answer — take every second or third pixel and ignore the
+rest — is what Lumit used to do everywhere, and it is not a smaller picture but
+a different one: thin lines break into dashes, fine texture crawls as the
+playhead moves, and the whole frame reads as soft and faintly busy without
+looking obviously wrong. The picture below 1:1 is now drawn through a filter
+that averages the pixels it is discarding instead (the graphics card keeps
+pre-shrunk copies of the frame — "mipmaps" — so this costs one lookup rather
+than a pile of them; it is the cheap relative of the careful resize the export
+does). Above 1:1 nothing changed: a magnified pixel is still a hard square,
+because the reason to zoom in is to look at the pixels, and the Appearance
+setting that blends them is still there for anyone framing rather than
+inspecting.
+
+The three numbers multiply, and the bar's reading stays honest about it. A
+half-resolution frame shown at 80% is *not* 0.56 of native — the engine renders
+to the panel's own size rather than to the zoom, so that frame is being drawn
+1.6 screen pixels to the texture pixel and is magnified, not shrunk. The filter
+is chosen from that product (and from the screen's own pixel ratio, so a
+high-DPI display at 80% is correctly seen as magnification), never from the
+zoom percentage alone.
+
 ### Moving between panels without the mouse
 
 `Ctrl+F6` moves the focus ring on to the next panel, `Ctrl+Shift+F6` back, and

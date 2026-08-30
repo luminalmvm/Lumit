@@ -19559,3 +19559,35 @@ renderer, a real drag, twelve handles or fewer — 160 without the ladder),
 itself, its thread and its line; the file starts again once it is too big), and
 `viewer_resize_storm_test` (the stage clips under both theme shapes, and keeps its clip
 through a seam drag thrashed in one element tree).
+
+## K-631 — The picture below 1:1 is filtered, not point-sampled
+
+**Status:** DECIDED — 2026-08-30
+
+Below 100% the Viewer looked soft and faintly odd, and the cause was the flag that made it
+look sharp above 100%. K-218's magnification is deliberate about zooming *in*: a magnified
+pixel is a square, so the picture is drawn with `FilterQuality.none` and the Appearance
+toggle (`smoothZoomedViewer`) hands the blending back to anyone who wants it. That flag was
+applied to every scale, including the ones where the texture is *minified* — and nearest
+sampling a minified texture keeps one source pixel in every few and discards the rest, which
+is not a smaller picture but a different one. Thin edges break up, fine texture crawls under
+a moving playhead, and the frame reads as soft without looking plainly wrong.
+
+**The filter is now chosen from how many screen pixels a texture pixel actually gets**, in
+`viewerPictureFilter`. Three numbers decide it and only their product matters: the
+magnification the bar reads out, the preview divisor the frame was made at (the texture is
+that much smaller than the comp), and the display's pixel ratio (the first is in logical
+pixels; the rasteriser samples in real ones). Below one, the picture is minified and is drawn
+at `FilterQuality.medium` — mipmapped, one prefiltered sample rather than a pile of taps, the
+cheap-but-clean relative of the Lanczos the export resize got in K-498. At or past one,
+nothing changes: `none` by default, `low` when the smoothing setting is on.
+
+**The zoom and the divisor do not multiply behind the bar's back.** A half-resolution frame
+shown at 80% is not 0.56 of native, because the engine renders to the panel's fit rather than
+to the zoom (K-230): it is 0.8 x 2 = 1.6 pixels a texel, magnified, and filtered as such. The
+readout keeps saying 80% and Half, and both remain true.
+
+Tests: `viewer_picture_filter_test` (below 1:1 is filtered whatever the smoothing setting
+says; at and above it the pixels stay square unless the setting asks otherwise; the three
+scales multiply, so half at 80% and quarter at 30% are magnification while quarter at 20% is
+not; a hi-DPI screen at 80% is 1.2 pixels a texel; a nonsense tier counts as full).

@@ -342,7 +342,12 @@ class ViewerStage extends StatelessWidget {
               rect: fitted,
               child: RepaintBoundary(
                 key: pictureKey,
-                child: _Picture(uiState: uiState, channel: channel),
+                child: _Picture(
+                  uiState: uiState,
+                  channel: channel,
+                  shownScale:
+                      compSize.width == 0 ? 1 : fitted.width / compSize.width,
+                ),
               ),
             ),
             // The grid and the safe areas (K-416): over the picture, under the
@@ -696,32 +701,82 @@ class _MissingBadgeState extends State<_MissingBadge> {
   }
 }
 
+/// How the picture's texture is sampled, given how much of it lands on how
+/// many screen pixels (K-631).
+///
+/// Three sizes decide this, and only their product matters. [shownScale] is the
+/// picture's width on screen as a share of the comp's — the percentage the bar
+/// reads out. [tier] is the preview divisor the frame was actually made at
+/// (1 Full, 2 Half, 4 Quarter), so the texture is that many times smaller than
+/// the comp. [devicePixelRatio] turns the first, which is in logical pixels,
+/// into the real ones the rasteriser samples into. Multiply them and the answer
+/// is how many screen pixels each texture pixel gets.
+///
+/// **Below one, the texture is being minified, and nearest sampling is wrong.**
+/// It keeps one source pixel out of every few and throws the rest away, which
+/// is not a smaller picture but a different one — edges break up, fine detail
+/// crawls, and the whole frame reads as soft and faintly busy. That is what a
+/// Viewer below 100 % was doing. [FilterQuality.medium] mipmaps instead, which
+/// is the cheap, clean equivalent of the Lanczos the exporter resizes with
+/// (K-498) — one prefiltered sample rather than a pile of taps.
+///
+/// At or past 1:1 the picture is *magnified*, and nearest is the honest answer:
+/// a zoomed pixel should be a square, because the reason to zoom in is to look
+/// at the pixels. [smooth] is the Settings toggle that hands the blending back.
+///
+/// Note the product: a half-resolution frame shown at 80 % is not 0.56 of
+/// native, because the engine renders to the *panel's* fit rather than the
+/// zoom. It is 0.8 × 2 = 1.6 texture pixels per screen pixel — magnified, and
+/// filtered as such. The two never multiply behind the bar's back.
+FilterQuality viewerPictureFilter({
+  required double shownScale,
+  required int tier,
+  required double devicePixelRatio,
+  required bool smooth,
+}) {
+  final perTexel = shownScale * (tier < 1 ? 1 : tier) * devicePixelRatio;
+  if (perTexel < 0.999) return FilterQuality.medium;
+  return smooth ? FilterQuality.low : FilterQuality.none;
+}
+
 /// Whatever the worker last published, in the chosen channel — always a
 /// platform texture (K-183): frames only ever arrive as GPU handles.
 class _Picture extends StatelessWidget {
   final LumitUiState uiState;
   final ViewerChannel channel;
-  const _Picture({required this.uiState, required this.channel});
+
+  /// The picture's width on screen as a share of the comp's — the bar's
+  /// magnification, and half of what decides the filter.
+  final double shownScale;
+
+  const _Picture({
+    required this.uiState,
+    required this.channel,
+    required this.shownScale,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
     return ValueListenableBuilder<int?>(
       valueListenable: uiState.viewerFrameid,
-      builder: (context, textureId, _) {
-        // Nearest by default: Flutter's `Texture` filters bilinearly unless
-        // told otherwise, which softens every pixel once the zoom is past
-        // 1:1 — the opposite of what zooming in is usually for. The setting
-        // hands the smoothing back to anyone who wants it.
-        final picture = textureId != null
-            ? Texture(
-                textureId: textureId,
-                filterQuality: uiState.workspace.smoothZoomedViewer
-                    ? FilterQuality.low
-                    : FilterQuality.none,
-              )
-            : const SizedBox.expand();
-        return pictureChannelFilter(channel, picture);
-      },
+      builder: (context, textureId, _) => ValueListenableBuilder<int>(
+        valueListenable: uiState.previewTier,
+        builder: (context, tier, _) {
+          final picture = textureId != null
+              ? Texture(
+                  textureId: textureId,
+                  filterQuality: viewerPictureFilter(
+                    shownScale: shownScale,
+                    tier: tier,
+                    devicePixelRatio: dpr,
+                    smooth: uiState.workspace.smoothZoomedViewer,
+                  ),
+                )
+              : const SizedBox.expand();
+          return pictureChannelFilter(channel, picture);
+        },
+      ),
     );
   }
 }
