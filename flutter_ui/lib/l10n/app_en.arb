@@ -2170,9 +2170,25 @@
   "@fxLuminanceOnly": {
     "description": "Effect controls — a control on Unsharp mask."
   },
+  "fxCustomShader": "Custom shader",
+  "@fxCustomShader": {
+    "description": "Effect controls — the name of the effect that runs a shader the user wrote."
+  },
+  "fxEditShader": "Edit shader…",
+  "@fxEditShader": {
+    "description": "Effect controls — the Custom shader row that opens the shader's source for editing."
+  },
+  "fxLoadFromFile": "Load from file…",
+  "@fxLoadFromFile": {
+    "description": "Effect controls — the Custom shader row that loads shader source from a file on disk."
+  },
   "fxLut": "LUT",
   "@fxLut": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxSecondInput": "Second input",
+  "@fxSecondInput": {
+    "description": "Effect controls — the Custom shader's optional extra picture layer."
   },
   "fxManual": "Manual",
   "@fxManual": {
