@@ -35,6 +35,9 @@ use std::sync::{OnceLock, RwLock};
 use super::params::{ParamId, Params, Unit};
 use super::schema::{ParamKind, ParamSchema};
 
+pub mod compile;
+pub mod graph;
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
@@ -789,7 +792,7 @@ fn annotations(doc: &str) -> (Vec<Ann>, String) {
 }
 
 /// `blend_point` to "Blend point" — what a line with nothing left on it gets.
-fn humanise(name: &str) -> String {
+pub(crate) fn humanise(name: &str) -> String {
     let spaced = name.replace('_', " ");
     let mut chars = spaced.chars();
     match chars.next() {

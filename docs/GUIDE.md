@@ -13053,6 +13053,25 @@ language a group of three numbers quietly occupies the space of four, and every 
 has written a shader has been caught by it at least once. Saying "use four" with a sentence
 explaining why is kinder than accepting it and being wrong later.
 
+### Wiring boxes instead of typing
+
+Typing shader code is a skill; wiring boxes together is not. So a custom shader can also hold
+a small **graph** — a box for the picture coming in, boxes for adding and multiplying and
+mixing, one box for the picture going out — and Lumit turns those boxes into shader text for
+you. Each box becomes one line of the program, written in a fixed order, so the same boxes
+always produce exactly the same text, letter for letter. That sameness matters more than it
+sounds: the text is how Lumit recognises "I have compiled this one before", so a translation
+that came out slightly differently each time would throw away its own cache. A **Parameter**
+box becomes one of the annotated lines described above, which is how a control you wired and
+a control you typed end up being the same kind of thing.
+
+You step into the graph the way you step into a precomp: double-click the effect, the Graph
+panel shows the inside, and a breadcrumb at the top brings you back. When a shader holds both
+the boxes and the text, the boxes are the ones Lumit believes — turning boxes into text always
+works, but turning arbitrary text back into boxes does not, so the road runs one way. If you
+want to edit the text by hand, you *detach* the graph: the text stays, the boxes go, and that
+is a deliberate act with its own undo step rather than something that can happen by accident.
+
 ### Why this is not a plugin
 
 Lumit will one day host plugins — other people's compiled programs, running in their own

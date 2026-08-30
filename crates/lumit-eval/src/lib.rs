@@ -468,7 +468,24 @@ fn feed_effect_stack(
                 if name == "origin" {
                     continue;
                 }
-                let text = value.to_string();
+                // The inner graph's `layout` is canvas positions (CS4, §4.2):
+                // presentation state, absent from the key for the reason
+                // `LayerGraph::layout` is — moving a box changes no pixel.
+                let text = if name == "graph" {
+                    match value {
+                        serde_json::Value::Object(graph) => serde_json::Value::Object(
+                            graph
+                                .iter()
+                                .filter(|(k, _)| *k != "layout")
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect(),
+                        )
+                        .to_string(),
+                        _ => value.to_string(),
+                    }
+                } else {
+                    value.to_string()
+                };
                 h.update(&(name.len() as u64).to_le_bytes());
                 h.update(name.as_bytes());
                 h.update(&(text.len() as u64).to_le_bytes());
@@ -2520,6 +2537,69 @@ mod tests {
             .effects
             .push(lumit_core::fx::instantiate("custom_shader").expect("the effect exists"));
         assert_ne!(base, key(&doc, &empty, 1.0));
+    }
+
+    /// The inner graph is content and its canvas positions are not (K-642,
+    /// custom-shader.md §2.4, §8 item 13): edit a wire and the frame is a
+    /// different frame; move a box and the key holds.
+    #[test]
+    fn the_frame_key_changes_with_the_graph_and_not_with_its_layout() {
+        use lumit_core::fx::shader::graph::{ShaderEdge, ShaderGraph, ShaderNode, ShaderNodePos};
+        use lumit_core::model::EffectInstance;
+        let doc = Document::new();
+        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
+
+        let node = |id: u32, kind: &str| ShaderNode {
+            id,
+            kind: kind.to_owned(),
+            settings: serde_json::Map::new(),
+        };
+        let with_graph = |graph: &ShaderGraph| {
+            let mut inst: EffectInstance =
+                lumit_core::fx::instantiate("custom_shader").expect("the effect exists");
+            let mut block = serde_json::Map::new();
+            block.insert(
+                "graph".into(),
+                serde_json::to_value(graph).expect("the graph serialises"),
+            );
+            inst.extra
+                .insert("shader".into(), serde_json::Value::Object(block));
+            let mut comp = plain.clone();
+            comp.layers[0].effects.push(inst);
+            comp
+        };
+
+        let mut graph = ShaderGraph {
+            nodes: vec![node(1, "picture"), node(2, "result")],
+            edges: vec![ShaderEdge {
+                from: 1,
+                from_port: 0,
+                to: 2,
+                to_port: 0,
+            }],
+            layout: Vec::new(),
+        };
+        let base = key(&doc, &with_graph(&graph), 1.0);
+
+        // Moving a box changes no pixel, so it changes no name.
+        graph.layout.push(ShaderNodePos {
+            node: 1,
+            x: 640.0,
+            y: 480.0,
+        });
+        assert_eq!(
+            base,
+            key(&doc, &with_graph(&graph), 1.0),
+            "a canvas position is presentation, not content"
+        );
+
+        // Cutting the wire changes the picture, so it renames the frame.
+        graph.edges.clear();
+        assert_ne!(
+            base,
+            key(&doc, &with_graph(&graph), 1.0),
+            "editing the graph must rename every frame it draws"
+        );
     }
 
     /// The effect stack is content (docs/08): adding a live effect changes

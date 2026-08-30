@@ -98,6 +98,9 @@ lumit-core = { path = "../lumit-core" }
 # production dependency direction stays eval-independent-of-gpu.
 lumit-eval = { path = "../lumit-eval" }
 uuid = { version = "1", features = ["v7"] }
+# Building shader-graph fixtures (tests/custom_shader.rs) — the node settings
+# bag is a serde_json map in the document's own shape.
+serde_json = "1"
 
 [lints]
 workspace = true

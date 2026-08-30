@@ -107,10 +107,27 @@ pub fn source_of(inst: &EffectInstance) -> Option<&str> {
     inst.extra.get(EXTRA_KEY)?.get("source")?.as_str()
 }
 
+/// The stored inner graph, or `None` for a hand-written (or empty) shader
+/// (§4.1, CS4).
+#[must_use]
+pub fn graph_of(inst: &EffectInstance) -> Option<&serde_json::Value> {
+    inst.extra.get(EXTRA_KEY)?.get("graph")
+}
+
 /// This instance's read and wrapped program, or `None` when it has no source or
 /// the source is refused (§2.2).
+///
+/// **The graph is master when it is there** (§4.1, CS4): an instance holding a
+/// graph renders the graph's compiled text and never the cached `source` beside
+/// it — a mismatch between the two is a stale cache to overwrite, never a
+/// conflict to resolve. The compile is memoised per distinct graph, so this is
+/// a hash and a map lookup on the render path either way.
 #[must_use]
 pub fn program_of(inst: &EffectInstance) -> Option<&'static crate::fx::shader::ShaderProgram> {
+    if let Some(graph) = graph_of(inst) {
+        let text = crate::fx::shader::compile::source_for(graph).ok()?;
+        return crate::fx::shader::program_for(text).ok();
+    }
     crate::fx::shader::program_for(source_of(inst)?).ok()
 }
 

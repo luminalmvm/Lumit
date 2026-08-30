@@ -198,6 +198,208 @@ fn a_golden_shader_renders_deterministically() {
     }
 }
 
+// ------------------------------------------------------- §8 items 22 and 23
+
+/// A small builder so a test reads as the graph it draws.
+fn gnode(id: u32, kind: &str) -> lumit_core::fx::shader::graph::ShaderNode {
+    lumit_core::fx::shader::graph::ShaderNode {
+        id,
+        kind: kind.to_owned(),
+        settings: serde_json::Map::new(),
+    }
+}
+
+fn gedge(
+    from: u32,
+    from_port: u32,
+    to: u32,
+    to_port: u32,
+) -> lumit_core::fx::shader::graph::ShaderEdge {
+    lumit_core::fx::shader::graph::ShaderEdge {
+        from,
+        from_port,
+        to,
+        to_port,
+    }
+}
+
+/// The §8 item 22 fixture: uv split apart, multiplied, put back together —
+/// a gradient whose twin a person can write in one line.
+fn gradient_graph() -> lumit_core::fx::shader::graph::ShaderGraph {
+    lumit_core::fx::shader::graph::ShaderGraph {
+        nodes: vec![
+            gnode(1, "uv"),
+            gnode(2, "split"),
+            gnode(3, "multiply"),
+            gnode(4, "combine4"),
+            gnode(5, "result"),
+        ],
+        edges: vec![
+            gedge(1, 0, 2, 0),
+            gedge(2, 0, 4, 0),
+            gedge(2, 1, 4, 1),
+            gedge(2, 0, 3, 0),
+            gedge(2, 1, 3, 1),
+            gedge(3, 0, 4, 2),
+            gedge(4, 0, 5, 0),
+        ],
+        layout: Vec::new(),
+    }
+}
+
+/// Every box in the v1 vocabulary, compiled and taken through the K-263 road —
+/// so the graph compiler cannot emit WGSL the validator refuses. No card.
+#[test]
+fn a_graph_of_every_node_assembles_and_validates() {
+    use lumit_core::fx::shader::graph::{ShaderGraph, ShaderNode};
+    let mut nodes = vec![gnode(1, "picture"), gnode(2, "luminance")];
+    let mut edges = vec![gedge(1, 0, 2, 0)];
+    let mut id = 100u32;
+    let mut spine = 1u32;
+    for kind in ["premultiply", "unpremultiply", "tint", "blend"] {
+        id += 1;
+        let mut n = gnode(id, kind);
+        if kind == "blend" {
+            n.settings = serde_json::json!({"mode": "screen"})
+                .as_object()
+                .expect("an object")
+                .clone();
+        }
+        nodes.push(n);
+        edges.push(gedge(spine, 0, id, 0));
+        spine = id;
+    }
+    let mut scalar = 2u32;
+    for kind in [
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "modulo",
+        "mix",
+        "clamp",
+        "saturate",
+        "pow",
+        "sqrt",
+        "abs",
+        "sign",
+        "min",
+        "max",
+        "floor",
+        "ceil",
+        "fract",
+        "step",
+        "smoothstep",
+        "sin",
+        "cos",
+        "atan2",
+        "length",
+        "distance",
+    ] {
+        id += 1;
+        nodes.push(gnode(id, kind));
+        edges.push(gedge(scalar, 0, id, 0));
+        scalar = id;
+    }
+    nodes.push(gnode(3, "uv"));
+    nodes.push(gnode(4, "split"));
+    edges.push(gedge(3, 0, 4, 0));
+    nodes.push(gnode(5, "combine2"));
+    edges.push(gedge(4, 0, 5, 0));
+    edges.push(gedge(4, 1, 5, 1));
+    nodes.push(gnode(6, "normalize"));
+    edges.push(gedge(5, 0, 6, 0));
+    nodes.push(gnode(7, "dot"));
+    edges.push(gedge(6, 0, 7, 0));
+    edges.push(gedge(5, 0, 7, 1));
+    let mut sw = gnode(8, "swizzle");
+    sw.settings = serde_json::json!({"pattern": "yx"})
+        .as_object()
+        .expect("an object")
+        .clone();
+    nodes.push(sw);
+    edges.push(gedge(5, 0, 8, 0));
+    nodes.push(gnode(9, "picture2"));
+    nodes.push(gnode(10, "sample"));
+    edges.push(gedge(9, 1, 10, 0));
+    edges.push(gedge(8, 0, 10, 1));
+    nodes.push(gnode(11, "matte"));
+    nodes.push(gnode(12, "time"));
+    nodes.push(gnode(13, "seed"));
+    nodes.push(gnode(14, "combine3"));
+    edges.push(gedge(11, 0, 14, 0));
+    edges.push(gedge(12, 0, 14, 1));
+    edges.push(gedge(13, 0, 14, 2));
+    let mut param: ShaderNode = gnode(15, "param");
+    param.settings = serde_json::json!({
+        "id": "amount", "kind": "slider", "min": 0, "max": 1, "default": 1
+    })
+    .as_object()
+    .expect("an object")
+    .clone();
+    nodes.push(param);
+    edges.push(gedge(15, 0, spine, 2));
+    edges.push(gedge(scalar, 0, spine, 1));
+    nodes.push(gnode(16, "result"));
+    edges.push(gedge(spine, 0, 16, 0));
+
+    let text = lumit_core::fx::shader::compile::compile(&ShaderGraph {
+        nodes,
+        edges,
+        layout: Vec::new(),
+    })
+    .expect("the whole vocabulary compiles");
+    let p = program(&text);
+    if let Err(why) = validate(&p.assembled) {
+        panic!("the vocabulary did not validate:\n{why}\n\n{}", p.assembled);
+    }
+}
+
+/// §8 item 22's other half on a card, and the CS4 gate the package names: the
+/// same picture from the graph and from the one-line WGSL a person would have
+/// written — identical arithmetic, identical pixels.
+#[test]
+fn a_graph_renders_its_hand_written_twin() {
+    let Ok(ctx) = GpuContext::headless() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (16u32, 12u32);
+    let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
+    let compiled =
+        lumit_core::fx::shader::compile::compile(&gradient_graph()).expect("the graph compiles");
+    let twin =
+        "fn shade(uv: vec2<f32>) -> vec4<f32> {\n    return vec4<f32>(uv.x, uv.y, uv.x * uv.y, 1.0);\n}\n";
+    let draw = |source: &str, salt: u128| {
+        let p = program(source);
+        let (pipeline, _) = fx
+            .shader_pipeline(&ctx, salt, p.source_hash, &p.assembled)
+            .expect("it compiles");
+        let out = fx.custom_shader(
+            &ctx,
+            &pipeline,
+            &tex,
+            &tex,
+            None,
+            None,
+            w,
+            h,
+            &header(w, h),
+            &p.pack(lumit_core::fx::Params::new(&[])),
+        );
+        readback_linear_f32(&ctx, &out, w, h).expect("readback")
+    };
+    let boxes = draw(&compiled, 40);
+    let typed = draw(twin, 41);
+    for (i, (a, b)) in boxes.iter().zip(&typed).enumerate() {
+        assert!(
+            (a - b).abs() < 1e-6,
+            "pixel component {i}: the graph drew {a}, the twin {b}"
+        );
+    }
+}
+
 #[test]
 fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
     let Ok(ctx) = GpuContext::headless() else {

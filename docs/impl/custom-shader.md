@@ -17,9 +17,17 @@ frame-key term. **CS2 and CS3 are built too**: the bridge's instance-scoped
 window `Edit shader…` opens — Apply commits synchronously as one `SetLayerEffects`, and the
 preview check while typing is a debounced `shader_status` call answered from the engine's
 source-hash cache, not §3.2's worker job (whose trigger for existing is a felt stutter while
-typing; the render path never waits on it either way). CS4 (the inner graph) and CS5 (entry)
-are not built. Four things K-650 settled where this note left a choice open, and which the
-rest of the note should be read against:
+typing; the render path never waits on it either way). **CS4's engine half is built**
+(2026-08-30): `fx/shader/graph.rs` holds the §1.2 `graph` shape and the §4.3 vocabulary,
+`fx/shader/compile.rs` the §4.4 compiler — one `let` per node, topological order with ties by
+node id, byte-identical for ever (`a_graph_compiles_to_byte_identical_wgsl`) — and
+`program_of` compiles from the graph whenever one is present (§4.1), memoised per distinct
+graph beside the source cache. The frame key's `extra.shader` fold skips `graph.layout`, the
+one presentation key inside the block. The blend box carries a linear-light subset of the
+layer modes (normal, add, multiply, screen, darken, lighten, difference, subtract, overlay)
+rather than the full `BlendMode::ALL` table — a recorded ceiling, upgraded when the node
+claims parity. CS4's bridge/panel half and CS5 (entry) follow. Four things K-650 settled
+where this note left a choice open, and which the rest of the note should be read against:
 
 - **The derived rows are `&'static [ParamSchema]`** from a session-lived parse cache keyed by
   the source hash, not owned records. §1.5's four rules are unchanged; what changed is that
