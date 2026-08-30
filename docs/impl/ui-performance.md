@@ -237,8 +237,10 @@ is the price of re-rasterising a maximised window on this backend, plus ~18 ms
 whenever the Viewer's texture is republishing (§2.2's live-vs-empty column; scrubs
 and the idle cache fill keep it republishing). The second control: §2.4 swaps the
 backend and the same widget code runs at 99–146 fps with the live picture up. The
-lever is the backend first (WP-1), then *how much area re-records per frame* (§4.2,
-§4.3) — never converting rows to a canvas (§4.4).
+backend looked like the lever and is not one — Skia is off the table by the owner's
+ruling and Impeller has no faster configuration on Windows (§4.1) — so what is left to
+us is *how much area re-records per frame* (§4.2, §4.3), never converting rows to a
+canvas (§4.4).
 
 ### 3.4 The per-frame sync calls on scrub
 
@@ -274,17 +276,61 @@ Five rulings. Each is the cheapest structure that meets the budget — no new
 framework, no second widget tree, no canvas rewrite of surfaces whose widgets already
 fit it.
 
-### 4.1 Ship on the backend the numbers chose, as revisited policy
+### 4.1 The backend is Impeller, and what is left of the gap is the backend's own
 
-§2.4 is not a taste: on this machine, at the owner's window, the default backend
-cannot reach 60 fps for *any* timeline gesture with any plausible widget-side saving
-(the floor is 30 ms of raster before Lumit draws a row), and Skia runs the same code
-at 99–146 fps. So the shipped Windows runner starts the engine on Skia, with a
-build-time knob keeping Impeller one flag away. The pin is **measured, revisited
-policy, not doctrine**: Impeller is Flutter's stated future, so the pin's K entry
-carries a review rule — re-run §2.4's A/B on each Flutter upgrade, and take Impeller
-the release it matches Skia on this class of machine. An upstream issue with these
-numbers is part of the package.
+The owner's ruling of 2026-08-30 settles what §2.4's table opened: *"we do not want skia
+imo at all. we need to get impeller working at these high framerates no matter what."*
+Skia is **not** a shipping backend for Lumit at any number. `--no-enable-impeller` keeps
+one use only — a diagnostic reference that says how much headroom the hardware has — and
+says nothing about what ships. So the shipped Windows runner starts the engine on
+Flutter's default, which is Impeller's OpenGLES backend, and carries **no pin at all**:
+the smallest runner is the one with nothing to say about backends (K-677).
+
+**Vulkan is not reachable on Windows in 3.47** — read out of the engine, then confirmed by
+running it. `impeller-backend` is a real switch (`shell/common/switch_defs.h`), parsed into
+`settings.requested_rendering_backend` (`shell/common/switches.cc`), and consumed in
+exactly two places in the tree: Android's `flutter_main.cc` and the headless tester. The
+Windows embedder has one GPU compositor, `CompositorOpenGL`, built against
+`impeller/renderer/backend/gles` alone (`shell/platform/windows/BUILD.gn`), over an ANGLE
+display whose type is the literal `EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE`
+(`shell/platform/windows/egl/manager.cc`); the word *vulkan* does not occur in the
+embedder's sources. Measured anyway, in the owner's conditions, with the switch pair set
+through `FLUTTER_ENGINE_SWITCHES`: the engine prints `Using the Impeller rendering backend
+(OpenGLESSDF)` and the table does not move (zoom fly 24.2 fps / 38.1 ms raster, against the
+unswitched run's 19.3 / 49.7 — one run's noise, not a backend).
+
+**Our own paint is not what costs.** The Impeller-expensive patterns were audited across
+the whole Dart tree: **zero** `saveLayer`, zero `BackdropFilter`, zero `ShaderMask`, five
+`Opacity`, seven rounded or path clips — in an entire editor. And the same probe run
+carries its own control: Graph mode, which is **one** `CustomPaint`, rasters 33.8 ms where
+the widget-built lane band rasters 49.7 ms in the same window with the same live preview.
+Our content is worth ~16 ms of the ~50; the ~34 ms a single painter still costs is a floor
+no widget-side saving reaches.
+
+**What that floor is, from the embedder's source.** `CompositorOpenGL::CreateBackingStore`
+gives Impeller a **4× MSAA** offscreen colour renderbuffer plus a 4× MSAA depth/stencil
+renderbuffer at the full window size, and `Present` resolve-blits that whole surface into
+the window every frame; the same function's Skia branch allocates a plain single-sample
+texture FBO and blits that. Neither backend has damage or partial-repaint plumbing on
+Windows — no such term appears in the platform directory — so every frame pays for the
+whole window whatever changed. Hence a cost that is area-proportional and nearly
+content-blind: 10.5 ms at 1280×720, 30–50 ms at 2560×1369, ≈ **8 ms per megapixel**, on a
+card that should fill that area hundreds of times a second. The further ~18 ms a
+*republishing* external texture adds (§2.2) sits on the same thread and stays undiagnosed
+for a related reason: our side of that transport is one stable DXGI shared handle,
+registered once and not re-registered while it plays (`viewer_texture_bridge.cpp`,
+`viewer_texture_controller.dart`), and the embedder wraps rather than copies it
+(`embedder_external_texture_gl.cc`, `TextureGLES::WrapTexture`) — so there is no per-frame
+copy, format conversion or handle churn of ours left to remove.
+
+**So WP-1 ships Impeller and does not meet WP-1's gate.** What it changes in the repo is
+nothing: the runner has no pin, which is the configuration the ruling asks for. What it
+leaves is §7.1's issue, drafted for the owner to file, and §7.2's follow-up package — the
+mandate keeps pulling. The shipped configuration's text is Impeller's SDF path, which the
+engine names in its own startup line (`OpenGLESSDF`); the pins that a rasteriser change
+could have moved — `icon_crispness_test`, `ui_scale_test` — are pure arithmetic over stroke
+widths and scale factors, backend-independent by construction, and CI's widget tests raster
+through Skia whatever the app ships.
 
 ### 4.2 The paint-layer discipline: a repaint matrix, gated
 
@@ -384,8 +430,9 @@ stays.
 - **The engine and the preview change nothing for this note.** The scrub's render
   requests, the cache bank, and the shared-texture present measured out of the
   frame-cost story (§2.3: fresh vs revisited spans differ by ~6 ms on the failing
-  backend, ~0 on Skia); the +18 ms live-picture tax in §2.2 is the failing
-  compositor's, and goes with WP-1.
+  backend, ~0 on Skia); the +18 ms live-picture tax in §2.2 is the compositor's, and
+  outlived WP-1 — §4.1 shows our end of that transport has nothing left to give, so it
+  travels to §7.2 with the rest of the gap.
 - **Flutter stays a thin view** (K-181): everything here is about *when* the view
   redraws, never about deciding document truth in Dart.
 
@@ -421,12 +468,16 @@ Ordered; each sized for one agent; each gate measured by the probe **in the owne
 conditions (§2.1: maximised, live preview)** against the same comp, medians unless
 said otherwise; where marked, also asserted in a widget test so CI holds it.
 
-1. **WP-1 — Ship on the backend the numbers chose.** §4.1: the shipped Windows
-   runner starts the engine on Skia; a build-time knob keeps Impeller one flag away;
-   its own K entry with §2.4's numbers and the per-upgrade review rule; the upstream
-   issue filed. *Gate (probe):* zoom fly and playhead drag — raster med **< 8 ms**,
-   span p90 **< 16.6 ms**, effective rate **≥ 100 fps** (measured achievable: 99.5
-   and 124.7); a release-shape build shows the same backend in its startup log.
+1. **WP-1 — Impeller at mandate speed. Done as far as it goes; its gate is not met**
+   (K-677, 2026-08-30). §4.1: the shipped Windows runner takes Flutter's default —
+   Impeller GLES, no pin, no knob — after Vulkan was ruled out of 3.47 on Windows from
+   the engine's own sources and then measured inert, the Dart tree was audited clear of
+   Impeller-expensive paint, and the residual cost was located in the embedder (4× MSAA
+   offscreen + whole-window resolve blit per frame, no partial repaint, ≈ 8 ms/Mpix).
+   *Gate (probe):* zoom fly and playhead drag — raster med **< 8 ms**, span p90
+   **< 16.6 ms**, ≥ 100 fps. **Measured after: 49.7 / 97.0 / 19.3 and 35.0 / 68.9 /
+   26.2 — unmet, by the backend, not by Lumit.** The pursuit continues as §7.2; the
+   issue that would move it upstream is §7.1, drafted and unfiled.
 2. **WP-2 — The click answers within the budget.** §4.4: layer selection into
    `TimelineSelection`; no `setState` in `_selectLayer`; rows and bars draw from
    their slice. *Gate (probe):* a first-visit outline click — worst build frame
@@ -462,13 +513,99 @@ floor cleared everywhere with 6–8× headroom and the 8.3 ms budget met or at i
 on every continuous gesture; WP-5 then removes the one remaining >17 ms frame class
 (the edit commit). That is the mandate met, not approached.
 
+### 7.1 The upstream issue, drafted (WP-1) — not filed
+
+Ready to file at `flutter/flutter` when the owner chooses to; nobody posts it on the
+owner's behalf. Re-measure before filing if the Flutter version has moved.
+
+> **Title:** Impeller (OpenGLES) on Windows: ~25 ms raster per maximised frame vs
+> Skia's ~5 ms, +18 ms more while an external texture republishes
+>
+> **Flutter:** 3.47, Windows 11, `flutter run --profile -d windows`.
+> **Machine:** RTX 5080, 2560×1440 @ 165 Hz, OS scale 1.0 (dPR 1.0).
+> **App:** a desktop editor with a timeline panel of ~57 visible rows and a Viewer
+> showing engine-rendered frames through an external texture (`FlutterDesktopTexture`,
+> D3D shared surfaces).
+>
+> **What happens.** With the default backend, every continuous UI gesture (Ctrl+wheel
+> zoom, a playhead drag, a handle drag) spends 30–49 ms on the raster thread per frame
+> at a maximised window, landing many vsyncs late — 20–30 fps. UI-thread build times
+> for the same frames are 4–11 ms, so the app is not the bottleneck. Passing
+> `--no-enable-impeller` runs the identical build and identical gestures at 99–146 fps
+> with 5 ms raster.
+>
+> | Gesture (maximised, live preview) | Impeller GLES — fps / raster med / span med | Skia — fps / raster med / span med |
+> |---|---|---|
+> | Ctrl+wheel zoom | 19.7 / 48.8 ms / 94.2 ms | 99.5 / 5.1 ms / 11.2 ms |
+> | Playhead drag | 19.9 / 47.7 ms / 93.6 ms | 124.7 / 5.3 ms / 10.2 ms |
+> | Handle drag | 30.2 / 30.3 ms / 59.5 ms | 145.3 / 5.0 ms / 9.2 ms |
+> | Single-`CustomPaint` view, same gestures | 27.9 / 33.0 ms / 63.7 ms | 114.3 / 4.8 ms / 9.9 ms |
+> | Frames > 17 ms, one 2.5 s drag | 72 of 72 | 0 of 409 |
+>
+> **Two separable costs, both raster-thread.** (1) *Window area:* the same gesture in a
+> 1280×720 window rasters 10.5 ms and at 2560×1369 rasters 30.0 ms, with nothing else
+> changed — ~3×, roughly area-proportional, while Skia's stays ~5 ms at both.
+> (2) *A republishing external texture:* with the same maximised window, media missing
+> so the texture presents a static placeholder, raster is 30.0 ms; with the texture
+> republishing each rendered frame it is 48.8 ms — **~18 ms per frame** for the presence
+> of new texture content. Skia pays ~nothing for the same traffic (5.1 vs 5.0 ms), and
+> the split is the same whether frames are freshly rendered or replayed from a cache,
+> which points at the compositor's handling of the updated texture rather than at
+> production of the frames.
+>
+> **Repro sketch.** A maximised Windows window; a scrolling/zooming widget band covering
+> most of it; an external texture updated every frame via
+> `TextureRegistrar::MarkTextureFrameAvailable`; drive a continuous pointer drag and read
+> `FrameTiming.rasterDuration`. The ~3× window-area term reproduces without the texture;
+> the ~18 ms term needs the texture republishing.
+>
+> **Two embedder details that look implicated**, from
+> `shell/platform/windows/compositor_opengl.cc`: with Impeller the backing store is a
+> 4× MSAA offscreen colour renderbuffer plus a 4× MSAA depth/stencil renderbuffer at
+> full window size, resolve-blitted to the window in `Present` every frame, where the
+> Skia branch of the same function uses a single-sample texture FBO; and the Windows
+> embedder has no damage/partial-repaint plumbing on either backend, so every frame
+> pays the whole window. The measured cost works out at ≈ 8 ms per megapixel.
+>
+> **Impact.** The app ships on Impeller by choice and takes a factor of 5–7 in interface
+> frame rate for it on a high-end GPU — its 60 fps interface mandate is unreachable on
+> Windows today, and `--no-enable-impeller` is kept only as a reference measurement.
+> Happy to re-run this A/B, or a narrowed one, against any build you would like numbers
+> from.
+
+### 7.2 WP-7 — the Impeller gap, still open
+
+WP-1 ran out of levers inside Lumit, not out of mandate. What is left is a raster-thread
+floor of ~34 ms per maximised frame that a single `CustomPaint` pays as surely as 57
+widget-built rows, plus ~18 ms more whenever the Viewer's texture republishes. The
+package that reopens it, in the order evidence would be gathered:
+
+- **Re-measure on each Flutter upgrade** — the §2.4 A/B and the §2.3 table, unchanged
+  method, one run each. Impeller is under active work upstream; the cheapest possible
+  fix is someone else's commit. Check specifically whether the Windows embedder has
+  grown a Vulkan compositor (`shell/platform/windows/BUILD.gn` gaining
+  `impeller/renderer/backend/vulkan`) or partial repaint.
+- **File §7.1** (the owner files it; nobody posts on their behalf) and carry the reply.
+- **Narrow the ~18 ms texture term to a repro outside Lumit** — a bare Windows Flutter
+  app, one `Texture` widget over a D3D11 shared handle marked available each frame, a
+  full-window gesture. Our end is already minimal (§4.1), so the value here is a
+  standalone case an engine engineer can run, not another change to our transport.
+- **Try the MSAA hypothesis where it can be tried** — a local engine build with the
+  Impeller backing store made single-sample says in one number how much of the floor is
+  the 4× MSAA offscreen and its resolve. That is an engine experiment, not a Lumit
+  change, and it belongs to whoever answers §7.1.
+
+Until one of those moves, WP-2..WP-6 stand on their own: they are the frames Lumit is
+responsible for, and each is measured against the backend that ships.
+
 ## Open questions
 
 - **The frame-pacing cap** (§1): revisit when Flutter exposes a preferred-frame-rate
   API on desktop; until then the cap is "fit in 8.3 ms and draw nothing at rest".
-- **When the Skia pin comes off** (WP-1): the trigger is an Impeller release whose
-  probe run matches Skia's numbers on this class of machine — re-run the §2.4 A/B per
-  Flutter upgrade; the pin's K entry carries the review rule.
+- **When Impeller reaches the mandate on Windows** (WP-1, §7.2): unanswered, and the
+  answer is not in Lumit's tree — re-run the §2.4 A/B per Flutter upgrade and read the
+  Windows embedder's compositor for a Vulkan backend or partial repaint. Skia stays a
+  reference measurement, never a shipping backend (K-677).
 - **Why a republishing texture costs Impeller ~18 ms** (§2.2) is left undiagnosed on
   purpose: the pin removes it, and the upstream issue is where the diagnosis belongs.
   If the pin ever comes off, re-measure live-vs-empty before believing the new

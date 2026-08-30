@@ -20996,3 +20996,48 @@ table, where each millisecond sits, the architecture (listenable selection, the 
 matrix, incremental scroll, per-revision engine questions, the rendering-backend pin),
 and the ordered work packages whose gates are re-measurements by the same parked probe.
 docs/13 §2 carries the rule; §7.3 names the probe the manual instrument for B1/B2.
+
+## K-677 — Lumit ships on Impeller, unpinned, and the 60 fps gap on Windows is the backend's
+
+**Status: DECIDED (2026-08-30, owner).** Supersedes the one sentence in K-676's note that
+proposed pinning the Windows runner to Skia. The owner's words: *"we do not want skia imo
+at all. we need to get impeller working at these high framerates no matter what."* So the
+shipped Windows runner takes Flutter's default rendering backend — Impeller's OpenGLES
+path — and carries **no pin and no build knob**: the runner has nothing to say about
+backends. `--no-enable-impeller` survives as a diagnostic reference only: it says how much
+headroom the hardware has, never what Lumit ships.
+
+**What was tried before that was accepted, and what each measured** (Flutter 3.47.1, the
+owner's conditions per docs/impl/ui-performance.md §2.1 — maximised 2560×1369, live
+preview, the *Set me Free* Clips comp, the parked probe):
+
+| Configuration | Zoom fly fps / raster med / span med | Playhead drag fps / raster / span |
+|---|---|---|
+| Impeller GLES, default (shipped) | 19.3 / 49.7 / 97.0 | 26.2 / 35.0 / 68.9 |
+| Impeller + `impeller-backend=vulkan` | 24.2 / 38.1 / 80.4 | 23.7 / 39.3 / 82.1 |
+| Skia (reference only, K-676 §2.4) | 99.5 / 5.1 / 11.2 | 124.7 / 5.3 / 10.2 |
+
+**Vulkan is not reachable on Windows in 3.47.** `impeller-backend` is a real engine switch
+but is consumed only by Android's `flutter_main.cc` and the headless tester; the Windows
+embedder builds one GPU compositor against the GLES backend alone, over an ANGLE display
+hardcoded to D3D11. Run with the switch set, the engine still prints `Using the Impeller
+rendering backend (OpenGLESSDF)` and the table does not move — the row above is that run.
+
+**The gap is not Lumit's paint.** The Dart tree holds zero `saveLayer`, zero
+`BackdropFilter`, zero `ShaderMask`; and Graph mode — one `CustomPaint` — rasters 33.8 ms
+where the widget-built lane band rasters 49.7 ms in the same frame conditions. The residual
+floor is area-proportional and nearly content-blind at ≈ 8 ms per megapixel, and the
+embedder's source names a mechanism: Impeller's Windows backing store is a 4× MSAA
+offscreen resolve-blitted whole-window every frame, with no partial repaint on either
+backend. Our external-texture transport was checked and is already minimal — one stable
+DXGI shared handle, registered once, wrapped rather than copied by the embedder.
+
+So WP-1's gate (raster med < 8 ms, span p90 < 16.6 ms, ≥ 100 fps) is **not met**, and is
+not met by a backend Lumit chose deliberately. The pursuit continues as the note's §7.2
+follow-up package; the upstream issue is drafted at §7.1 for the owner to file. The shipped
+configuration's text is Impeller's SDF path (the engine says so in its startup line), and
+the arithmetic pins that a rasteriser change could have moved — `icon_crispness_test`,
+`ui_scale_test` — are backend-independent by construction.
+
+Regression tests: none — this decision removes code rather than adding it, and its check is
+the probe run recorded above, re-run per Flutter upgrade (the note's §7.2).
