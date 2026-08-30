@@ -334,10 +334,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// a document read, so a rebuild must never ask for it again.
   bool? _useProxies;
 
-  /// The colour chip the filter row is holding, or null for "show everything"
+  /// The colour the swatch filter is holding, or null for "show everything"
   /// (§12A.3a). Session state, like the search text and the shut folders: a
   /// filter is where you are looking, not something about the document.
   int? _labelFilter;
+
+  /// Whether the tree is being narrowed at all — by a search term or by a
+  /// held colour. A narrowed tree opens every folder, because what is being
+  /// looked for is usually inside one.
+  bool get _filtering => _search.isNotEmpty || _labelFilter != null;
 
   /// Decoded poster frames by footage id, held in RAM for the session so the
   /// preview card never re-decodes for a selection change. A null entry claims
@@ -537,10 +542,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final searchHit = selfMatched ||
           (item is ItemReference_Folder && _subtreeMatches(item));
       // Missing-only is matched on the row's own name alone (docs/07 §3.3).
-      // The colour chip narrows *with* whatever else is running, and on the
-      // row's own tag alone — a folder's colour is the folder's, not a claim
-      // about everything inside it.
-      final chipHit = _labelFilter == null || label == _labelFilter;
+      // The swatch filter narrows *with* whatever else is running, and on the
+      // colour the row is actually **wearing** — its own tag where it has one,
+      // the nearest tagged folder's where it has not (K-634, K-567). Filing a
+      // shoot into a red folder colours the shoot, so picking red has to find
+      // it; the filter used to read the row's own `u8` and missed everything
+      // that got its colour from where it sits.
+      final worn = label != 0 ? label : inherited;
+      final chipHit = _labelFilter == null || worn == _labelFilter;
       final show =
           chipHit && (missingOnly ? isMissingFootage && ownMatch : searchHit);
       // Counted before the row is built rather than after it: the Items cell
@@ -582,7 +591,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           onEndRename: () => setState(() => _renamingId = null),
           onFindMissing: () => setState(() => _missingOnly = true),
           onNewComposition: _newComposition,
-          folderOpen: _search.isNotEmpty || !_closedFolders.contains(id),
+          folderOpen: _filtering || !_closedFolders.contains(id),
           onToggleFolder: () => setState(() {
             if (!_closedFolders.remove(id)) _closedFolders.add(id);
           }),
@@ -604,9 +613,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         _refreshThumb(field0);
         _refreshMediaInfo(field0);
       }
-      // A closed folder keeps its children to itself — unless a search is
-      // running, which has to be able to find what is inside one.
-      if (_search.isNotEmpty || !_closedFolders.contains(id)) {
+      // A closed folder keeps its children to itself — unless a filter is
+      // running, which has to be able to find what is inside one. A colour
+      // counts as much as a search term here: the items wearing a folder's
+      // colour are the ones inside it, so a shut folder would hide exactly
+      // what was asked for.
+      if (_filtering || !_closedFolders.contains(id)) {
         for (final child in children) {
           walk(child, depth + 1, selfMatched, label != 0 ? label : inherited);
         }

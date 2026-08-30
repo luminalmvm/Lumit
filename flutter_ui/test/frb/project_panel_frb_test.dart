@@ -1476,6 +1476,96 @@ void main() {
           reason: 'the neutral chip is the way back out');
     });
 
+    /// **The swatch filter narrows on the colour a row is wearing** (K-634),
+    /// which for an untagged item inside a tagged folder is the folder's
+    /// (K-567). It used to read the row's own `u8` alone, so filing a clip
+    /// into a coloured folder coloured it on screen and then hid it from the
+    /// filter for that very colour.
+    testWidgets('the swatch filter finds an inherited colour, and clears',
+        (tester) async {
+      final p = freshProject();
+      final project = p.state.project!;
+      final folder = project.newFolder(name: 'Reds', parent: null);
+      final inside = project.importFootage(path: 'C:/clips/inside.mov');
+      project.importFootage(path: 'C:/clips/outside.mov');
+      ItemReference.footage(inside).moveToFolder(folder: folder.internalid);
+      ItemReference.folder(folder).setLabel(label: 4);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
+      await tester.pump();
+      expect(rowText('Reds'), findsOneWidget,
+          reason: 'the folder wears the colour itself');
+      expect(rowText('inside.mov'), findsOneWidget,
+          reason: 'what the folder holds wears the folder\'s colour');
+      expect(rowText('outside.mov'), findsNothing,
+          reason: 'nothing outside the folder inherits it');
+
+      // Combined with a search term: the two narrow together, so a colour and
+      // a word each have to be satisfied.
+      await tester.enterText(
+          find.byKey(const ValueKey('project-search')), 'outside');
+      await tester.pump();
+      expect(rowText('inside.mov'), findsNothing,
+          reason: 'the name does not match the term');
+      expect(rowText('outside.mov'), findsNothing,
+          reason: 'the colour does not match the swatch');
+
+      await tester.enterText(
+          find.byKey(const ValueKey('project-search')), 'inside');
+      await tester.pump();
+      expect(rowText('inside.mov'), findsOneWidget,
+          reason: 'both the colour and the term are satisfied');
+
+      // The neutral chip clears the colour and leaves the term running.
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-none')));
+      await tester.pump();
+      expect(rowText('outside.mov'), findsNothing,
+          reason: 'clearing the swatch does not clear the search');
+      await tester.enterText(find.byKey(const ValueKey('project-search')), '');
+      await tester.pump();
+      expect(rowText('outside.mov'), findsOneWidget,
+          reason: 'and with neither running, everything is listed');
+    });
+
+    /// A shut folder holds its children back — but not while the swatch
+    /// filter is running, which is looking for exactly what is inside one.
+    testWidgets('a held colour opens the folders it has to look inside',
+        (tester) async {
+      final p = freshProject();
+      final project = p.state.project!;
+      final folder = project.newFolder(name: 'Shut', parent: null);
+      final inside = project.importFootage(path: 'C:/clips/tucked.mov');
+      ItemReference.footage(inside).moveToFolder(folder: folder.internalid);
+      ItemReference.folder(folder).setLabel(label: 2);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('project-twirl-${folder.internalid}')));
+      // The row above the twirl claims double-clicks, so a single tap on it
+      // only resolves once that window has passed.
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      expect(rowText('tucked.mov'), findsNothing,
+          reason: 'a shut folder keeps what it holds to itself');
+
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-2')));
+      await tester.pump();
+      expect(rowText('tucked.mov'), findsOneWidget,
+          reason: 'the filter looks inside a shut folder');
+    });
+
     /// A folder's colour is handed down to what it holds (A12): a tagged folder
     /// tints its descendants' glyphs, an item with a tag of its own overrides
     /// what it inherits, and the nearest tagged folder is the one that wins.

@@ -51,9 +51,15 @@ class HouseTextField extends StatefulWidget {
   final String? hint;
 
   /// A mark inside the well, before the text — the search glyph on a field
-  /// whose job is searching (§12A.1). Decorative: it takes no pointer, so a
-  /// click on it still lands in the field behind it.
+  /// whose job is searching (§12A.1). Decorative by default: it takes no
+  /// pointer, so a click on it still lands in the field behind it.
   final Widget? leading;
+
+  /// Whether [leading] answers the pointer. A mark that only says what the
+  /// field is for must not swallow a click meant for the text behind it; a
+  /// leading that is itself a control — the Project panel's colour filter,
+  /// which lives inside the search well — has to be clickable.
+  final bool leadingInteractive;
 
   /// Which end of the well the text sits at. The default reads from the start,
   /// which is what a name or a search term wants; a **number** reads from the
@@ -92,6 +98,7 @@ class HouseTextField extends StatefulWidget {
     this.style,
     this.hint,
     this.leading,
+    this.leadingInteractive = false,
     this.textAlign = TextAlign.start,
   });
 
@@ -311,6 +318,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       ),
       child: _withLeading(
         leading,
+        widget.leadingInteractive,
         Stack(
           children: [
             if (hint != null && widget.controller.text.isEmpty)
@@ -361,13 +369,14 @@ class _HouseTextFieldState extends State<HouseTextField>
   }
 
   /// The well's contents, with [leading] before them when there is one.
-  static Widget _withLeading(Widget? leading, Widget field) => leading == null
-      ? field
-      : Row(children: [
-          IgnorePointer(child: leading),
-          const SizedBox(width: 5),
-          Expanded(child: field),
-        ]);
+  static Widget _withLeading(Widget? leading, bool interactive, Widget field) =>
+      leading == null
+          ? field
+          : Row(children: [
+              interactive ? leading : IgnorePointer(child: leading),
+              const SizedBox(width: 5),
+              Expanded(child: field),
+            ]);
 
   @override
   GlobalKey<EditableTextState> get editableTextKey => textFieldKey;

@@ -657,8 +657,10 @@ void main() {
     });
 
     /// 8d. **The colour chips are the mockup's six 6px dots.** Five palette
-    /// colours and a neutral one, in a row beside the search well.
-    testWidgets('the filter chips are six 6px dots beside the search well',
+    /// colours and a neutral one, in a row inside the search well at its left
+    /// (K-634) — the swatch filter is part of the search bar rather than a
+    /// second control beside it.
+    testWidgets('the filter chips are six 6px dots inside the search well',
         (tester) async {
       final p = withItems();
       await mount(tester, p, width: 360);
@@ -672,23 +674,21 @@ void main() {
         expect(tester.getRect(chip).size, const Size(6, 6),
             reason: 'the mockup draws each chip 6 by 6');
       }
-      // Inside the search row, and to the right of the well.
+      // Inside the well, at its left, and clear of both its edges.
       final well = tester.getRect(find.byKey(const ValueKey('project-search')));
-      expect(tester.getRect(strip).left, greaterThanOrEqualTo(well.right));
+      expect(tester.getRect(strip).left, greaterThan(well.left));
+      expect(tester.getRect(strip).right, lessThan(well.right));
     });
 
     /// 8e. **The search row measured at the mockup's own width** (owner,
-    /// 2026-08-24). The owner kept reading the app's well as wider than the
-    /// drawing's, so it was probed at 1:1 — the artboard is 360 across, and
-    /// the manifest resolves the well to 279x20 with a 59-wide chip strip and
-    /// a 6 between them.
+    /// 2026-08-24), as the swatch filter's move inside the well leaves it
+    /// (K-634). The artboard is 360 across and the row is padded 8 either
+    /// side, so the well is now the whole 344 of what is left rather than the
+    /// 279 it kept while a 59-wide chip strip stood beside it.
     ///
-    /// It was 282x20 with a 62-wide strip and no gap: the strip gave every
-    /// chip a leading 3, including the first, which spent the row's gap inside
-    /// the strip and left the well three pixels over. Every other number in
-    /// the row — the 8 either side, the 20, the fill, the border — already
-    /// agreed, so this is the whole of the difference, and it is worth a test
-    /// because three pixels is exactly the size of thing that comes back.
+    /// The strip itself is unchanged apart from its standoff: six 6px dots 3
+    /// apart is 51, and it sits one border and one 6px inset in from the
+    /// well's left edge, with the well's usual 5 between it and the text.
     testWidgets('the search row is the mockup\'s row, at the mockup\'s width',
         (tester) async {
       final p = withItems();
@@ -701,14 +701,14 @@ void main() {
       expect(row.width, 360);
       expect(well.left - row.left, 8,
           reason: 'the row is padded 8 at the left');
-      expect(well.size, const Size(279, 20),
-          reason: 'the manifest resolves the well to 279 by 20');
-      expect(chips.left - well.right, 6,
-          reason: 'the mockup\'s row is a flex line with gap: 6');
-      expect(chips.width, 59,
-          reason: 'six 6px dots, 3 apart, in a strip padded 4 either side');
-      expect(row.right - chips.right, 8,
+      expect(row.right - well.right, 8,
           reason: 'and padded 8 at the right, like every other row');
+      expect(well.size, const Size(344, 20),
+          reason: 'the well is the row\'s full width now that nothing '
+              'stands beside it');
+      expect(chips.width, 51, reason: 'six 6px dots, 3 apart');
+      expect(chips.left - well.left, 7,
+          reason: 'the well\'s own border and its 6px inset');
     });
 
     /// 9. **A missing file wears the mockup's pill, and the pill relinks.**

@@ -963,7 +963,9 @@ The library of assets: footage items, audio items, comps, folders.
   name, and a column repeating it would not be context. The **`in use`** badge marks any
   item a composition places, hidden switches included. A **colour tag** tints the row's
   glyph rather than adding a dot beside it, is set from the row menu's chip strip, and the
-  chips beside the search well narrow the tree to one colour. The preview card's second
+  **swatch filter inside the search well** narrows the tree to one colour — on the colour
+  a row is *wearing*, a folder's handed down included (K-634, K-567), so a colour finds
+  everything filed under a folder of that colour. The preview card's second
   line names the **codec** and the sound's rate and layout, and a **still** says so where
   a rate and a length would be — which retired the zero-picture-width guess that called a
   silent still an audio file.

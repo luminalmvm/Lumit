@@ -67,15 +67,13 @@ const double _footerCountTracking = 0.54;
 /// The bottom bar's glyphs (K-456), drawn at the size its own mockup computed.
 const double projectFooterIconSize = 13;
 
-/// The colour-chip filter beside the search well (§12A.3a): the mockup's six
-/// 6px dots, 3px apart, in a strip padded 4px either side.
+/// The colour-chip filter, now *inside* the search well at its left (K-634):
+/// the mockup's six 6px dots, 3px apart. The strip's own standoff padding has
+/// gone with the move — the well's own 6px inset stands the leading dot off
+/// the edge, and `HouseTextField` puts the usual 5 between a leading mark and
+/// the text after it.
 const double _chipSize = 6;
 const double _chipGap = 3;
-const double _chipStripPad = 4;
-
-/// The search row's own gap, between the well and the chip strip — the
-/// mockup's `gap: 6` on that flex line.
-const double _searchGap = 6;
 
 /// The label chips the filter row offers, as palette indices, in the mockup's
 /// own order — azure, mint, amber, violet, coral. The sixth chip is not a
@@ -175,8 +173,8 @@ Widget projectColumnHeader(
           Expanded(child: Text(l10n.name.toUpperCase(), style: t.kicker)),
           ...cols.cells(
             seam: (before) => _ColumnSeam(
-              key:
-                  ValueKey<String>('project-seam-${_leftOf(cols, before).name}'),
+              key: ValueKey<String>(
+                  'project-seam-${_leftOf(cols, before).name}'),
               // The seam resizes the column it follows, which is the one the
               // eye reads it as belonging to — and nothing at all beside a
               // column that has no width of its own to change.
@@ -214,89 +212,77 @@ Widget projectSearchRow(
             projectRowPadding, _searchPadBottom),
         child: SizedBox(
           height: wellHeight,
-          child: Row(
-            children: [
-              Expanded(
-                child: HouseTextField(
-                  key: const ValueKey('project-search'),
-                  controller: controller,
-                  focusNode: focus,
-                  width: double.infinity,
-                  // The well fills its row rather than floating inside it:
-                  // the mockup renders it exactly 20 tall, and the default
-                  // 3px above and below would burst that.
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  // `surface2`, not the well's usual recess: this well has
-                  // its own row to itself over the panel's `surface1`, and
-                  // the mockup computes it a shade lighter rather than a
-                  // shade darker.
-                  fill: t.surface2,
-                  hint: l10n.searchProject,
-                ),
-              ),
-              // **The mockup's own gap between the well and the chips**
-              // (owner, 2026-08-24; measured 1:1 against ProjectPanel's
-              // manifest). The row is a flex line with `gap: 6`, and the
-              // strip beside it is 59 wide — so the well comes out at 279 in
-              // a 360 panel. The app had no gap here and a chip strip of 62,
-              // because every chip carried a leading 3; the well measured
-              // 282, three pixels over, and that is the difference the owner
-              // kept reading. The 3 has gone back to being a gap *between*
-              // chips, where the drawing puts it.
-              const SizedBox(width: _searchGap),
-              _labelChips(t, labelFilter, onFilter),
-            ],
+          child: HouseTextField(
+            key: const ValueKey('project-search'),
+            controller: controller,
+            focusNode: focus,
+            width: double.infinity,
+            // The well fills its row rather than floating inside it:
+            // the mockup renders it exactly 20 tall, and the default
+            // 3px above and below would burst that.
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            // `surface2`, not the well's usual recess: this well has
+            // its own row to itself over the panel's `surface1`, and
+            // the mockup computes it a shade lighter rather than a
+            // shade darker.
+            fill: t.surface2,
+            hint: l10n.searchProject,
+            // **The swatch filter lives inside the well** (K-634), where a
+            // search field's leading mark goes — one control that narrows
+            // the list rather than two beside each other, and the well is
+            // the row's full width again. It is the one leading in the app
+            // that answers the pointer, because it is a control rather than
+            // a sign saying what the field is for.
+            leading: _labelChips(t, labelFilter, onFilter),
+            leadingInteractive: true,
           ),
         ),
       ),
     );
 
-/// The colour-chip filter, beside the search well (§12A.3a). Five palette
-/// dots and a neutral one: tapping a colour narrows the tree to the items
-/// tagged with it, tapping the neutral chip — or the held colour again —
-/// shows everything.
+/// The colour-swatch filter, inside the search well at its left (§12A.3a,
+/// K-634). Five palette dots and a neutral one: tapping a colour narrows the
+/// tree to the items wearing it — a folder's own tag included, so a colour
+/// finds everything filed under a folder of that colour (K-567) — and tapping
+/// the neutral chip, or the held colour again, shows everything.
 ///
 /// The held chip is marked by a ring rather than by growing, so the row does
 /// not change width as the filter is used (§12A.5: nothing changes the
 /// resting state).
 Widget _labelChips(
         LumitTheme t, int? labelFilter, ValueChanged<int?> onFilter) =>
-    Padding(
+    Row(
       key: const ValueKey('project-label-chips'),
-      padding: const EdgeInsets.symmetric(horizontal: _chipStripPad),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final (i, label) in [...projectFilterLabels, null].indexed)
-            Padding(
-              // Between the chips, not before the first one: the strip's own
-              // 4 of padding is what stands the leading dot off the well.
-              padding: EdgeInsets.only(left: i == 0 ? 0 : _chipGap),
-              child: LumitTooltip(
-                message: label == null
-                    ? l10n.tipShowEverything
-                    : l10n.tipFilterByLabel,
-                child: GestureDetector(
-                  key:
-                      ValueKey<String>('project-label-chip-${label ?? 'none'}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onFilter(label == labelFilter ? null : label),
-                  child: Container(
-                    width: _chipSize,
-                    height: _chipSize,
-                    decoration: BoxDecoration(
-                      color: label == null ? t.surface4 : t.labelColour(label),
-                      shape: BoxShape.circle,
-                      border: labelFilter == label && label != null
-                          ? Border.all(color: t.textPrimary)
-                          : null,
-                    ),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (i, label) in [...projectFilterLabels, null].indexed)
+          Padding(
+            // Between the chips, not before the first one: the well's own
+            // 6 of inset is what stands the leading dot off the edge.
+            padding: EdgeInsets.only(left: i == 0 ? 0 : _chipGap),
+            child: LumitTooltip(
+              message: label == null
+                  ? l10n.tipShowEverything
+                  : l10n.tipFilterByLabel,
+              child: GestureDetector(
+                key: ValueKey<String>('project-label-chip-${label ?? 'none'}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onFilter(label == labelFilter ? null : label),
+                child: Container(
+                  width: _chipSize,
+                  height: _chipSize,
+                  decoration: BoxDecoration(
+                    color: label == null ? t.surface4 : t.labelColour(label),
+                    shape: BoxShape.circle,
+                    border: labelFilter == label && label != null
+                        ? Border.all(color: t.textPrimary)
+                        : null,
                   ),
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
 
 /// The horizontal scrollbar under the tree: a 4px track inset 8 either side,
@@ -597,8 +583,8 @@ Widget _previewContent(
       height: _thumbHeight,
       child: image == null
           ? Center(
-              child:
-                  lumitIcon(LumitIcon.footage, size: iconSize, color: t.textMuted))
+              child: lumitIcon(LumitIcon.footage,
+                  size: iconSize, color: t.textMuted))
           : ClipRRect(
               borderRadius: BorderRadius.circular(t.tokens.controlRadius),
               child: Container(
@@ -619,8 +605,7 @@ Widget _previewContent(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(name,
-                style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+            Text(name, style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
             const SizedBox(height: _previewLineGap),
             _previewFacts(t, item, missing, info),
             const SizedBox(height: _previewLineGap),
