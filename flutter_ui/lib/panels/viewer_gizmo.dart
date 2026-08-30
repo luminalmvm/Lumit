@@ -697,16 +697,15 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// the curve on screen belonged to. Drawing only: what can be *dragged*
   /// stays the layer selection proper, so an outline never turns into a handle
   /// nobody asked for.
+  /// The set itself lives on [LumitUiState.outlinedLayerIds], because the
+  /// stage now decides from the same set whether to ask the engine where these
+  /// layers' animated masks are (K-342) — two readers of one rule rather than
+  /// two copies of it.
   List<LayerBox> get _outlined {
-    final ids = widget.uiState.selectedLayerIds;
-    final byProperty = <String>{
-      for (final path in widget.uiState.selectedProperties.value)
-        if (path.indexOf('/') > 0) path.substring(0, path.indexOf('/')),
-    };
-    if (byProperty.isEmpty) return _selected;
+    final ids = widget.uiState.outlinedLayerIds;
     return [
       for (final box in widget.boxes)
-        if (ids.contains(box.id) || byProperty.contains(box.id.toString())) box
+        if (ids.contains(box.id.toString())) box
     ];
   }
 

@@ -7478,6 +7478,22 @@ memory. Nothing has to register or unregister — the list of curves is simply
 what was asked for last, so a row that appears joins it after one frame and a
 row that goes falls out of it.
 
+**Two more questions a scrub used to ask on every frame**, both answered the
+same way: by noticing that the answer belongs to the *document*, not to the
+frame. The first is "what time is frame N?" — remembering it helps a rebuild
+that asks twice, but a sweep across a stretch of the composition nobody has
+visited is a new frame each time, so it missed on every one of them. The
+conversion cannot be worked out here (a frame at 29.97 is 1001/30000 of a
+second exactly, and a keyframe placed in floating point lands off the frame it
+was set on), so instead of moving the sum, Lumit moves *when* it is asked: a
+miss brings back a whole **page** of 512 consecutive frames in one crossing,
+and the next eight seconds of scrubbing read their answers out of memory. The
+second is "where are the animated masks right now?" — a real question, but only
+where some mask's shape actually has keys on it, and whether any does is
+something the read model already knows without asking. So the Viewer looks
+there; a composition whose masks all sit still now costs nothing per frame,
+while a mask that genuinely moves is still measured at the frame on screen.
+
 The other half of the same lag was not the engine at all — it was the drawing.
 Flutter keeps a picture of what it has already drawn and only redraws the parts
 that changed, but it can only do that where you have told it a part is worth

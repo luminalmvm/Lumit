@@ -21084,3 +21084,78 @@ Regression test: `rebuild_budget_test.dart`, "a scroll builds the rows it brings
 the whole window" — 200 layers in a 300px panel, the window slid two rows: **3 rows and 3
 bars rebuilt, against 28 and 28 with the reuse defeated**, with the honest half asserting
 that the rows entering the window were built at all.
+
+## K-679 — A drag asks the engine nothing about a document it is not changing
+
+**Status: DECIDED (2026-08-30).** WP-4 of K-676's note (docs/impl/ui-performance.md §4.5).
+Two named calls crossed the bridge **on every frame of every scrub** of the owner's
+project, for about 0.7 ms of an 8.3 ms budget between them. Both are now facts held
+against the document rather than questions asked per frame — but neither took the shape
+§3.4 predicted, and the difference is the interesting part.
+
+**`animated_mask_paths_at` was not answering "nothing".** The note assumed the empty
+answer and an empty-at-this-revision short-circuit. Measured, the Clips comp carries
+eight masks and **four of them are keyed** (three on visible layers), so the call was
+doing real interpolation work every frame and would never have short-circuited. What
+makes it free is a second condition nobody had written down: the interpolated shape is
+only ever *drawn* on an **outlined** layer — the gizmo's `maskedBoxes` and its editable
+points are both selection-derived. So the ask is made when a mask is keyed **and** its
+layer is outlined, and both are known in Dart for nothing: `BridgeMask.pathKeys` already
+rides in the read model, and the outline rule moved onto
+`LumitUiState.outlinedLayerIds`, which the gizmo now picks its boxes with and the stage
+now decides from — one rule with two readers rather than two copies that can drift.
+A scrub with those three layers unselected, which is every scrub that is not editing
+them, costs nothing; select one and it is asked per frame again, because its vertices
+genuinely differ frame by frame. The flag goes *into* `AnimatedMaskPaths.refresh` and
+into its memo key, so both ways it can go false — the last path key deleted, the layer
+deselected — empty the held copy instead of leaving a mask drawing a shape it no longer
+has, and flipping it true without moving the playhead re-asks instead of serving the memo.
+
+**`time_of_frame` could not ride `sample_scalars`.** The note's first option does not
+work: that call takes the time as an argument, so the conversion has already had to
+happen. The conversion cannot move to Dart either — a frame at 29.97 is exactly
+1001/30000 s and a key placed in floating point lands off the frame it was set on
+(docs/14 §2, docs/17). So it moves *off the frame* instead. New
+`CompositionReference::times_of_frames(first, count)` returns a run of exact times in one
+crossing, capped engine-side at 512 so a silly span is trimmed rather than allocated, and
+stopping short at the first frame the rate cannot name rather than failing the whole
+span. `comp_time.dart` warms the **page** a miss lands in — a scrub crosses the seam once
+per ~8 seconds of 60 fps footage instead of once per frame it has not visited, where a
+cold sweep used to cost 88–308 ms of `time_of_frame`.
+
+**Measured** (the parked probe, the owner's conditions per the note's §2.1 — maximised
+2560×1369, live preview, the *Set me Free* Clips comp), sync bridge traffic per gesture:
+
+| Gesture | Before | After |
+|---|---|---|
+| Playhead drag, fresh spans | 301 calls, **74.0 ms** — `animated_mask_paths_at` ×90 for 65.2 | 174 calls, **4.2 ms** — **×0** |
+| Playhead drag, revisited | 307, 65.5 — ×93 for 61.1 | 180, **4.4** — ×0 |
+| Work-area end-handle drag | 554, 143.6 — ×75 for 42.0 | 433, **129.7** — ×0 |
+| Graph-mode playhead drag | 310, 60.5 — ×95 for 56.4 | 169, **4.3** — ×0 |
+
+**Per-frame document-touching sync calls on the playhead and work-area drags: zero**,
+which is the gate. What is left on those rows is `cached_frames` and `render_frame` —
+a cache-index read that genuinely changes per frame, and the request for the picture,
+which *is* the gesture rather than a question about the document — plus five ticks of a
+2 Hz status timer. Frame timings moved ±6 ms of raster in both directions across the
+session's runs and are K-677's window floor, not this package's: nothing here enters a
+paint path.
+
+**What was tried and reverted**, recorded so it is not tried again by accident: the read
+model's revision check, one `document_revision` on each frame of a zoom fly (75–96 calls
+over 75–96 frames, 0.028 ms a frame — that gesture's whole per-frame bill).
+`CompModel._freshen` can skip it while a frame is being built, on the sound argument that
+a frame cannot see the document move; the probe went green and **17 tests** across
+`timeline_panel_frb_test` and `timeline_extras_frb_test` went red, because a `pump()`
+following an op without turning the event loop never delivers the change-stream event and
+that check is what they were relying on. It is the same "an edit's follow-on is one wave"
+problem WP-5 owns, and belongs there rather than smuggled in at the cost of the suite
+that guards it.
+
+Regression tests: `bridge_call_budget_test.dart` — "a mask is asked about only while its
+drawn path moves" pins all three states over a thirty-frame sweep (**0** calls with a
+still mask, **30** with it keyed and selected, **0** with it keyed and deselected), and
+asserts the premise as a measurement rather than assuming it; the two scrub budgets now
+pin `time_of_frame` at **0**, one of them with the memory deliberately emptied first, and
+`times_of_frames` at no more than one. The engine's span is checked against its own
+single call frame by frame, negative frames included, plus the cap.

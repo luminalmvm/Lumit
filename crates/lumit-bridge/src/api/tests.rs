@@ -2481,6 +2481,30 @@ fn frame_and_time_round_trip_exactly_at_a_drop_frame_rate() {
     // …and the pair really is the exact rational, not a rounded one.
     let one = comp.time_of_frame(1).expect("time");
     assert_eq!((one.num, one.den), (1001, 30000));
+
+    // **The span answers exactly what the singles do** — it exists to move the
+    // conversion off the frame (docs/impl/ui-performance.md §4.5), so a span
+    // that drifted from `time_of_frame` by one denominator would place
+    // keyframes off the frame they were set on (docs/14 §2). Negative frames
+    // are in it because they are real: a layer may start before the comp does.
+    let span = comp.times_of_frames(-4, 12).expect("span");
+    assert_eq!(span.len(), 12);
+    for (i, time) in span.iter().enumerate() {
+        let frame = -4 + i as i64;
+        let single = comp.time_of_frame(frame).expect("time");
+        assert_eq!(
+            (time.num, time.den),
+            (single.num, single.den),
+            "the span disagreed with the single call at frame {frame}"
+        );
+    }
+
+    // And the cap holds, so a frontend asking for a silly span gets a short
+    // answer rather than an allocation nobody budgeted for (docs/14).
+    assert_eq!(
+        comp.times_of_frames(0, u32::MAX).expect("span").len(),
+        crate::api::composition::TIME_SPAN_MAX
+    );
 }
 
 // --- Timeline -------------------------------------------------------------

@@ -164,18 +164,26 @@ class ViewerStage extends StatelessWidget {
     final revision = model.heldRevision;
     // Where the keyed masks actually are at the frame on screen (K-342). Held
     // against the document and the playhead, so this costs nothing on a hover
-    // and re-asks only when one of the two has moved — and only when some
-    // layer actually has a mask to draw. The read model already knows that
-    // without a call, and on a maskless comp the old unconditional ask was a
-    // bridge call per playhead move for an answer that is always empty, which
-    // is exactly what this method's budget (K-184) exists to stop.
-    if (model.heldLayers.any((entry) => entry.info.masks.isNotEmpty)) {
-      uiState.animatedMaskPaths.refresh(
-        comp: comp,
-        frame: uiState.playheadFrame.value,
-        revision: revision,
-      );
-    }
+    // and re-asks only when one of the two has moved — and only when a mask
+    // whose shape is **drawn** is actually path-animated. Both halves of that
+    // are known here for free: the read model carries every mask's `pathKeys`,
+    // and a mask outline is drawn only on an outlined layer
+    // ([LumitUiState.outlinedLayerIds], which the gizmo picks its boxes with).
+    //
+    // Asking regardless was ~0.7 ms of *every frame of every scrub* on the
+    // owner's project — a sixth of a frame's budget spent interpolating three
+    // masks nothing on screen was going to draw (ui-performance §3.4, §4.5).
+    // A keyed mask on an outlined layer is still asked per frame, because its
+    // vertices genuinely differ frame by frame; that is the whole point.
+    final outlined = uiState.outlinedLayerIds;
+    uiState.animatedMaskPaths.refresh(
+      comp: comp,
+      frame: uiState.playheadFrame.value,
+      revision: revision,
+      anyAnimated: model.heldLayers.any((entry) =>
+          outlined.contains(entry.layer.internallayerId.toString()) &&
+          entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty)),
+    );
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     // Where the playhead is in seconds, which is the clock a shape item's keys
     // cross the bridge on: a keyed repeater's copies are part of the layer's
@@ -381,6 +389,12 @@ class ViewerStage extends StatelessWidget {
                 // in flight from the Rotation tool (K-230).
                 listenable: Listenable.merge([
                   uiState.selectedLayers,
+                  // Picking a mask's **Path** row outlines its layer without
+                  // the layer ever being clicked (K-341), so it is half of
+                  // `outlinedLayerIds` — and therefore half of whether the
+                  // masks below are asked for at the frame on screen. Without
+                  // it the outline would appear and draw the stored shape.
+                  uiState.selectedProperties,
                   uiState.layerBounds,
                   uiState.model,
                   uiState.liveRotations,

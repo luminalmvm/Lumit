@@ -274,6 +274,13 @@ impl BridgeCompSettings {
     }
 }
 
+/// The most frames [`CompositionReference::times_of_frames`] answers for in one
+/// crossing. A page, not a whole comp: it bounds the answer's size whatever the
+/// frontend asks for, and a page of this length covers ~8 seconds of a 60 fps
+/// scrub for one call.
+#[frb(ignore)]
+pub const TIME_SPAN_MAX: usize = 512;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[frb]
 pub struct CompositionReference {
@@ -1943,6 +1950,47 @@ impl CompositionReference {
             num: time.0.num(),
             den: time.0.den(),
         })
+    }
+
+    /// The comp times of the `count` frames running from `first`, in **one**
+    /// crossing: the same answers as calling [`Self::time_of_frame`] once per
+    /// frame, for the price of one call instead of `count`.
+    ///
+    /// Why it exists: a scrub asks for the time of every frame it crosses, and
+    /// each ask is ~0.6 ms of an 8.3 ms frame budget on a project this size
+    /// (docs/impl/ui-performance.md §3.4) — a sweep across a span the session
+    /// has not visited paid it per frame. The conversion cannot move to Dart,
+    /// because keyframe times must be exact (docs/14 §2), so it moves *off the
+    /// frame* instead: the frontend warms a page of frames in one call and
+    /// reads every frame in it out of memory.
+    ///
+    /// `count` is capped at [`TIME_SPAN_MAX`] frames, so a frontend asking for
+    /// a silly span gets a short answer rather than an allocation nobody
+    /// budgeted for (docs/14). The answer also stops short at the first frame
+    /// the rate cannot name, instead of failing the whole span — the caller
+    /// falls back to the single call for that frame and gets its error.
+    #[frb(sync)]
+    pub fn times_of_frames(
+        &self,
+        first: i64,
+        count: u32,
+    ) -> Result<Vec<BridgeRational>, BridgeError> {
+        let comp = self.composition()?;
+        let count = (count as usize).min(TIME_SPAN_MAX);
+        let mut out = Vec::with_capacity(count);
+        for i in 0..count as i64 {
+            let Some(frame) = first.checked_add(i) else {
+                break;
+            };
+            let Ok(time) = comp.frame_rate.time_of_frame(frame) else {
+                break;
+            };
+            out.push(BridgeRational {
+                num: time.0.num(),
+                den: time.0.den(),
+            });
+        }
+        Ok(out)
     }
 
     /// The frame containing `time` (floored) — the inverse of

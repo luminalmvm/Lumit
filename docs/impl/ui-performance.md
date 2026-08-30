@@ -250,6 +250,10 @@ Two, measured together at ~1.2–1.3 ms a frame — a sixth of the 8.3 ms budget
   scrub re-asks every frame — to hear "no animated masks" on this comp every time.
   Whether *any* mask is animated can only change with the document: an empty answer
   is valid for the whole revision, whatever the frame.
+  **Corrected by WP-4** (§4.5): on this comp the answer is *not* empty — four of the
+  Clips comp's eight masks are keyed — so the empty short-circuit alone would never
+  have fired. The condition that makes it free is that the interpolated shape is only
+  ever *drawn* on an outlined layer.
 - `time_of_frame` (~0.56–0.7 ms): memoised per frame number for the session
   (`state/comp_time.dart`), so it taxes frames the session has not asked about — a
   scrub across a long comp on a fresh session pays it per new frame (88–308 ms per
@@ -452,7 +456,47 @@ crossing, or pre-warmed in one span call); the §3.1 document-change walks (the
 Viewer's footage facts, `LayerBounds`, the Project panel's per-comp settings) refilled
 from the read model or asynchronously, never as per-item sync crossings inside a build
 wave. `cached_frames` (0.02 ms, a cache-index read that genuinely changes per frame)
-stays.
+stays, and so does `render_frame` — asking for the picture is what a scrub *is*, not a
+question about the document.
+
+**Both named instances landed with WP-4** (K-679, 2026-08-30), and the shape each took
+is worth recording because neither is the shape §3.4 assumed.
+
+- `animated_mask_paths_at` is **not** the empty answer §3.4 assumed, and finding that
+  out changed the fix. The Clips comp carries eight masks, **four of them keyed** (three
+  on visible layers), so the call was doing real interpolation work every frame — it was
+  never going to short-circuit on "nothing is animated". What makes it free is the
+  second condition nobody had written down: the interpolated shape is *drawn* only on an
+  **outlined** layer (`_GizmoPainter`'s `maskedBoxes`, and `_editablePointBoxes` for its
+  points — both the selection). So the ask is made when a mask is keyed **and** its
+  layer is outlined, both known here for nothing: `BridgeMask.pathKeys` rides in the
+  read model, and the outline set moved onto `LumitUiState.outlinedLayerIds` so the
+  gizmo that draws from it and the stage that asks from it cannot drift apart. A scrub
+  with those three layers unselected — which is every scrub that is not editing them —
+  now costs nothing; select one and it is asked per frame again, because its vertices
+  genuinely differ frame by frame. The flag goes *into* `AnimatedMaskPaths.refresh` and
+  into its memo key, so both ways it can go false (the last path key deleted, the layer
+  deselected) empty the held copy rather than leaving a mask drawing a shape it no
+  longer has, and flipping it true mid-frame re-asks rather than serving the memo.
+- `time_of_frame` could not ride `sample_scalars`: that call takes the time as an
+  argument, so the conversion has to have happened before it is made. It is
+  **pre-warmed a page at a time** instead — a new `times_of_frames(first, count)`
+  returns 512 consecutive exact times in one crossing (capped engine-side, so a silly
+  span is trimmed rather than allocated), and a miss in `comp_time.dart` warms the page
+  the frame lands in. A scrub crosses the seam once per ~8 seconds of 60 fps footage
+  instead of once per frame it has not visited.
+
+**What WP-4 did not remove, and why it is WP-5's**: the read model's revision check,
+one `document_revision` per frame of a zoom fly (96 calls over 96 frames, 4.7 ms — 0.049
+ms a frame, the whole per-frame bill of that gesture). `CompModel._freshen` can skip it
+while a frame is being built, on the argument that a frame cannot see the document move:
+a change arrives on the stream between frames and calls `refresh`, and a panel that
+commits its own op calls `refresh` too. **Tried, measured green on the probe, and
+reverted** — 17 tests across `timeline_panel_frb_test` and `timeline_extras_frb_test`
+fail, because a `pump()` that follows an op without turning the event loop never
+delivers the stream event and the per-frame check is what they were relying on. That is
+the same "an edit's follow-on is one wave" problem WP-5 owns (§7 item 5), and it should
+be answered there once, not smuggled in here at the cost of the suite that guards it.
 
 ## 5. What does not change
 
@@ -548,12 +592,33 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    — `rebuild_budget_test`'s "a scroll builds the rows it brings in, not the whole
    window": 3 rows and 3 bars on a slide of two rows, from 28 and 28. K-649's
    playhead-repaints-alone test keeps holding.
-4. **WP-4 — Continuous gestures make zero per-frame document calls.** §4.5 for
-   `animated_mask_paths_at` (empty-at-revision short-circuit + regression test) and
-   `time_of_frame` on the scrub path (ride `sample_scalars`' crossing or pre-warm the
-   span); audit the drag paths for siblings. *Gate (probe):* playhead and work-area
-   drags — **0** sync document-touching calls per frame on this comp;
-   `cached_frames` exempt.
+4. **WP-4 — Continuous gestures make zero per-frame document calls. Landed
+   2026-08-30 (K-679); its gate is met on the drags it names.** §4.5 for
+   `animated_mask_paths_at` and `time_of_frame`, and the drag paths audited for
+   siblings. *Gate (probe):* playhead and work-area drags — **0** sync
+   document-touching calls per frame on this comp; `cached_frames` exempt (and
+   `render_frame` with it: asking for the picture is the gesture, not a question
+   about the document). **Measured after**, the owner's conditions, medians:
+
+   | Gesture | Before — calls / ms, per-frame name | After |
+   |---|---|---|
+   | Playhead drag, fresh (92→75 frames) | 301 / **74.0 ms** — `animated_mask_paths_at` ×90, 65.2 ms | 174 / **4.2 ms** — **×0** |
+   | Playhead drag, revisited | 307 / 65.5 ms — ×93, 61.1 ms | 180 / **4.4 ms** — ×0 |
+   | Work-area drag | 554 / 143.6 ms — ×75, 42.0 ms | 433 / **129.7 ms** — ×0 |
+   | Graph-mode playhead drag | 310 / 60.5 ms — ×95, 56.4 ms | 169 / **4.3 ms** — ×0 |
+   | Zoom fly | 96 / 4.7 ms — `document_revision` ×96 | 75 / 2.1 ms — ×75, **unchanged** |
+
+   Everything left on the two playhead rows is exempt or a 2 Hz status timer;
+   `time_of_frame` was already zero on the probe's sweeps (the zoom-to-fit warm-up
+   §3.4 names) and is now zero on a cold one too, pinned in CI instead. The work-area
+   row's remaining 130 ms is the release commit's walk, which is WP-5's. **The zoom's
+   one revision check a frame is not removed** — §4.5 says why, and it is WP-5's as
+   well. Frame timings across these runs moved by ±6 ms of raster in both directions
+   and are §4.1's window floor, not this package's: nothing here enters a paint path.
+   *Gate (CI):* `bridge_call_budget_test` — "a mask is asked about only while its drawn
+   path moves" (0 calls still, 30 selected-and-keyed, 0 keyed-but-unselected) and
+   `time_of_frame` pinned at **0** on a scrub, including one whose memory was emptied
+   first.
 5. **WP-5 — An edit's follow-on is one wave.** §4.5 for the document-change walks:
    footage facts into the read model (or async refill), `LayerBounds` lazy/async, the
    Project panel's per-comp `get_settings` per revision. *Gate (probe):* a switch

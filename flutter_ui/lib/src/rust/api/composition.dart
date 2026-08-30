@@ -1198,6 +1198,29 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceTimeOfFrame(
           that: this, frame: frame);
 
+  /// The comp times of the `count` frames running from `first`, in **one**
+  /// crossing: the same answers as calling [`Self::time_of_frame`] once per
+  /// frame, for the price of one call instead of `count`.
+  ///
+  /// Why it exists: a scrub asks for the time of every frame it crosses, and
+  /// each ask is ~0.6 ms of an 8.3 ms frame budget on a project this size
+  /// (docs/impl/ui-performance.md §3.4) — a sweep across a span the session
+  /// has not visited paid it per frame. The conversion cannot move to Dart,
+  /// because keyframe times must be exact (docs/14 §2), so it moves *off the
+  /// frame* instead: the frontend warms a page of frames in one call and
+  /// reads every frame in it out of memory.
+  ///
+  /// `count` is capped at [`TIME_SPAN_MAX`] frames, so a frontend asking for
+  /// a silly span gets a short answer rather than an allocation nobody
+  /// budgeted for (docs/14). The answer also stops short at the first frame
+  /// the rate cannot name, instead of failing the whole span — the caller
+  /// falls back to the single call for that frame and gets its error.
+  List<BridgeRational> timesOfFrames(
+          {required PlatformInt64 first, required int count}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTimesOfFrames(
+              that: this, first: first, count: count);
+
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;
 

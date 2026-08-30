@@ -32,6 +32,12 @@ class AnimatedMaskPaths {
   int? _frame;
   UuidValue? _comp;
 
+  /// What [refresh] was last told about whether anything drawn is animated.
+  /// Part of the memo key, not just a guard: selecting a layer with a keyed
+  /// mask flips it true without moving the frame or the document, and a memo
+  /// that ignored it would hold the empty answer and draw the stored path.
+  bool _animated = false;
+
   /// The path [mask] on [layer] is showing, or null when it is not animated —
   /// in which case the mask's own vertices are already right.
   List<BridgeVertex>? pathOf(UuidValue layer, UuidValue mask) =>
@@ -39,16 +45,39 @@ class AnimatedMaskPaths {
 
   /// Bring the held answer up to date for [comp] at [frame] and document
   /// [revision]. Cheap and call-free when none of the three has moved.
+  ///
+  /// [anyAnimated] is "a mask whose shape is actually drawn carries path
+  /// keys", which the caller reads off the read model and the selection for
+  /// nothing. When it is false there is no interpolated shape to draw at *any*
+  /// frame — a mask with no path keys is never listed whatever frame is asked
+  /// for, and a mask on a layer nobody outlines is never painted — so the ask
+  /// is skipped rather than made once a frame (ui-performance §4.5).
+  ///
+  /// Passing it in rather than guarding the call from outside is what keeps
+  /// the held copy honest: when it goes false — the last path key deleted, or
+  /// the layer deselected — the copy is emptied, instead of a mask carrying on
+  /// with the interpolated shape it no longer has.
   void refresh({
     required CompositionReference comp,
     required int frame,
     required BigInt? revision,
+    required bool anyAnimated,
   }) {
     final id = comp.internalid;
-    if (_comp == id && _frame == frame && _revision == revision) return;
+    if (_comp == id &&
+        _frame == frame &&
+        _revision == revision &&
+        _animated == anyAnimated) {
+      return;
+    }
     _comp = id;
     _frame = frame;
     _revision = revision;
+    _animated = anyAnimated;
+    if (!anyAnimated) {
+      _byLayer = const {};
+      return;
+    }
     try {
       final rows = comp.animatedMaskPathsAt(frame: frame);
       if (rows.isEmpty) {

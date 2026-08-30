@@ -31,6 +31,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
+import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -335,7 +336,9 @@ void main() {
       // Loose, in the house style, and the per-name budgets above are the
       // teeth: what must not happen is a count that scales with the number of
       // steps. The revision check the read model makes once a frame is most of
-      // what is left here.
+      // what is left here — the one per-frame crossing ui-performance §4.5
+      // still wants gone, and the one the frb suite shows is load-bearing
+      // (§7's WP-4 note), so it is WP-5's to move, not this budget's.
       expect(
         counter.total,
         lessThan(40),
@@ -715,10 +718,15 @@ void main() {
 
       // ignore: avoid_print
       print('SCRUB COST ${counter.total} calls\n${counter.ranking()}');
+      // **Not once, either** (ui-performance §4.5): the conversion is exact
+      // arithmetic the engine owns and Dart may not do (docs/14 §2), so it
+      // moves off the frame rather than into Dart — a miss brings back the
+      // whole page of frames around it, and a scrub reads the rest of the
+      // page out of memory.
       expect(
         counter.calls['composition_reference_time_of_frame'] ?? 0,
-        lessThanOrEqualTo(1),
-        reason: 'each row converted the playhead frame for itself:\n'
+        0,
+        reason: 'the playhead frame was converted on the frame that moved:\n'
             '${counter.ranking()}',
       );
       // **One sampling call, whatever the number of lanes open.** It used to be
@@ -745,6 +753,119 @@ void main() {
         lessThan(20),
         reason: 'a scrub re-read too much across the bridge:\n'
             '${counter.ranking()}',
+      );
+    });
+
+    /// **A mask is asked about only when its interpolated shape is drawn**
+    /// (K-342, ui-performance §4.5). The wireframe wants the shape the picture
+    /// has, rather than the one the drawing tools last wrote, on exactly two
+    /// conditions: the path is keyed, and the layer is outlined. Both are known
+    /// here for nothing — `pathKeys` rides in the read model and the outline
+    /// set is the selection — and asking anyway cost ~0.7 ms on every frame of
+    /// every scrub of the owner's project, where three keyed masks sit on
+    /// layers a scrub is not looking at.
+    ///
+    /// All three states are pinned, because any one alone is worthless: a
+    /// still mask must cost nothing, an unselected keyed mask must cost
+    /// nothing, and a **selected** keyed mask must still be asked per frame or
+    /// the wireframe goes back to drawing where the shape was.
+    testWidgets('a mask is asked about only while its drawn path moves',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      final maskId = UuidValue.fromString(const Uuid().v4());
+      layer.addMask(
+        mask: BridgeMask(
+          id: maskId,
+          name: 'Rectangle',
+          vertices: const [
+            BridgeVertex(
+                x: 100, y: 100, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 300, y: 100, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+            BridgeVertex(
+                x: 300, y: 300, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0),
+          ],
+          closed: true,
+          inverted: false,
+          opacity: const BridgeScalar.static_(100),
+          mode: BridgeMaskMode.add,
+          feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
+          expansion: const BridgeScalar.static_(0),
+          pathKeys: const [],
+        ),
+      );
+      p.uiState.setSelectedComp(comp);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      /// The Viewer's own question, asked the way the stage asks it: the held
+      /// model and the outline set decide together, and thirty frames go by.
+      int callsOverASweep() {
+        final paths = AnimatedMaskPaths();
+        final model = p.uiState.model;
+        final outlined = p.uiState.outlinedLayerIds;
+        final animated = model.heldLayers.any((entry) =>
+            outlined.contains(entry.layer.internallayerId.toString()) &&
+            entry.info.masks.any((m) => m.pathKeys.isNotEmpty));
+        counter
+          ..reset()
+          ..counting = true;
+        for (var frame = 0; frame < 30; frame++) {
+          paths.refresh(
+            comp: comp,
+            frame: frame,
+            revision: model.heldRevision,
+            anyAnimated: animated,
+          );
+        }
+        counter.counting = false;
+        return counter.calls['composition_reference_animated_mask_paths_at'] ??
+            0;
+      }
+
+      // The premise, stated as a measurement rather than assumed: a mask with
+      // no path keys is listed at no frame, so an empty answer at one frame is
+      // an empty answer at all of them.
+      expect(comp.animatedMaskPathsAt(frame: 0), isEmpty);
+      expect(comp.animatedMaskPathsAt(frame: 17), isEmpty);
+      p.uiState.setSelection([layer]);
+      expect(
+        callsOverASweep(),
+        0,
+        reason: 'a scrub asked the engine about a mask that does not move',
+      );
+
+      // Key the path. Selected, the sweep must go back to asking: the vertices
+      // it wants genuinely differ frame by frame now.
+      layer.toggleMaskPathKey(id: maskId, time: comp.timeOfFrame(frame: 0));
+      layer.toggleMaskPathKey(id: maskId, time: comp.timeOfFrame(frame: 60));
+      p.uiState.model.refresh();
+      await settleFrb(tester, minRounds: 4);
+      expect(comp.animatedMaskPathsAt(frame: 17), isNotEmpty,
+          reason: 'the path did not take keys, so the rest proves nothing');
+      expect(
+        callsOverASweep(),
+        30,
+        reason: 'a keyed mask stopped being read at the frame on screen, so '
+            'the wireframe draws where the shape was, not where it is',
+      );
+
+      // And deselected — the state the owner's project scrubs in, where three
+      // keyed masks sit on layers nothing is outlining — it costs nothing
+      // again, because no outline is drawn to want the shape.
+      p.uiState.setSelection(const []);
+      expect(
+        callsOverASweep(),
+        0,
+        reason: 'a scrub interpolated a mask on a layer nothing outlines',
       );
     });
 
@@ -819,6 +940,23 @@ void main() {
         await tester.pump();
         await settleFrb(tester, minRounds: 2, maxRounds: 6);
         counter.counting = false;
+        // **The cold case, which is what a scrub actually is.** The memory was
+        // emptied above, so this frame is one nothing has been asked about —
+        // the state a sweep across an unvisited stretch is in on every frame
+        // of it, and where `time_of_frame` used to cost ~0.6 ms a frame
+        // (ui-performance §3.4). One crossing warms the page it lands in.
+        expect(
+          counter.calls['composition_reference_time_of_frame'] ?? 0,
+          0,
+          reason: 'a frame nobody had asked about was converted on its own:\n'
+              '${counter.ranking()}',
+        );
+        expect(
+          counter.calls['composition_reference_times_of_frames'] ?? 0,
+          lessThanOrEqualTo(1),
+          reason: 'the page was warmed more than once for one frame:\n'
+              '${counter.ranking()}',
+        );
         return counter.total;
       }
 

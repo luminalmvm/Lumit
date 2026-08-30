@@ -765,6 +765,28 @@ class LumitUiState extends ChangeNotifier {
   Set<UuidValue> get selectedLayerIds =>
       {for (final layer in selectedLayers.value) layer.internallayerId};
 
+  /// **Every layer the Viewer may draw an outline or an editable point on** —
+  /// the selection, plus any layer a *property* of which is picked in the
+  /// Timeline (K-341: picking a mask's Path row offers that mask's points
+  /// without the layer itself ever being clicked).
+  ///
+  /// One definition rather than two, because two things now depend on it and
+  /// they must not drift: the gizmo draws these layers' mask outlines, and the
+  /// stage asks the engine for those masks' *interpolated* shapes (K-342). A
+  /// layer that fell out of this set while its outline was still drawn would
+  /// silently go back to drawing the shape the drawing tools last wrote rather
+  /// than the one the picture shows, which is the bug K-342 exists to fix.
+  ///
+  /// Ids as strings, because half of it arrives as the head of a property path
+  /// and parsing it back would be a throw waiting for a path shape nobody
+  /// promised.
+  Set<String> get outlinedLayerIds => {
+        for (final layer in selectedLayers.value)
+          layer.internallayerId.toString(),
+        for (final path in selectedProperties.value)
+          if (path.indexOf('/') > 0) path.substring(0, path.indexOf('/')),
+      };
+
   /// Replace the selection. The first entry becomes [selectedLayer].
   void setSelection(List<LayerReference> layers) {
     selectedLayers.value = List.unmodifiable(layers);

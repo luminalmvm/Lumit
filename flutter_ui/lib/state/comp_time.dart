@@ -27,13 +27,40 @@ final _times = <CompositionReference, Map<int, BridgeRational>>{};
 /// runs, so without a ceiling the memory grows for as long as the session does.
 const _maxPerComp = 8192;
 
+/// How many frames one crossing brings back, as a power of two so the page a
+/// frame belongs to is a shift. Matches the engine's own cap
+/// (`TIME_SPAN_MAX`), which is what a longer page would be trimmed to anyway.
+const _pageBits = 9;
+const _page = 1 << _pageBits;
+
 /// The comp time of `frame`, from memory when it is there.
 ///
 /// Prefer this to calling `comp.timeOfFrame` directly anywhere that runs during
 /// a build or a paint: those paths must not make bridge calls.
+///
+/// **A miss warms the whole page the frame sits in, in one call.** Remembering
+/// answers only helps a rebuild that asks twice; a scrub asks about a frame
+/// nobody has asked about before, so it missed on every frame and paid ~0.6 ms
+/// for each — a sweep across an unvisited span cost 88–308 ms of it
+/// (docs/impl/ui-performance.md §3.4). A page of 512 is one crossing per ~8
+/// seconds of 60 fps scrubbing instead of one per frame, and it is the same
+/// arithmetic the engine was doing either way (§4.5).
 BridgeRational timeOfFrame(CompositionReference comp, int frame) {
   final times = _times[comp] ??= {};
+  final held = times[frame];
+  if (held != null) return held;
   if (times.length >= _maxPerComp) times.clear();
+  // Shifts, not `~/`: negative frames are real — a layer may start before the
+  // comp does — and truncating division would put frame −1 in page 0 with
+  // frame 511, which is a page that does not contain it.
+  final first = (frame >> _pageBits) << _pageBits;
+  final span = comp.timesOfFrames(first: first, count: _page);
+  for (var i = 0; i < span.length; i++) {
+    times[first + i] = span[i];
+  }
+  // Still asked one at a time when the page came back short, which is the
+  // engine saying it cannot name that frame: the single call raises what it
+  // would have raised before any of this existed.
   return times[frame] ??= comp.timeOfFrame(frame: frame);
 }
 
