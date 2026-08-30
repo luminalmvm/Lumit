@@ -37,7 +37,7 @@ web/
   src/content/releases/   one Markdown file per release
   src/layouts/Base.astro  the page shell
   src/components/         Header, Footer, Wordmark, ReleaseEntry, ReleaseDate
-  src/pages/              index, download, 404, releases/
+  src/pages/              index, download, sponsor, translate, 404, releases/
   src/styles/global.css   design tokens and component classes
   public/                 files served as-is (the mark and wordmark SVGs)
 ```
@@ -47,6 +47,15 @@ The download page fetches
 inserts the version, date and asset links. A failed or rate-limited fetch leaves the
 static fallback text in place. A release tag therefore updates the site with **no
 deploy**.
+
+The translate page is the other way round: it is built from files outside `web/`.
+`src/pages/translate.astro` reads `flutter_ui/lib/l10n/app_en.arb`, the five
+translation files and `translation-state.json` at build time, works out what each
+language is missing or has gone stale on, and ships the lot inline — so the page is
+exactly as current as the deploy, and there is no runtime and nothing to fetch
+(K-653). Cloudflare clones the whole repository, so the relative path up out of
+`web/` holds there as well as locally; a string added to `app_en.arb` is offered to
+translators on the next push.
 
 ## web-docs/ — the manual
 

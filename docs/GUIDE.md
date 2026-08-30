@@ -8900,6 +8900,49 @@ than kept, and the phrase falls back to English until somebody translates the ne
 wording. English that is merely untranslated is a gap; English that is wrongly
 translated is a bug you cannot see unless you read that language.
 
+### What a translator actually does
+
+Somebody in Discord says they speak Ukrainian and would like to help. You send
+them **lumitlab.com/translate** and that is the whole of your side of it.
+
+They pick their language from a menu at the top. Under it is a list of every
+phrase that language has not got yet: the English in white, the note underneath
+in grey saying where it appears, and an empty box under that. They type, and the
+counter in the bar says *142 of 2,274 filled in*. Nothing is sent anywhere while
+they work — what they type is kept by their own browser, so they can close the
+tab, come back on Thursday, and carry on where they stopped.
+
+Two things the page is fussy about, because the tool at the other end is. A
+phrase like `{count} files` has a **placeholder** in it — `{count}` is a hole the
+application fills with a number — and if their sentence loses the hole, the row
+says so in orange while they can still fix it. And a phrase that was translated
+once, from English that has since been reworded, is shown with both: what it used
+to say and what it says now, so it is a correction rather than a retype.
+
+When they are done there are two buttons. **Download .json** gives them a small
+file. **Open a GitHub issue** opens a new issue with the file already written into
+it, so all they do is press the green button; if their language is far enough
+along that the file will not fit in a link, the issue tells them to drag the
+downloaded file in instead. Someone without a GitHub account can post the file in
+Discord and let somebody else pass it on.
+
+The file holds two things: their translations, and a copy of the English sentence
+each one was written from. That second half is the point. An `.arb` file can say
+what the German for a phrase is, but not what the English *was* when somebody
+wrote that German — so a reworded English string would keep its old translation
+for ever with nothing to notice it. `flutter_ui/lib/l10n/translation-state.json`
+is where that memory is kept, one line per translated phrase per language, and it
+is both how `prune` knows what to expire and how the web page knows which rows to
+show as needing a second look.
+
+One quiet rule is worth knowing, because it explains a number that looks wrong.
+The five language files were exported by the old service with the *English* text
+copied into every phrase nobody had answered — so `app_de.arb` has 1,036 phrases
+in it and four of them are actually German. A phrase whose translation is
+identical to the English counts as untranslated, here and in the tool, which is
+why the page offers a German speaker 2,274 rows rather than the 1,242 a naive
+count would say were left.
+
 ### What happens when a translation is missing
 
 Nothing bad, which is the point. A phrase nobody has reached yet falls back to

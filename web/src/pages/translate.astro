@@ -1,0 +1,344 @@
+---
+import { readFileSync } from "node:fs";
+import Base from "../layouts/Base.astro";
+
+// The translation page (K-653). Crowdin hosted a box a translator typed into; this is
+// that box, built from the application's own string file at build time. Nothing here
+// runs on a server: the whole list of what each language is missing is worked out
+// during `astro build`, and what a translator types lives in their browser until they
+// send it back as a file.
+//
+// The files are read from the repository rather than copied into web/, so a string
+// added to app_en.arb is offered the next time the site deploys - which is on push.
+// Cloudflare Pages clones the whole repository and builds from web/, so the relative
+// path up to flutter_ui/ holds there as well as locally.
+const l10n = (name: string): Record<string, any> =>
+  JSON.parse(
+    readFileSync(new URL(`../../../flutter_ui/lib/l10n/${name}`, import.meta.url), "utf8"),
+  );
+
+const en = l10n("app_en.arb");
+// scripts/translations.ps1's sidecar: the English each existing translation was made
+// from. It is the only way to know a translation has gone stale.
+const state = l10n("translation-state.json");
+
+const LANGUAGES = [
+  { code: "de", name: "German", endonym: "Deutsch" },
+  { code: "kk", name: "Kazakh", endonym: "Қазақша" },
+  { code: "uk", name: "Ukrainian", endonym: "Українська" },
+  { code: "zh", name: "Chinese, Simplified", endonym: "简体中文" },
+  { code: "zh_Hant", name: "Chinese, Traditional", endonym: "繁體中文" },
+];
+
+const keys = Object.keys(en).filter((k) => !k.startsWith("@"));
+
+// Three parallel arrays rather than 2,278 little objects: the same data, a third of the
+// bytes, and the page ships all of it inline so there is nothing to fetch.
+const payload = {
+  k: keys,
+  s: keys.map((k) => en[k] as string),
+  d: keys.map((k) => (en["@" + k]?.description as string) ?? ""),
+  loc: {} as Record<string, { need: number[]; old: Record<number, string>; was: Record<number, string> }>,
+};
+
+for (const { code } of LANGUAGES) {
+  const arb = l10n(`app_${code}.arb`);
+  const seen = state[code] ?? {};
+  const need: number[] = [];
+  const old: Record<number, string> = {};
+  const was: Record<number, string> = {};
+  keys.forEach((key, i) => {
+    const have = arb[key];
+    // A key whose "translation" is the English is not translated: the exports these
+    // files came from wrote the source text through wherever nobody had answered.
+    if (have === undefined || have === en[key]) {
+      need.push(i);
+      return;
+    }
+    const source = seen[key];
+    if (source !== undefined && source !== en[key]) {
+      need.push(i);
+      old[i] = have; // what it says now, so a stale row is a correction and not a retype
+      was[i] = source; // and the English that answer was written for
+    }
+  });
+  payload.loc[code] = { need, old, was };
+}
+
+const totals = Object.fromEntries(
+  LANGUAGES.map((l) => [l.code, keys.length - payload.loc[l.code].need.length]),
+);
+
+const DISCORD = "https://discord.gg/dc3p3XC7mM";
+const REPO = "https://github.com/luminalmvm/Lumit";
+---
+
+<Base
+  title="Translate Lumit"
+  description="Translate Lumit into your language. No account, no software to install - the page hands you a file to send back."
+>
+  <section class="pt-16 sm:pt-20">
+    <div class="wrap">
+      <p class="kicker">Translate</p>
+      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Say it in your language.</h2>
+      <p class="mt-4 max-w-[620px]">
+        Every word Lumit shows comes from one file, and this page is that file with a box
+        beside each phrase. Fill in as many as you like - what you type stays in this
+        browser until you send it, so you can stop and come back. When you are done, the
+        Download button hands you a file to attach to a GitHub issue, and a maintainer
+        reads it in.
+      </p>
+      <p class="mt-3 max-w-[620px] text-fg-3 text-[14px]">
+        No account here and nothing to install. Placeholders like <code
+          class="font-mono text-fg-2">{"{count}"}</code
+        > stand for a number or a name the application fills in - keep them exactly as they
+        are, anywhere in your sentence that reads well.
+      </p>
+    </div>
+  </section>
+
+  <div class="sticky top-16 z-10 mt-10 border-y border-line bg-ink/95 backdrop-blur">
+    <div class="wrap flex flex-wrap items-center gap-x-5 gap-y-3 py-3.5">
+      <label class="flex items-center gap-2.5 text-[14px] text-fg-3">
+        Language
+        <select
+          id="lang"
+          class="h-9 rounded-ctl border border-line-2 bg-ink-2 px-2.5 text-[15px] text-fg"
+        >
+          {
+            LANGUAGES.map((l) => (
+              <option value={l.code}>
+                {l.endonym} · {l.name}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+      <p class="font-mono text-[13px] tabular-nums text-fg-3">
+        <span id="done">0</span> of <span id="total">0</span> filled in ·
+        <span id="already">0</span> already translated
+      </p>
+      <div class="ml-auto flex items-center gap-2.5">
+        <button id="download" class="btn h-9 px-3.5 text-[14px]" type="button">
+          Download .json
+        </button>
+        <button id="issue" class="btn btn-ghost h-9 px-3.5 text-[14px]" type="button">
+          Open a GitHub issue
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <section class="py-10">
+    <div class="wrap">
+      <div id="rows" class="max-w-[880px]"></div>
+      <div id="more" class="h-24"></div>
+      <p class="mt-6 max-w-[620px] text-[14px] text-fg-3">
+        Your language is not in the list? Ask on <a class="link" href={DISCORD}>Discord</a> -
+        a new language is one line in the repository and a file to start filling, and the
+        five here started the same way.
+      </p>
+    </div>
+  </section>
+
+  {/* Data, not code: parsed once by the script below. `<` is escaped because a string
+      in the .arb that happened to contain `</script` would otherwise end the tag. */}
+  <script
+    is:inline
+    id="l10n-data"
+    type="application/json"
+    set:html={JSON.stringify(payload).replace(/</g, "\\u003c")}
+  />
+  <script
+    is:inline
+    id="l10n-meta"
+    type="application/json"
+    set:html={JSON.stringify({ languages: LANGUAGES, totals, repo: REPO }).replace(/</g, "\\u003c")}
+  />
+
+  <script>
+    const read = (id: string) => JSON.parse(document.getElementById(id)!.textContent!);
+    const data = read("l10n-data");
+    const meta = read("l10n-meta");
+
+    const rows = document.getElementById("rows")!;
+    const sentinel = document.getElementById("more")!;
+    const picker = document.getElementById("lang") as HTMLSelectElement;
+    const doneEl = document.getElementById("done")!;
+    const totalEl = document.getElementById("total")!;
+    const alreadyEl = document.getElementById("already")!;
+
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const tokens = (s: string) => (s.match(/\{\w+\}/g) ?? []).filter((t, i, a) => a.indexOf(t) === i);
+
+    let locale = "";
+    let need: number[] = [];
+    let store: Record<string, string> = {};
+    let cursor = 0;
+    let saveTimer = 0;
+
+    // A translator fills a thousand boxes over several sittings; losing that to a closed
+    // tab would be the end of them helping. Storage can be switched off, in which case
+    // the page still works and only forgets.
+    const storeKey = () => `lumit-translate:${locale}`;
+    function load() {
+      try {
+        store = JSON.parse(localStorage.getItem(storeKey()) ?? "{}");
+      } catch {
+        store = {};
+      }
+    }
+    function save() {
+      clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        try {
+          localStorage.setItem(storeKey(), JSON.stringify(store));
+        } catch {
+          /* private window, or full: the page keeps working, it just forgets */
+        }
+      }, 400);
+    }
+
+    function filled() {
+      let n = 0;
+      for (const i of need) if ((store[data.k[i]] ?? "").trim()) n++;
+      return n;
+    }
+    function progress() {
+      doneEl.textContent = String(filled());
+    }
+
+    function row(i: number) {
+      const key = data.k[i];
+      const english = data.s[i];
+      const marks = tokens(english);
+      const was = data.loc[locale].was[i];
+      const old = data.loc[locale].old[i];
+      const value = store[key] ?? "";
+      return `<div class="border-t border-line py-5" data-i="${i}">
+        <p class="text-[16px] text-fg" dir="ltr">${esc(english)}</p>
+        <p class="mt-1.5 text-[13.5px] leading-[1.5] text-fg-3">${esc(data.d[i])}</p>
+        ${
+          was
+            ? `<p class="mt-2 rounded-ctl border border-line bg-ink-2 px-2.5 py-2 text-[13px] text-fg-3">
+                 This one was translated before, from English that has since changed.
+                 It used to say <span class="text-fg-2">${esc(was)}</span>, and the current
+                 translation is <span class="text-fg-2" dir="auto">${esc(old)}</span>.
+               </p>`
+            : ""
+        }
+        <input
+          class="mt-2.5 h-10 w-full rounded-ctl border border-line-2 bg-ink-2 px-3 text-[15px] text-fg outline-none focus:border-accent-2"
+          type="text" dir="auto" spellcheck="false" autocomplete="off"
+          aria-label="${esc(english)}" value="${esc(value)}" />
+        <p class="mt-1.5 flex flex-wrap gap-x-3 font-mono text-[12px] text-fg-4">
+          <span>${esc(key)}</span>
+          ${marks.length ? `<span data-keep>keep ${esc(marks.join(" "))}</span>` : ""}
+          <span class="text-[#c9866b]" data-warn hidden></span>
+        </p>
+      </div>`;
+    }
+
+    // 2,274 rows at once is a second of blank page and a lot of memory. They arrive a
+    // screenful at a time instead, and keep arriving while the foot of the list is still
+    // on screen, so a fast scroll never outruns them.
+    const near = () => sentinel.getBoundingClientRect().top < window.innerHeight * 2;
+    function more() {
+      if (cursor >= need.length) return;
+      const slice = need.slice(cursor, cursor + 60);
+      cursor += slice.length;
+      rows.insertAdjacentHTML("beforeend", slice.map(row).join(""));
+      if (near()) more();
+    }
+
+    function show(code: string) {
+      locale = code;
+      need = data.loc[code].need;
+      load();
+      cursor = 0;
+      rows.innerHTML = "";
+      totalEl.textContent = String(need.length);
+      alreadyEl.textContent = String(meta.totals[code]);
+      progress();
+      more();
+    }
+
+    // The one thing a translator can send that the ingest tool will refuse outright, so
+    // it is said here, on the row, while they can still fix it.
+    function checkPlaceholders(box: HTMLInputElement, i: number) {
+      const holder = box.closest("[data-i]")!;
+      const warn = holder.querySelector("[data-warn]") as HTMLElement;
+      const missing = tokens(data.s[i]).filter((t) => !box.value.includes(t));
+      const wrong = box.value.trim() !== "" && missing.length > 0;
+      warn.textContent = wrong ? `missing ${missing.join(" ")}` : "";
+      warn.hidden = !wrong;
+    }
+
+    rows.addEventListener("input", (e) => {
+      const box = e.target as HTMLInputElement;
+      const holder = box.closest("[data-i]") as HTMLElement | null;
+      if (!holder) return;
+      const i = Number(holder.dataset.i);
+      const key = data.k[i];
+      if (box.value.trim()) store[key] = box.value;
+      else delete store[key];
+      checkPlaceholders(box, i);
+      progress();
+      save();
+    });
+
+    function bundle() {
+      const entries: Record<string, string> = {};
+      const sourceHashes: Record<string, string> = {};
+      for (const i of need) {
+        const key = data.k[i];
+        const text = (store[key] ?? "").trim();
+        if (!text) continue;
+        entries[key] = text;
+        sourceHashes[key] = data.s[i];
+      }
+      return { locale, entries, sourceHashes };
+    }
+
+    document.getElementById("download")!.addEventListener("click", () => {
+      const json = JSON.stringify(bundle(), null, 2);
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lumit-${locale}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("issue")!.addEventListener("click", () => {
+      const b = bundle();
+      const count = Object.keys(b.entries).length;
+      const name = meta.languages.find((l: any) => l.code === locale).name;
+      const json = JSON.stringify(b, null, 2);
+      // A URL carries only so much before GitHub refuses it, and a full language is far
+      // more than that. A short one goes in the issue; a long one goes in as the file.
+      const fenced =
+        json.length < 5000
+          ? "```json\n" + json + "\n```"
+          : `The file is too long to carry in a link. Download it with the button beside this one and drag \`lumit-${locale}.json\` into this box before posting.`;
+      const body = [
+        `${count} strings for **${name}** (\`${locale}\`), from https://lumitlab.com/translate.`,
+        "",
+        fenced,
+        "",
+        `_Read in with \`.\\scripts\\translations.ps1 ingest lumit-${locale}.json\`._`,
+      ].join("\n");
+      const url =
+        `${meta.repo}/issues/new?title=` +
+        encodeURIComponent(`Translation: ${name} (${locale}) - ${count} strings`) +
+        "&body=" +
+        encodeURIComponent(body);
+      window.open(url, "_blank", "noopener");
+    });
+
+    picker.addEventListener("change", () => show(picker.value));
+    addEventListener("scroll", () => near() && more(), { passive: true });
+    show(picker.value);
+  </script>
+</Base>
