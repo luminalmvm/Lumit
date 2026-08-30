@@ -38,9 +38,12 @@ import 'package:uuid/uuid.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect;
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
 import 'viewer_layer_map.dart';
+import 'viewer_overlays.dart' show ViewerOverlayPainter;
 import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
+import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'layer_fold_frb.dart';
 
@@ -612,6 +615,12 @@ class ViewerGizmoLayer extends StatefulWidget {
   /// the question the picture has to answer.
   final bool showAnchors;
 
+  /// Where the picture is drawn, and how big the comp is — the two halves of
+  /// putting a guide, which is kept in comp pixels, on screen (K-689). Only
+  /// snapping reads them.
+  final Rect picture;
+  final Size compSize;
+
   final VoidCallback onChanged;
 
   const ViewerGizmoLayer({
@@ -622,6 +631,8 @@ class ViewerGizmoLayer extends StatefulWidget {
     required this.showControls,
     required this.tool,
     required this.onChanged,
+    required this.picture,
+    required this.compSize,
     this.showAnchors = false,
   });
 
@@ -777,7 +788,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             ? [for (final box in selected) box.anchorScreen]
             : const [],
         marquee: _drag == _GizmoDrag.marquee ? _marqueeRect() : null,
-        moved: _drag == _GizmoDrag.move ? _delta : Offset.zero,
+        moved: _drag == _GizmoDrag.move ? _moveDelta : Offset.zero,
         // `animated`, not `accent` (§3.1, K-466): the closed list gives that
         // colour to "this is selected or in hand", and **selected gizmo
         // handles** are named in it. The approved drawing agrees — the box
@@ -854,6 +865,70 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   Rect _marqueeRect() => Rect.fromPoints(_origin, _pointer);
+
+  // --- Snapping (K-689, docs/07 §2.2 item 6) --------------------------------
+  //
+  // The drag the *layer* takes, as against the travel the pointer asked for:
+  // with the magnet on, the selection's box reaches for the guides — and for
+  // the grid, while Snap to grid is ticked — in the Timeline magnet's own
+  // grammar, measured in screen pixels so the magnification is the precision
+  // control (`viewer_snap.dart`).
+  //
+  // **What caught it is not drawn, and does not need to be.** The Timeline
+  // marks its target because a layer's in point is not a line on the screen
+  // until something lands on it; a guide already *is* one, drawn the whole
+  // time, so the layer arriving on it is the indication.
+
+  /// The whole selection's box on screen, or null when nothing draggable is
+  /// selected. Corners rather than sides, because a turned layer's box is a
+  /// turned quad and what lines up with a guide is its extent.
+  Rect? _selectionRect() {
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = double.negativeInfinity;
+    var bottom = double.negativeInfinity;
+    var any = false;
+    for (final box in _selected) {
+      if (!box.draggable) continue;
+      for (final corner in box.corners) {
+        if (!corner.dx.isFinite || !corner.dy.isFinite) continue;
+        any = true;
+        left = math.min(left, corner.dx);
+        top = math.min(top, corner.dy);
+        right = math.max(right, corner.dx);
+        bottom = math.max(bottom, corner.dy);
+      }
+    }
+    return any ? Rect.fromLTRB(left, top, right, bottom) : null;
+  }
+
+  /// The travel the move actually uses: the pointer's own, pulled onto the
+  /// nearest line within the magnet's reach.
+  Offset get _moveDelta {
+    if (_drag != _GizmoDrag.move || _delta == Offset.zero) return _delta;
+    final tools = widget.uiState.tools;
+    if (!tools.snapping ||
+        snapSuspended(
+            controlPressed: HardwareKeyboard.instance.isControlPressed)) {
+      return _delta;
+    }
+    final rect = _selectionRect();
+    if (rect == null) return _delta;
+    List<double> targets(bool vertical) => viewerSnapTargets(
+          guides: widget.uiState.guides,
+          vertical: vertical,
+          picture: widget.picture,
+          compSize: widget.compSize,
+          grid: tools.snapToGrid,
+          divisions: ViewerOverlayPainter.divisions,
+        );
+    return snapViewerDrag(
+      box: rect,
+      delta: _delta,
+      verticals: targets(true),
+      horizontals: targets(false),
+    );
+  }
 
   void _setHover(UuidValue? id) {
     if (_hover == id) return;
@@ -1082,10 +1157,17 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
   }
 
-  (double, double) _movedPosition(LayerBox box) => (
-        box.map.px + _delta.dx / box.map.viewScale,
-        box.map.py + _delta.dy / box.map.viewScale,
-      );
+  /// Where a dragged layer's Position lands: the magnet's travel, not the
+  /// pointer's (K-689). The preview, the box on screen and the committed op all
+  /// come through here, so the picture cannot land anywhere but where the
+  /// wireframe said it would.
+  (double, double) _movedPosition(LayerBox box) {
+    final delta = _moveDelta;
+    return (
+      box.map.px + delta.dx / box.map.viewScale,
+      box.map.py + delta.dy / box.map.viewScale,
+    );
+  }
 
   void _commitMove() {
     if (_delta == Offset.zero) return;

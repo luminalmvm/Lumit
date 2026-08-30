@@ -398,17 +398,43 @@ Every control on either strip keeps the behaviour its item below defines. The it
    mode, is still owed (docs/TODO.md).
 6. **Guides menu**: rulers (`Ctrl+R`), guides (drag out of rulers; lock/clear), grid,
    title/action safe overlays, snapping-to-guides toggle.
-   **Built so far (K-416, K-466)**: the menu itself, one mark beside the transparency
-   board, with four checkable entries — Grid, Title/action safe, Layer controls and Region
-   of interest — and a fifth row for the composition background, which opens the colour
-   picker and carries a swatch of the colour it would write. The grid
+   **Built (K-416, K-466, K-689)**: the menu itself, one mark beside the transparency
+   board, with six checkable entries — Grid, Title/action safe, Rulers, Snap to guides,
+   Layer controls and Region of interest — a Clear guides row once any are placed, and a
+   last row for the composition background, which opens the colour picker and carries a
+   swatch of the colour it would write. The grid
    is the frame's own **eighths**, drawn as theme hairlines; the safe areas are the
    standard **90 % action / 80 % title** rectangles, square-cornered hairlines with no
    labels. Both are worked out from the picture's rectangle, so they zoom and pan with
    the shot rather than sitting still on the panel, and both are display-side: no engine
-   copy, no cache entry, and nothing an export can see. State is **per comp, in the
-   session** — keeping it with the project is owed, as are rulers, draggable guides and
-   snapping, which land as further entries in this same menu rather than as new chrome.
+   copy, no cache entry, and nothing an export can see.
+
+   **The rulers** (`Ctrl+R`, View ▸ Show ruler) are two 18-tall strips along the picture's
+   **top and left** edges, counting **comp pixels** on a 1 / 2 / 5 ladder chosen so
+   labelled ticks stay at least 64 screen pixels apart — the magnification decides the
+   step, so the numbers stay round at every zoom. They stand on the *panel*: turning them
+   on takes their band off the picture area, so the fit, the pan and every anchored zoom
+   are measured against what is left and nothing is drawn over the shot. Their look is
+   neutral (§3.2's zone): band, hairline seam, muted labels.
+
+   **Guides** are dragged out of a strip onto the picture — the top strip makes a
+   horizontal guide, the left a vertical one — moved by their own thin grab strip, and
+   deleted by being dropped back on a ruler or off the picture; *Clear guides* takes them
+   all at once. They are kept in **comp pixels**, so they pan and zoom with the shot, and
+   drawn in the accent, which §3.2 allows for a tool overlaid on the image itself. **Guide
+   locking is still owed** (docs/TODO.md).
+
+   **Snapping** is the toolbar magnet (§4.5, §1.7): with it on, a layer dragged on the
+   picture has its box's two edges and its middle pulled onto the nearest guide within
+   eight screen pixels, each axis deciding on its own, and `Ctrl` held suspends it exactly
+   as in the Timeline. **Snap to grid** (View menu) adds the grid's own eighths and the
+   frame's edges to that list. What caught a drag is not drawn: unlike a Timeline target,
+   a guide is already a line on the screen, so the layer arriving on it is the indication.
+
+   State — the three overlay switches and the guides alike — is **per comp, in the
+   per-project session** (K-689, doing what K-416 said was owed): a comp reopens with the
+   scaffolding it was left with, no tick makes the project dirty, and Ctrl+Z never undoes
+   one.
 7. **Region of interest** (K-362, landed): drag a rectangle; the engine renders only that
    region for preview. MUST be clearable in one click and MUST never affect export. Armed
    from the view menu of items 5–6 (K-466), swept on the picture, and outlined whenever it is in force. It is a
@@ -1543,8 +1569,13 @@ markers, **beat markers**, the playhead, and work area edges. On by default; a h
 plus `Ctrl`-hold to suspend during a drag.
 
 **The switch lives where the snapping does.** The toolbar carried a second one that nothing
-read, and it is gone (K-230, §1.7): a global switch belongs there once there is snapping
-outside the Timeline for it to govern.
+read, and it was taken off (K-230, §1.7) on the understanding that it belonged there once
+there was snapping outside the Timeline for it to govern. **There is now, and it is back**
+(K-689): the toolbar's **magnet** governs snapping on the *picture* — a dragged layer
+reaching for the guides, and for the grid while View ▸ Snap to grid is ticked (§2.2 item 6)
+— and the Viewer's own view menu shows the same switch under its own name. The Timeline
+keeps its own magnet in the lane bottom bar: the two surfaces snap to different things, and
+one switch for both would mean turning off keyframe snapping to place a layer freehand.
 
 **Shipped (K-190, K-292):** the **magnet** in the lane bottom bar, on by default. With it
 off a key may sit *between* frames: the time is quantised to a thousandth of a frame and

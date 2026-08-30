@@ -8741,6 +8741,10 @@
   "@viewerOverlayBackground": {
     "description": "Entry in the Viewer bar's view menu, with a swatch of the current colour beside it. It opens the colour picker for what the composition is drawn onto; the ellipsis says a picker follows."
   },
+  "viewerOverlayClearGuides": "Clear guides",
+  "@viewerOverlayClearGuides": {
+    "description": "Entry in the Viewer bar's view menu, offered only once guides have been placed: picking it takes every guide off this composition at once."
+  },
   "viewerOverlayClearRegion": "Clear region of interest",
   "@viewerOverlayClearRegion": {
     "description": "Entry in the Viewer bar's view menu, replacing viewerOverlayRegion once a region has been swept out: picking it renders the whole frame again."
@@ -8752,6 +8756,14 @@
   "viewerOverlayRegion": "Region of interest",
   "@viewerOverlayRegion": {
     "description": "Entry in the Viewer bar's view menu: picking it arms the next drag on the picture to sweep out a rectangle, and only that rectangle is rendered for preview."
+  },
+  "viewerOverlayRulers": "Rulers",
+  "@viewerOverlayRulers": {
+    "description": "Entry in the Viewer bar's view menu, with a tick beside it when they are on: the two strips along the top and left edges of the picture, counting the composition's own pixels. Guides are dragged out of them."
+  },
+  "viewerOverlaySnap": "Snap to guides",
+  "@viewerOverlaySnap": {
+    "description": "Entry in the Viewer bar's view menu, with a tick beside it when it is on: whether a layer dragged on the picture is pulled onto the nearest guide. The same switch as the magnet on the toolbar."
   },
   "viewerQualityPlayback": "Playback",
   "@viewerQualityPlayback": {

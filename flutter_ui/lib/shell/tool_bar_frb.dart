@@ -19,11 +19,12 @@
 // The right-hand end carries what the shell has nowhere else to put: the
 // workspace strip §1.4 asks for.
 //
-// **What is deliberately not here.** A snapping switch used to sit beside it —
-// docs/07 §4.5's switch — and nothing in the application read it (K-230). A
-// toggle that changes nothing is worse than a missing one: it makes the reader
-// doubt what snapping *is* here rather than what it is set to. It comes back
-// when there is snapping for it to govern.
+// **The magnet is back** (K-689). It sat here once, was taken off when nothing
+// in the application read it (K-230) — a toggle that changes nothing is worse
+// than a missing one — and returns now that the Viewer's layer drags reach for
+// the guides and the grid with it. Docs/07 §4.5 puts the switch that governs a
+// gesture on the toolbar; the Viewer's own guides menu shows the same switch
+// under its own name.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
@@ -137,10 +138,42 @@ class LumitToolBarFrb extends StatelessWidget {
               ),
             ),
             const _ToolBarDivider(),
+            _SnapButton(tools: ui.tools),
+            const _ToolBarDivider(),
             const _WorkspaceStrip(),
             const SizedBox(width: 6),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// **The magnet** (docs/07 §4.5, K-689): whether a drag on the picture reaches
+/// for the guides and the grid.
+///
+/// Dressed as the graph editor's and the Timeline's are — lit reads as the
+/// glyph at foreground strength on the button's own face, off as a frameless
+/// muted mark. No accent: §3.1's list of that colour's jobs is closed, and a
+/// magnet is not on it.
+class _SnapButton extends StatelessWidget {
+  final ToolsState tools;
+  const _SnapButton({required this.tools});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final on = tools.snapping;
+    return LumitTooltip(
+      message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
+      child: HouseButton(
+        key: const ValueKey('tool-snapping'),
+        small: true,
+        frameless: !on,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: () => tools.snapping = !on,
+        child: lumitIcon(LumitIcon.magnet,
+            size: iconSize, color: on ? t.textPrimary : t.textMuted),
       ),
     );
   }

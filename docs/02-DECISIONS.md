@@ -21516,3 +21516,57 @@ for the list on screen and is not serialised.
 Tests: `store.rs` — `the_history_list_names_the_ops_it_was_given`,
 `a_step_keeps_its_name_through_undo_and_redo`,
 `jumping_to_a_history_index_restores_that_state`; `history_frb_test.dart` for the panel.
+
+## K-689 — The rulers stand on the panel, guides are session state, and the magnet comes back
+
+**Status: DECIDED (2026-08-30).** The last unbuilt half of docs/07 §2.2 item 6 — rulers,
+draggable guides, snapping — with three rulings that settle where each of them lives.
+
+**The rulers take their band off the picture area, not off the picture.** Two 18-tall
+strips along the top and left edges, counting **comp pixels** on a 1 / 2 / 5 ladder chosen
+so labelled ticks stay at least 64 screen pixels apart. Turning them on deflates the
+rectangle the picture is fitted, centred, panned and anchored-zoomed inside, so nothing is
+ever drawn over the shot and every one of those four sums reads the same number — a ruler
+that overlaid the picture would have covered the top-left of a fitted comp, and a ruler
+that insetted only the *drawing* would have left the wheel zoom's anchor half a band out.
+
+**A guide is kept in comp pixels, and it is session state.** Comp pixels because that is
+what the rulers count and what Position is measured in, and because fractions would move a
+guide when a comp is resized. Session because placing one is a way of *looking* at the
+work, not an edit to it: no op, no dirty document, no undo step, nothing an export sees.
+**The K-416 overlay switches move there with it** — that entry's own note said keeping
+them was owed, and the answer is the session rather than the `.lum`, for the reason the
+region of interest and the preview resolution are already there (K-362, K-670): a project
+file must stay byte-identical between two saves of the same work and must not carry one
+machine's habits to another. Both are per comp, validated against the document on restore
+like every other id in a session.
+
+Guides come out of a strip (top → horizontal, left → vertical), move by their own thin
+grab strip so the picture underneath loses no hit area to a layer nobody can click, and are
+deleted by being dropped back on a ruler or off the picture — one gesture for making,
+moving and destroying. Locking guides is deliberately not built and stays owed.
+
+**The magnet returns to the toolbar, and it is the Viewer's.** K-230 took it off because
+nothing read it; the Viewer's layer drags read it now, so it is back where docs/07 §4.5 put
+it, with the Viewer's own view menu showing the same switch under its own name. It governs
+the *picture* only: the Timeline keeps its own magnet in the lane bar, because one switch
+for both would mean turning keyframe snapping off in order to place a layer freehand. The
+arithmetic is the Timeline's grammar re-used rather than re-derived (`viewer_snap.dart`
+beside `timeline_snap.dart`): slop measured in **screen pixels** so the magnification is
+the precision control, the nearest target within reach wins, `Ctrl` held suspends it, and
+each axis decides on its own so a layer held against a guide still slides along it. The
+dragged box's two edges **and its middle** are all candidates, which is what makes centring
+a layer on a guide one gesture. *Snap to grid* (View menu) adds the grid's own eighths and
+the frame's edges to the list; guides are always in it while the magnet is on.
+
+**What caught a drag is not indicated, and that is not the Timeline's rule broken.** The
+Timeline draws a line at what caught a key because a layer's in point is not a mark on the
+screen until something lands on it. A guide already is one, drawn the whole time, so the
+layer arriving on it is the indication — and a second mark over the first would be the
+picture explaining itself twice.
+
+Tests: `viewer_guides_test.dart` — the ruler's ladder, the comp↔screen conversions, the
+magnet engaging inside its slop and not outside it, the two axes deciding separately,
+making/moving/deleting a guide by drag, and the session's JSON round trip;
+`viewer_panel_frb_test.dart` — the rulers insetting the picture and a guide dragged out of
+the strip riding the comp's session; `menu_rows_frb_test.dart` — the three View rows.

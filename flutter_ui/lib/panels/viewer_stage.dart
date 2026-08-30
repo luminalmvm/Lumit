@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/tools.dart';
+import '../state/workspace.dart' show ViewerOverlays;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'viewer_anchor.dart';
@@ -35,6 +36,7 @@ import 'viewer_paint.dart';
 import 'viewer_prefix_chip.dart';
 import 'viewer_region.dart';
 import 'viewer_rotate.dart';
+import 'viewer_rulers.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
@@ -63,8 +65,9 @@ class ViewerStage extends StatelessWidget {
   final Rect fitted;
   final bool grid;
 
-  /// Which of the guides menu's marks are drawn over the picture (K-416).
-  final ({bool grid, bool safeAreas}) overlays;
+  /// Which of the guides menu's marks are drawn over the picture (K-416,
+  /// K-689): the grid, the safe rectangles and the rulers.
+  final ViewerOverlays overlays;
 
   /// The boundary the panel photographs for a snapshot — round the picture
   /// alone, so the marks over it are not in the photograph.
@@ -420,6 +423,13 @@ class ViewerStage extends StatelessWidget {
                         // hand.
                         showAnchors:
                             uiState.tools.tool.group == ToolGroup.rotate,
+                        // What a dragged layer reaches for (K-689): a guide is
+                        // kept in comp pixels, and these two put it on screen.
+                        picture: fitted,
+                        compSize: Size(
+                          compSize.width.toDouble(),
+                          compSize.height.toDouble(),
+                        ),
                         onChanged: onChanged,
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
@@ -605,6 +615,30 @@ class ViewerStage extends StatelessWidget {
             // picture is a target: a drag handle under the pointer must not
             // take the click that was meant to pick a pixel.
             DropperLayer(comp: comp, uiState: uiState, fitted: fitted),
+            // The rulers along the top and left edges, and the guides dragged
+            // out of them (K-689). Over the tool layers, because a guide is
+            // grabbed by its own thin strip and a handle underneath must not
+            // take a press aimed at one; under the snapshot, because a guide
+            // belonging to the live picture drawn over a held one would be a
+            // mark about the wrong picture. Nothing is built at all when there
+            // are neither rulers up nor guides placed.
+            if (overlays.rulers || uiState.guides.isNotEmpty)
+              ViewerRulers(
+                rulers: overlays.rulers,
+                picture: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                guides: uiState.guides,
+                onGuides: uiState.setGuides,
+                band: t.surface2,
+                line: t.hairlineStrong,
+                label: t.textMuted,
+                // The one saturated mark the neutrality zone allows over the
+                // picture: §3.2 names guides in its own exemption.
+                guideColour: t.accent,
+              ),
             // The held snapshot (K-416), over everything: while it is up the
             // Viewer is showing a second picture, and a wireframe belonging to
             // the live one drawn on top of it would be a lie about both. Fitted

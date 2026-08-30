@@ -438,6 +438,15 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.setPreviewResolution(PreviewResolution.half);
       case 'viewer.res.quarter':
         ui.setPreviewResolution(PreviewResolution.quarter);
+      // `Ctrl+R` puts the rulers up and takes them down (§15's table, K-689).
+      // Per comp, like every other mark over the picture.
+      case 'viewer.rulers.toggle':
+        ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers);
+      // And `Ctrl+'` the **transparency** grid — the checkerboard behind the
+      // picture, which is what §15's table gives this chord to. The grid drawn
+      // *over* the picture is the View menu's Show grid and has no chord.
+      case 'viewer.grid.toggle':
+        ui.setViewerGrid(!ui.viewerGrid);
       // Moving between panels without the mouse (docs/07 §15, "Panels").
       case 'panel.focus.next':
         handled = ui.cyclePanelFocus(1);

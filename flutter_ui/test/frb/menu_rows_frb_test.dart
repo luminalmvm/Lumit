@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/state/dock.dart' show WorkspacePreset;
+import 'package:lumit_flutter/state/workspace.dart' show noViewerOverlays;
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -543,6 +544,47 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.uiState.keymap.chordFor('workspace.switch.1'),
           isNot(contains('4')));
+    });
+
+    /// **The three View rows that used to say nothing** (K-689, docs/07 §2.2
+    /// item 6). Each is a toggle, so the menu stays open and all three can be
+    /// set in one visit — and each reaches the state the Viewer actually
+    /// draws from, rather than a second copy of it.
+    testWidgets('View ▸ the grid, the rulers and the magnet are wired',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+      final ui = p.uiState;
+      expect(ui.viewerOverlays, noViewerOverlays);
+      expect(ui.tools.snapToGrid, isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('menu-View')));
+      await tester.pump();
+      for (final row in [
+        l10n.menuShowGrid,
+        l10n.menuShowRuler,
+        l10n.menuSnapToGrid,
+      ]) {
+        await tester.ensureVisible(find.text(row).first);
+        await tester.pump();
+        await tester.tap(find.text(row).first);
+        await tester.pump();
+      }
+
+      expect(ui.viewerOverlays.grid, isTrue);
+      expect(ui.viewerOverlays.rulers, isTrue,
+          reason: 'the menu stayed open, so all three landed in one visit');
+      expect(ui.tools.snapToGrid, isTrue);
+      await dismiss(tester);
+
+      // And each one turns off again from the same row.
+      await tester.tap(find.byKey(const ValueKey('menu-View')));
+      await tester.pump();
+      await tester.ensureVisible(find.text(l10n.menuShowRuler).first);
+      await tester.tap(find.text(l10n.menuShowRuler).first);
+      await tester.pump();
+      expect(ui.viewerOverlays.rulers, isFalse);
+      await dismiss(tester);
     });
 
     testWidgets('File ▸ Close project leaves an empty one in its place',

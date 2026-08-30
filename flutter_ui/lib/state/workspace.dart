@@ -41,6 +41,28 @@ typedef CompView = ({int frame, double zoom, double scroll});
 /// A comp nobody has been in yet: frame one, fitted, at the left.
 const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
 
+/// Which of the Viewer's marks are drawn over one composition (K-416, K-689):
+/// the proportional grid, the title/action safe rectangles, and the rulers
+/// along the picture's top and left edges.
+///
+/// A record for [ViewerLook]'s reason — three switches with no behaviour,
+/// compared by value, which is what [SavedSession]'s equality needs.
+typedef ViewerOverlays = ({bool grid, bool safeAreas, bool rulers});
+
+/// Nothing drawn: what a composition nobody has asked anything of shows.
+const ViewerOverlays noViewerOverlays =
+    (grid: false, safeAreas: false, rulers: false);
+
+/// One guide dragged out of a ruler (K-689): where it sits in **comp pixels**,
+/// and which way it runs.
+///
+/// [vertical] is the line's own direction, so a vertical guide is a constant
+/// *x* and a horizontal one a constant *y* — the same reading Photoshop and
+/// After Effects have taught. Comp pixels rather than fractions because that is
+/// what the rulers count and what a layer's Position is measured in; a guide at
+/// 960 is at 960 whatever the picture is magnified to.
+typedef ViewerGuide = ({double at, bool vertical});
+
 /// The per-project session the egui shell restores on open (its `SavedSession`,
 /// crates/lumit-ui/src/app_state/mod.rs): which compositions are open, which is
 /// fronted, where the playhead sits, and which layer is selected. Ids are the
@@ -74,6 +96,22 @@ class SavedSession {
   /// the whole frame — the default — are simply absent.
   final Map<String, List<double>> regionsOfInterest;
 
+  /// Which marks the Viewer draws over each composition, by id (K-416, K-689):
+  /// the grid, the safe rectangles and the rulers.
+  ///
+  /// **Session state, and this is where K-416 said it would end up.** Which
+  /// scaffolding you want over a shot is a way of looking at it rather than an
+  /// edit to it: it never reaches an op, Ctrl+Z never undoes a tick, and no
+  /// export has ever seen one. Comps with nothing drawn — the default — are
+  /// simply absent.
+  final Map<String, ViewerOverlays> viewerOverlays;
+
+  /// The guides dragged out of each composition's rulers, by id (K-689), in
+  /// comp pixels. Session state for the overlays' reason, and kept beside them
+  /// because a guide is a mark over the picture like any other. Comps with no
+  /// guides are simply absent.
+  final Map<String, List<ViewerGuide>> guides;
+
   /// Where the user was in each composition, by id (K-624) — the playhead and
   /// the Timeline's view. Session state for the same reason the looks are:
   /// standing somewhere in a comp is not an edit to it, so it never reaches an
@@ -102,6 +140,8 @@ class SavedSession {
     this.viewerLooks = const {},
     this.previewResolutions = const {},
     this.regionsOfInterest = const {},
+    this.viewerOverlays = const {},
+    this.guides = const {},
     this.compViews = const {},
   });
 
@@ -117,6 +157,21 @@ class SavedSession {
         },
         'preview_resolutions': previewResolutions,
         'regions_of_interest': regionsOfInterest,
+        'viewer_overlays': {
+          for (final e in viewerOverlays.entries)
+            e.key: {
+              'grid': e.value.grid,
+              'safe_areas': e.value.safeAreas,
+              'rulers': e.value.rulers,
+            },
+        },
+        'guides': {
+          for (final e in guides.entries)
+            e.key: [
+              for (final g in e.value)
+                {'at': g.at, 'vertical': g.vertical},
+            ],
+        },
         'comp_views': {
           for (final e in compViews.entries)
             e.key: {
@@ -176,6 +231,8 @@ class SavedSession {
         viewerLooks: _looksFromJson(j['viewer_looks']),
         previewResolutions: _resolutionsFromJson(j['preview_resolutions']),
         regionsOfInterest: _regionsFromJson(j['regions_of_interest']),
+        viewerOverlays: _overlaysFromJson(j['viewer_overlays']),
+        guides: _guidesFromJson(j['guides']),
         compViews: _compViewsFromJson(j['comp_views']),
       );
 
@@ -193,6 +250,8 @@ class SavedSession {
       other._dockKey == _dockKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
+      mapEquals(other.viewerOverlays, viewerOverlays) &&
+      other._guideKey == _guideKey &&
       other._regionKey == _regionKey &&
       mapEquals(other.compViews, compViews) &&
       listEquals(other.openComps, openComps);
@@ -215,7 +274,23 @@ class SavedSession {
         Object.hashAll([
           for (final e in compViews.entries) Object.hash(e.key, e.value),
         ]),
+        Object.hashAll([
+          for (final e in viewerOverlays.entries) Object.hash(e.key, e.value),
+        ]),
+        _guideKey,
       );
+
+  /// The guides compared (and hashed) as text, for [_regionKey]'s reason: a map
+  /// of *lists* compares by identity, so two equal sets of guides would read as
+  /// different and the session would rewrite itself on every frame.
+  String get _guideKey => guides.isEmpty
+      ? ''
+      : jsonEncode({
+          for (final e in guides.entries)
+            e.key: [
+              for (final g in e.value) [g.at, g.vertical],
+            ],
+        });
 
   /// The regions compared (and hashed) as text: a map of *lists* compares by
   /// identity under `mapEquals`, so two equal regions would read as different
@@ -248,6 +323,46 @@ Map<String, CompView> _compViewsFromJson(Object? raw) {
       zoom: zoom < 1.0 ? 1.0 : zoom,
       scroll: scroll.clamp(0.0, 1.0),
     );
+  }
+  return out;
+}
+
+/// The per-comp overlays out of a session's JSON (K-689). A missing or
+/// malformed switch reads as off, which is what a session written by a build
+/// that had fewer of them gets: the marks it did ask for, and nothing invented.
+Map<String, ViewerOverlays> _overlaysFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, ViewerOverlays>{};
+  for (final e in raw.entries) {
+    final k = e.key;
+    final v = e.value;
+    if (k is! String || v is! Map) continue;
+    final overlays = (
+      grid: v['grid'] == true,
+      safeAreas: v['safe_areas'] == true,
+      rulers: v['rulers'] == true,
+    );
+    if (overlays != noViewerOverlays) out[k] = overlays;
+  }
+  return out;
+}
+
+/// The per-comp guides out of a session's JSON (K-689), keeping only entries
+/// that are a finite position — a hand-edited or truncated session leaves the
+/// comp with the guides that did read, and an app that opens.
+Map<String, List<ViewerGuide>> _guidesFromJson(Object? raw) {
+  if (raw is! Map) return const {};
+  final out = <String, List<ViewerGuide>>{};
+  for (final e in raw.entries) {
+    final k = e.key;
+    final v = e.value;
+    if (k is! String || v is! List) continue;
+    final lines = <ViewerGuide>[
+      for (final g in v)
+        if (g is Map && g['at'] is num && (g['at'] as num).toDouble().isFinite)
+          (at: (g['at'] as num).toDouble(), vertical: g['vertical'] == true),
+    ];
+    if (lines.isNotEmpty) out[k] = lines;
   }
   return out;
 }

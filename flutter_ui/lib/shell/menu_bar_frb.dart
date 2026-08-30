@@ -1066,8 +1066,26 @@ List<MenuSection> lumitMenus(
             ),
         ]),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuShowGrid, action: 'viewer.grid.toggle'),
-        MenuEntry.todo(l10n.menuShowRuler, action: 'viewer.rulers.toggle'),
+        // The marks over the picture (docs/07 §2.2 items 5–6, K-683). All
+        // three are the Viewer's own view menu under other names, so they are
+        // toggles: turning the rulers on to drag a guide out and ticking Snap
+        // to grid is two ticks, not two trips to the View menu (K-520).
+        //
+        // Show grid carries no chord: `Ctrl+'` belongs to the *transparency*
+        // grid (§15's table), which is a different grid and a different
+        // question, and a row advertising a key that does something else is
+        // worse than a row with no key at all.
+        MenuEntry.toggle(
+          l10n.menuShowGrid,
+          () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
+          checked: () => ui.viewerOverlays.grid,
+        ),
+        MenuEntry.toggle(
+          l10n.menuShowRuler,
+          () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
+          action: 'viewer.rulers.toggle',
+          checked: () => ui.viewerOverlays.rulers,
+        ),
         // The layer-controls switch (K-217, K-466): the wireframes, the
         // handles and the hover highlight, on and off together. The bar's own
         // view menu carries the same switch under its own name — they are one
@@ -1076,7 +1094,14 @@ List<MenuSection> lumitMenus(
         MenuEntry(l10n.menuShowWireframe,
             () => ui.setViewerLayerControls(!ui.viewerLayerControls),
             checked: ui.viewerLayerControls),
-        MenuEntry.todo(l10n.menuSnapToGrid),
+        // Whether the grid's own lines are things a dragged layer lands on,
+        // over and above the guides (K-683). The magnet on the toolbar is what
+        // decides whether *any* of it engages; this says what is in the list.
+        MenuEntry.toggle(
+          l10n.menuSnapToGrid,
+          () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
+          checked: () => ui.tools.snapToGrid,
+        ),
       ]
     ),
     (

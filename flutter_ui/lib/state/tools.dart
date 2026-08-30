@@ -235,6 +235,39 @@ class ToolsState extends ChangeNotifier {
   /// variant you chose rather than snapping back to the first one.
   final Map<ToolGroup, ToolMode> _lastUsed = {};
 
+  /// **The magnet** (docs/07 §4.5, K-689): whether a drag on the picture
+  /// reaches for the guides and, when [snapToGrid] is on, for the grid.
+  ///
+  /// It lives here, on the toolbar's own state, because the toolbar is where
+  /// the switch that applies to a *gesture* goes — and the Viewer's guides menu
+  /// shows the same switch under its own name, the way the layer-controls
+  /// switch is shown in two places. It was taken off the strip when nothing in
+  /// the application read it (K-230); it is back because the Viewer's layer
+  /// drags read it now.
+  ///
+  /// On by default, as the Timeline's magnet is: `Ctrl` held suspends it for
+  /// the length of a gesture, which is the escape hatch for the one drag in ten
+  /// that wants no help.
+  bool _snapping = true;
+  bool get snapping => _snapping;
+  set snapping(bool value) {
+    if (_snapping == value) return;
+    _snapping = value;
+    notifyListeners();
+  }
+
+  /// Whether the **grid**'s own lines are things to land on, over and above the
+  /// guides (View ▸ Snap to grid). Off by default: the grid is scaffolding to
+  /// read the frame against, and a magnet that pulled every drag onto an eighth
+  /// of the frame would be in the way of ordinary work.
+  bool _snapToGrid = false;
+  bool get snapToGrid => _snapToGrid;
+  set snapToGrid(bool value) {
+    if (_snapToGrid == value) return;
+    _snapToGrid = value;
+    notifyListeners();
+  }
+
   /// The **fill** the drawing tools use: the colour new text is set in (K-225),
   /// and the colour a shape layer's fill will take once there are shape layers.
   ToolColour _fill = ToolColour.white;

@@ -69,6 +69,7 @@ import '../widgets/controls.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'viewer_bar.dart';
+import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 import 'viewer_zoom.dart';
@@ -571,6 +572,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       key: const ValueKey('viewer-stage'),
       builder: (context, constraints) {
         final size = facts.size;
+        // Read here, not in [build]: the rulers change what "fit" means, and
+        // every measurement in this builder is taken against what they leave.
+        _band = ui.viewerOverlays.rulers ? viewerRulerBand : 0.0;
         final fitted = _fittedRect(constraints, size);
         _reportScale(ui, fitted, size, _fitScale(constraints, size));
 
@@ -635,19 +639,22 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
                 ui.model.refresh();
                 setState(() {});
               },
+              // Both in the picture area's frame (K-689), for [_scrollZoom]'s
+              // reason: the pan that comes back is measured from the middle of
+              // what the rulers have left.
               onZoomAt: (at, {required bool out}) => applyZoom(zoomAboutPoint(
-                cursor: at,
+                cursor: at - _bandOffset,
                 factor: out ? 1 / zoomToolStep : zoomToolStep,
-                fitted: fitted,
+                fitted: fitted.shift(-_bandOffset),
                 compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: Size(constraints.maxWidth, constraints.maxHeight),
+                panel: _pictureArea(constraints),
               )),
               onZoomBox: (box, {required bool out}) => applyZoom(zoomToBox(
-                box: box,
+                box: box.shift(-_bandOffset),
                 out: out,
-                fitted: fitted,
+                fitted: fitted.shift(-_bandOffset),
                 compSize: Size(size.width.toDouble(), size.height.toDouble()),
-                panel: Size(constraints.maxWidth, constraints.maxHeight),
+                panel: _pictureArea(constraints),
               )),
             ),
           ),
@@ -735,9 +742,11 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       pan = Offset.lerp(_panFrom, _pan, t) ?? _pan;
     }
     final drawn = Size(w * scale, h * scale);
+    // Centred in what the rulers have left, and pushed past them (K-689).
+    final area = _pictureArea(constraints);
     final centre = Offset(
-      (constraints.maxWidth - drawn.width) / 2,
-      (constraints.maxHeight - drawn.height) / 2,
+      _band + (area.width - drawn.width) / 2,
+      _band + (area.height - drawn.height) / 2,
     );
     // Snapped to the device-pixel grid before anyone sees it: the
     // checkerboard is painted anti-aliased while the platform texture is not,
@@ -760,12 +769,15 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   void _scrollZoom(Offset cursor, double dy, BoxConstraints constraints,
       BridgeCompSize size, Rect fitted) {
     if (size.width == 0 || fitted.width <= 0) return;
+    // In the picture area's own frame, the rulers taken off both ends: the
+    // anchoring maths and the pan it returns are measured from the middle of
+    // whatever the picture is centred in.
     final next = zoomAboutPoint(
-      cursor: cursor,
+      cursor: cursor - _bandOffset,
       factor: math.pow(1.0012, -dy).toDouble(),
-      fitted: fitted,
+      fitted: fitted.shift(-_bandOffset),
       compSize: Size(size.width.toDouble(), size.height.toDouble()),
-      panel: Size(constraints.maxWidth, constraints.maxHeight),
+      panel: _pictureArea(constraints),
     );
     setState(() {
       _zoomFrom = null;
@@ -780,9 +792,8 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     final w = size.width.toDouble();
     final h = size.height.toDouble();
     if (w <= 0 || h <= 0) return 1;
-    return constraints.maxWidth / w < constraints.maxHeight / h
-        ? constraints.maxWidth / w
-        : constraints.maxHeight / h;
+    final area = _pictureArea(constraints);
+    return area.width / w < area.height / h ? area.width / w : area.height / h;
   }
 
   /// Tell the engine what fraction of comp resolution the next render should be
@@ -826,6 +837,23 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// Kept because the bar is built outside the layout builder that measures it,
   /// and a zoom has to know where it is flying *from*.
   double _shownScale = 1;
+
+  /// How much of the stage the rulers are standing on: [viewerRulerBand] down
+  /// the top and left edges while they are up, nothing at all otherwise
+  /// (K-689).
+  ///
+  /// **Every measurement below is taken against what is left.** The picture is
+  /// fitted, centred, panned and zoomed inside that smaller rectangle, so
+  /// turning the rulers on moves the picture out from under them rather than
+  /// covering it — and because the fit, the anchor and the pan all read the
+  /// same number, none of them can drift apart from the others.
+  double _band = 0;
+
+  Offset get _bandOffset => Offset(_band, _band);
+
+  /// The stage's rectangle with the strips taken off it.
+  Size _pictureArea(BoxConstraints constraints) =>
+      Size(constraints.maxWidth - _band, constraints.maxHeight - _band);
 
   /// The playhead moved — from anywhere. The Timeline ruler, an arrow key and
   /// the transport all just set it, and this is what tells the engine.

@@ -76,6 +76,8 @@ class ViewerGuidesMenu extends StatelessWidget {
     final on = ui.viewerOverlays;
     final lit = on.grid ||
         on.safeAreas ||
+        on.rulers ||
+        ui.guides.isNotEmpty ||
         ui.regionOfInterest != null ||
         ui.armingRegion;
     return LumitTooltip(
@@ -130,6 +132,23 @@ class ViewerGuidesMenu extends StatelessWidget {
             pick: () =>
                 ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
           ),
+          // The rulers, and the magnet that decides whether a drag reaches for
+          // what they put on the picture (K-689). The magnet is the toolbar's
+          // own switch under a second name, exactly as the layer-controls row
+          // is the View menu's: one switch, two places to find it.
+          (
+            key: 'viewer-guides-rulers',
+            text: l10n.viewerOverlayRulers,
+            on: ui.viewerOverlays.rulers,
+            pick: () =>
+                ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
+          ),
+          (
+            key: 'viewer-guides-snap',
+            text: l10n.viewerOverlaySnap,
+            on: ui.tools.snapping,
+            pick: () => ui.tools.snapping = !ui.tools.snapping,
+          ),
           (
             key: 'viewer-wireframes',
             text: l10n.viewerOverlayLayerControls,
@@ -159,6 +178,23 @@ class ViewerGuidesMenu extends StatelessWidget {
               children: [
                 menuTick(row.on),
                 Text(row.text),
+              ],
+            ),
+          ),
+        // Taking every guide off this comp at once (K-689). Only offered when
+        // there is something to take off, and no tick: it is a command, not a
+        // state you can be in.
+        if (ui.guides.isNotEmpty)
+          MenuRow(
+            key: const ValueKey('viewer-guides-clear'),
+            onPressed: () {
+              close(null);
+              ui.setGuides(const []);
+            },
+            child: Row(
+              children: [
+                menuTick(false),
+                Text(l10n.viewerOverlayClearGuides),
               ],
             ),
           ),

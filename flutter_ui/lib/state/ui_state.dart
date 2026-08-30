@@ -1735,31 +1735,64 @@ class LumitUiState extends ChangeNotifier {
   /// Keyed by comp exactly as [regionsOfInterest] is, and for the same reason —
   /// which marks you want over a shot belong to that shot. Nothing here crosses
   /// the bridge: the engine's picture is untouched, so unlike the region there
-  /// is no push and no re-render, only a repaint. Session only for now; keeping
-  /// a comp's overlays with the project is owed (docs/TODO.md).
-  final Map<String, ({bool grid, bool safeAreas})> viewerOverlaysByComp = {};
+  /// is no push and no re-render, only a repaint.
+  ///
+  /// **They ride the per-project session** (K-689, doing what K-416's own note
+  /// said was owed): a comp opened tomorrow comes back with the scaffolding it
+  /// was left with, and none of it is in the document, so no tick makes a
+  /// project dirty and Ctrl+Z never undoes one.
+  final Map<String, ViewerOverlays> viewerOverlaysByComp = {};
 
   /// The fronted comp's overlays — nothing drawn, until something is asked for.
-  ({bool grid, bool safeAreas}) get viewerOverlays =>
+  ViewerOverlays get viewerOverlays =>
       viewerOverlaysByComp[_selectedComp?.internalid.toString()] ??
-      (grid: false, safeAreas: false);
+      noViewerOverlays;
 
-  /// Turn one overlay on or off, leaving the other as it is. Two named
+  /// Turn one overlay on or off, leaving the others as they are. Named
   /// arguments rather than a whole record, for [setViewerStops]'s reason: a
-  /// caller that rebuilt the pair from what it was *drawn* with would carry a
-  /// stale reading for the other half into the write.
-  void setViewerOverlays({bool? grid, bool? safeAreas}) {
+  /// caller that rebuilt the set from what it was *drawn* with would carry a
+  /// stale reading for the other switches into the write.
+  void setViewerOverlays({bool? grid, bool? safeAreas, bool? rulers}) {
     final id = _selectedComp?.internalid.toString();
     if (id == null) return;
     final now = viewerOverlays;
-    final next =
-        (grid: grid ?? now.grid, safeAreas: safeAreas ?? now.safeAreas);
-    if (next.grid || next.safeAreas) {
+    final next = (
+      grid: grid ?? now.grid,
+      safeAreas: safeAreas ?? now.safeAreas,
+      rulers: rulers ?? now.rulers,
+    );
+    if (next != noViewerOverlays) {
       viewerOverlaysByComp[id] = next;
     } else {
       viewerOverlaysByComp.remove(id);
     }
     notifyListeners();
+    rememberSession();
+  }
+
+  /// The **guides** of each comp (K-689, docs/07 §2.2 item 6), in comp pixels:
+  /// the lines dragged out of the Viewer's rulers, which layers snap to while
+  /// the magnet is on. Beside the overlays in the session, and for the same
+  /// reason — a guide is a mark over the picture, not an edit to the work.
+  final Map<String, List<ViewerGuide>> guidesByComp = {};
+
+  /// The fronted comp's guides, oldest first.
+  List<ViewerGuide> get guides =>
+      guidesByComp[_selectedComp?.internalid.toString()] ?? const [];
+
+  /// Replace the fronted comp's guides — what dragging one out of a ruler,
+  /// moving one and clearing the lot all go through, so the session is written
+  /// in exactly one place.
+  void setGuides(List<ViewerGuide> lines) {
+    final id = _selectedComp?.internalid.toString();
+    if (id == null) return;
+    if (lines.isEmpty) {
+      guidesByComp.remove(id);
+    } else {
+      guidesByComp[id] = List.unmodifiable(lines);
+    }
+    notifyListeners();
+    rememberSession();
   }
 
   /// Whether the Viewer draws its **layer controls** (K-217, K-466): the
@@ -1932,6 +1965,10 @@ class LumitUiState extends ChangeNotifier {
         },
         regionsOfInterest: {
           for (final e in regionsOfInterest.entries) e.key: List.of(e.value),
+        },
+        viewerOverlays: Map.of(viewerOverlaysByComp),
+        guides: {
+          for (final e in guidesByComp.entries) e.key: List.of(e.value),
         });
   }
 
@@ -1999,6 +2036,8 @@ class LumitUiState extends ChangeNotifier {
       playheadFrame.value = 0;
       viewerLooks.clear();
       previewResolutions.clear();
+      viewerOverlaysByComp.clear();
+      guidesByComp.clear();
       // Another project's colour config names another project's views.
       _colourView = null;
       // A new project is a new worker, and a new worker is born knowing
@@ -2047,6 +2086,15 @@ class LumitUiState extends ChangeNotifier {
         if (known.containsKey(e.key)) {
           regionsOfInterest[e.key] = List.of(e.value);
         }
+      }
+      // The marks over each comp and the guides on it (K-689), same rule
+      // again: an overlay or a guide kept against a comp id that has gone
+      // would be written back out for ever.
+      viewerOverlaysByComp.addEntries(
+        session.viewerOverlays.entries.where((e) => known.containsKey(e.key)),
+      );
+      for (final e in session.guides.entries) {
+        if (known.containsKey(e.key)) guidesByComp[e.key] = List.of(e.value);
       }
       // Where the user was in each comp (K-624), same rule again.
       compViews.addEntries(

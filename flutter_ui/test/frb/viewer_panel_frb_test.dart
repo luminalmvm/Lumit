@@ -36,6 +36,7 @@ import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/panels/viewer_overlays.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_paint.dart';
+import 'package:lumit_flutter/panels/viewer_rulers.dart';
 import 'package:lumit_flutter/panels/viewer_zoom.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -817,13 +818,59 @@ void main() {
       );
 
       await pick('viewer-guides-safe');
-      expect(p.uiState.viewerOverlays, (grid: true, safeAreas: true));
+      expect(p.uiState.viewerOverlays,
+          (grid: true, safeAreas: true, rulers: false));
 
       // Off again, one at a time: the painter goes only when the last mark has.
       await pick('viewer-guides-grid');
       expect(overlay, findsOneWidget, reason: 'the safe areas are still on');
       await pick('viewer-guides-safe');
       expect(overlay, findsNothing);
+    });
+
+    /// **The rulers stand on the panel, not on the picture** (K-689, docs/07
+    /// §2.2 item 6): turning them on moves the picture out from under them,
+    /// which is what makes a guide dragged out of a strip land on the shot
+    /// rather than on a band covering it. And a guide is a mark over one comp,
+    /// so it rides that comp's session.
+    testWidgets('the rulers inset the picture, and guides come out of them',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final rulers = find.byKey(const ValueKey('viewer-rulers'));
+      expect(rulers, findsNothing, reason: 'no rulers, and no guides either');
+
+      await pickViewRow(tester, 'viewer-guides-rulers');
+      expect(p.uiState.viewerOverlays.rulers, isTrue);
+      expect(rulers, findsOneWidget);
+      final painter = tester.widget<CustomPaint>(rulers).painter;
+      expect(
+        painter,
+        isA<ViewerRulerPainter>().having(
+          (x) => x.picture.left,
+          'the picture starts past the strip',
+          greaterThanOrEqualTo(viewerRulerBand),
+        ),
+      );
+
+      // Out of the top strip and onto the picture: a horizontal guide, kept
+      // against this comp.
+      final stage = tester.getTopLeft(find.byType(ViewerStage));
+      await tester.dragFrom(
+          stage + const Offset(200, viewerRulerBand / 2), const Offset(0, 120));
+      await tester.pumpAndSettle();
+      expect(p.uiState.guides.length, 1);
+      expect(p.uiState.guides.single.vertical, isFalse);
+      expect(
+        p.uiState.session().guides[p.comp.internalid.toString()],
+        p.uiState.guides,
+        reason: 'a guide is written down with where the user was',
+      );
+
+      // And the menu takes them all off again.
+      await pickViewRow(tester, 'viewer-guides-clear');
+      expect(p.uiState.guides, isEmpty);
     });
 
     /// **A snapshot is a second picture, and releasing the button is its whole

@@ -6950,6 +6950,54 @@ The region belongs to the composition, not the project. It rides the session
 alongside the preview resolution, so it is where you left it when you come back
 and it can never end up in an exported file.
 
+### Rulers, guides and the magnet (K-689)
+
+**The rulers.** `Ctrl+R`, View ▸ Show ruler, or Rulers in the Viewer's own view
+menu puts two thin strips along the **top and left** edges of the picture. They
+count the composition's own pixels — a 1920×1080 comp reads 0 to 1920 across —
+so the numbers mean the same thing whatever magnification you are looking at.
+The gap between numbered ticks changes as you zoom, always to a round step (10,
+50, 100, 500 …), chosen so the labels never crowd each other.
+
+The strips stand on the *panel*, not on the picture: turning them on gives the
+picture a slightly smaller box to sit in and it re-fits into what is left.
+Nothing is ever drawn on top of your shot, and zooming still keeps the point
+under the pointer under the pointer.
+
+**Guides.** Press in a strip and drag onto the picture: a line comes out with
+the pointer and stays where you drop it. The top strip gives you a horizontal
+guide, the left strip a vertical one, which is the way round every editor has
+taught. To move one, drag the line itself; to get rid of it, drag it back onto a
+ruler or off the edge of the picture. *Clear guides* in the view menu takes them
+all off at once.
+
+A guide is stored in composition pixels, so it pans and zooms with the shot
+rather than floating over the panel. It belongs to that composition and rides
+the **session**, like the region of interest: it is there when you come back
+tomorrow, it never makes the project "unsaved", Ctrl+Z will not undo it, and no
+export has ever seen one. The grid and the safe-area rectangles now ride the
+session the same way, which they did not before.
+
+**The magnet.** The horseshoe on the toolbar is back, and it is what makes a
+layer you drag on the picture *want* to land on a guide. With it on, the box's
+left edge, right edge and middle all reach for the nearest guide within about
+eight pixels of screen — measured on screen, so zooming in is how you place
+something precisely and zooming out is how you snap freely. Each direction is
+decided on its own, so a layer held against a vertical guide still slides up and
+down it freely. Hold `Ctrl` while dragging and the magnet lets go for as long as
+you hold it, exactly as in the Timeline.
+
+**Snap to grid** in the View menu adds the grid's own eighths, and the frame's
+edges, to the list of things a drag can land on. It is off to begin with: the
+grid is mostly there to read the frame against, and a magnet pulling everything
+onto an eighth of the frame would be in the way.
+
+Nothing flashes to tell you a snap happened, and that is deliberate. In the
+Timeline a snap target is invisible until something lands on it, so the panel
+draws a line to say what caught the drag; a guide is already a line you are
+looking at, so the layer arriving on it says the same thing without a second
+mark.
+
 ### Lights that actually light things (K-361)
 
 A Light layer used to be something the Lens flare read. Now it is also
