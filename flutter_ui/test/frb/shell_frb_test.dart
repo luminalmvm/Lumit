@@ -913,6 +913,50 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// Where a whole section does not apply, the section says so rather than
+    /// each row saying it alone: the group's name goes to `text_disabled` and
+    /// nothing inside it answers a click. Deaf, not faded, and with no line of
+    /// prose explaining the obvious.
+    testWidgets('a section the output cannot use goes dead entire',
+        (tester) async {
+      await open(tester);
+
+      bool dead(String group) => tester
+          .widget<IgnorePointer>(find
+              .descendant(
+                of: find.byKey(ValueKey<String>('export-group-$group')),
+                matching: find.byType(IgnorePointer),
+              )
+              .first)
+          .ignoring;
+
+      expect(dead('audio'), isFalse, reason: 'an mp4 carries sound');
+      expect(dead('picture'), isFalse);
+      expect(dead('colour'), isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
+      await tester.pumpAndSettle();
+      expect(dead('audio'), isTrue, reason: 'a folder of stills is mute');
+      expect(dead('picture'), isFalse,
+          reason: 'a sequence is all picture, whatever it cannot carry');
+      expect(dead('metadata'), isTrue,
+          reason: 'and has no container to keep metadata in');
+
+      await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
+      await tester.pumpAndSettle();
+      expect(dead('picture'), isTrue,
+          reason: 'a sound file has no picture to size, crop or resample');
+      expect(dead('colour'), isTrue, reason: 'and no colour to state either');
+      expect(dead('audio'), isFalse);
+      expect(find.textContaining('refused rather than written wrongly'),
+          findsNothing,
+          reason: 'the disabled group states the fact; the note would repeat '
+              'it about a colour nobody is writing');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// *Still* is gone (K-485): an image sequence of one frame is a still, and
     /// the span already says how many frames there are.
     testWidgets('there is no Still output type', (tester) async {
@@ -1240,8 +1284,8 @@ void main() {
 
       // A second one seeds its own key and is edited on its own.
       await add();
-      expect(find.byKey(const ValueKey('export-metadata-name-6')),
-          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('export-metadata-name-6')), findsOneWidget);
       expect(find.text('encoded_by'), findsOneWidget,
           reason: 'and the first one keeps its name');
 
@@ -1300,8 +1344,8 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
-      expect(find.text('This format has nowhere to keep metadata.'),
-          findsNothing,
+      expect(
+          find.text('This format has nowhere to keep metadata.'), findsNothing,
           reason: 'the line that said the section did nothing has gone');
       expect(
           find.descendant(

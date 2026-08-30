@@ -236,12 +236,19 @@ Widget dialogTabs<T>(
 /// to the section it jumps to on a dialog that scrolls rather than paging
 /// (K-485). The accent is doing here exactly what it does in the tab strip:
 /// saying *this is the one you asked for*, and only while you are asking.
+///
+/// [dimmed] is a whole group the chosen output has no use for — the Audio group
+/// of a folder of stills, the picture groups of a sound file. Its name goes to
+/// `text_disabled` and nothing inside it answers a click; the rows stay drawn
+/// and legible, because being off is not being gone (docs/15 §5). Deaf but not
+/// faded, the same idiom a driven parameter row wears.
 Widget dialogGroup(
   LumitTheme t,
   String title,
   List<Widget> rows, {
   Key? key,
   bool highlighted = false,
+  bool dimmed = false,
 }) =>
     Padding(
       key: key,
@@ -255,10 +262,13 @@ Widget dialogGroup(
               borderRadius: BorderRadius.circular(dialogGroupRadius),
             ),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: rows,
+            child: IgnorePointer(
+              ignoring: dimmed,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: rows,
+              ),
             ),
           ),
           // The kicker sits *on* the edge, its own background cutting the line
@@ -270,7 +280,8 @@ Widget dialogGroup(
               color: t.surface1,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(title.toUpperCase(),
-                  style: t.kicker.copyWith(color: t.textSecondary)),
+                  style: t.kicker.copyWith(
+                      color: dimmed ? t.textDisabled : t.textSecondary)),
             ),
           ),
         ],
@@ -291,13 +302,19 @@ Widget dialogRow(
   double gap = 10,
   double minHeight = 28,
   Key? key,
+  bool dimmed = false,
 }) =>
     ConstrainedBox(
       key: key,
       constraints: BoxConstraints(minHeight: minHeight),
       child: Row(
         children: [
-          SizedBox(width: labelColumn, child: Text(label, style: t.body)),
+          SizedBox(
+              width: labelColumn,
+              child: Text(label,
+                  style: dimmed
+                      ? t.body.copyWith(color: t.textDisabled)
+                      : t.body)),
           SizedBox(width: gap),
           Expanded(child: control),
         ],

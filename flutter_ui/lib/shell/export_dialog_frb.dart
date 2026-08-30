@@ -533,8 +533,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     // a different container is a thing people want, and applying the preset
     // first means an unset codec changes nothing.
     if (defaults.codec.isNotEmpty) {
-      final format =
-          _formats.where((f) => f.key == defaults.codec).firstOrNull;
+      final format = _formats.where((f) => f.key == defaults.codec).firstOrNull;
       if (format != null) _format = format;
     }
     _seedDestination(defaults);
@@ -1360,9 +1359,13 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
+  /// Picture, and the sound-only case it has nothing to say in: a format with
+  /// no picture leaves every row here dead, so the whole group states that
+  /// rather than each row stating it alone.
   Widget _pictureGroup(LumitTheme t) {
     final (width, height) = _outputSize;
     final crop = _crop;
+    final dim = !_picture;
     return _group(
       t,
       ExportSection.picture,
@@ -1382,6 +1385,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               onChanged:
                   _caps.alpha ? (a) => _edit(() => _alphaChannel = a) : null,
             ),
+            dimmed: dim,
           ),
           _row(
             t,
@@ -1399,10 +1403,12 @@ class _ExportDialogState extends State<_ExportDialog> {
                   : null,
             ),
             labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
           ),
         ),
         _columns(
-          _row(t, l10n.exportDepth, _depthDropdown(t, 'export-depth')),
+          _row(t, l10n.exportDepth, _depthDropdown(t, 'export-depth'),
+              dimmed: dim),
           _row(
             t,
             l10n.exportBitRate,
@@ -1444,6 +1450,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ]),
             labelColumn: exportLabelColumnPaired,
+            dimmed: dim,
           ),
         ),
         _row(
@@ -1502,8 +1509,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             const SizedBox(width: 6),
             Flexible(
               child: Text(l10n.exportLockAspect,
-                  style: t.body.copyWith(
-                      color: _picture ? t.textMuted : t.textDisabled),
+                  style: t.body
+                      .copyWith(color: _picture ? t.textMuted : t.textDisabled),
                   overflow: TextOverflow.ellipsis),
             ),
             const Spacer(),
@@ -1525,6 +1532,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ),
           ]),
+          dimmed: dim,
         ),
         _row(
           t,
@@ -1542,14 +1550,13 @@ class _ExportDialogState extends State<_ExportDialog> {
             HouseCheckbox(
               key: const ValueKey('export-use-region'),
               value: _useRegion,
-              onChanged:
-                  _picture ? (on) => _edit(() => _useRegion = on) : null,
+              onChanged: _picture ? (on) => _edit(() => _useRegion = on) : null,
             ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(l10n.exportUseRegionOfInterest,
-                  style: t.body.copyWith(
-                      color: _picture ? t.textMuted : t.textDisabled),
+                  style: t.body
+                      .copyWith(color: _picture ? t.textMuted : t.textDisabled),
                   overflow: TextOverflow.ellipsis),
             ),
             const SizedBox(width: 8),
@@ -1566,13 +1573,17 @@ class _ExportDialogState extends State<_ExportDialog> {
               ),
             ),
           ]),
+          dimmed: dim,
         ),
         if (_images)
           _reading(
             t,
             l10n.exportImageSequenceNote(_format.extension.toUpperCase()),
           ),
-        if (crop != null &&
+        // Not while the group is dead: a reading of a frame nobody is writing
+        // is the "this does nothing" line the disabled group already states.
+        if (!dim &&
+            crop != null &&
             (crop.width < _compWidth || crop.height < _compHeight))
           _reading(
             t,
@@ -1580,6 +1591,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             key: const ValueKey('export-crop-reading'),
           ),
       ],
+      dimmed: dim,
     );
   }
 
@@ -1592,62 +1604,67 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// whatever the container can state, because an OCIO export is written
   /// untagged by design (docs/impl/ocio.md §5.2); what refuses it is the
   /// config, not the format, and `_colourRefused` is where that answer is.
-  Widget _colourGroup(LumitTheme t) => _group(
-        t,
-        ExportSection.colour,
-        l10n.exportGroupColour,
-        [
-          _row(
+  Widget _colourGroup(LumitTheme t) {
+    final dim = !_picture;
+    return _group(
+      t,
+      ExportSection.colour,
+      l10n.exportGroupColour,
+      [
+        _row(
+          t,
+          l10n.exportColourSpace,
+          dialogDropdown<String>(
             t,
-            l10n.exportColourSpace,
-            dialogDropdown<String>(
-              t,
-              id: 'export-colour-space',
-              value: _colourSpace,
-              options: _colourOptions,
-              label: _colourSpaceLabel,
-              // The config's names are the user's own words and never go
-              // through the label table (K-303); the heading over them is
-              // ours.
-              group: (v) => widget.colour.spaces.contains(v) &&
-                      !_caps.colourSpaces.contains(v)
-                  ? l10n.colourSpaceFromConfig
-                  : null,
-              disabledReason: (v) => _colourRefused[v],
-              onChanged: _colourOptions.length > 1
-                  ? (v) => _edit(() => _colourSpace = v)
-                  : null,
-            ),
+            id: 'export-colour-space',
+            value: _colourSpace,
+            options: _colourOptions,
+            label: _colourSpaceLabel,
+            // The config's names are the user's own words and never go
+            // through the label table (K-303); the heading over them is
+            // ours.
+            group: (v) => widget.colour.spaces.contains(v) &&
+                    !_caps.colourSpaces.contains(v)
+                ? l10n.colourSpaceFromConfig
+                : null,
+            disabledReason: (v) => _colourRefused[v],
+            onChanged: _colourOptions.length > 1
+                ? (v) => _edit(() => _colourSpace = v)
+                : null,
           ),
-          _row(
+          dimmed: dim,
+        ),
+        _row(
+          t,
+          l10n.exportColourManagement,
+          _dead(
             t,
-            l10n.exportColourManagement,
-            _dead(
-              t,
-              'export-ocio',
-              widget.colour.path.isEmpty
-                  ? l10n.exportColourOcio
-                  : widget.colour.path,
-              l10n.tipExportColourManagedBy,
-            ),
+            'export-ocio',
+            widget.colour.path.isEmpty
+                ? l10n.exportColourOcio
+                : widget.colour.path,
+            l10n.tipExportColourManagedBy,
           ),
-          // What the container will actually do with the choice, said where
-          // the choice is made: a wide-gamut file carrying no label is read as
-          // sRGB and comes back looking wrong.
-          // A file written through a config's transform carries no reliable
-          // primaries or transfer to state, so it is written untagged rather
-          // than mis-tagged (docs/impl/ocio.md §5.2) — said here, where the
-          // choice is made.
-          if (_colourFromConfig && _caps.colourSpaces.isNotEmpty)
-            _reading(t, l10n.exportColourConfigUntagged,
-                key: const ValueKey('export-colour-tagging'))
-          else if (_caps.colourSpaces.length > 1)
-            _reading(t, l10n.exportColourStated,
-                key: const ValueKey('export-colour-tagging')),
-          _reading(t, l10n.exportColourNote),
-
-        ],
-      );
+          dimmed: dim,
+        ),
+        // What the container will actually do with the choice, said where
+        // the choice is made: a wide-gamut file carrying no label is read as
+        // sRGB and comes back looking wrong.
+        // A file written through a config's transform carries no reliable
+        // primaries or transfer to state, so it is written untagged rather
+        // than mis-tagged (docs/impl/ocio.md §5.2) — said here, where the
+        // choice is made.
+        if (_colourFromConfig && _caps.colourSpaces.isNotEmpty)
+          _reading(t, l10n.exportColourConfigUntagged,
+              key: const ValueKey('export-colour-tagging'))
+        else if (_caps.colourSpaces.length > 1)
+          _reading(t, l10n.exportColourStated,
+              key: const ValueKey('export-colour-tagging')),
+        if (!dim) _reading(t, l10n.exportColourNote),
+      ],
+      dimmed: dim,
+    );
+  }
 
   /// The dropdown's list: the format's own built-in spaces, then the loaded
   /// config's, and always the stored value even where neither offers it — a
@@ -1682,182 +1699,195 @@ class _ExportDialogState extends State<_ExportDialog> {
         _ => stored,
       };
 
-  Widget _audioGroup(LumitTheme t) => _group(
-        t,
-        ExportSection.audio,
-        l10n.exportGroupAudio,
-        [
-          _row(
-            t,
-            l10n.exportGroupAudio,
-            Row(children: [
-              SizedBox(
-                width: exportAudioSourceWidth,
-                height: dialogControlHeight,
-                child: BareDropdown<bool>(
-                  key: const ValueKey('export-audio'),
-                  value: _audio,
-                  options: const [true, false],
-                  label: (on) =>
-                      on ? l10n.exportAudioAuto : l10n.exportAudioOff,
-                  onChanged:
-                      _caps.audio ? (on) => _edit(() => _audio = on) : null,
-                ),
+  /// Sound, and the mute case: a folder of stills carries none, so the group
+  /// goes dead entire rather than offering four rows that write nothing.
+  Widget _audioGroup(LumitTheme t) {
+    final dim = !_caps.audio;
+    return _group(
+      t,
+      ExportSection.audio,
+      l10n.exportGroupAudio,
+      [
+        _row(
+          t,
+          l10n.exportGroupAudio,
+          Row(children: [
+            SizedBox(
+              width: exportAudioSourceWidth,
+              height: dialogControlHeight,
+              child: BareDropdown<bool>(
+                key: const ValueKey('export-audio'),
+                value: _audio,
+                options: const [true, false],
+                label: (on) => on ? l10n.exportAudioAuto : l10n.exportAudioOff,
+                onChanged:
+                    _caps.audio ? (on) => _edit(() => _audio = on) : null,
               ),
-              const SizedBox(width: 6),
-              // The three sound settings (K-493). The rate resamples at the
-              // source rather than after the mix; the width means something
-              // only for the uncompressed forms, so AAC offers sixteen alone
-              // rather than accepting a setting it cannot honour; and mono is
-              // the finished stereo mix folded down, once.
-              SizedBox(
-                width: exportAudioRateWidth,
-                height: dialogControlHeight,
-                child: BareDropdown<int>(
-                  key: const ValueKey('export-audio-sample-rate'),
-                  value: _audioSampleRate,
-                  options: _sampleRates,
-                  label: _sampleRateLabel,
-                  onChanged: _caps.audio && _audio
-                      ? (r) => _edit(() => _audioSampleRate = r)
-                      : null,
-                ),
+            ),
+            const SizedBox(width: 6),
+            // The three sound settings (K-493). The rate resamples at the
+            // source rather than after the mix; the width means something
+            // only for the uncompressed forms, so AAC offers sixteen alone
+            // rather than accepting a setting it cannot honour; and mono is
+            // the finished stereo mix folded down, once.
+            SizedBox(
+              width: exportAudioRateWidth,
+              height: dialogControlHeight,
+              child: BareDropdown<int>(
+                key: const ValueKey('export-audio-sample-rate'),
+                value: _audioSampleRate,
+                options: _sampleRates,
+                label: _sampleRateLabel,
+                onChanged: _caps.audio && _audio
+                    ? (r) => _edit(() => _audioSampleRate = r)
+                    : null,
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: exportAudioDepthWidth,
-                height: dialogControlHeight,
-                child: BareDropdown<int>(
-                  key: const ValueKey('export-audio-depth'),
-                  value: _audioDepth,
-                  options: _caps.audio24Bit ? const [16, 24] : const [16],
-                  label: (d) =>
-                      d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
-                  onChanged: _caps.audio && _caps.audio24Bit && _audio
-                      ? (d) => _edit(() => _audioDepth = d)
-                      : null,
-                ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: exportAudioDepthWidth,
+              height: dialogControlHeight,
+              child: BareDropdown<int>(
+                key: const ValueKey('export-audio-depth'),
+                value: _audioDepth,
+                options: _caps.audio24Bit ? const [16, 24] : const [16],
+                label: (d) =>
+                    d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
+                onChanged: _caps.audio && _caps.audio24Bit && _audio
+                    ? (d) => _edit(() => _audioDepth = d)
+                    : null,
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: exportAudioLayoutWidth,
-                height: dialogControlHeight,
-                child: BareDropdown<int>(
-                  key: const ValueKey('export-audio-layout'),
-                  value: _audioChannels,
-                  options: const [2, 1],
-                  label: (c) =>
-                      c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
-                  onChanged: _caps.audio && _audio
-                      ? (c) => _edit(() => _audioChannels = c)
-                      : null,
-                ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: exportAudioLayoutWidth,
+              height: dialogControlHeight,
+              child: BareDropdown<int>(
+                key: const ValueKey('export-audio-layout'),
+                value: _audioChannels,
+                options: const [2, 1],
+                label: (c) =>
+                    c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
+                onChanged: _caps.audio && _audio
+                    ? (c) => _edit(() => _audioChannels = c)
+                    : null,
               ),
-              const Spacer(),
-              SizedBox(
-                width: exportAudioBitRateWidth,
-                height: dialogControlHeight,
-                child: BareDropdown<int>(
-                  key: const ValueKey('export-audio-rate'),
-                  value: _audioRate,
-                  options: _audioRates,
-                  label: (r) => '${r ~/ 1000} kb/s',
-                  onChanged: _caps.audioBitRate && _audio
-                      ? (r) => _edit(() => _audioRate = r)
-                      : null,
-                ),
+            ),
+            const Spacer(),
+            SizedBox(
+              width: exportAudioBitRateWidth,
+              height: dialogControlHeight,
+              child: BareDropdown<int>(
+                key: const ValueKey('export-audio-rate'),
+                value: _audioRate,
+                options: _audioRates,
+                label: (r) => '${r ~/ 1000} kb/s',
+                onChanged: _caps.audioBitRate && _audio
+                    ? (r) => _edit(() => _audioRate = r)
+                    : null,
               ),
-            ]),
-          ),
-        ],
-      );
+            ),
+          ]),
+          dimmed: dim,
+        ),
+      ],
+      dimmed: dim,
+    );
+  }
 
   /// Metadata: an ordered key/value set, because the order lands in the file
   /// and an export is deterministic. The five classic fields lead, named; a
   /// field of one's own carries FFmpeg's own key in a well beside its value.
-  Widget _metadataGroup(LumitTheme t) => _group(
-        t,
-        ExportSection.metadata,
-        l10n.exportGroupMetadata,
-        [
-          for (final (index, field) in _metadata.indexed)
-            _row(
-              t,
-              field.label ?? '',
-              Row(children: [
-                if (field.name case final name?) ...[
-                  // The key, typed: FFmpeg's own word, and the reason the row
-                  // has no label above it.
-                  SizedBox(
-                    width: exportMetadataNameWidth,
-                    child: _caps.metadata
-                        ? HouseTextField(
-                            key: ValueKey<String>('export-metadata-name-$index'),
-                            controller: name,
-                            width: exportMetadataNameWidth,
-                            fill: t.surface0,
-                            onSubmitted: (_) => _edit(() {}),
-                            submitOnLostFocus: true,
-                          )
-                        : _well(t, name.text,
-                            key: ValueKey<String>(
-                                'export-metadata-name-$index'),
-                            tone: t.textDisabled),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Expanded(
-                  // A container with nowhere to keep metadata gets the reading
-                  // and not the field: the disabled face is the whole message,
-                  // where a line under the rows saying so was one more thing
-                  // to read.
+  /// A container with nowhere to keep metadata leaves the whole group dead,
+  /// the same way a sound file leaves Picture dead.
+  Widget _metadataGroup(LumitTheme t) {
+    final dim = !_caps.metadata;
+    return _group(
+      t,
+      ExportSection.metadata,
+      l10n.exportGroupMetadata,
+      [
+        for (final (index, field) in _metadata.indexed)
+          _row(
+            t,
+            field.label ?? '',
+            dimmed: dim,
+            Row(children: [
+              if (field.name case final name?) ...[
+                // The key, typed: FFmpeg's own word, and the reason the row
+                // has no label above it.
+                SizedBox(
+                  width: exportMetadataNameWidth,
                   child: _caps.metadata
                       ? HouseTextField(
-                          key: ValueKey<String>('export-metadata-$index'),
-                          controller: field.value,
-                          width: double.infinity,
+                          key: ValueKey<String>('export-metadata-name-$index'),
+                          controller: name,
+                          width: exportMetadataNameWidth,
                           fill: t.surface0,
                           onSubmitted: (_) => _edit(() {}),
                           submitOnLostFocus: true,
                         )
-                      : _well(t, field.value.text,
-                          key: ValueKey<String>('export-metadata-$index'),
+                      : _well(t, name.text,
+                          key: ValueKey<String>('export-metadata-name-$index'),
                           tone: t.textDisabled),
                 ),
                 const SizedBox(width: 6),
-                SizedBox(
-                  height: dialogControlHeight,
-                  child: HouseButton(
-                    key: ValueKey<String>('export-metadata-remove-$index'),
-                    onPressed: _caps.metadata
-                        ? () => _edit(() {
-                              _metadata.removeAt(index).dispose();
-                            })
-                        : null,
-                    child: Text(l10n.exportMetadataRemove, style: t.body),
-                  ),
-                ),
-              ]),
-            ),
-          _row(
-            t,
-            '',
-            Row(children: [
+              ],
+              Expanded(
+                // A container with nowhere to keep metadata gets the reading
+                // and not the field: the disabled face is the whole message,
+                // where a line under the rows saying so was one more thing
+                // to read.
+                child: _caps.metadata
+                    ? HouseTextField(
+                        key: ValueKey<String>('export-metadata-$index'),
+                        controller: field.value,
+                        width: double.infinity,
+                        fill: t.surface0,
+                        onSubmitted: (_) => _edit(() {}),
+                        submitOnLostFocus: true,
+                      )
+                    : _well(t, field.value.text,
+                        key: ValueKey<String>('export-metadata-$index'),
+                        tone: t.textDisabled),
+              ),
+              const SizedBox(width: 6),
               SizedBox(
                 height: dialogControlHeight,
                 child: HouseButton(
-                  key: const ValueKey('export-metadata-add'),
+                  key: ValueKey<String>('export-metadata-remove-$index'),
                   onPressed: _caps.metadata
-                      ? () => _edit(() => _metadata
-                          .add(_MetaField.own('field_${_metadata.length + 1}')))
+                      ? () => _edit(() {
+                            _metadata.removeAt(index).dispose();
+                          })
                       : null,
-                  child: Text(l10n.exportMetadataAdd, style: t.body),
+                  child: Text(l10n.exportMetadataRemove, style: t.body),
                 ),
               ),
             ]),
           ),
-        ],
-      );
+        _row(
+          t,
+          '',
+          dimmed: dim,
+          Row(children: [
+            SizedBox(
+              height: dialogControlHeight,
+              child: HouseButton(
+                key: const ValueKey('export-metadata-add'),
+                onPressed: _caps.metadata
+                    ? () => _edit(() => _metadata
+                        .add(_MetaField.own('field_${_metadata.length + 1}')))
+                    : null,
+                child: Text(l10n.exportMetadataAdd, style: t.body),
+              ),
+            ),
+          ]),
+        ),
+      ],
+      dimmed: dim,
+    );
+  }
 
   // ---- the pieces a row is made of -----------------------------------------
 
@@ -1867,18 +1897,20 @@ class _ExportDialogState extends State<_ExportDialog> {
     LumitTheme t,
     ExportSection section,
     String title,
-    List<Widget> rows,
-  ) =>
+    List<Widget> rows, {
+    bool dimmed = false,
+  }) =>
       dialogGroup(
         t,
         title,
         rows,
         key: ValueKey<String>('export-group-${title.toLowerCase()}'),
         highlighted: _flash == section,
+        dimmed: dimmed,
       );
 
   Widget _row(LumitTheme t, String label, Widget control,
-          {double labelColumn = exportLabelColumn}) =>
+          {double labelColumn = exportLabelColumn, bool dimmed = false}) =>
       dialogRow(
         t,
         label,
@@ -1886,6 +1918,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         labelColumn: labelColumn,
         gap: exportRowGap,
         minHeight: exportRowHeight,
+        dimmed: dimmed,
       );
 
   /// Two short rows side by side, as the drawing sets them.
@@ -2138,10 +2171,8 @@ class _ExportDialogState extends State<_ExportDialog> {
       template: defaults.filenameTemplate,
     ).defaultName;
     if (name.isEmpty) return;
-    _path = _join(
-        folder,
-        name.replaceFirst(
-            RegExp(r'\.[A-Za-z0-9]+$'), '.${_format.extension}'));
+    _path = _join(folder,
+        name.replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '.${_format.extension}'));
   }
 
   /// The folder the open project's file sits in, or empty where it has never
