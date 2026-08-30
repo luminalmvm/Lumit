@@ -952,7 +952,17 @@ void main() {
 
       expect(find.byKey(const ValueKey('viewer-resolution')), findsOneWidget);
 
-      await pickHeaderRow(tester, 'viewer-resolution', 'viewer-quality-half');
+      // **Opened once** (K-671): every row in this menu is an option row, so
+      // the menu stays up and the next answer is one tap away.
+      await pressBar(tester, 'viewer-resolution');
+      await tester.pumpAndSettle();
+
+      Future<void> pick(String key) async {
+        await tester.tap(find.byKey(ValueKey<String>(key)));
+        await tester.pumpAndSettle();
+      }
+
+      await pick('viewer-quality-half');
       expect(p.uiState.previewResolution, PreviewResolution.half,
           reason: 'the bar reaches the same state the View menu sets — the '
               'resolution→scale arithmetic itself is pinned in '
@@ -960,14 +970,54 @@ void main() {
 
       expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame,
           reason: 'every frame is the shipped default (K-670)');
-      await pickHeaderRow(
-          tester, 'viewer-resolution', 'viewer-playback-adaptive');
+      await pick('viewer-playback-adaptive');
       expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive,
           reason: 'and the choice is remembered, not just drawn');
 
-      await pickHeaderRow(
-          tester, 'viewer-resolution', 'viewer-playback-everyFrame');
+      await pick('viewer-playback-everyFrame');
       expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame);
+
+      // Three choices, and the menu never went away — which is what makes
+      // comparing two tiers a matter of looking rather than of reopening.
+      expect(find.byKey(const ValueKey('viewer-quality-auto')), findsOneWidget);
+    });
+
+    /// **An option row leaves the menu open, and the pointer leaving takes it
+    /// down** (K-671). The stay-open half is what the picker test above walks;
+    /// this pins the way out, because a menu that stays and cannot be got rid
+    /// of by moving away is worse than one that shuts too eagerly.
+    testWidgets('the quality menu goes when the pointer leaves it',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      await pressBar(tester, 'viewer-resolution');
+      await tester.pumpAndSettle();
+
+      // A pointer that is on the menu, then off it. Before an option is
+      // picked the menu ignores the pointer leaving — it was opened by a
+      // click and a click is what takes it away.
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      final row = find.byKey(const ValueKey('viewer-quality-half'));
+      await tester.sendEventToBinding(pointer.hover(tester.getCenter(row)));
+      await tester.pumpAndSettle();
+      await tester.sendEventToBinding(pointer.hover(const Offset(5, 500)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('viewer-quality-half')), findsOneWidget,
+          reason: 'nothing was picked, so nothing armed the way out');
+
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(p.uiState.previewResolution, PreviewResolution.half);
+      expect(find.byKey(const ValueKey('viewer-quality-half')), findsOneWidget,
+          reason: 'the option row left the menu up');
+
+      await tester.sendEventToBinding(pointer.hover(tester.getCenter(row)));
+      await tester.pumpAndSettle();
+      await tester.sendEventToBinding(pointer.hover(const Offset(5, 500)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('viewer-quality-half')), findsNothing,
+          reason: 'and the pointer leaving is the way out');
     });
 
     /// **Auto and Full are not the same tier** (K-357). Auto renders what the

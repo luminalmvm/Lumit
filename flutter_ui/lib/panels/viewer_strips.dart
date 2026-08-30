@@ -287,51 +287,65 @@ class _QualityDropdown extends StatelessWidget {
         builder: (context) => dropdownButton(
           t: t,
           dense: true,
-          onPressed: () => _open(context, t, ui, adaptive),
+          onPressed: () => _open(context, t, ui),
           face: dropdownFace(t, ui.previewResolution.title),
         ),
       ),
     );
   }
 
-  void _open(
-      BuildContext context, LumitTheme t, LumitUiState ui, bool adaptive) {
+  void _open(BuildContext context, LumitTheme t, LumitUiState ui) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
     showMenuAt<void>(
       context: context,
       position: box.localToGlobal(Offset(0, box.size.height + 2)),
+      // **Every row here is an option row** (K-671): both halves of this menu
+      // change the picture in front of you, and picking one is usually
+      // comparing it with the last. So the menu stays until the pointer
+      // leaves it, and the ticks are redrawn in place — which is what the
+      // builder is for, since a row that stays has to be able to change its
+      // mind about which one is ticked.
       rows: (close) => [
-        _menuHeading(t, l10n.viewerQualityResolution),
-        for (final resolution in PreviewResolution.values)
-          MenuRow(
-            key: ValueKey<String>('viewer-quality-${resolution.name}'),
-            onPressed: () {
-              close(null);
-              ui.setPreviewResolution(resolution);
-            },
-            child: Row(children: [
-              menuTick(resolution == ui.previewResolution),
-              Text(resolution.title),
-            ]),
+        StatefulBuilder(
+          builder: (context, redraw) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _menuHeading(t, l10n.viewerQualityResolution),
+              for (final resolution in PreviewResolution.values)
+                MenuRow.option(
+                  key: ValueKey<String>('viewer-quality-${resolution.name}'),
+                  onPressed: () {
+                    ui.setPreviewResolution(resolution);
+                    redraw(() {});
+                  },
+                  child: Row(children: [
+                    menuTick(resolution == ui.previewResolution),
+                    Text(resolution.title),
+                  ]),
+                ),
+              _menuHeading(t, l10n.viewerQualityPlayback),
+              for (final mode in PlaybackMode.values)
+                MenuRow.option(
+                  key: ValueKey<String>('viewer-playback-${mode.name}'),
+                  onPressed: () {
+                    ui.workspace.performance.playback = mode;
+                    ui.workspace.touch();
+                    redraw(() {});
+                  },
+                  child: Row(children: [
+                    // Read live rather than from the face the menu opened
+                    // with: a row that stays open outlives it.
+                    menuTick(mode == ui.workspace.performance.playback),
+                    Text(mode == PlaybackMode.adaptive
+                        ? l10n.playbackAdaptiveShort
+                        : l10n.playbackEveryFrame),
+                  ]),
+                ),
+            ],
           ),
-        _menuHeading(t, l10n.viewerQualityPlayback),
-        for (final mode in PlaybackMode.values)
-          MenuRow(
-            key: ValueKey<String>('viewer-playback-${mode.name}'),
-            onPressed: () {
-              close(null);
-              ui.workspace.performance.playback = mode;
-              ui.workspace.touch();
-            },
-            child: Row(children: [
-              menuTick(mode ==
-                  (adaptive ? PlaybackMode.adaptive : PlaybackMode.everyFrame)),
-              Text(mode == PlaybackMode.adaptive
-                  ? l10n.playbackAdaptiveShort
-                  : l10n.playbackEveryFrame),
-            ]),
-          ),
+        ),
       ],
     );
   }

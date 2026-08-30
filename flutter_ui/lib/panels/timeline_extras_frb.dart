@@ -205,6 +205,10 @@ class DoubleTap {
 /// [rows] builds the menu rows around `close`, which resolves the popup with
 /// what was picked (or null when it is dismissed). With no [width] the menu
 /// sizes itself to its widest row, which is what the marker menus always did.
+///
+/// A [MenuRow.option] in here leaves the menu up (K-671); the pointer leaving
+/// the surface is then what takes it down, which is why the close is handed to
+/// the surface as well as to the rows.
 Future<T?> showMenuAt<T>({
   required BuildContext context,
   required Offset position,
@@ -222,6 +226,7 @@ Future<T?> showMenuAt<T>({
         );
         return FloatSurface(
           width: width,
+          onLeaveAfterOption: () => close(null),
           child: width == null ? IntrinsicWidth(child: column) : column,
         );
       },

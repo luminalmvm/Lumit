@@ -743,24 +743,43 @@ void main() {
       expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
           reason: 'the default does not follow the panel down');
 
-      await choose(tester, 'View', 'Half', under: 'Resolution');
+      // **The submenu is opened once** (K-671): a resolution row is an option
+      // row, so it leaves the menu up and the next tier is one tap away. Five
+      // tiers, one opening — which is the whole point of the convention.
+      await tester.tap(find.byKey(const ValueKey('menu-View')));
+      await tester.pump();
+      await tester.tap(find.text('Resolution'));
+      await tester.pump();
+
+      Future<void> pick(String tier) async {
+        await tester.tap(find.text(tier));
+        await tester.pump();
+      }
+
+      await pick('Half');
       expect(p.uiState.previewResolution, PreviewResolution.half);
       expect(p.uiState.viewerScale, closeTo(0.5, 1e-9),
           reason: 'Half is half of the composition, not of the panel');
+      expect(find.text('Quarter'), findsOneWidget,
+          reason: 'and the menu is still there to pick the next one from');
 
-      await choose(tester, 'View', 'Quarter', under: 'Resolution');
+      await pick('Quarter');
       expect(p.uiState.viewerScale, closeTo(0.25, 1e-9));
 
-      await choose(tester, 'View', 'Full', under: 'Resolution');
+      await pick('Full');
       expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
           reason: 'Full is comp resolution whatever the panel is showing');
 
-      await choose(tester, 'View', 'Third', under: 'Resolution');
+      await pick('Third');
       expect(p.uiState.viewerScale, closeTo(1.0 / 3.0, 1e-9));
 
-      await choose(tester, 'View', 'Auto', under: 'Resolution');
+      await pick('Auto');
       expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
           reason: 'and Auto is back to following the panel');
+
+      await dismiss(tester);
+      expect(find.text('Quarter'), findsNothing,
+          reason: 'a click away still takes the menu down');
     });
 
     /// The magnification rows *ask* the Viewer rather than doing it here:

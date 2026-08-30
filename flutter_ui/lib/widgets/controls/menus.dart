@@ -36,6 +36,18 @@ class MenuRow extends StatefulWidget {
   final VoidCallback onPressed;
   final bool selected;
 
+  /// **An option row leaves the menu open** (K-671), the way a checkbox row
+  /// does (K-520) — for the menus whose rows change the picture in front of
+  /// you: the preview resolution, the playback mode. Flipping between them is
+  /// comparing them, and a menu that shut after each choice made comparing two
+  /// tiers a matter of reopening the menu between every look.
+  ///
+  /// The row runs its command and stays; the menu then goes when the pointer
+  /// leaves it, on Escape, or on a click away. Only rows that pick one of
+  /// several *and* show their answer immediately: an ordinary command row
+  /// still closes, because closing is what doing something should do.
+  final bool option;
+
   /// What this row calls itself in its surface's hover state, for the rows that
   /// have to know which of them the pointer is over. Defaults to the row's own
   /// state; [SubmenuRow] passes its own, because the flyout belongs to the
@@ -48,7 +60,16 @@ class MenuRow extends StatefulWidget {
     required this.onPressed,
     this.selected = false,
     this.hoverId,
-  });
+  }) : option = false;
+
+  /// A row that picks one of several and leaves the menu up — see [option].
+  const MenuRow.option({
+    super.key,
+    required this.child,
+    required this.onPressed,
+    this.selected = false,
+    this.hoverId,
+  }) : option = true;
 
   @override
   State<MenuRow> createState() => _MenuRowState();
@@ -81,7 +102,12 @@ class _MenuRowState extends State<MenuRow> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
+        onTap: () {
+          widget.onPressed();
+          // The row stayed, so the menu now needs a way out that is not a
+          // click: the pointer leaving it (K-671).
+          if (widget.option) surface?._optionPicked();
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
@@ -105,7 +131,20 @@ class _MenuRowState extends State<MenuRow> {
 class FloatSurface extends StatefulWidget {
   final Widget child;
   final double? width;
-  const FloatSurface({super.key, required this.child, this.width});
+
+  /// How to take this menu down once an option row has been picked and the
+  /// pointer has left it (K-671). Null on a surface with no option rows — and
+  /// on the menu bar's own lists, whose flyouts are navigated by moving off
+  /// one surface and onto another, so "the pointer left" is not a dismissal
+  /// there.
+  final VoidCallback? onLeaveAfterOption;
+
+  const FloatSurface({
+    super.key,
+    required this.child,
+    this.width,
+    this.onLeaveAfterOption,
+  });
 
   /// The row of the nearest floating surface the pointer is on, or null outside
   /// one, where no menu is being drawn.
@@ -280,6 +319,11 @@ class _FloatSurfaceState extends State<FloatSurface> {
     _hovered.value = owner;
   }
 
+  /// An option row was pressed and left the menu up (K-671). From here the
+  /// pointer leaving the surface is what takes it down.
+  bool _leaveArmed = false;
+  void _optionPicked() => _leaveArmed = true;
+
   /// The flyout has gone; the guard goes with it.
   void _disarmFlyoutGuard(Object owner) {
     if (_guardOwner != owner) return;
@@ -304,20 +348,28 @@ class _FloatSurfaceState extends State<FloatSurface> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final surface = Container(
+      width: widget.width,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: t.surface3,
+        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+        border: Border.all(color: t.hairline, width: 1),
+        boxShadow: t.floatShadow,
+      ),
+      child: widget.child,
+    );
     return _MenuHoverScope(
       hovered: _hovered,
       state: this,
-      child: Container(
-        width: widget.width,
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: t.surface3,
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          border: Border.all(color: t.hairline, width: 1),
-          boxShadow: t.floatShadow,
-        ),
-        child: widget.child,
-      ),
+      child: widget.onLeaveAfterOption == null
+          ? surface
+          : MouseRegion(
+              onExit: (_) {
+                if (_leaveArmed) widget.onLeaveAfterOption!();
+              },
+              child: surface,
+            ),
     );
   }
 }

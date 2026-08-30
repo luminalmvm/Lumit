@@ -224,6 +224,27 @@ class MenuEntry {
         live = null,
         rebuild = null;
 
+  /// **An option row that leaves the menu open** (K-671), on the same terms as
+  /// [MenuEntry.toggle] and for a narrower reason: the rows that pick one of
+  /// several *and* change the picture in front of you — the preview
+  /// resolution. Picking one is nearly always comparing it with the last, and
+  /// a menu that shut after each choice made comparing two tiers a matter of
+  /// reopening the menu between every look.
+  ///
+  /// K-520 left these as ordinary rows because "closing is what a choice
+  /// should do"; that holds for a choice you cannot see the result of without
+  /// the menu out of the way — a workspace preset — and not for one whose
+  /// whole point is on screen behind the menu.
+  MenuEntry.option(this.label, this.onPressed,
+      {this.action, required bool Function() checked})
+      : isDivider = false,
+        children = null,
+        todo = false,
+        _checked = null,
+        _checkedNow = checked,
+        live = null,
+        rebuild = null;
+
   MenuEntry.divider()
       : label = null,
         onPressed = null,
@@ -284,7 +305,9 @@ class MenuEntry {
     return now == null ? _checked : now();
   }
 
-  /// Whether pressing this row leaves the menu up (K-520).
+  /// Whether pressing this row leaves the menu up — a [MenuEntry.toggle]
+  /// (K-520) or a [MenuEntry.option] (K-671). Both read their tick through a
+  /// closure, which is what lets it be redrawn after the press.
   bool get keepsMenuOpen => _checkedNow != null;
 
   /// This row as it currently reads. The same row for everything except a
@@ -1024,13 +1047,13 @@ List<MenuSection> lumitMenus(
         // asked for, ticked so the menu says which one is in force.
         MenuEntry.submenu(l10n.menuResolution, [
           for (final resolution in PreviewResolution.values)
-            MenuEntry(
+            MenuEntry.option(
               resolution.title,
               () => ui.setPreviewResolution(resolution),
               // Only three of the five have a chord of their own (§15);
               // Auto and Third are menu and bar only.
               action: resolution.action,
-              checked: ui.previewResolution == resolution,
+              checked: () => ui.previewResolution == resolution,
             ),
         ]),
         MenuEntry.divider(),
