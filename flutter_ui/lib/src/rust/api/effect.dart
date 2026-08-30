@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -194,8 +194,32 @@ List<BridgeParamGroup> listParameterGroups({required String effect}) =>
 List<BridgeEnabledWhen> listEnabledWhen({required String effect}) =>
     BridgeLib.instance.api.crateApiEffectListEnabledWhen(effect: effect);
 
+/// The v1 node vocabulary (custom-shader.md §4.3), in listing order. Static:
+/// asked once and memoised Dart-side like every other catalogue.
+List<BridgeShaderNodeKind> listShaderNodes() =>
+    BridgeLib.instance.api.crateApiEffectListShaderNodes();
+
+/// Resolve one graph document for drawing: every box's ports and types, and
+/// whether the whole thing compiles.
+///
+/// A pure question — nothing is staged and no document moves — which is also
+/// how the canvas refuses a drop: build the candidate graph, ask, and decline
+/// visually when the answer names a mismatch or a cycle. The engine stays the
+/// single validator; the panel never learns the type rules (K-183's spirit:
+/// display and forward, decide in Rust). Called on gestures and reloads, never
+/// in a rebuild.
+BridgeShaderGraphView shaderGraphView({required String graph}) =>
+    BridgeLib.instance.api.crateApiEffectShaderGraphView(graph: graph);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<BridgeEffectInstance>>
 abstract class BridgeEffectInstance implements RustOpaqueInterface {
+  /// Detach the inner graph (§4.1): keep the compiled text, drop the `graph`
+  /// key, and leave an ordinary hand-written shader behind. One staged edit,
+  /// committed with the stack, so it is one undo step — and it is not
+  /// reversible by another button, which is the honest shape: the graph is
+  /// gone because the user said so.
+  void detachShaderGraph();
+
   /// False when the effect is individually bypassed (docs/08 §1.5) — the state
   /// of the checkbox in its title bar.
   bool enabled();
@@ -262,6 +286,22 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// live, and the document's business is only which pairs are tied.
   bool setPairLinked({required String stem, required bool linked});
 
+  /// Stage a whole inner graph on this instance (§4.1, CS4), exactly as
+  /// `set_shader_source` stages text: `LayerReference::set_effects` is the
+  /// commit, so a graph edit is one `SetLayerEffects` and one undo step.
+  ///
+  /// The graph becomes master. When it compiles, the compiled WGSL is written
+  /// into `source` in the same staging — the cached text §4.1 keeps so a
+  /// build that cannot compile the graph can still render it — and `origin`
+  /// is dropped, the text no longer being any file's. When it does not
+  /// compile, the graph is stored anyway with the last text left standing:
+  /// being broken is a normal state to pass through, and the badge says so.
+  ///
+  /// # Errors
+  /// [`BridgeError::InvalidShaderGraph`] when the text is not a graph
+  /// document at all — a caller bug, not a user state.
+  void setShaderGraph({required String graph});
+
   /// Stage this instance's shader source on the **staged** copy, exactly as
   /// `set_custom_name` and `set_value` do: `LayerReference::set_effects` is the
   /// commit, so a shader edit is one `SetLayerEffects` and one undo step like
@@ -294,6 +334,13 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// not deciding for it; a control that forgets to can no longer render a
   /// value the parameter does not have.
   void setValue({required String id, required BridgeEffectValue value});
+
+  /// The stored inner graph, as its JSON text, or `None` for a hand-written
+  /// (or empty) shader (docs/impl/custom-shader.md §4, CS4).
+  ///
+  /// Read on the gesture that enters the graph, never per rebuild — the same
+  /// contract `shader_source` has, and for the same reason.
+  String? shaderGraph();
 
   /// Where the text came from, when it was loaded from a file — remembered for
   /// reload and **never read at render**: a project must be one file that opens
@@ -1091,6 +1138,115 @@ sealed class BridgeScalar with _$BridgeScalar {
   ) = BridgeScalar_Expression;
 }
 
+/// One box of the inner graph, resolved for drawing. `label` is set only for
+/// a Parameter box — the user's own word for their own control, shown as-is
+/// and never translated; every other box is named by the frontend from `kind`.
+class BridgeShaderGraphNode {
+  final int id;
+  final String kind;
+  final String? label;
+  final List<BridgeShaderPort> inputs;
+  final List<BridgeShaderPort> outputs;
+
+  const BridgeShaderGraphNode({
+    required this.id,
+    required this.kind,
+    this.label,
+    required this.inputs,
+    required this.outputs,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      kind.hashCode ^
+      label.hashCode ^
+      inputs.hashCode ^
+      outputs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShaderGraphNode &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          kind == other.kind &&
+          label == other.label &&
+          inputs == other.inputs &&
+          outputs == other.outputs;
+}
+
+/// A stored inner graph as the canvas draws it, plus the one sentence that
+/// says whether it will compile. The canvas draws a broken graph exactly as it
+/// draws a working one — being broken is a state to work in, and the badge is
+/// the messenger (§2.2) — so the boxes and the error travel together.
+class BridgeShaderGraphView {
+  final List<BridgeShaderGraphNode> nodes;
+  final String? error;
+
+  const BridgeShaderGraphView({
+    required this.nodes,
+    this.error,
+  });
+
+  @override
+  int get hashCode => nodes.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShaderGraphView &&
+          runtimeType == other.runtimeType &&
+          nodes == other.nodes &&
+          error == other.error;
+}
+
+/// One entry of the inner graph's add-search: a kind the frontend translates,
+/// filed under its family.
+class BridgeShaderNodeKind {
+  final String kind;
+  final String category;
+
+  const BridgeShaderNodeKind({
+    required this.kind,
+    required this.category,
+  });
+
+  @override
+  int get hashCode => kind.hashCode ^ category.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShaderNodeKind &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          category == other.category;
+}
+
+/// One port as the inner canvas draws it: its name (an id the frontend
+/// translates — the engine sends no English here) and its nominal type.
+class BridgeShaderPort {
+  final String id;
+  final BridgeShaderTy ty;
+
+  const BridgeShaderPort({
+    required this.id,
+    required this.ty,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ ty.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeShaderPort &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          ty == other.ty;
+}
+
 /// What became of the shader one Custom shader instance holds
 /// (docs/impl/custom-shader.md §2.2).
 ///
@@ -1129,6 +1285,20 @@ class BridgeShaderStatus {
           runtimeType == other.runtimeType &&
           error == other.error &&
           notes == other.notes;
+}
+
+/// What a wire in the inner graph carries, for the canvas to colour sockets
+/// by. Widths one to three are numbers, a vec4 is a colour, and a picture is
+/// the identity of a texture only the Sample box can read. No colour crosses
+/// the bridge; the frontend maps type to theme token, exactly as the layer
+/// graph's `BridgePortType` does.
+enum BridgeShaderTy {
+  f32,
+  vec2,
+  vec3,
+  vec4,
+  picture,
+  ;
 }
 
 @freezed

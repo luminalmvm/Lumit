@@ -608,7 +608,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSelectorShape dco_decode_bridge_selector_shape(dynamic raw);
 
   @protected
+  BridgeShaderGraphNode dco_decode_bridge_shader_graph_node(dynamic raw);
+
+  @protected
+  BridgeShaderGraphView dco_decode_bridge_shader_graph_view(dynamic raw);
+
+  @protected
+  BridgeShaderNodeKind dco_decode_bridge_shader_node_kind(dynamic raw);
+
+  @protected
+  BridgeShaderPort dco_decode_bridge_shader_port(dynamic raw);
+
+  @protected
   BridgeShaderStatus dco_decode_bridge_shader_status(dynamic raw);
+
+  @protected
+  BridgeShaderTy dco_decode_bridge_shader_ty(dynamic raw);
 
   @protected
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw);
@@ -832,6 +847,17 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
+
+  @protected
+  List<BridgeShaderGraphNode> dco_decode_list_bridge_shader_graph_node(
+      dynamic raw);
+
+  @protected
+  List<BridgeShaderNodeKind> dco_decode_list_bridge_shader_node_kind(
+      dynamic raw);
+
+  @protected
+  List<BridgeShaderPort> dco_decode_list_bridge_shader_port(dynamic raw);
 
   @protected
   List<BridgeShapeItem> dco_decode_list_bridge_shape_item(dynamic raw);
@@ -1640,8 +1666,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeShaderGraphNode sse_decode_bridge_shader_graph_node(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShaderGraphView sse_decode_bridge_shader_graph_view(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShaderNodeKind sse_decode_bridge_shader_node_kind(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShaderPort sse_decode_bridge_shader_port(SseDeserializer deserializer);
+
+  @protected
   BridgeShaderStatus sse_decode_bridge_shader_status(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeShaderTy sse_decode_bridge_shader_ty(SseDeserializer deserializer);
 
   @protected
   BridgeShapeItem sse_decode_bridge_shape_item(SseDeserializer deserializer);
@@ -1905,6 +1949,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeScalar> sse_decode_list_bridge_scalar(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeShaderGraphNode> sse_decode_list_bridge_shader_graph_node(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeShaderNodeKind> sse_decode_list_bridge_shader_node_kind(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeShaderPort> sse_decode_list_bridge_shader_port(
       SseDeserializer deserializer);
 
   @protected
@@ -2796,8 +2852,28 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSelectorShape self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_shader_graph_node(
+      BridgeShaderGraphNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shader_graph_view(
+      BridgeShaderGraphView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shader_node_kind(
+      BridgeShaderNodeKind self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shader_port(
+      BridgeShaderPort self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_shader_status(
       BridgeShaderStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shader_ty(
+      BridgeShaderTy self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_shape_item(
@@ -3074,6 +3150,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_scalar(
       List<BridgeScalar> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_shader_graph_node(
+      List<BridgeShaderGraphNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_shader_node_kind(
+      List<BridgeShaderNodeKind> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_shader_port(
+      List<BridgeShaderPort> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_shape_item(

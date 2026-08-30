@@ -1218,6 +1218,84 @@ fn every_effect_value_kind_round_trips_through_the_document() {
     assert_eq!(stack_of(&layer), vec![original]);
 }
 
+/// The inner shader graph's seam (custom-shader.md §4, §8 item 27, CS4): a
+/// staged `set_shader_graph` commits as one `SetLayerEffects` with the compiled
+/// text cached beside it; Detach keeps the text and drops the graph — one way,
+/// its own undo step; and each step undoes whole.
+#[test]
+fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
+    let (project, layer) = project_with_layer();
+    seed_stack(
+        &project,
+        &layer,
+        vec![lumit_core::fx::instantiate("custom_shader").expect("the effect exists")],
+    );
+
+    let graph = serde_json::json!({
+        "nodes": [
+            {"id": 1, "kind": "picture"},
+            {"id": 2, "kind": "result"},
+        ],
+        "edges": [{"from": 1, "from_port": 0, "to": 2, "to_port": 0}],
+    })
+    .to_string();
+
+    // One staged write, one commit, one undo step.
+    let mut staged = layer.get_effects().expect("stack");
+    staged[0].set_shader_graph(graph).expect("a graph document");
+    layer.set_effects(staged).expect("committed");
+
+    let held = stack_of(&layer);
+    let block = held[0].extra.get("shader").expect("the block");
+    assert!(block.get("graph").is_some(), "the graph is stored");
+    let cached = block
+        .get("source")
+        .and_then(|v| v.as_str())
+        .expect("the compiled text is cached beside it")
+        .to_owned();
+    assert!(cached.contains("lumit_sample(uv)"));
+
+    // Detach keeps the text and drops the graph (§4.1) — not reversible by
+    // another button, which is the honest shape.
+    let mut staged = layer.get_effects().expect("stack");
+    assert!(staged[0].shader_graph().is_some());
+    staged[0].detach_shader_graph();
+    assert!(staged[0].shader_graph().is_none());
+    layer.set_effects(staged).expect("committed");
+    let held = stack_of(&layer);
+    let block = held[0].extra.get("shader").expect("the block");
+    assert!(
+        block.get("graph").is_none(),
+        "the graph is gone because the user said so"
+    );
+    assert_eq!(
+        block.get("source").and_then(|v| v.as_str()),
+        Some(cached.as_str()),
+        "an ordinary hand-written shader is left behind"
+    );
+
+    // One undo brings the graph back whole; a second leaves a fresh instance.
+    undo_once(&project);
+    let held = stack_of(&layer);
+    assert!(
+        held[0]
+            .extra
+            .get("shader")
+            .and_then(|b| b.get("graph"))
+            .is_some(),
+        "undoing the detach restores the graph"
+    );
+    undo_once(&project);
+    assert!(
+        stack_of(&layer)[0].extra.get("shader").is_none(),
+        "undoing the graph edit restores the fresh instance"
+    );
+
+    // Nonsense is a caller bug, refused before anything is staged.
+    let mut staged = layer.get_effects().expect("stack");
+    assert!(staged[0].set_shader_graph("not json".into()).is_err());
+}
+
 /// An effect saved before its schema grew a parameter must still be able to
 /// reach it.
 ///

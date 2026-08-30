@@ -406,6 +406,22 @@ one.
     that did. The same answer reaches the panel without a call as `badge_reason:
     "shader_failed"` plus the message in `badge_detail` — the fifth `BADGE_REASONS` key, and
     the only one that is not about somebody else's binary.
+- `shader_graph()` / `set_shader_graph(graph)` / `detach_shader_graph()` — the **inner
+    graph** (custom-shader.md §4, CS4), as its JSON text, riding the same staged road the
+    source does: `LayerReference::set_effects` is the commit, so a graph edit is one
+    `SetLayerEffects` and one undo step. `set_shader_graph` makes the graph master and, when
+    it compiles, writes the compiled WGSL into `source` in the same staging (the §4.1 cached
+    text) and drops `origin`; a graph that will not compile is stored anyway, with the badge
+    carrying its sentence — being broken is a state to work in. `detach_shader_graph` is the
+    §4.1 one-way door: the compiled text stays, the `graph` key goes. A text that is not a
+    graph document at all is `InvalidShaderGraph`, a caller bug rather than a user state.
+- `shader_graph_view(graph)` / `list_shader_nodes()` — module-level, pure questions with no
+    document behind them: the resolved boxes (ports, nominal types, a Parameter box's own
+    label — the one user-authored word, never translated) plus the one compile sentence, and
+    the §4.3 vocabulary for the add-search. The engine stays the single validator: the canvas
+    refuses a drop by building the candidate graph and asking, never by learning the type
+    rules itself. Both are gesture-time calls, never rebuild traffic. Port and kind ids cross
+    as ids, not English — the frontend's arb owns their words, so K-303 has nothing to walk.
 
 **A derived row's value.** The document is not made to carry a row it has never been told
 about: the derived defaults are filled onto the two copies the bridge makes — the one

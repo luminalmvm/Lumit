@@ -82,6 +82,9 @@ pub enum BridgeError {
     InvalidScopeColours,
     /// The text handed to `load_preset` is not a `.lumfx` document.
     InvalidPreset,
+    /// The text handed to `set_shader_graph` is not a graph document — a
+    /// caller bug, never a user state (custom-shader.md §4, CS4).
+    InvalidShaderGraph,
     /// The export could not start — already running, no GPU, or a spec the
     /// encoder will not take. Carries the engine's own words.
     ExportFailed(String),
@@ -206,6 +209,7 @@ impl fmt::Display for BridgeError {
                 write!(f, "A scope needs five red/green/blue triples")
             }
             BridgeError::InvalidPreset => write!(f, "That is not a valid effect preset"),
+            BridgeError::InvalidShaderGraph => write!(f, "That is not a shader graph"),
             BridgeError::InvalidKeyChord(why) => {
                 write!(f, "That is not a keyboard shortcut: {why}")
             }

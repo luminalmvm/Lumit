@@ -1620,6 +1620,150 @@ pub struct BridgeShaderStatus {
     pub notes: Vec<String>,
 }
 
+// --- The inner shader graph (docs/impl/custom-shader.md §4, K-642, CS4) -----
+
+/// What a wire in the inner graph carries, for the canvas to colour sockets
+/// by. Widths one to three are numbers, a vec4 is a colour, and a picture is
+/// the identity of a texture only the Sample box can read. No colour crosses
+/// the bridge; the frontend maps type to theme token, exactly as the layer
+/// graph's `BridgePortType` does.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeShaderTy {
+    F32,
+    Vec2,
+    Vec3,
+    Vec4,
+    Picture,
+}
+
+#[frb(ignore)]
+fn bridge_shader_ty(ty: lumit_core::fx::shader::graph::GraphTy) -> BridgeShaderTy {
+    use lumit_core::fx::shader::graph::GraphTy;
+    match ty {
+        GraphTy::F32 => BridgeShaderTy::F32,
+        GraphTy::Vec2 => BridgeShaderTy::Vec2,
+        GraphTy::Vec3 => BridgeShaderTy::Vec3,
+        GraphTy::Vec4 => BridgeShaderTy::Vec4,
+        GraphTy::Picture => BridgeShaderTy::Picture,
+    }
+}
+
+/// One port as the inner canvas draws it: its name (an id the frontend
+/// translates — the engine sends no English here) and its nominal type.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeShaderPort {
+    pub id: String,
+    pub ty: BridgeShaderTy,
+}
+
+/// One box of the inner graph, resolved for drawing. `label` is set only for
+/// a Parameter box — the user's own word for their own control, shown as-is
+/// and never translated; every other box is named by the frontend from `kind`.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeShaderGraphNode {
+    pub id: u32,
+    pub kind: String,
+    pub label: Option<String>,
+    pub inputs: Vec<BridgeShaderPort>,
+    pub outputs: Vec<BridgeShaderPort>,
+}
+
+/// A stored inner graph as the canvas draws it, plus the one sentence that
+/// says whether it will compile. The canvas draws a broken graph exactly as it
+/// draws a working one — being broken is a state to work in, and the badge is
+/// the messenger (§2.2) — so the boxes and the error travel together.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeShaderGraphView {
+    pub nodes: Vec<BridgeShaderGraphNode>,
+    pub error: Option<String>,
+}
+
+/// One entry of the inner graph's add-search: a kind the frontend translates,
+/// filed under its family.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeShaderNodeKind {
+    pub kind: String,
+    pub category: String,
+}
+
+/// The v1 node vocabulary (custom-shader.md §4.3), in listing order. Static:
+/// asked once and memoised Dart-side like every other catalogue.
+#[frb(sync)]
+pub fn list_shader_nodes() -> Vec<BridgeShaderNodeKind> {
+    lumit_core::fx::shader::graph::NODE_SPECS
+        .iter()
+        .map(|spec| BridgeShaderNodeKind {
+            kind: spec.kind.to_owned(),
+            category: spec.category.to_owned(),
+        })
+        .collect()
+}
+
+/// Resolve one graph document for drawing: every box's ports and types, and
+/// whether the whole thing compiles.
+///
+/// A pure question — nothing is staged and no document moves — which is also
+/// how the canvas refuses a drop: build the candidate graph, ask, and decline
+/// visually when the answer names a mismatch or a cycle. The engine stays the
+/// single validator; the panel never learns the type rules (K-183's spirit:
+/// display and forward, decide in Rust). Called on gestures and reloads, never
+/// in a rebuild.
+#[frb(sync)]
+pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
+    use lumit_core::fx::shader::graph::{ports_of, ShaderGraph};
+    let parsed: Result<ShaderGraph, _> = serde_json::from_str(&graph);
+    let Ok(g) = parsed else {
+        return BridgeShaderGraphView {
+            nodes: Vec::new(),
+            error: Some("the stored graph does not parse".to_owned()),
+        };
+    };
+    let error = lumit_core::fx::shader::compile::compile(&g)
+        .err()
+        .map(|why| why.to_string());
+    let nodes = g
+        .nodes
+        .iter()
+        .map(|node| {
+            let (inputs, outputs) = ports_of(node);
+            let port = |(id, ty): &(&'static str, lumit_core::fx::shader::graph::GraphTy)| {
+                BridgeShaderPort {
+                    id: (*id).to_owned(),
+                    ty: bridge_shader_ty(*ty),
+                }
+            };
+            BridgeShaderGraphNode {
+                id: node.id,
+                kind: node.kind.clone(),
+                label: (node.kind == "param").then(|| {
+                    node.settings
+                        .get("label")
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.trim().is_empty())
+                        .map_or_else(
+                            || {
+                                node.settings
+                                    .get("id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("?")
+                                    .to_owned()
+                            },
+                            str::to_owned,
+                        )
+                }),
+                inputs: inputs.iter().map(port).collect(),
+                outputs: outputs.iter().map(port).collect(),
+            }
+        })
+        .collect();
+    BridgeShaderGraphView { nodes, error }
+}
+
 /// Why this instance's shader will not draw, in the compiler's own words, or
 /// `None` when it will (docs/impl/custom-shader.md §2.1, §2.2).
 ///
@@ -1639,7 +1783,17 @@ pub struct BridgeShaderStatus {
 /// badge.
 #[frb(ignore)]
 fn shader_error(effect: &EffectInstance) -> Option<String> {
-    let source = lumit_core::fx::effects::custom_shader::source_of(effect)?;
+    use lumit_core::fx::effects::custom_shader as cs;
+    // The graph is master when it is there (§4.1, CS4): the sentence the badge
+    // wears is about what will actually render, which is the graph's compile —
+    // never the cached text beside it.
+    let source: &str = match cs::graph_of(effect) {
+        Some(graph) => match lumit_core::fx::shader::compile::source_for(graph) {
+            Ok(text) => text,
+            Err(why) => return Some(why.to_owned()),
+        },
+        None => cs::source_of(effect)?,
+    };
     if source.trim().is_empty() {
         return None;
     }
@@ -1970,11 +2124,86 @@ impl BridgeEffectInstance {
     pub fn shader_status(&self) -> BridgeShaderStatus {
         BridgeShaderStatus {
             error: shader_error(&self.effect),
-            notes: lumit_core::fx::effects::custom_shader::source_of(&self.effect)
-                .and_then(|source| lumit_core::fx::shader::program_for(source).ok())
+            // `program_of` is graph-aware (§4.1), so the notes are about the
+            // text that will actually render whichever view authored it.
+            notes: lumit_core::fx::effects::custom_shader::program_of(&self.effect)
                 .map(|program| program.notes.clone())
                 .unwrap_or_default(),
         }
+    }
+
+    /// The stored inner graph, as its JSON text, or `None` for a hand-written
+    /// (or empty) shader (docs/impl/custom-shader.md §4, CS4).
+    ///
+    /// Read on the gesture that enters the graph, never per rebuild — the same
+    /// contract `shader_source` has, and for the same reason.
+    #[frb(sync)]
+    pub fn shader_graph(&self) -> Option<String> {
+        lumit_core::fx::effects::custom_shader::graph_of(&self.effect)
+            .map(std::string::ToString::to_string)
+    }
+
+    /// Stage a whole inner graph on this instance (§4.1, CS4), exactly as
+    /// `set_shader_source` stages text: `LayerReference::set_effects` is the
+    /// commit, so a graph edit is one `SetLayerEffects` and one undo step.
+    ///
+    /// The graph becomes master. When it compiles, the compiled WGSL is written
+    /// into `source` in the same staging — the cached text §4.1 keeps so a
+    /// build that cannot compile the graph can still render it — and `origin`
+    /// is dropped, the text no longer being any file's. When it does not
+    /// compile, the graph is stored anyway with the last text left standing:
+    /// being broken is a normal state to pass through, and the badge says so.
+    ///
+    /// # Errors
+    /// [`BridgeError::InvalidShaderGraph`] when the text is not a graph
+    /// document at all — a caller bug, not a user state.
+    #[frb(sync)]
+    pub fn set_shader_graph(&mut self, graph: String) -> Result<(), BridgeError> {
+        use lumit_core::fx::effects::custom_shader::EXTRA_KEY;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&graph).map_err(|_| BridgeError::InvalidShaderGraph)?;
+        if serde_json::from_value::<lumit_core::fx::shader::graph::ShaderGraph>(parsed.clone())
+            .is_err()
+        {
+            return Err(BridgeError::InvalidShaderGraph);
+        }
+        let compiled = lumit_core::fx::shader::compile::source_for(&parsed).ok();
+        let mut block = match self.effect.extra.remove(EXTRA_KEY) {
+            Some(serde_json::Value::Object(had)) => had,
+            _ => serde_json::Map::new(),
+        };
+        block.insert("language".to_owned(), json!("wgsl"));
+        block.insert("graph".to_owned(), parsed);
+        if let Some(text) = compiled {
+            block.insert("source".to_owned(), json!(text));
+            block.remove("origin");
+        }
+        self.effect
+            .extra
+            .insert(EXTRA_KEY.to_owned(), serde_json::Value::Object(block));
+        Ok(())
+    }
+
+    /// Detach the inner graph (§4.1): keep the compiled text, drop the `graph`
+    /// key, and leave an ordinary hand-written shader behind. One staged edit,
+    /// committed with the stack, so it is one undo step — and it is not
+    /// reversible by another button, which is the honest shape: the graph is
+    /// gone because the user said so.
+    #[frb(sync)]
+    pub fn detach_shader_graph(&mut self) {
+        use lumit_core::fx::effects::custom_shader::EXTRA_KEY;
+        let Some(serde_json::Value::Object(block)) = self.effect.extra.get_mut(EXTRA_KEY) else {
+            return;
+        };
+        // The kept text is compiled afresh rather than trusted from the cache
+        // field (§4.1 — the cached text is a convenience, not an authority).
+        let compiled = block
+            .get("graph")
+            .and_then(|g| lumit_core::fx::shader::compile::source_for(g).ok());
+        if let Some(text) = compiled {
+            block.insert("source".to_owned(), json!(text));
+        }
+        block.remove("graph");
     }
 
     #[frb(ignore)]
