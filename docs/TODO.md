@@ -155,11 +155,6 @@ These are v1-scope surfaces it does not yet match.
     upgrade is to photograph the *visible region* instead of the whole picture,
     which keeps full detail and wants the boundary moved rather than a number
     changed.
-- ~~**The colour pipeline offers one transform**~~ (§2.2 item 8, K-466) — **the picker
-    filled 2026-08-25** with the OCIO UI (K-490): the built-in pair is still the row at
-    the top and the no-config face, and a loaded config adds a section per display with
-    its views as rows. No chrome had to change to let it, which was the point of building
-    it as a picker.
 - **Degradation names a tier, not the steps it skipped** (§2.2 item 9). The bar's
     reading says the pixel count a frame was made at, which is the tier; §2.2 also asks
     that the indicator name what was degraded ("glow skipped"), and nothing reports that
@@ -517,9 +512,8 @@ does not gate the four. Delete each phase here when it lands, as with everything
     undegraded field pinned, and K-510 — a driven value is clamped to its
     parameter's hard range at the effect's socket).
     **The programme is complete.** docs/impl/particulate.md remains the effect's
-    own design; the deferred family (Connect points, Clone to points, Trail,
-    Scatter, Emit-from-image, cross-layer taps) is points-stream.md §2.3, each
-    its own package, none started.
+    own design; the family landed whole (K-600..K-604): Grid, Scatter, Emit from image,
+    Clone to points, Trail, Connect points and the cross-layer tap.
 - ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (K-438, K-439, K-476, the
     `WebHero` drawing under K-458): lumitlab.com carries the application's own tokens -
     the three greys, the four text tiers, the two hairlines, clay as the only accent -
@@ -625,14 +619,10 @@ What OCIO still owes, all of it recorded and none of it blocking:
 
 ## Next - engine/bridge follow-ups
 
-**The Settings drawing's Audio, Autosave and Export pages** (K-458, K-465,
-docs/15-DESIGN.md §12A.4). The drawing gives Settings three pages the engine cannot
-back yet, so their nav entries are omitted rather than opening empty: an audio
-output-device choice (needs device enumeration and selection in the audio engine), an
-autosave interval (needs the autosave mechanism itself), and export defaults — which the
-export rework did **not** bring with it (K-469): the queue's engine half remembers nothing
-between sessions, so a defaults store is still the first thing that page needs. Each is
-engine-first work; the rows are drawn and waiting.
+**Settings pages still unbuilt (docs/07 §15's remainder):** CUDA on/off and the
+plugins/decoder page. Audio, Autosave and Export defaults all landed (K-586,
+K-587, K-588); colour management lives in Project settings (K-490); the
+preview-mode toggle exists.
 
 **The Export drawing's rows are built, both halves** (K-479 engine, K-485 interface,
 docs/06 §7.4–§7.5, docs/15-DESIGN.md §12A.4). Audio-only output (`.m4a`/`.wav`), colour
@@ -1017,8 +1007,8 @@ collection, the recording mode, the panel) is in the entry above.
     command with a place waiting for it: Close project, History,
     layer settings and the mask/transform/blending/matte/style families, the
     whole Animation menu, the View menu's grid/ruler/wireframe/snap rows,
-    Trim and Crop comp to work area, and Add to export queue (Check for
-    updates is built — K-296; so are the View menu's magnification and
+    Trim and Crop comp to work area (Add to export queue and Check for
+    updates are built — K-296; so are the View menu's magnification and
     resolution rows and the Help menu's two documentation links). Delete each
     mark as the command lands. Suggested chords for the AE-shaped ones are in
     K-244.
