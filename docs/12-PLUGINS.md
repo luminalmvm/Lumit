@@ -426,6 +426,30 @@ an expression's engine has no such functions registered at all.
 
 ---
 
+## 4a. Audio plugins: CLAP and VST3 (K-683)
+
+Lumit hosts **CLAP** (MIT, C ABI) and **VST3** (under its GPLv3 dual-licence branch)
+audio effect plugins; **VST2 is not hosted** (Steinberg stopped granting licences in
+2018 — no GPLv3-compatible road exists). CLAP ships first. Everything structural follows
+§1 and §2's discipline: out-of-process brokers per vendor module, parameters as
+first-class Lumit properties, opaque state blobs round-tripped under the K-040 schema,
+missing plugins as inert placeholders, a quirks table from day one.
+
+What is specific to audio: a plugin is an **insert on the layer, ahead of Volume and
+Pan** — an entry in the ordinary effect stack ("the stack is the rack": no separate FX
+panel), processed in fixed 512-frame blocks at the 48 kHz session rate by a per-layer
+chain worker that pre-renders ahead of the playhead, so the realtime callback never
+waits on a plugin process and a dying plugin costs one block (played dry, ramped), not
+the session. Latency is compensated by placement; export processes offline on the same
+block schedule and stays deterministic. v1 hosts stereo effect plugins with
+parameters-only UI (derived rows); the plugin's own native editor window is a recorded
+follow-on, not a v1 promise.
+
+[impl/audio-plugins.md](impl/audio-plugins.md) is the binding note: APIs, isolation,
+mix seam, contracts, traps, test plans, and the work packages AP1–AP5.
+
+---
+
 ## 5. Security model
 
 Plugins and expressions are **untrusted input**, including the ones the user installed on

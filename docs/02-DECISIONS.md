@@ -21291,3 +21291,37 @@ strip is no denser there.
 Pinned in `timeline_alignment_test`'s K-451 heights test: the toolbar row's top is the
 strip's top, its height is the chrome row plus the band (under Regular and Compact both),
 and the ruler starts one band below either.
+
+## K-683 — Audio plugin hosting is CLAP and VST3, as inserts in the effect stack, on the OFX broker architecture
+
+**Status: DECIDED (2026-08-30, scoping the audio programme; the owner accepted
+VST3 + CLAP).** Binding note: [impl/audio-plugins.md](impl/audio-plugins.md); spec
+pointer: [12-PLUGINS.md](12-PLUGINS.md) §4a.
+
+The standards: **CLAP** (MIT, C ABI, extension-based — the easier and first host) and
+**VST3** under its GPLv3 dual-licence branch (via Steinberg's plain-C `vst3_c_api`,
+never the C++ headers). **VST2 is rejected** — Steinberg stopped granting licences in
+2018 and no GPLv3-compatible road exists. Both collapse into one internal
+`AudioEffectDef` after describe, the way OFX collapsed into `OfxEffectDef` (K-593).
+
+The model, in the impl note's words: an audio plugin is an **insert on the layer, ahead
+of Volume and Pan** — an ordinary entry in the effect stack per the AudioWorkspace
+board's canvas note ("the stack is the rack, no new FX panel"), pre-fader so a fade
+fades the processed sound instead of pumping a compressor's input. Processing is fixed
+512-frame fp32 blocks at the 48 kHz session rate, pre-rendered ahead of the playhead by
+a per-layer chain worker, so the realtime callback never waits on a plugin process and
+**a dying plugin costs one block** (played dry with a 5 ms ramp; three strikes disable
+it for the session with the calm badge — the OFX watchdog discipline with an
+audio-sized deadline). Parameters are first-class properties keyed by the plugin's
+stable parameter ids; state is an opaque per-instance blob (`api`, id, version, bytes —
+VST3 stores its two halves) round-tripped under K-040; latency is compensated by
+placement; export processes offline on the same block schedule and keeps docs/09 §8's
+determinism. v1 hosts stereo effect plugins, parameters-only (derived rows); the
+plugin's native editor window is a recorded follow-on riding the broker's own floating
+window, not a v1 promise — deferred honestly, named so nobody discovers the gap in a
+release note.
+
+The work is ordered AP1–AP5 in the impl note: CLAP host core, broker isolation,
+mix-graph seam, VST3 host, panel surface — each with its test plan, an in-tree CLAP
+test plugin, and a free dual-API conformance bench (Airwindows Consolidated, Surge XT
+Effects).

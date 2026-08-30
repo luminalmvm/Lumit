@@ -152,6 +152,8 @@ These three words are **not interchangeable**.
 |---|---|
 | **LFX** | Lumit's native plugin API: stable C ABI, sandboxed out-of-process execution. See [12-PLUGINS.md](12-PLUGINS.md). |
 | **OFX** | The OpenFX standard; Lumit is an OFX host, which is how Twixtor, RSMB, Sapphire et al. run. |
+| **CLAP** | The CLever Audio Plug-in standard (MIT, C ABI); Lumit's first audio plugin host (K-683). See [12-PLUGINS.md](12-PLUGINS.md) §4a. |
+| **VST3** | Steinberg's plugin standard, hosted under its GPLv3 licence branch (K-683). VST2 is not hosted. |
 | **Preset** | A saved, shareable configuration of effects/properties/animations, importable per layer. |
 
 ## 9. Words we do not use
