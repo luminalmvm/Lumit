@@ -347,9 +347,11 @@ function Invoke-Prune {
             if ($state[$loc].Contains($k)) { $state[$loc].Remove($k) }
             if ($gone) { $dropped++ } else { $expired++; Write-Host "  $loc : $k expired (English was reworded)" }
         }
-        # A sidecar line for a translation that is no longer there says nothing.
+        # A sidecar line for a translation that is no longer there says nothing. A
+        # "machine:<key>" line says who wrote <key>, so it lives and dies with it.
         foreach ($k in @($state[$loc].Keys)) {
-            if (-not $arb.Contains($k)) { $state[$loc].Remove($k) }
+            $of = if ($k.StartsWith('machine:')) { $k.Substring(8) } else { $k }
+            if (-not $arb.Contains($of)) { $state[$loc].Remove($k) }
         }
         Write-JsonMap (Get-ArbPath $loc) $arb
     }
