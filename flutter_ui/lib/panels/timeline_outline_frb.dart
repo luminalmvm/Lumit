@@ -36,7 +36,8 @@ import 'timeline_outline_row_frb.dart';
 class GutterScrollbar extends StatelessWidget {
   final ScrollController controller;
   final Axis axis;
-  const GutterScrollbar({super.key, 
+  const GutterScrollbar({
+    super.key,
     required this.controller,
     this.axis = Axis.vertical,
   });
@@ -150,7 +151,14 @@ class _GroupSeam extends StatefulWidget {
   /// Null for a group whose width is fixed: the rule still draws, but the seam
   /// is not a handle and does not offer a resize cursor.
   final ValueChanged<double>? onResize;
-  const _GroupSeam({super.key, required this.onResize});
+
+  /// How far the seam has moved, reported as it moves and once with null when
+  /// the hand lets go (T4): the outline draws its rows at the live width, so
+  /// the Layers column's names widen under the drag rather than on release,
+  /// and a switch column's cells go away as the seam passes them.
+  final ValueChanged<double?>? onResizeLive;
+  const _GroupSeam(
+      {super.key, required this.onResize, required this.onResizeLive});
 
   @override
   State<_GroupSeam> createState() => _GroupSeamState();
@@ -194,14 +202,23 @@ class _GroupSeamState extends State<_GroupSeam> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: (_) => setState(() => _staged = 0),
-        onHorizontalDragUpdate: (d) =>
-            setState(() => _staged = (_staged ?? 0) + d.delta.dx),
+        onHorizontalDragUpdate: (d) {
+          setState(() => _staged = (_staged ?? 0) + d.delta.dx);
+          widget.onResizeLive?.call(_staged);
+        },
         onHorizontalDragEnd: (_) {
           final moved = _staged;
           setState(() => _staged = null);
-          if (moved != null && moved != 0) resize(moved);
+          if (moved != null && moved != 0) {
+            resize(moved);
+          } else {
+            widget.onResizeLive?.call(null);
+          }
         },
-        onHorizontalDragCancel: () => setState(() => _staged = null),
+        onHorizontalDragCancel: () {
+          setState(() => _staged = null);
+          widget.onResizeLive?.call(null);
+        },
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -255,12 +272,18 @@ class ColumnHeader extends StatelessWidget {
   /// A seam dragged: widen (or narrow) the group on its left by `delta`.
   final void Function(TimelineGroup group, double delta) onResize;
 
-  const ColumnHeader({super.key, 
+  /// The same drag as it happens, and null when it ends (T4) — what the
+  /// outline draws its rows at while the hand is on the seam.
+  final void Function(TimelineGroup group, double? delta) onResizeLive;
+
+  const ColumnHeader({
+    super.key,
     required this.order,
     required this.widths,
     required this.matteToggles,
     required this.onReorder,
     required this.onResize,
+    required this.onResizeLive,
   });
 
   @override
@@ -288,6 +311,9 @@ class ColumnHeader extends StatelessWidget {
                 onResize: groupIsFixedWidth(order[i - 1])
                     ? null
                     : (delta) => onResize(order[i - 1], delta),
+                onResizeLive: groupIsFixedWidth(order[i - 1])
+                    ? null
+                    : (delta) => onResizeLive(order[i - 1], delta),
               ),
             _draggable(context, t, order[i]),
           ],
@@ -430,6 +456,7 @@ class ColumnHeader extends StatelessWidget {
     };
   }
 }
+
 /// A number written the way the Timeline writes numbers: whole numbers plain, everything else
 /// to two places — the drawing's own `960, 540`, `100`, `1.60`, `0.60`.
 String keysNumberText(double v) =>
@@ -491,7 +518,8 @@ class KeyReadoutRow extends StatelessWidget {
   final double fps;
   final VoidCallback onChanged;
 
-  const KeyReadoutRow({super.key, 
+  const KeyReadoutRow({
+    super.key,
     required this.channels,
     required this.selectedKeys,
     required this.fps,
@@ -783,7 +811,14 @@ class Outline extends StatelessWidget {
   /// The layer `Enter` has just asked to rename (K-243).
   final ValueNotifier<UuidValue?> renameRequest;
 
-  const Outline({super.key, 
+  /// The scroll this list sits in and the height of its viewport — what
+  /// [LazyBlocks] windows the stack against, so a long precomp costs the rows
+  /// on screen rather than the rows it has.
+  final ScrollController vScroll;
+  final double viewport;
+
+  const Outline({
+    super.key,
     required this.comp,
     required this.rows,
     required this.groupOrder,
@@ -803,6 +838,8 @@ class Outline extends StatelessWidget {
     required this.layerDrag,
     required this.blockHeights,
     required this.renameRequest,
+    required this.vScroll,
+    required this.viewport,
   });
 
   @override
@@ -816,95 +853,97 @@ class Outline extends StatelessWidget {
     // offer as a parent, and they come from the row list rather than from a
     // second list handed in beside it.
     final layers = [for (final row in rows) row.entry];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < rows.length; i++)
-          LayerDragSlide(
-            drag: layerDrag,
-            heights: blockHeights,
-            index: i,
-            // **The selection is listened to here, one layer at a time.** A
-            // click that lights a row must not redraw the layers it did not
-            // touch, and this is the seam that decides that.
-            child: _LayerBlock(
-              selection: selection,
-              layerId: rows[i].id,
-              builder: (context, mine) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OutlineRow(
-                  key: ValueKey<String>('tl-row-${rows[i].id}'),
-                  comp: comp,
-                  entry: rows[i].entry,
-                  onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
-                  layers: layers,
-                  groupOrder: groupOrder,
-                  widths: widths,
-                  matteToggles: matteToggles,
-                  index: i,
-                  count: rows.length,
-                  // A local compare, not a bridge call: both ids already sit here.
-                  selected:
-                      selectedIds.contains(rows[i].entry.layer.internallayerId),
-                  highlighted: mine.highlighted,
-                  open: rows[i].open,
-                  hasAudio: rows[i].hasAudio,
-                  hasPicture: rows[i].hasPicture,
-                  onToggleOpen: () => onToggle(rows[i].id),
-                  onSelect: () => onSelect(rows[i].entry.layer),
-                  onChanged: onChanged,
-                  layerDrag: layerDrag,
-                  renameRequest: renameRequest,
-                  blockHeights: blockHeights,
-                ),
-                // The room the lanes draw an open sequence view in (K-248). The
-                // outline has nothing to put here — the clips and their envelope are
-                // the lane's to draw — but it must leave exactly the same gap, or
-                // every row below this one sits at a different height on the two
-                // sides of the Timeline and the halves stop lining up. Both sides
-                // ask the same [LayerRow], so the gap and the view cannot be
-                // opened by one half and not the other.
-                if (rows[i].sequenceExtra != null)
-                  SizedBox(
-                    key: ValueKey<String>('tl-seq-room-${rows[i].id}'),
-                    height: rows[i].sequenceExtra,
-                  ),
-                // The fold-out, from the same list the lanes leave room for.
-                for (final row in rows[i].drawnRows)
-                  // A raw pointer listener, not a gesture: touching a sub-item
-                  // highlights its layer, and it must never fight the row's own
-                  // taps and drags for the gesture arena.
-                  Listener(
-                    onPointerDown: (_) => onHighlight(rows[i].id),
-                    child: FoldRow(
-                      // Named after the property it draws, so a test — and a
-                      // reveal — can find one row among a stack of them.
-                      key: ValueKey<String>(
-                          'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
-                      comp: comp,
-                      layer: rows[i].entry.layer,
-                      row: row,
-                      valueColumn: valueColumn,
-                      timingsColumn: timingsColumn,
-                      baseIndent: baseIndent,
-                      path: foldRowPath(rows[i].id, row),
-                      selectedProperties: mine.properties,
-                      graphColours: mine.colours,
-                      onSelectProperty: onSelectProperty,
-                      onEditProperty: onEditProperty,
-                      playheadFrame: playheadFrame,
-                      onSeek: onSeek,
-                      onToggle: onToggle,
-                      onChanged: onChanged,
-                      locked: rows[i].entry.info.switches.locked,
-                    ),
-                  ),
-              ],
+    // Only the blocks in view are built; the rest are two blanks holding the
+    // stack open, so the outline costs what is on screen rather than what the
+    // comp has.
+    return LazyBlocks(
+      controller: vScroll,
+      heights: blockHeights,
+      viewport: viewport,
+      builder: (context, i) => LayerDragSlide(
+        drag: layerDrag,
+        heights: blockHeights,
+        index: i,
+        // **The selection is listened to here, one layer at a time.** A
+        // click that lights a row must not redraw the layers it did not
+        // touch, and this is the seam that decides that.
+        child: _LayerBlock(
+          selection: selection,
+          layerId: rows[i].id,
+          builder: (context, mine) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              OutlineRow(
+                key: ValueKey<String>('tl-row-${rows[i].id}'),
+                comp: comp,
+                entry: rows[i].entry,
+                onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
+                layers: layers,
+                groupOrder: groupOrder,
+                widths: widths,
+                matteToggles: matteToggles,
+                index: i,
+                count: rows.length,
+                // A local compare, not a bridge call: both ids already sit here.
+                selected:
+                    selectedIds.contains(rows[i].entry.layer.internallayerId),
+                highlighted: mine.highlighted,
+                open: rows[i].open,
+                hasAudio: rows[i].hasAudio,
+                hasPicture: rows[i].hasPicture,
+                onToggleOpen: () => onToggle(rows[i].id),
+                onSelect: () => onSelect(rows[i].entry.layer),
+                onChanged: onChanged,
+                layerDrag: layerDrag,
+                renameRequest: renameRequest,
+                blockHeights: blockHeights,
               ),
-            ),
+              // The room the lanes draw an open sequence view in (K-248). The
+              // outline has nothing to put here — the clips and their envelope are
+              // the lane's to draw — but it must leave exactly the same gap, or
+              // every row below this one sits at a different height on the two
+              // sides of the Timeline and the halves stop lining up. Both sides
+              // ask the same [LayerRow], so the gap and the view cannot be
+              // opened by one half and not the other.
+              if (rows[i].sequenceExtra != null)
+                SizedBox(
+                  key: ValueKey<String>('tl-seq-room-${rows[i].id}'),
+                  height: rows[i].sequenceExtra,
+                ),
+              // The fold-out, from the same list the lanes leave room for.
+              for (final row in rows[i].drawnRows)
+                // A raw pointer listener, not a gesture: touching a sub-item
+                // highlights its layer, and it must never fight the row's own
+                // taps and drags for the gesture arena.
+                Listener(
+                  onPointerDown: (_) => onHighlight(rows[i].id),
+                  child: FoldRow(
+                    // Named after the property it draws, so a test — and a
+                    // reveal — can find one row among a stack of them.
+                    key: ValueKey<String>(
+                        'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
+                    comp: comp,
+                    layer: rows[i].entry.layer,
+                    row: row,
+                    valueColumn: valueColumn,
+                    timingsColumn: timingsColumn,
+                    baseIndent: baseIndent,
+                    path: foldRowPath(rows[i].id, row),
+                    selectedProperties: mine.properties,
+                    graphColours: mine.colours,
+                    onSelectProperty: onSelectProperty,
+                    onEditProperty: onEditProperty,
+                    playheadFrame: playheadFrame,
+                    onSeek: onSeek,
+                    onToggle: onToggle,
+                    onChanged: onChanged,
+                    locked: rows[i].entry.info.switches.locked,
+                  ),
+                ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }

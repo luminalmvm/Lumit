@@ -625,14 +625,55 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     TimelineGroup.parent,
   ];
 
-  /// Widen (or narrow) one group, never below what its cells need — and not at
-  /// all for a fixed-width group (the switches, §12A.1).
+  /// The width a seam drag is currently showing, or null when no seam is being
+  /// dragged (T4). **The outline follows the hand**: the rows redraw at this
+  /// width as the drag moves — which is what "the Layers column updates live"
+  /// asks for, and what makes a switch column's hide ladder legible, since the
+  /// cells going away are the whole of what the drag does.
+  ///
+  /// A notifier rather than `setState` because only the outline half depends on
+  /// a column width. The panel's own rebuild — every lane, every bar, every
+  /// waveform — is what made this drag lag when it was tried before, and none
+  /// of that is left of the seam.
+  final ValueNotifier<MapEntry<TimelineGroup, double>?> _liveResize =
+      ValueNotifier(null);
+
+  /// Where a seam drag of [delta] would put [group]: never past what its cells
+  /// need or can use, and settled on the nearest whole cell or on the width it
+  /// shipped at ([snapGroupWidth]).
+  double _resizedWidth(TimelineGroup group, double delta) =>
+      snapGroupWidth(group, (_groupWidths[group] ?? 0) + delta);
+
+  /// Widen (or narrow) one group — and not at all for a fixed-width group (the
+  /// render-time readout, sized for its own number).
   void _resizeGroup(TimelineGroup group, double delta) => setState(() {
+        _liveResize.value = null;
         if (groupIsFixedWidth(group)) return;
-        final next = ((_groupWidths[group] ?? 0) + delta)
-            .clamp(minGroupWidth(group), 900.0);
-        _groupWidths = {..._groupWidths, group: next};
+        _groupWidths = {..._groupWidths, group: _resizedWidth(group, delta)};
       });
+
+  /// The same width, mid-drag: published for the outline to draw and not
+  /// written to [_groupWidths] until the hand lets go, so a cancelled drag
+  /// leaves the column where it was.
+  void _liveResizeGroup(TimelineGroup group, double? delta) =>
+      _liveResize.value = delta == null || groupIsFixedWidth(group)
+          ? null
+          : MapEntry(group, _resizedWidth(group, delta));
+
+  /// The drawn widths with a seam drag's live width in place of the stored
+  /// one. The matte toggles' room is added back the same way the build adds
+  /// it, so a dragged compose column keeps its two pickers in step (K-463).
+  Map<TimelineGroup, double> _liveWidths(Map<TimelineGroup, double> widths,
+          MapEntry<TimelineGroup, double>? live, bool matteToggles) =>
+      live == null || !widths.containsKey(live.key)
+          ? widths
+          : {
+              ...widths,
+              live.key: live.value +
+                  (live.key == TimelineGroup.compose && matteToggles
+                      ? matteToggleWidth
+                      : 0),
+            };
 
   /// The layer whose fold-out was last touched — drawn a shade dimmer than
   /// the selected layer, so "which layer do these rows belong to" has an
@@ -2281,6 +2322,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _barDrag.dispose();
     _layerDrag.dispose();
     _renameRequest.dispose();
+    _liveResize.dispose();
     _rowSelection.dispose();
     _laneKeys.dispose();
     _vOutline.dispose();
@@ -2837,17 +2879,35 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _outlineHalf(context, ui, comp,
-                            rows: rows,
-                            layers: layers,
-                            blockHeights: blockHeights,
-                            groupOrder: groupOrder,
-                            groupWidths: groupWidths,
-                            matteToggles: anyMatte,
-                            graphColours: graphColours,
-                            outlineViewport: outlineViewport,
-                            channels: channels,
-                            outlineWidth: outlineWidth),
+                        // **The outline redraws under a seam drag** (T4): while
+                        // a seam is in hand this half is built at the live
+                        // width, so the Layers column's names widen with the
+                        // gesture and a switch column's cells go away as the
+                        // seam passes them. Only this half listens — nothing
+                        // right of the seam depends on a column width, and
+                        // rebuilding the lanes and bars per pointer move is
+                        // what made this drag lag when it was tried before.
+                        ValueListenableBuilder<
+                            MapEntry<TimelineGroup, double>?>(
+                          valueListenable: _liveResize,
+                          builder: (context, live, _) {
+                            final widths =
+                                _liveWidths(groupWidths, live, anyMatte);
+                            return _outlineHalf(context, ui, comp,
+                                rows: rows,
+                                layers: layers,
+                                blockHeights: blockHeights,
+                                groupOrder: groupOrder,
+                                groupWidths: widths,
+                                matteToggles: anyMatte,
+                                graphColours: graphColours,
+                                outlineViewport: outlineViewport,
+                                channels: channels,
+                                outlineWidth: live == null
+                                    ? outlineWidth
+                                    : outlineWidthOf(widths));
+                          },
+                        ),
                         Expanded(
                           // **Only this half rebuilds when the zoom moves**
                           // (K-293). The zoom is a `Listenable`, and the lane
@@ -2989,6 +3049,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               widths: groupWidths,
                               matteToggles: matteToggles,
                               onResize: _resizeGroup,
+                              onResizeLive: _liveResizeGroup,
                               onReorder: (dragged, target) => setState(
                                 () => _groupOrder = reorderedGroups(
                                     _groupOrder, dragged, target),
@@ -3009,42 +3070,49 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 key: const ValueKey('tl-outline-ground'),
                                 behavior: HitTestBehavior.translucent,
                                 onTap: () => _deselectAll(ui),
-                                child: SingleChildScrollView(
-                                  controller: _vOutline,
-                                  // **One outline, in both views** (K-529):
-                                  // Graph mode's colour-ticked filtered list
-                                  // is gone and the graph shows exactly this,
-                                  // so a property is picked the same way
-                                  // wherever the panel is looked at.
-                                  child: Outline(
-                                    comp: comp,
-                                    rows: rows,
-                                    onOpenSequence: _toggleSequenceView,
-                                    layerDrag: _layerDrag,
-                                    renameRequest: _renameRequest,
-                                    blockHeights: blockHeights,
-                                    groupOrder: groupOrder,
-                                    widths: groupWidths,
-                                    matteToggles: matteToggles,
-                                    selectedIds: ui.selectedLayerIds,
-                                    selection: _rowSelection,
-                                    onSelectProperty: _selectProperty,
-                                    onEditProperty: _selectOnEdit,
-                                    onToggle: _toggle,
-                                    playheadFrame: ui.playheadFrame.value,
-                                    onSeek: ui.scrubTo,
-                                    onSelect: (l) =>
-                                        _selectLayer(ui, l, among: layers),
-                                    // The dimmer mark that follows the fold-out
-                                    // last touched: one row's shade, so one
-                                    // row's repaint.
-                                    onHighlight: (id) {
-                                      _highlighted = id;
-                                      _publishRowSelection();
-                                    },
-                                    onChanged: ui.model.refresh,
-                                  ),
-                                ),
+                                // The viewport's own height, which is what
+                                // the row list windows itself against.
+                                child: LayoutBuilder(
+                                    builder: (context, box) =>
+                                        SingleChildScrollView(
+                                          controller: _vOutline,
+                                          // **One outline, in both views** (K-529):
+                                          // Graph mode's colour-ticked filtered list
+                                          // is gone and the graph shows exactly this,
+                                          // so a property is picked the same way
+                                          // wherever the panel is looked at.
+                                          child: Outline(
+                                            comp: comp,
+                                            rows: rows,
+                                            vScroll: _vOutline,
+                                            viewport: box.maxHeight,
+                                            onOpenSequence: _toggleSequenceView,
+                                            layerDrag: _layerDrag,
+                                            renameRequest: _renameRequest,
+                                            blockHeights: blockHeights,
+                                            groupOrder: groupOrder,
+                                            widths: groupWidths,
+                                            matteToggles: matteToggles,
+                                            selectedIds: ui.selectedLayerIds,
+                                            selection: _rowSelection,
+                                            onSelectProperty: _selectProperty,
+                                            onEditProperty: _selectOnEdit,
+                                            onToggle: _toggle,
+                                            playheadFrame:
+                                                ui.playheadFrame.value,
+                                            onSeek: ui.scrubTo,
+                                            onSelect: (l) => _selectLayer(ui, l,
+                                                among: layers),
+                                            // The dimmer mark that follows the fold-out
+                                            // last touched: one row's shade, so one
+                                            // row's repaint.
+                                            onHighlight: (id) {
+                                              _highlighted = id;
+                                              _publishRowSelection();
+                                            },
+                                            onChanged: ui.model.refresh,
+                                          ),
+                                        )),
                               ),
                             ),
                           ],

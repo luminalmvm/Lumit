@@ -1265,8 +1265,11 @@ wanders into the panels behind it.
 7. Optional columns: in, out, duration, stretch.
 
 **Shipped arrangement (K-188, superseding K-168's; extended by K-276):** the columns sit in
-FIVE groups, left to right — 1 visibility · audio · solo · lock · shy; 2 twirl ·
-label-colour chip · layer number · name; 3 flow-or-collapse · fx bypass · motion blur · 3D;
+FIVE groups, left to right — 1 visibility · audio · solo · lock · shy · guide; 2 twirl ·
+label-colour chip · layer number · name; 3 fx bypass · motion blur · 3D · adjustment · flow
+· collapse (K-632, superseding K-483/K-484's ordering: fx leads the column, collapse has
+its own cell after 3D rather than sharing K-168's flow-or-collapse slot, and flow stands
+immediately left of it);
 4 matte · blend · parent (dropdowns; the pick-whips are a follow-up); 5 **render time**. **Dragging a group's header moves the
 whole group**, which is how the column order is changed, and **dragging the seam after a
 group resizes it** (K-192) — every other group keeps its width, so the outline grows or
@@ -1292,20 +1295,23 @@ every layer kind — any layer can be reference-only — with the set's own Guid
 glyph lit `text_primary` on and `text_muted` off. The switches group is
 therefore `6 × switchCellWidth`. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
 rename, reorder and delete all refuse — though property-row edits are not yet guarded
-(docs/TODO.md). The flow cell awaits per-layer optical flow in the engine; a Precomp
-shows collapse there and other kinds leave it empty. Quality and
+(docs/TODO.md). The flow cell awaits per-layer optical flow in the engine; it is drawn on
+footage and **collapse now has a cell of its own** (K-632), drawn on a Precomp — so a
+Precomp that is also retimed footage no longer has to choose which of the two switches its
+one slot shows. Each is blank on the kinds it does nothing for, keeping the column the same
+width on every row. Quality and
 preserve-underlying-transparency still await their backing machinery (K-168);
 hide-per-workspace and the optional in/out/duration columns remain open. Right-clicking a
 layer row opens the **layer menu** — duplicate, reorder, delete, and the ticked **Accepts
 lights** entry (K-361), which is where that setting lives now that it has no cell in the
-Modes column (K-483). The freed fifth cell is the **adjustment switch** (K-537): on, the
+Modes column (K-483). The cell it freed is the **adjustment switch** (K-537): on, the
 layer's own picture is set aside and its effect stack runs on the composite beneath it;
 off, the layer is itself again with everything — source, masks, transform, effects — where
 it was. It is drawn on **every row that shows something in the Viewer**, whatever its own
 visibility switch says, and left blank only on the four kinds with no picture to set aside
 (camera, light, null, audio). Lit `text_primary` on, `text_muted` off, one undo step each
 way, and applied to the whole selection like the switches beside it (K-523). The Modes
-group is five cells wide on every row all the same.
+group is six cells wide on every row all the same.
 
 **The render-time column (K-276, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.1)**
 shows what each layer's own picture cost in the frame at the playhead, and — on a layer

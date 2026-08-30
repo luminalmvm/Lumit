@@ -19,8 +19,8 @@ enum TimelineGroup {
   /// the name takes whatever the fixed groups leave.
   identity,
 
-  /// Flow (or collapse on a Precomp) · fx · motion blur · 3D. Also the span
-  /// the fold-out rows align their value cells to.
+  /// Fx · motion blur · 3D · adjustment · flow · collapse ([ModeCell]). Also
+  /// the span the fold-out rows align their value cells to.
   render,
 
   /// Matte · blend.
@@ -97,12 +97,63 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 /// value cells to exactly this span (docs/07 §4.3); they are simply as wide as
 /// the column they sit under.
 ///
-/// **Five cells** (K-537). Accepts lights vacated the fifth on the owner's
-/// ruling (K-483) and the column stood at four until the engine grew the
-/// switch; the **adjustment switch** now has it. The span is the same on every
-/// row, including the four kinds the switch is not drawn on: a column that
-/// changed width by layer kind would take the pickers with it.
-const double renderGroupWidth = 5 * switchCellWidth;
+/// **Six cells** — the L6 arrangement (owner's ruling; supersedes K-483/K-484's
+/// share of the ordering). Fx leads the column, collapse comes out of the cell
+/// it shared with flow and stands last on a column of its own after 3D, and
+/// flow sits immediately left of it: fx · motion blur · 3D · adjustment · flow
+/// · collapse ([ModeCell]). The span is the same on every row, including the
+/// kinds a given cell is not drawn on: a column that changed width by layer
+/// kind would take the pickers with it.
+const double renderGroupWidth = 6 * switchCellWidth;
+
+/// The A/V switch cells, in the order they are drawn.
+enum SwitchCell { visible, audible, solo, locked, shy, guide }
+
+/// The order the Switches column gives its cells up in as it is dragged
+/// narrower (owner, T4): the grid mark first, then shy, then lock, then solo.
+/// **Visibility and audio never hide** — a column you cannot silence or blind
+/// a layer from is not worth keeping the others for.
+const List<SwitchCell> switchHideOrder = [
+  SwitchCell.guide,
+  SwitchCell.shy,
+  SwitchCell.locked,
+  SwitchCell.solo,
+];
+
+/// The Modes cells, in the order they are drawn (L6): fx leads, collapse ends
+/// the column on a cell of its own, and flow stands immediately left of it.
+/// Motion blur, 3D and adjustment keep the places they had between them.
+enum ModeCell { fx, motionBlur, threeD, adjustment, flow, collapse }
+
+/// The order the Modes column gives its cells up in (owner, T4): flow, then
+/// adjustment, then motion blur. Fx, 3D and collapse are what a shrunk Modes
+/// column keeps.
+const List<ModeCell> modeHideOrder = [
+  ModeCell.flow,
+  ModeCell.adjustment,
+  ModeCell.motionBlur,
+];
+
+/// Which cells a switch column of [width] draws: one per [switchCellWidth] it
+/// has room for, dropped from [hideOrder] until what is left fits. A dragged
+/// seam therefore takes cells away in a named order rather than clipping
+/// whichever one happened to be last.
+Set<T> cellsFor<T>(List<T> all, List<T> hideOrder, double width) {
+  final fits = (width / switchCellWidth)
+      .floor()
+      .clamp(all.length - hideOrder.length, all.length);
+  final gone = hideOrder.take(all.length - fits).toSet();
+  return {
+    for (final cell in all)
+      if (!gone.contains(cell)) cell
+  };
+}
+
+Set<SwitchCell> switchCellsFor(double width) =>
+    cellsFor(SwitchCell.values, switchHideOrder, width);
+
+Set<ModeCell> modeCellsFor(double width) =>
+    cellsFor(ModeCell.values, modeHideOrder, width);
 
 /// The compose group's cells — **the mockup's own dropdown widths** (K-461):
 /// 84 for the matte and blend faces, 64 for the parent's. They were 118 / 112 /
@@ -178,31 +229,62 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
   TimelineGroup.timings: timingsGroupWidth,
 };
 
-/// **The two switch columns are fixed at their minimum width** (§12A.1,
-/// K-448; Modes added by the owner, 2026-08-24): their toggles never stretch
-/// to fill a wider column, so widening either would only buy blank space, and
-/// the seams beside them are not draggable at all.
+/// **The render-time column alone is fixed** (owner's ruling): sized for
+/// "00.00 ms" exactly, so its dots stack whatever the window does.
 ///
-/// Only these. The rest each have something inside them that gains from
-/// more room — a longer name, a longer blend-mode word. The render-time
-/// column is fixed too (owner's ruling): sized for "00.00 ms" exactly, so
-/// its dots stack whatever the window does.
-bool groupIsFixedWidth(TimelineGroup group) =>
-    group == TimelineGroup.switches ||
-    group == TimelineGroup.render ||
-    group == TimelineGroup.timings;
+/// The two switch columns were fixed at their minimum too (§12A.1, K-448;
+/// Modes joined it 2026-08-24), on the reasoning that a wider column of icons
+/// buys blank space. **That pin is deliberately moved** (owner, T4): a switch
+/// column now drags, and what a drag buys is not width but *cells* — narrowing
+/// it puts the housekeeping marks away in a named order ([switchHideOrder],
+/// [modeHideOrder]) and widening it brings them back, up to the whole set. It
+/// still never holds blank space: [snapGroupWidth] rounds it to whole cells and
+/// [maxGroupWidth] stops it at its last one.
+bool groupIsFixedWidth(TimelineGroup group) => group == TimelineGroup.timings;
 
 /// How narrow a group may be dragged: enough for the cells that cannot
 /// shrink — its icons, or a dropdown you can still read a name in.
 double minGroupWidth(TimelineGroup group) => switch (group) {
-      TimelineGroup.switches => switchesGroupWidth,
+      // What the hide ladders never take away: visibility and audio, and fx,
+      // 3D and collapse.
+      TimelineGroup.switches =>
+        (SwitchCell.values.length - switchHideOrder.length) * switchCellWidth,
       TimelineGroup.identity => 120,
-      TimelineGroup.render => renderGroupWidth,
+      TimelineGroup.render =>
+        (ModeCell.values.length - modeHideOrder.length) * switchCellWidth,
       TimelineGroup.compose => 120,
       TimelineGroup.parent => 60,
       // Enough for the widest number the readout writes ("12.34 s").
       TimelineGroup.timings => 56,
     };
+
+/// How wide a group may be dragged. A switch column stops at its full set of
+/// cells — past that it would only hold air — and the rest stop at a width no
+/// window has room to beat.
+double maxGroupWidth(TimelineGroup group) => switch (group) {
+      TimelineGroup.switches => switchesGroupWidth,
+      TimelineGroup.render => renderGroupWidth,
+      TimelineGroup.timings => timingsGroupWidth,
+      _ => 900,
+    };
+
+/// How near the hand has to come to a column's shipped width for the seam to
+/// take it: near enough that "put it back" is a gesture, far enough that a
+/// width chosen a few pixels off is still the width you chose.
+const double snapGrab = 6;
+
+/// Where a dragged seam settles (T4). A switch column snaps to whole cells —
+/// half an icon column is not a column — and every other snaps to the width it
+/// shipped at when the drag comes within [snapGrab] of it.
+double snapGroupWidth(TimelineGroup group, double width) {
+  final settled = width.clamp(minGroupWidth(group), maxGroupWidth(group));
+  if (group == TimelineGroup.switches || group == TimelineGroup.render) {
+    return ((width / switchCellWidth).round() * switchCellWidth)
+        .clamp(minGroupWidth(group), maxGroupWidth(group));
+  }
+  final home = defaultGroupWidths[group] ?? settled;
+  return (settled - home).abs() <= snapGrab ? home : settled;
+}
 
 /// The space at an outline row's **trailing** end: the row's own 8 of padding
 /// plus the 2 spare pixels [outlineWidthOf] leaves there, since the outline is

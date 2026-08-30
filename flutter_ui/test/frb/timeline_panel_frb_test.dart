@@ -4035,6 +4035,65 @@ void main() {
       expect(reorderedGroups(defaultGroupOrder, g[1], g[1]), defaultGroupOrder);
     });
 
+    /// **The hide ladders** (K-633). A switch column narrowed by a drag gives
+    /// its cells up in a named order rather than clipping whichever happened
+    /// to be last, and two of them are never in the ladder at all.
+    test('a narrowed switch column sheds its cells in order', () {
+      Set<SwitchCell> at(int cells) =>
+          switchCellsFor(cells * switchCellWidth + 1);
+      expect(at(6), SwitchCell.values.toSet(), reason: 'all six at full width');
+      expect(at(5).contains(SwitchCell.guide), isFalse,
+          reason: 'the grid mark goes first');
+      expect(at(4).intersection({SwitchCell.guide, SwitchCell.shy}), isEmpty,
+          reason: 'then shy');
+      expect(at(3).contains(SwitchCell.locked), isFalse, reason: 'then lock');
+      expect(at(2), {SwitchCell.visible, SwitchCell.audible},
+          reason: 'then solo, and the eye and the speaker are what is left');
+      expect(at(0), {SwitchCell.visible, SwitchCell.audible},
+          reason: 'the ladder ends there however hard the seam is pulled');
+      expect(switchCellsFor(400), SwitchCell.values.toSet(),
+          reason: 'and a column dragged past its cells gains none');
+
+      Set<ModeCell> modes(int cells) =>
+          modeCellsFor(cells * switchCellWidth + 1);
+      expect(modes(6), ModeCell.values.toSet());
+      expect(modes(5).contains(ModeCell.flow), isFalse, reason: 'flow first');
+      expect(modes(4).contains(ModeCell.adjustment), isFalse,
+          reason: 'then adjustment');
+      expect(modes(3), {ModeCell.fx, ModeCell.threeD, ModeCell.collapse},
+          reason: 'then motion blur, leaving fx, 3D and collapse');
+      expect(modes(0), modes(3),
+          reason:
+              'those three are the floor, and minGroupWidth is their width');
+      expect(minGroupWidth(TimelineGroup.render), 3 * switchCellWidth);
+      expect(minGroupWidth(TimelineGroup.switches), 2 * switchCellWidth);
+    });
+
+    /// **Seams snap** (K-633): a switch column to whole cells, everything else
+    /// back to the width it shipped at when the drag passes near it.
+    test('snapGroupWidth settles a dragged seam', () {
+      expect(snapGroupWidth(TimelineGroup.switches, 4 * switchCellWidth + 4),
+          4 * switchCellWidth,
+          reason: 'rounded down to whole cells');
+      expect(snapGroupWidth(TimelineGroup.switches, 4 * switchCellWidth - 4),
+          4 * switchCellWidth,
+          reason: 'and up');
+      expect(snapGroupWidth(TimelineGroup.switches, 1000), switchesGroupWidth,
+          reason: 'a switch column stops at its own cells: no blank space');
+      expect(snapGroupWidth(TimelineGroup.render, 0),
+          minGroupWidth(TimelineGroup.render));
+
+      final home = defaultGroupWidths[TimelineGroup.identity]!;
+      expect(snapGroupWidth(TimelineGroup.identity, home + snapGrab - 1), home,
+          reason: 'near its shipped width, the seam takes it');
+      expect(snapGroupWidth(TimelineGroup.identity, home + 40), home + 40,
+          reason:
+              'away from it, the width you dragged to is the width you get');
+      expect(snapGroupWidth(TimelineGroup.identity, 10),
+          minGroupWidth(TimelineGroup.identity),
+          reason: 'and never below what the column needs');
+    });
+
     /// The value column sits under the render group: everything right of it
     /// in the order contributes its fixed width to the inset.
     test('valueColumnFor measures what sits right of the render group', () {
@@ -4999,6 +5058,52 @@ void main() {
         expect(dx(order[i]), greaterThan(dx(order[i - 1])),
             reason: '${order[i]} sits right of ${order[i - 1]}');
       }
+    });
+
+    /// **Flow and collapse have a cell each** (K-632). They shared one slot,
+    /// which meant the same square was a frame-interpolation policy on footage
+    /// and a rasterisation rule on a Precomp — and a Precomp made from retimed
+    /// footage had nowhere to say both. Each is drawn only on the kind it acts
+    /// on, and each stands at the end of the Modes column: flow, then collapse.
+    testWidgets('flow and collapse stand in cells of their own',
+        (tester) async {
+      final p = withComp();
+      final inner = p.state.project!.newComposition(name: 'Inner');
+      final precomp = p.comp.addPrecompLayer(comp: inner);
+      final solid = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final precompId = precomp.internallayerId;
+      final solidId = solid.internallayerId;
+
+      expect(find.byKey(ValueKey<String>('tl-collapse-$precompId')),
+          findsOneWidget,
+          reason: 'a Precomp collapses');
+      expect(find.byKey(ValueKey<String>('tl-collapse-$solidId')), findsNothing,
+          reason: 'a solid has no nested comp to collapse');
+      expect(find.byKey(ValueKey<String>('tl-flow-$precompId')), findsNothing,
+          reason: 'and it has no footage rate to interpolate, so no flow — but '
+              'the cell it does not draw is no longer the cell collapse needs');
+
+      // The L6 order, read across the Precomp's own row: fx leads, and the two
+      // kind-gated cells end the column with flow left of collapse.
+      double dx(String key) =>
+          tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
+      for (final pair in [
+        ('tl-fx-$precompId', 'tl-mb-$precompId'),
+        ('tl-mb-$precompId', 'tl-3d-$precompId'),
+        ('tl-3d-$precompId', 'tl-adjust-$precompId'),
+        ('tl-adjust-$precompId', 'tl-collapse-$precompId'),
+      ]) {
+        expect(dx(pair.$2), greaterThan(dx(pair.$1)),
+            reason: '${pair.$2} sits right of ${pair.$1}');
+      }
+      // Collapse is last, so it stands a whole cell right of where the flow
+      // cell is drawn — the two are columns, not one square taking turns.
+      expect(dx('tl-collapse-$precompId') - dx('tl-adjust-$precompId'),
+          closeTo(2 * switchCellWidth, 0.5),
+          reason: 'the blank flow cell keeps its place between them');
+      expect(renderGroupWidth, 6 * switchCellWidth,
+          reason: 'six cells: fx, motion blur, 3D, adjustment, flow, collapse');
     });
 
     /// Dragging a header group moves the whole cluster: dropping the
@@ -7141,11 +7246,14 @@ void main() {
           reason: 'the graph\'s own commands follow them');
     });
 
-    /// **A seam drag is staged and committed once** (K-529). Column widths are
-    /// pure view state, so nothing reaches the document either way — the lag
-    /// was the panel rebuilding whole on every pointer move. The gesture now
-    /// draws its own line and the columns move once, on release.
-    testWidgets('a column seam stages its drag and commits on release',
+    /// **A seam drag moves the columns as it goes** (K-633, moving K-529's
+    /// pin). Column widths are pure view state, so nothing reaches the document
+    /// either way — the lag K-529 was answering was the *panel* rebuilding
+    /// whole on every pointer move, and the live width now reaches the outline
+    /// alone. The gesture still draws its own line, where the pointer is rather
+    /// than where the snapped column has settled, and the travel lands once:
+    /// releasing does not apply it a second time.
+    testWidgets('a column seam moves the columns as it is dragged',
         (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
@@ -7163,16 +7271,16 @@ void main() {
       }
 
       expect(find.byKey(const ValueKey('tl-seam-preview')), findsOneWidget,
-          reason: 'the gesture draws where the seam will land');
-      expect(tester.getRect(seam).left, closeTo(before.left, 0.5),
-          reason: 'and the columns have not moved yet');
+          reason: 'the gesture draws where the pointer is');
+      expect(tester.getRect(seam).left, closeTo(before.left + 60, 1),
+          reason: 'and the column has already followed it');
 
       await gesture.up();
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('tl-seam-preview')), findsNothing);
-      expect(tester.getRect(seam).left, greaterThan(before.left + 50),
-          reason: 'the whole travel landed in one step');
+      expect(tester.getRect(seam).left, closeTo(before.left + 60, 1),
+          reason: 'the travel landed once, not twice');
     });
 
     /// **`Ctrl+C` then `Ctrl+V` round-trips a block of keys — in Layers.**

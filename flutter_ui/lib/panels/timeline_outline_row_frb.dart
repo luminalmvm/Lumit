@@ -315,10 +315,10 @@ class _OutlineRowState extends State<OutlineRow> {
                 // not choosing it, and those cells have never selected.
                 child: switch (widget.groupOrder[i]) {
                   TimelineGroup.identity => _identityCells(context, t, info),
-                  TimelineGroup.switches =>
-                    _ownClick(_switchCells(context, t, info)),
-                  TimelineGroup.render =>
-                    _ownClick(_renderCells(context, info)),
+                  TimelineGroup.switches => _ownClick(_switchCells(context, t,
+                      info, widget.widths[TimelineGroup.switches] ?? 0)),
+                  TimelineGroup.render => _ownClick(_renderCells(
+                      context, info, widget.widths[TimelineGroup.render] ?? 0)),
                   TimelineGroup.compose => _ownClick(_composeCells(context, t,
                       info, widget.widths[TimelineGroup.compose] ?? 0)),
                   TimelineGroup.parent => _ownClick(_parentCell(
@@ -347,55 +347,64 @@ class _OutlineRowState extends State<OutlineRow> {
   /// have to click it to find out. Each keeps its cell's width either way, so
   /// the switches stay in their columns down the stack and the ones a row does
   /// have sit where the eye reads for them.
+  ///
+  /// **And only what the column has room for** (T4): dragged narrower it gives
+  /// its cells up in [switchHideOrder] — the grid mark, then shy, then lock,
+  /// then solo — and visibility and audio are never among them.
   Widget _switchCells(
-      BuildContext context, LumitTheme t, BridgeLayerInfo info) {
+      BuildContext context, LumitTheme t, BridgeLayerInfo info, double width) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
+    final blank = SizedBox(width: switchCellWidth, height: t.density.laneRow);
+    Widget cell(SwitchCell which) => switch (which) {
+          SwitchCell.visible => widget.hasPicture
+              ? _switch(context, id, 'visible', null, switches.visible,
+                  BridgeLayerSwitch.visible,
+                  mark: LumitIcons.visible,
+                  offMark: LumitIcons.hidden,
+                  tip:
+                      switches.visible ? l10n.switchVisible : l10n.switchHidden)
+              : blank,
+          SwitchCell.audible => widget.hasAudio
+              ? _switch(context, id, 'audible', null, switches.audible,
+                  BridgeLayerSwitch.audible,
+                  mark: LumitIcons.audio,
+                  offMark: LumitIcons.muted,
+                  tip: switches.audible ? l10n.switchAudible : l10n.switchMuted)
+              : blank,
+          // A ringed dot, dimmed until soloed — the set has one solo mark, so
+          // this pair is told apart by strength rather than by shape.
+          SwitchCell.solo => _switch(
+              context, id, 'solo', null, switches.solo, BridgeLayerSwitch.solo,
+              mark: LumitIcons.solo,
+              offMark: LumitIcons.solo,
+              tip: switches.solo ? l10n.switchSoloed : l10n.switchSolo),
+          SwitchCell.locked => _switch(context, id, 'locked', null,
+              switches.locked, BridgeLayerSwitch.locked,
+              mark: LumitIcons.lock,
+              offMark: LumitIcons.unlocked,
+              tip: switches.locked ? l10n.switchLocked : l10n.switchLock),
+          SwitchCell.shy => _switch(context, id, 'shy', LumitIcon.shyHidden,
+              switches.shy, BridgeLayerSwitch.shy,
+              offIcon: LumitIcon.shy,
+              tip: switches.shy ? l10n.switchShy : l10n.switchMarkShy),
+          // Guide (K-497), the cell beside shy that docs/07 §4.2 names for it.
+          // **Drawn on every row**, unlike the kind-gated cells in the Modes
+          // column: any layer can be reference-only — a match photograph, a
+          // grid, an animatic — so there is no kind the mark would do nothing
+          // on. The two strengths are the column's own: lit `text_primary`
+          // while the layer is a guide, resting at `text_muted` when it is not.
+          SwitchCell.guide => _switch(context, id, 'guide', null,
+              switches.guide, BridgeLayerSwitch.guide,
+              mark: LumitIcons.guide,
+              tip: switches.guide ? l10n.switchGuide : l10n.switchMarkGuide),
+        };
+    final shown = switchCellsFor(width);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.hasPicture)
-          _switch(context, id, 'visible', null, switches.visible,
-              BridgeLayerSwitch.visible,
-              mark: LumitIcons.visible,
-              offMark: LumitIcons.hidden,
-              tip: switches.visible ? l10n.switchVisible : l10n.switchHidden)
-        else
-          SizedBox(width: switchCellWidth, height: t.density.laneRow),
-        if (widget.hasAudio)
-          _switch(context, id, 'audible', null, switches.audible,
-              BridgeLayerSwitch.audible,
-              mark: LumitIcons.audio,
-              offMark: LumitIcons.muted,
-              tip: switches.audible ? l10n.switchAudible : l10n.switchMuted)
-        else
-          SizedBox(width: switchCellWidth, height: t.density.laneRow),
-        // A ringed dot, dimmed until soloed — the set has one solo mark, so
-        // this pair is told apart by strength rather than by shape.
-        _switch(
-            context, id, 'solo', null, switches.solo, BridgeLayerSwitch.solo,
-            mark: LumitIcons.solo,
-            offMark: LumitIcons.solo,
-            tip: switches.solo ? l10n.switchSoloed : l10n.switchSolo),
-        _switch(context, id, 'locked', null, switches.locked,
-            BridgeLayerSwitch.locked,
-            mark: LumitIcons.lock,
-            offMark: LumitIcons.unlocked,
-            tip: switches.locked ? l10n.switchLocked : l10n.switchLock),
-        _switch(context, id, 'shy', LumitIcon.shyHidden, switches.shy,
-            BridgeLayerSwitch.shy,
-            offIcon: LumitIcon.shy,
-            tip: switches.shy ? l10n.switchShy : l10n.switchMarkShy),
-        // Guide (K-497), the cell beside shy that docs/07 §4.2 names for it.
-        // **Drawn on every row**, unlike the two kind-gated cells in the Modes
-        // column: any layer can be reference-only — a match photograph, a
-        // grid, an animatic — so there is no kind the mark would do nothing
-        // on. The two strengths are the column's own: lit `text_primary` while
-        // the layer is a guide, resting at `text_muted` when it is not.
-        _switch(
-            context, id, 'guide', null, switches.guide, BridgeLayerSwitch.guide,
-            mark: LumitIcons.guide,
-            tip: switches.guide ? l10n.switchGuide : l10n.switchMarkGuide),
+        for (final which in SwitchCell.values)
+          if (shown.contains(which)) cell(which),
       ],
     );
   }
@@ -492,16 +501,24 @@ class _OutlineRowState extends State<OutlineRow> {
     );
   }
 
-  /// Group 3: flow (collapse on a Precomp) · fx · motion blur · 3D ·
-  /// adjustment, spread across the same span the fold-out's value cells use.
+  /// Group 3: fx · motion blur · 3D · adjustment · flow · collapse, spread
+  /// across the same span the fold-out's value cells use.
   ///
-  /// Two of the five cells are drawn by kind, on the same rule: a cell is there
-  /// when the row can act on it, and blank otherwise. The flow slot is the
-  /// spec's flow-or-collapse cell (K-168) — a Precomp shows its collapse
-  /// switch, **footage shows its Flow switch** (K-088/K-331), everything else
-  /// leaves it empty; the adjustment cell (K-537) is drawn on every row that
-  /// shows something in the Viewer, which is all of them but the four that
-  /// draw nothing.
+  /// **The L6 arrangement** (owner's ruling): fx leads the column, collapse has
+  /// come out of the cell it shared with flow (K-168's flow-or-collapse) and
+  /// stands on its own after 3D, and flow sits immediately left of it. A
+  /// column each means a Precomp that is also retimed footage shows both, and
+  /// neither has to be read off the layer's kind to know which switch it is.
+  ///
+  /// Three of the six cells are drawn by kind, on the same rule: a cell is
+  /// there when the row can act on it, and blank otherwise. **Footage shows
+  /// Flow** (K-088/K-331), a Precomp shows collapse, and the adjustment cell
+  /// (K-537) is drawn on every row that shows something in the Viewer, which is
+  /// all of them but the four that draw nothing.
+  ///
+  /// **And only what the column has room for** (T4): dragged narrower it gives
+  /// its cells up in [modeHideOrder] — flow, then adjustment, then motion blur
+  /// — leaving fx, 3D and collapse.
   /// Whether the adjustment cell is drawn on a row of this kind (K-537): every
   /// kind that puts something in the Viewer, which is everything except the
   /// four with no picture of their own.
@@ -515,45 +532,30 @@ class _OutlineRowState extends State<OutlineRow> {
       kind != BridgeLayerKind.nullLayer &&
       kind != BridgeLayerKind.audio;
 
-  Widget _renderCells(BuildContext context, BridgeLayerInfo info) {
+  Widget _renderCells(
+      BuildContext context, BridgeLayerInfo info, double width) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
-    return SizedBox(
-      width: renderGroupWidth,
-      child: Row(
-        children: [
-          // Packed left in ordinary switch cells, exactly as group 1 is: the
-          // group's remaining span belongs to the fold-out's value column,
-          // not to spreading four icons across it.
-          if (info.kind == BridgeLayerKind.precomp)
-            _switch(context, id, 'collapse', LumitIcon.collapse,
-                switches.collapse, BridgeLayerSwitch.collapse,
-                tip: l10n.tipCollapseTransformations)
-          else if (info.kind == BridgeLayerKind.footage)
-            // The Flow cell: shaped exactly like a switch but writing the
-            // layer's interpolation policy rather than a `BridgeLayerSwitch`,
-            // because that is what flow *is* underneath (K-088: "the option
-            // surfaces the policy").
-            _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
-                tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
-              layer.setFlowEnabled(on_: !info.flow);
-              widget.onChanged();
-            })
-          else
-            const SizedBox(width: switchCellWidth),
-          _switch(context, id, 'fx', LumitIcon.fx, switches.fx,
+    const blank = SizedBox(width: switchCellWidth);
+    Widget cell(ModeCell which) => switch (which) {
+          ModeCell.fx => _switch(context, id, 'fx', LumitIcon.fx, switches.fx,
               BridgeLayerSwitch.fx,
               tip: switches.fx
                   ? l10n.switchEffectsOn
                   : l10n.switchEffectsBypassed),
-          _switch(context, id, 'mb', LumitIcon.motionBlur, switches.motionBlur,
+          ModeCell.motionBlur => _switch(
+              context,
+              id,
+              'mb',
+              LumitIcon.motionBlur,
+              switches.motionBlur,
               BridgeLayerSwitch.motionBlur,
               tip: l10n.switchMotionBlur),
-          _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
-              BridgeLayerSwitch.threeD,
+          ModeCell.threeD => _switch(context, id, '3d', LumitIcon.cube3d,
+              switches.threeD, BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
           // The adjustment cell (K-537), where accepts lights used to stand
-          // (K-483). An ordinary switch cell like the three before it: it
+          // (K-483). An ordinary switch cell like the ones beside it: it
           // writes `BridgeLayerSwitch.adjustment`, so it inherits the plural
           // handler and applies to the whole selection (K-523).
           //
@@ -564,14 +566,40 @@ class _OutlineRowState extends State<OutlineRow> {
           // pickers after it stay in one column. Drawn regardless of the row's
           // own visibility switch: what a layer *is* and whether it is being
           // shown are two answers, and hiding one must not hide the other.
-          if (_canAdjust(info.kind))
-            _switch(context, id, 'adjust', LumitIcon.adjustment,
-                switches.adjustment, BridgeLayerSwitch.adjustment,
-                tip: switches.adjustment
-                    ? l10n.tipAdjustmentOn
-                    : l10n.tipAdjustmentOff)
-          else
-            const SizedBox(width: switchCellWidth),
+          ModeCell.adjustment => _canAdjust(info.kind)
+              ? _switch(context, id, 'adjust', LumitIcon.adjustment,
+                  switches.adjustment, BridgeLayerSwitch.adjustment,
+                  tip: switches.adjustment
+                      ? l10n.tipAdjustmentOn
+                      : l10n.tipAdjustmentOff)
+              : blank,
+          // The Flow cell: shaped exactly like a switch but writing the
+          // layer's interpolation policy rather than a `BridgeLayerSwitch`,
+          // because that is what flow *is* underneath (K-088: "the option
+          // surfaces the policy").
+          ModeCell.flow => info.kind == BridgeLayerKind.footage
+              ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
+                  tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
+                  layer.setFlowEnabled(on_: !info.flow);
+                  widget.onChanged();
+                })
+              : blank,
+          ModeCell.collapse => info.kind == BridgeLayerKind.precomp
+              ? _switch(context, id, 'collapse', LumitIcon.collapse,
+                  switches.collapse, BridgeLayerSwitch.collapse,
+                  tip: l10n.tipCollapseTransformations)
+              : blank,
+        };
+    final shown = modeCellsFor(width);
+    return SizedBox(
+      width: width,
+      child: Row(
+        // Packed left in ordinary switch cells, exactly as group 1 is: the
+        // group's remaining span belongs to the fold-out's value column,
+        // not to spreading the icons across it.
+        children: [
+          for (final which in ModeCell.values)
+            if (shown.contains(which)) cell(which),
         ],
       ),
     );

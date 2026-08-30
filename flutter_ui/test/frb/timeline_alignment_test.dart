@@ -1110,9 +1110,12 @@ void main() {
       expect(at('twirl').left - at('guide').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
-      // A solid draws the adjustment cell (K-484), so it is the last mark in
-      // the Modes column and the one the pickers stand a gap away from.
-      expect(at('matte').left - at('adjust').right, closeTo(outlineGap, 0.5),
+      // A solid draws the adjustment cell (K-484) and neither of the two that
+      // end the column — flow is footage's and collapse is a Precomp's (K-632)
+      // — so the seam between the modes and the pickers is one gap past two
+      // cells it keeps but does not fill.
+      expect(at('matte').left - at('adjust').right,
+          closeTo(outlineGap + 2 * switchCellWidth, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
               'name\'s own trailing 4 is gone with it');
       expect(at('blend').left - at('matte').right, closeTo(outlineGap, 0.5),
@@ -1356,42 +1359,93 @@ void main() {
           reason: 'the two halves are level in Compact too');
     });
 
-    /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes
-    /// joined Switches on the owner's word, 2026-08-24): the seam is not a
-    /// handle, and a resize asked for anyway leaves it where it was. Both are
-    /// rows of icons — a wider column buys blank space and nothing else.
-    testWidgets('the switch columns are pinned to their minimum width',
+    /// 11. **A switch column drags, and what it buys is cells** (K-633,
+    /// moving K-448's pin). Both columns are rows of icons, so there is no
+    /// stretching to be had — but narrowing one puts its least-used marks away
+    /// in a named order, and dragging it back brings them out again.
+    testWidgets('a narrowed switch column sheds its marks in order',
         (tester) async {
       final p = withComp();
-      p.comp.addSolidLayer();
+      final layer = p.comp.addSolidLayer();
       p.uiState.model.refresh();
       await mount(tester, p);
+      final id = layer.internallayerId;
 
-      // Modes is exactly its switch cells and no more. Five of them: accepts
-      // lights left the column for the row menu (K-483) and the adjustment
-      // toggle took the freed cell once the engine grew its kind flip (K-484).
-      expect(renderGroupWidth, 5 * switchCellWidth);
-      // And the A/V column is exactly its own six: visibility, audio, solo,
-      // lock, shy and — since K-497 — guide.
+      // Both columns are exactly their cells: six A/V marks (K-497 added
+      // guide) and six modes (K-632 gave collapse its own).
       expect(switchesGroupWidth, 6 * switchCellWidth);
+      expect(renderGroupWidth, 6 * switchCellWidth);
 
-      for (final group in [TimelineGroup.switches, TimelineGroup.render]) {
-        final key = ValueKey<String>('tl-seam-${group.name}');
-        final seam = find.byKey(key);
-        expect(seam, findsOneWidget,
-            reason: '${group.name}: the rule is still drawn');
-        expect(
-          find.descendant(of: seam, matching: find.byType(GestureDetector)),
-          findsNothing,
-          reason: '${group.name}: but there is nothing to take hold of',
-        );
+      bool drawn(String name) =>
+          find.byKey(ValueKey<String>('tl-$name-$id')).evaluate().isNotEmpty;
 
-        final before = tester.getRect(seam);
-        await tester.drag(seam, const Offset(60, 0));
-        await tester.pump();
-        expect(tester.getRect(find.byKey(key)).left, closeTo(before.left, 0.5),
-            reason: '${group.name}: a drag on it widens nothing');
-      }
+      final seam = find.byKey(const ValueKey('tl-seam-switches'));
+      expect(find.descendant(of: seam, matching: find.byType(GestureDetector)),
+          findsOneWidget,
+          reason: 'the seam is a handle now, not only a rule');
+
+      // Two cells' worth to the left: the grid mark and shy go, in that order,
+      // and nothing else does.
+      await tester.drag(seam, const Offset(-2 * switchCellWidth, 0));
+      await tester.pump();
+      expect(drawn('guide'), isFalse, reason: 'the grid mark goes first');
+      expect(drawn('shy'), isFalse, reason: 'then shy');
+      expect(drawn('locked'), isTrue, reason: 'the padlock is still there');
+      expect(drawn('visible'), isTrue,
+          reason: 'and the eye is never in the ladder');
+
+      // All the way in: the eye and the speaker are the floor.
+      await tester.drag(seam, const Offset(-200, 0));
+      await tester.pump();
+      expect(drawn('locked'), isFalse);
+      expect(drawn('solo'), isFalse);
+      expect(drawn('visible'), isTrue,
+          reason: 'a column that cannot blind a layer is not worth keeping');
+
+      // And back out again — the marks return in the order they left.
+      await tester.drag(seam, const Offset(400, 0));
+      await tester.pump();
+      expect(drawn('guide'), isTrue, reason: 'the whole set comes back');
+
+      // Modes runs the same ladder: flow, then adjustment, then motion blur,
+      // leaving fx, 3D and collapse.
+      final modes = find.byKey(const ValueKey('tl-seam-render'));
+      await tester.drag(modes, const Offset(-3 * switchCellWidth, 0));
+      await tester.pump();
+      expect(drawn('mb'), isFalse, reason: 'motion blur is the third to go');
+      expect(drawn('adjust'), isFalse);
+      expect(drawn('fx'), isTrue, reason: 'fx leads the column and stays');
+      expect(drawn('3d'), isTrue);
+    });
+
+    /// 11b. **The rows redraw under the drag, not on release** (K-633): the
+    /// Layers column's names widen with the hand. The seam used to stage its
+    /// whole gesture and tell the panel once, on release, because a live drag
+    /// rebuilt the entire Timeline per pointer move.
+    testWidgets('the Layers column updates the rows live during a drag',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      double nameWidth() =>
+          tester.getSize(find.byKey(ValueKey<String>('tl-name-$id'))).width;
+      final before = nameWidth();
+
+      // Mid-gesture: the pointer is still down.
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('tl-seam-identity'))));
+      await gesture.moveBy(const Offset(60, 0));
+      await tester.pump();
+      expect(nameWidth(), closeTo(before + 60, 1),
+          reason: 'the row follows the hand');
+
+      // And letting go keeps it, rather than applying it a second time.
+      await gesture.up();
+      await tester.pump();
+      expect(nameWidth(), closeTo(before + 60, 1));
     });
 
     /// 12. **The comp-wide switches live in the bottom bar** (§12A.1), after
