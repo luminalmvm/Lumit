@@ -19503,3 +19503,59 @@ The steps stay locked to each other: whatever is fainter is never taller, which 
 regression asserts rather than the numbers themselves.
 
 Tests: `cache_bar_frb_test` ("a coarser tier is drawn shorter as well as fainter").
+
+## K-630 — The preview scale is a ladder, and the Viewer's marks are clipped to the Viewer
+
+**Status: DECIDED (2026-08-30).** Two faults with one gesture behind them: dragging the
+Viewer's split in the Nodes workspace made the layer wireframe flicker over the node graph,
+and then the editor froze and the process ended with "Lost connection to device" and no Dart
+exception.
+
+**The marks.** Every mark drawn over the picture — wireframes, handles, mask outlines, each
+tool layer — is a painter filling the stage's stack, and a painter may draw outside the box
+it was given. A `Stack` does not stop it: the clip it carries is applied only when a
+*positioned child* is measured overflowing, and a `Positioned.fill` painter never is. What
+had been containing them was the rounded-tile wrapper Round puts round the picture (K-394);
+under Sharp there was nothing at all. **The clip is the stage's own now**, above the stack
+that fails to clip, so it holds whatever the theme shape, the magnification or the layout is
+doing.
+
+**The freeze.** The Viewer reports the fraction of comp resolution its panel can show
+(K-230), and that fraction is continuous — a seam drag walks it through a new value on every
+layout. Each distinct value is a differently sized composite, and on the zero-copy transport
+(K-177, K-183) a differently sized composite is a **new shared texture with a new handle**:
+minted by the renderer, registered by the frontend over a platform round trip, and presented
+with two waits on the graphics card. `lumit-render`'s `shared_present` tests already name
+this as the registration storm that crashes the compositor; the target pool they introduced
+stops it for sizes that *alternate*, but a seam drag walks, and a walk outruns any pool. A
+160-step drag handed out 160 handles, measured against a real device.
+
+**The preview scale therefore snaps to a rung**: the next thirty-second **up**, never down,
+in `render::quality_for` — the one funnel every preview path routes through, so the Viewer,
+a live drag, playback and the idle fill all agree without a second copy of the policy. Up
+rather than down means the picture is never softer than what was asked for; a rung is at most
+3% of the width, which is finer than the step below it can be told from. Deliberately not the
+playback tier ladder (K-186's four rungs): that one sheds cost to keep time, this one bounds
+how many *different* pictures a session asks for, and it has to stay fine enough that a
+Viewer docked small is still cheap. Two consequences worth having: a rung is an exact binary
+fraction, so one panel size always names one texture; and the frame cache keys on this scale,
+so resizing a panel no longer discards every frame already rendered.
+
+**And a fault now names itself.** The crash net (K-585's neighbour) writes its line through
+`note!`, which reaches standard error — a handle that does not exist in a windowed Windows
+build, which is why every report of this family has arrived with no message in it. Faults are
+now also appended to `lumit-diagnostics.log` in the system temporary directory, by the net
+and by a process-wide panic hook, so a failure that ends the process before anything can be
+asked still leaves its message, its thread and its source line behind. It is not a logging
+system and must not become one: one capped file, written a whole line at a time, never a
+reason to fail.
+
+Tests: `lumit_bridge`'s `a_seam_drag_does_not_mint_a_shared_texture_per_layout` (a real
+renderer, a real drag, twelve handles or fewer — 160 without the ladder),
+`a_seam_drag_asks_for_a_handful_of_sizes_not_one_per_layout`,
+`a_rung_is_never_below_the_scale_it_was_asked_for`, `one_rung_is_one_number`,
+`the_whole_range_is_a_short_list`, `a_nonsense_scale_falls_back_to_comp_resolution`,
+`faults::tests` (a recorded line reads back; an uncaught panic on a background thread names
+itself, its thread and its line; the file starts again once it is too big), and
+`viewer_resize_storm_test` (the stage clips under both theme shapes, and keeps its clip
+through a seam drag thrashed in one element tree).

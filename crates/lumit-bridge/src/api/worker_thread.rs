@@ -2437,7 +2437,15 @@ fn worker_loop(
     receiver: Receiver<WorkerRequest>,
     stream: WorkerResponseStream,
 ) {
-    note!("Worker thread started");
+    // Before anything else the worker does, because everything it does after
+    // this can fault. The hook is what makes a panic name itself on disk — the
+    // console `note!` writes to does not exist in a windowed build, which is why
+    // the crash reports so far have carried no message at all.
+    crate::faults::watch();
+    note!(
+        "Worker thread started; faults are recorded in {:?}",
+        crate::faults::path()
+    );
     let mut stream = stream;
     raise_timer_resolution();
 
@@ -2512,13 +2520,20 @@ fn worker_loop(
             Ok(Turn::Stop) => return,
             Err(payload) => {
                 faults_in_a_row += 1;
-                note!(
+                // Both, and not one or the other: the console line is what a
+                // developer running from a terminal reads as it happens, and the
+                // file is what a bug report can be written from afterwards.
+                let said = format!(
                     "The render worker faulted ({}); rebuilding the renderer: {}",
                     faults_in_a_row,
                     panic_message(&*payload),
                 );
+                note!("{said}");
+                crate::faults::record(&said);
                 if faults_in_a_row > MAX_FAULTS_IN_A_ROW {
-                    note!("The render worker faulted on every attempt; it is stopping");
+                    let stopping = "The render worker faulted on every attempt; it is stopping";
+                    note!("{stopping}");
+                    crate::faults::record(stopping);
                     return;
                 }
                 rebuild_renderer(&mut state, &mut stream);
@@ -4669,6 +4684,74 @@ mod tests {
             .expect("and the preview goes on after the fault");
     }
 
+    /// **Dragging a panel seam must not mint a shared texture per layout.**
+    ///
+    /// The report: widening the Viewer's split in the Nodes workspace made the
+    /// picture flicker, then the editor froze and the process was gone with
+    /// "Lost connection to device" and no Dart exception. The Viewer reports the
+    /// fraction of comp resolution its panel can show, and while a seam is being
+    /// dragged that fraction is a new number on every layout — dozens a second.
+    ///
+    /// Each distinct number is a differently sized composite, and on the
+    /// zero-copy path a differently sized composite means a **new shared texture
+    /// with a new handle**: minted here, registered by the frontend over a
+    /// platform round trip, and presented with two waits on the graphics card
+    /// (`SharedTexture::present`). `lumit-render`'s `shared_present` tests
+    /// already name this as the storm that crashes the compositor; the target
+    /// pool they added stopped it for sizes that *alternate*, but a seam drag
+    /// walks, and a walk outruns any pool.
+    ///
+    /// So the ladder in [`crate::render::quality_for`] is what this asserts, at
+    /// the place it actually matters: the handles a real renderer hands out.
+    /// Without it the walk below hands out one per step.
+    #[test]
+    #[cfg(all(windows, feature = "shared-texture"))]
+    fn a_seam_drag_does_not_mint_a_shared_texture_per_layout() {
+        let (project, comp) = project_with_solid_sized(60, 960, 540);
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let bgra = super::zero_copy_wants_bgra();
+
+        // A Viewer growing from a third of the comp to two thirds, a pixel of
+        // pointer travel at a time.
+        let asked: Vec<f32> = (0..160).map(|i| 0.33 + i as f32 * 0.002).collect();
+        let mut raw: Vec<u32> = asked.iter().map(|s| (s * 960.0).round() as u32).collect();
+        raw.sort_unstable();
+        raw.dedup();
+        assert!(
+            raw.len() > 100,
+            "the drag itself has to walk many sizes, or this proves nothing"
+        );
+
+        let mut handles = Vec::new();
+        for scale in &asked {
+            let quality = still_quality(*scale);
+            let prepared =
+                super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, false)
+                    .expect("a solid renders at every scale a panel can be");
+            let shared = state
+                .renderer
+                .present_prepared(&prepared)
+                .expect("and presents at every one of them");
+            handles.push(shared.handle);
+        }
+        handles.sort_unstable();
+        handles.dedup();
+        assert!(
+            handles.len() <= 12,
+            "the drag handed out {} shared-texture handles; the frontend has to \
+             register each one with the platform, and that storm is what takes \
+             the editor down",
+            handles.len()
+        );
+    }
+
     /// A worker's state around a real renderer, built as `worker_loop` builds
     /// it. `None` where there is no graphics adapter to build one on.
     fn worker_state(project: crate::api::project::ProjectReference) -> Option<super::WorkerState> {
@@ -4716,6 +4799,16 @@ mod tests {
 
     /// The same, `frames` frames long at 30 fps.
     fn project_with_solid_of(frames: i64) -> (crate::api::project::ProjectReference, Uuid) {
+        project_with_solid_sized(frames, 64, 32)
+    }
+
+    /// The same, at a chosen raster — for the tests that care how big the
+    /// pictures the renderer is asked for actually are.
+    fn project_with_solid_sized(
+        frames: i64,
+        width: u32,
+        height: u32,
+    ) -> (crate::api::project::ProjectReference, Uuid) {
         use lumit_core::model::{Composition, LinearColour, ProjectItem};
         use lumit_core::time::{Duration, FrameRate, Rational};
 
@@ -4724,8 +4817,8 @@ mod tests {
         let comp = Composition {
             id: Uuid::now_v7(),
             name: "Scene".into(),
-            width: 64,
-            height: 32,
+            width,
+            height,
             frame_rate: FrameRate::new(30, 1).expect("30 fps"),
             duration: Duration(Rational::new(frames, 30).expect("a duration")),
             background: LinearColour([0.0, 0.0, 0.0, 0.0]),

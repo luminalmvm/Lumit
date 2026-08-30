@@ -81,6 +81,7 @@ mod autosave;
 mod beats;
 mod edits;
 mod export;
+mod faults;
 mod framecache;
 mod media;
 mod names;

@@ -12588,3 +12588,70 @@ changes. The wires above it can be redrawn sixty times a second and the dots are
 touched. Boundaries are not free — each one is another picture to keep and to compose — so
 they earn their place where the thing behind is expensive to draw and rarely changes, which
 describes a background almost by definition.
+
+## 37. Why the Viewer draws at only a short list of sizes, in plain terms
+
+The Viewer does not always ask the engine for the composition at full size. A Viewer docked
+into a narrow column can only *show* a third of the picture's width, so asking for the other
+two thirds would be work thrown away — the engine renders a third-sized picture instead and
+the panel stretches it to fit. That is why a small Viewer is cheap, and it is the whole
+reason the panel measures itself and tells the engine what fraction it can show.
+
+The catch is that the fraction is a *continuous* number. Drag the seam between the Viewer
+and the panel beside it and the fraction changes with every pixel the pointer moves — a new
+number dozens of times a second, and each one a differently sized picture.
+
+Every one of those sizes is expensive in a way that is not obvious. A frame reaches Flutter
+without ever being copied out of the graphics card: the engine draws into a piece of GPU
+memory and hands over a **handle**, a small number naming that memory, which Flutter
+registers with the operating system and then samples directly. A handle names a texture of
+one fixed size. Change the size and there has to be a new texture, a new handle, and a fresh
+registration — a round trip out to the platform and back, while the old one is still on
+screen. One of those is nothing. One per layout, for the length of a drag, is a queue of
+registrations the compositor never catches up with, and the reported symptom was exactly
+that: the picture flickering, then the editor freezing, then the process gone with the
+graphics driver having reset the device underneath it.
+
+The fix is to stop asking for a continuum. The fraction is rounded **up** to the nearest
+thirty-second before it reaches the renderer — 3% steps, so nothing looks different, and up
+rather than down so the picture is never softer than what was asked for. A drag now crosses
+a handful of those steps instead of a new size per pixel, and crossing back lands on sizes
+already made, which the renderer keeps a few of. Two other things fall out of it. The steps
+are exact fractions, so the same panel size always names the same texture rather than one a
+hair different. And the frame cache files each finished frame under the size it was made at,
+so resizing a panel no longer quietly throws away every frame rendered so far.
+
+The idea is a common one: when something continuous is expensive to change, you let it take
+only a fixed set of values. What matters is choosing the set fine enough that nobody can
+see the steps and coarse enough that the whole set is short.
+
+## 38. The file a crash leaves behind, in plain terms
+
+Section 35 explains why the engine's diagnostics go through `note!` instead of the ordinary
+printing macros: a windowed Lumit has no console, and writing to one that is not there must
+not be fatal. That fixed the crash. It did not fix the other half of the problem, which is
+that those lines then go **nowhere**.
+
+That mattered more than it sounds. The render worker has a safety net round it: if something
+gives up partway through a frame, the net catches it, writes a line naming what happened, and
+builds the renderer again so the picture keeps moving. The line is the important part — it is
+the only place the actual cause is ever named. And in a normal, double-clicked Lumit, nobody
+has ever been able to read one.
+
+So the worst lines are now also appended to a file: `lumit-diagnostics.log`, in the machine's
+temporary directory, whose full path the engine prints as the render worker starts. Two
+things write to it. The safety net, when it catches and recovers from a fault. And a
+**panic hook** — a piece of code Rust runs at the moment something is about to give up,
+before any of the unwinding starts. That second one is what covers the case the first cannot:
+a failure that is *not* caught, that ends the whole process, and that Flutter can only report
+as "lost connection to device" because by then there is nothing left to ask. The hook writes
+the message, the thread it happened on, and the source line, and then hands over to whatever
+would have happened anyway.
+
+It is deliberately not a logging system. One file, appended a line at a time, started afresh
+once it passes a quarter of a megabyte so it cannot fill a disk, and never allowed to fail
+loudly — a diagnostic that can break the thing it is diagnosing is worse than no diagnostic.
+Each entry is one line even when the message it carries has several, so the file can be
+searched. And the write is a single call rather than several, because two threads failing at
+the same moment is not a rare coincidence — it is the usual case, one failure having caused
+the other — and interleaved halves of two messages are worse than either alone.
