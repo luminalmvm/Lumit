@@ -1099,6 +1099,18 @@
   "@exportAudio24Bit": {
     "description": "Export dialog, Audio section, sample-width list: twenty-four bits a sample, offered only by the uncompressed formats. Beside exportAudio16Bit."
   },
+  "exportAudio44k": "44.100 kHz",
+  "@exportAudio44k": {
+    "description": "Export dialog, Audio section, sample-rate list: 44100 hertz, the CD rate. A number and its unit; keep the same decimal style as the other two rates."
+  },
+  "exportAudio48k": "48.000 kHz",
+  "@exportAudio48k": {
+    "description": "Export dialog, Audio row: the sample rate every export is mixed at. Disabled — there is nothing to choose."
+  },
+  "exportAudio96k": "96.000 kHz",
+  "@exportAudio96k": {
+    "description": "Export dialog, Audio section, sample-rate list: 96000 hertz, the high-resolution master rate. A number and its unit; keep the same decimal style as the other two rates."
+  },
   "exportAudioAuto": "自動",
   "@exportAudioAuto": {
     "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
@@ -1151,6 +1163,10 @@
   "@exportChannels": {
     "description": "Export dialog, Picture group: whether the file carries the composite's own coverage as an alpha channel."
   },
+  "exportChannelsRgb": "RGB",
+  "@exportChannelsRgb": {
+    "description": "Export dialog, Channels list: colour only. RGB stays as it is."
+  },
   "exportColourConfigUntagged": "通過色彩配置寫出的檔案寧可不加標記，也不會加錯標記。",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
@@ -1175,9 +1191,25 @@
   "@exportColourSpace": {
     "description": "Export dialog, Colour section: the space the file is written in — the export's final transform."
   },
+  "exportColourSpaceDisplayP3": "Display P3",
+  "@exportColourSpaceDisplayP3": {
+    "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
+  },
   "exportColourSpaceLinear": "線性",
   "@exportColourSpaceLinear": {
     "description": "Export dialog, Colour section, Colour space list: the space with Rec. 709 primaries and no transfer curve, for a file going back into a compositor. A colour-science term."
+  },
+  "exportColourSpaceRec2020": "Rec. 2020",
+  "@exportColourSpaceRec2020": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.2020 wide-gamut space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceRec709": "Rec. 709",
+  "@exportColourSpaceRec709": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.709 broadcast space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceSrgb": "sRGB / Rec.709",
+  "@exportColourSpaceSrgb": {
+    "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
   },
   "exportColourStated": "該檔案會在自己的頭資訊中聲明此空間。",
   "@exportColourStated": {
@@ -1878,6 +1910,10 @@
   "formatHevc": "HEVC 視訊 (.mp4)",
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
+  },
+  "formatM4a": "M4A (AAC)",
+  "@formatM4a": {
+    "description": "Export dialog, Format list: compressed sound in an .m4a container. The codec name AAC stays as it is."
   },
   "formatM4aPicker": "M4A 音訊",
   "@formatM4aPicker": {
@@ -3579,6 +3615,10 @@
   "@fxNormal": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxNtsc": "NTSC",
+  "@fxNtsc": {
+    "description": "Effect controls — a Standard option on Broadcast safe. NTSC is a broadcast television standard and is not translated."
+  },
   "fxOffset": "偏移",
   "@fxOffset": {
     "description": "Effect name in the Add effect menu — slides the frame, wrapping round."
@@ -3686,6 +3726,10 @@
   "fxPaintStyle": "繪畫樣式",
   "@fxPaintStyle": {
     "description": "Effect controls — a control on Stroke: what the brush is painted onto."
+  },
+  "fxPal": "PAL",
+  "@fxPal": {
+    "description": "Effect controls — a Standard option on Broadcast safe. PAL is a broadcast television standard and is not translated."
   },
   "fxParticle": "粒子",
   "@fxParticle": {
@@ -3846,6 +3890,10 @@
   "fxRate": "速率",
   "@fxRate": {
     "description": "Effect controls — how many turns a second the Colour cycle driver makes."
+  },
+  "fxRec709": "Rec. 709",
+  "@fxRec709": {
+    "description": "Effect controls — an Input space option on LUT: the ITU-R BT.709 transfer function."
   },
   "fxRectangle": "矩形",
   "@fxRectangle": {
@@ -4314,6 +4362,10 @@
   "fxSqueeze": "擠壓",
   "@fxSqueeze": {
     "description": "Effect controls — a Style option on Warp."
+  },
+  "fxSrgb": "sRGB",
+  "@fxSrgb": {
+    "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
   },
   "fxStandard": "標準",
   "@fxStandard": {
@@ -4894,6 +4946,15 @@
   "graphTypes": "類型",
   "@graphTypes": {
     "description": "Graph panel: the heading of the legend strip along the bottom of the canvas, which says what each wire colour carries."
+  },
+  "graphZoom": "{percent}%",
+  "@graphZoom": {
+    "description": "Graph panel toolbar: the canvas zoom readout, a percentage.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
   },
   "graphicsDeviceReset": "顯示卡裝置已重置；預覽正在重建",
   "@graphicsDeviceReset": {
@@ -6352,6 +6413,15 @@
   "@off": {
     "description": "A setting that is switched off."
   },
+  "openingPercent": "{percent}%",
+  "@openingPercent": {
+    "description": "The percentage beside the phase line on the card shown while a project is being opened. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
   "openingPreparingProject": "正在準備專案",
   "@openingPreparingProject": {
     "description": "Third phase line on the card shown while a project is being opened: the document is being made the open one."
@@ -6830,6 +6900,18 @@
   "scopesWaiting": "正在等待波形",
   "@scopesWaiting": {
     "description": "Shown in the Scopes panel before the first frame has been measured."
+  },
+  "scrubLadderAlt": "ALT ×.01",
+  "@scrubLadderAlt": {
+    "description": "The finest rung of the small floating chip that appears while a number is being dragged sideways to change it. Holding Alt makes the drag a hundredth as fast. ALT is the key's name on the keyboard and stays as it is; the multiplier is the number the drag is scaled by."
+  },
+  "scrubLadderCtrl": "CTRL ×.1",
+  "@scrubLadderCtrl": {
+    "description": "The second rung of the small floating chip shown while a number is being dragged to change it. Holding Ctrl makes the drag a tenth as fast. CTRL is the key's name on the keyboard and stays as it is."
+  },
+  "scrubLadderShift": "SHIFT ×10",
+  "@scrubLadderShift": {
+    "description": "The coarsest rung of the small floating chip shown while a number is being dragged to change it. Holding Shift makes the drag ten times as fast. SHIFT is the key's name on the keyboard and stays as it is."
   },
   "search": "搜尋",
   "@search": {
@@ -7549,6 +7631,10 @@
   "shaderEditorTitle": "編輯著色器",
   "@shaderEditorTitle": {
     "description": "Title of the window that opens from a Custom shader effect's 'Edit shader…' button, where the user types the shader program. Shown capitalised as a kicker in the window's title strip."
+  },
+  "shaderNodeUv": "UV",
+  "@shaderNodeUv": {
+    "description": "Name of the 'UV' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — the position of the pixel being drawn, 0..1 across the frame. Also a row of the box search that adds one."
   },
   "shapeCombine": "合併",
   "@shapeCombine": {
@@ -9280,6 +9366,11 @@
   "@unitGb": {
     "description": "The gigabyte unit, shown after an amount of memory."
   },
+  "unitKhz": "kHz",
+  "@unitKhz": {
+    "description": "Unit beside a sound's sample rate — kilohertz. Most languages keep the SI symbol.",
+    "type": "text"
+  },
   "unitMb": "MB",
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
@@ -9299,6 +9390,11 @@
   "unitSymbolFrames": "影格",
   "@unitSymbolFrames": {
     "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unitSymbolPx": "px",
+  "@unitSymbolPx": {
+    "description": "The unit rider beside an effect parameter's value when the number is a distance in pixels at composition size. Abbreviated because it sits in a narrow column beside the number.",
     "type": "text"
   },
   "unitSymbolSeconds": "秒",
