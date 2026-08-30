@@ -93,9 +93,24 @@ class _Probe {
   /// it claims to wait for.
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// When a frame that the *interface* built last arrived, as against one the
+  /// preview merely republished into.
+  ///
+  /// A click on a switch is answered by the chrome and then, a while later, by
+  /// a new picture: the engine re-renders, the texture republishes, and frames
+  /// keep landing for a few hundred milliseconds with nothing to build in them
+  /// (docs/13 §4 lets the picture lag; the chrome may not). Measuring
+  /// "settled" off every frame therefore measured the render, not the wave —
+  /// so a build worth more than a tenth of a millisecond is what counts as the
+  /// interface still working.
+  DateTime _lastBuiltAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _onTimings(List<FrameTiming> timings) {
     _bucket?.addAll(timings);
     _lastFrameAt = DateTime.now();
+    if (timings.any((f) => f.buildDuration.inMicroseconds > 100)) {
+      _lastBuiltAt = _lastFrameAt;
+    }
   }
 
   // ---- pointer dispatch ---------------------------------------------------
@@ -361,6 +376,15 @@ class _Probe {
     // plain select and never a switch toggle.
     await _selectClicks('select: clicks on outline row names', dx: 40);
 
+    // G1b: the click that *edits* — WP-5's gate. The lock cell is a switch like
+    // any other (`set_switch` → one committed op → the document-change wave),
+    // and it is the one switch that changes no pixel, so what the row reports is
+    // the follow-on wave itself rather than a re-render arriving behind it. The
+    // cells are found by key rather than by an x offset because which switches
+    // are shown depends on the outline's width (`switchCellsFor`).
+    await _selectClicks('edit: clicks on a row lock switch',
+        dx: 0, cellPrefix: 'tl-locked-');
+
     // G2: wheel-scroll the lanes down then up.
     await _measure('scroll: lanes wheel 30 down + 30 up', () async {
       for (var i = 0; i < 30; i++) {
@@ -511,19 +535,28 @@ class _Probe {
   /// One row of per-click evidence: acknowledgement (down → the next finished
   /// frame), quiet (down → 300ms with no frame at all), the frames in the
   /// burst, and every bridge call the click set off.
-  Future<void> _selectClicks(String name, {required double dx}) async {
+  Future<void> _selectClicks(String name,
+      {double dx = 0, String? cellPrefix}) async {
     await _settle();
     out.writeln('== $name ==');
     for (var i = 0; i < 6; i++) {
-      final live = _byTypeName('OutlineRow');
+      final live = cellPrefix == null
+          ? _byTypeName('OutlineRow')
+          : _elements((e) => switch (e.widget.key) {
+                ValueKey<String>(:final value) => value.startsWith(cellPrefix),
+                _ => false,
+              });
       if (live.isEmpty) break;
       final row = _rectOf(live[(i * 3 + 1) % live.length]);
       if (row == null) continue;
-      final at = Offset(row.left + dx, row.center.dy);
+      final at =
+          cellPrefix == null ? Offset(row.left + dx, row.center.dy) : row.center;
       final frames = <FrameTiming>[];
       _bucket = frames;
       final before = bridge?.snapshot();
       final sw = Stopwatch()..start();
+      final clickedAt = DateTime.now();
+      _lastBuiltAt = clickedAt;
       await _click(at);
       await SchedulerBinding.instance.endOfFrame;
       final ack = sw.elapsedMicroseconds / 1000.0;
@@ -536,6 +569,14 @@ class _Probe {
         }
       }
       final quiet = sw.elapsedMicroseconds / 1000.0 - 300.0;
+      // Settled: the last frame the interface actually *built* something in.
+      // WP-5's gate is on this rather than on `quiet`, which keeps running for
+      // as long as the preview is republishing behind the edit.
+      final settled = _lastBuiltAt
+          .difference(clickedAt)
+          .inMicroseconds
+          .clamp(0, 1 << 31) /
+          1000.0;
       _bucket = null;
       final after = bridge?.snapshot();
       final builds = frames.map((f) => f.buildDuration.inMicroseconds / 1000.0);
@@ -552,6 +593,7 @@ class _Probe {
       final top = delta.entries.toList()
         ..sort((a, b) => b.value.$2.compareTo(a.value.$2));
       out.writeln('click ${i + 1}: ack=${ack.toStringAsFixed(0)}ms '
+          'settled=${settled.toStringAsFixed(0)}ms '
           'quiet=${quiet.toStringAsFixed(0)}ms frames=${frames.length} '
           'worstBuild=${worstBuild.toStringAsFixed(1)}ms '
           'bridge=$calls calls ${callMs.toStringAsFixed(1)}ms');
