@@ -41,6 +41,7 @@ import 'graph_panel.dart'
     show
         GraphGroundPainter,
         GraphNodeFrame,
+        graphShaderHeader,
         graphDashPath,
         graphWirePath,
         graphDotGrid,
@@ -920,7 +921,10 @@ class _ShaderNodeCard extends StatelessWidget {
               height: graphNodeHeaderHeight,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: t.surface2,
+                // Every box in here is shader vocabulary, so every header
+                // wears the same viz tint the Custom shader box wears
+                // outside (K-675) — one colour, one meaning, both graphs.
+                color: graphShaderHeader(t),
                 border: Border(bottom: BorderSide(color: t.hairline)),
               ),
               child: Row(

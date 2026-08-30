@@ -164,6 +164,14 @@ const double _socketGrab = 7;
 /// The pointer travel that turns a press into a drag rather than a click.
 const double _dragSlop = 3;
 
+/// The header tint a **Custom shader** box wears, in the outer graph and on
+/// every box of its inner graph alike (K-675, owner item 13b): the theme's
+/// own viz family — `curve[0]`, the household ramp's lead — washed over the
+/// ordinary header ground, so a programmable box reads at a glance without a
+/// third colour system beside the port legend and the label palette.
+Color graphShaderHeader(LumitTheme t) =>
+    Color.alphaBlend(t.curve.first.withValues(alpha: 0.14), t.surface2);
+
 /// Which theme token a port type draws in (K-472 §6.1): seven types, five
 /// colours, grouped as the drawing's legend groups them.
 Color portColour(LumitTheme t, BridgePortType type) => switch (type) {
@@ -2313,7 +2321,11 @@ class _NodeCard extends StatelessWidget {
         height: graphNodeHeaderHeight,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: t.surface2,
+          // A Custom shader box wears the viz tint (K-675) so the one box
+          // with an inside reads at a glance.
+          color: box.node.matchName == 'custom_shader'
+              ? graphShaderHeader(t)
+              : t.surface2,
           border: Border(bottom: BorderSide(color: t.hairline)),
         ),
         child: Row(

@@ -20951,3 +20951,18 @@ the Layer out takes the last effect`, `a chain wire dropped on another chain inp
 reorders`, `a chain wire dropped on the Layer out moves its source last`, `a stationary
 press on a chain input changes nothing`, `a chain wire dropped on a driver socket is
 declined` (graph_panel_frb_test).
+
+## K-675 — The Custom shader box wears the viz family's tint
+
+**Status: DECIDED (2026-08-30).** Owner's item 13b: shader boxes should read at a
+glance. The Custom shader box's header is `curve[0]` — the household viz ramp's lead —
+washed at low alpha over the ordinary `surface_2` ground, in the outer graph and on
+every box of the inner graph alike: one colour, one meaning ("this is shader
+vocabulary"), borrowed from the theme's existing viz family rather than inventing a
+third colour system beside the port legend (K-472) and the label palette (K-188). No
+hex enters widget code; the wash is derived from the theme token. The approved NodeGraph
+board can gain the tint on its next pass; the ruling is recorded here first.
+
+Regression tests: `a Custom shader box wears the viz tint on its header`
+(graph_panel_metrics_test); `an inner box's header wears the shader tint`
+(shader_graph_frb_test).

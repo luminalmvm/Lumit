@@ -353,6 +353,37 @@ void main() {
           reason: 'and with no ring to offer the list stands open');
     });
 
+    /// 10. **A Custom shader box wears the viz tint** (K-675, owner item
+    /// 13b): its header is `curve[0]` washed over the ordinary ground, so
+    /// the one box with an inside reads at a glance — and every other box's
+    /// header stays plain `surface_2`.
+    testWidgets('a Custom shader box wears the viz tint on its header',
+        (tester) async {
+      final p = withBlur();
+      p.layer.addEffect(name: 'custom_shader');
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final shaderKey = graphNodeKey(p.layer
+          .getGraph()
+          .nodes
+          .firstWhere((n) => n.matchName == 'custom_shader')
+          .node);
+
+      Iterable<Color?> headerColours(String key) => [
+            for (final c in tester.widgetList<Container>(find.descendant(
+                of: find.byKey(ValueKey<String>('graph-node-$key')),
+                matching: find.byType(Container))))
+              if (c.decoration case final BoxDecoration d?) d.color,
+          ];
+
+      expect(headerColours(shaderKey), contains(graphShaderHeader(theme)),
+          reason: 'the shader box\'s header is tinted from the viz family');
+      expect(headerColours(effectKey(p.layer)),
+          isNot(contains(graphShaderHeader(theme))),
+          reason: 'an ordinary effect box\'s header stays surface_2');
+    });
+
     /// 9. **A wire always leaves its socket** (owner, desk test). The cubic's
     /// handles used to be ±dx/2, so a consumer dragged left of — or on top of
     /// — its producer collapsed them to nothing and the wire vanished behind

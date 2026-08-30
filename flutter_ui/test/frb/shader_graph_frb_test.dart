@@ -11,6 +11,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
 
@@ -189,6 +190,25 @@ void main() {
           tester.getRect(find.byKey(const ValueKey<String>('shader-node-1'))),
           before,
           reason: 'no zoom moved the box: the scroll was the console\'s');
+    });
+
+    /// **The inner graph wears the shader tint too** (K-675): every box in
+    /// here is shader vocabulary, so every header carries the same wash the
+    /// Custom shader box wears outside — one colour, one meaning.
+    testWidgets('an inner box\'s header wears the shader tint',
+        (tester) async {
+      final p = withShader();
+      await mount(tester, p);
+      await enter(tester, p.layer);
+
+      final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final colours = [
+        for (final c in tester.widgetList<Container>(find.descendant(
+            of: find.byKey(const ValueKey<String>('shader-node-1')),
+            matching: find.byType(Container))))
+          if (c.decoration case final BoxDecoration d?) d.color,
+      ];
+      expect(colours, contains(graphShaderHeader(theme)));
     });
 
     /// A wire let go over empty canvas opens the same console, and the box
