@@ -78,6 +78,7 @@ import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'timeline_extras_frb.dart';
 import 'timeline_navigator.dart';
 import 'sequence_view_frb.dart';
+import 'spectral_lane_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -179,6 +180,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// same key by design ([WaveformRequest]).
   final Map<String, String> _peakKeys = {};
 
+  /// Each spectral-mode layer's spectrogram window (K-699), and what it was
+  /// fetched for — the peaks' own bargain, for the other picture. A layer
+  /// holds one or the other, never both: the mode decides which fetch runs,
+  /// and the loser's entry is dropped so a long session does not keep two
+  /// summaries of every lane it has looked at.
+  final Map<String, BridgeSpectrogram> _spectra = {};
+  final Map<String, String> _spectraKeys = {};
+
+  /// A lane-mode chip changed (K-699): fetch what the new mode needs. No
+  /// rebuild here — the chips and the lanes listen to [laneModes] themselves,
+  /// which is what keeps the toggle off the rest of the table.
+  void _onLaneMode() {
+    if (!mounted) return;
+    _refreshPeaks(_lastLayers);
+  }
+
   /// The lanes' viewport width as the last layout measured it. Written during
   /// build and never read to decide layout.
   ///
@@ -256,6 +273,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Only the band split reaches the engine: where the wave sits is a
     // drawing decision, so toggling it repaints and fetches nothing.
     final multiwave = _waveformStyle.needsBands;
+    // What a layer with no chip choice of its own shows (K-699) — read here,
+    // once, rather than in every waveform row's build (K-184).
+    laneModes.stackDefault = multiwave;
     // The comp seconds under the lanes' window, from the same mapping the axis
     // draws with.
     final maxOffset = max(0.0, width - _laneViewport);
@@ -272,6 +292,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // the time it opens again, and the memory is a whole track's summary.
         _peaks.remove(id);
         _peakKeys.remove(id);
+        _spectra.remove(id);
+        _spectraKeys.remove(id);
         continue;
       }
       final span = entry.info.span;
@@ -289,7 +311,31 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // and an edit anywhere else in the document asks for nothing.
       final retimed =
           entry.info.retime == null ? '' : '|${ui.model.heldRevision}';
-      final key = '${request.key}|$multiwave$retimed';
+      // The lane's mode decides which picture is fetched (K-699): the
+      // spectrogram in spectral mode, the peaks otherwise — never both.
+      final mode = laneModes.of(id);
+      if (mode == LaneMode.spectral) {
+        _peaks.remove(id);
+        _peakKeys.remove(id);
+        final key = '${request.key}$retimed';
+        if (_spectraKeys[id] == key) continue;
+        _spectraKeys[id] = key;
+        entry.layer
+            .audioSpectrogram(
+          startSeconds: request.startSeconds,
+          endSeconds: request.endSeconds,
+          columns: request.buckets,
+        )
+            .then((grid) {
+          if (!mounted || _spectraKeys[id] != key) return;
+          setState(() => _spectra[id] = grid);
+        });
+        continue;
+      }
+      _spectra.remove(id);
+      _spectraKeys.remove(id);
+      final bands = mode == LaneMode.stack;
+      final key = '${request.key}|$bands$retimed';
       // Claimed before the fetch starts, so a rebuild mid-decode does not ask
       // twice for the same window.
       if (_peakKeys[id] == key) continue;
@@ -299,7 +345,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         startSeconds: request.startSeconds,
         endSeconds: request.endSeconds,
         buckets: request.buckets,
-        multiwave: multiwave,
+        multiwave: bands,
       )
           .then((peaks) {
         // A later window may already have been asked for while this one was
@@ -315,7 +361,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// finer summary of somewhere else. Nothing is rebuilt here — the fetch calls
   /// `setState` only when an answer actually arrives.
   void _onLaneScroll() {
-    if (_peakKeys.isEmpty && _peaks.isEmpty) return;
+    if (_peakKeys.isEmpty && _peaks.isEmpty && _spectraKeys.isEmpty) return;
     _refreshPeaks(_lastLayers);
   }
 
@@ -1475,6 +1521,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // (K-280). Nothing else about the panel changes, so this listens rather
     // than the panel rebuilding on every scrolled pixel.
     _hLane.addListener(_onLaneScroll);
+    // A lane-mode chip flipping to spectral needs data the peaks fetch never
+    // asked for (K-699). Fetch only: the lanes and chips listen to the store
+    // themselves, so the toggle repaints them without this panel rebuilding.
+    laneModes.addListener(_onLaneMode);
     HardwareKeyboard.instance.addHandler(_onKey);
     // Claim Delete for the finer selection this panel holds (K-234). The state
     // is kept, not looked up again: `dispose` runs after the element is
@@ -2460,6 +2510,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   @override
   void dispose() {
+    laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.selectedLayer.removeListener(_onPrimaryChanged);
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
@@ -3701,6 +3752,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                         retime: BridgeScalar.keyframed(keys),
                       ),
                       peaks: _peaks,
+                      spectra: _spectra,
                       waveformStyle: _waveformStyle,
                       fps: ui.model.fps,
                       fpsNum: fpsNum,

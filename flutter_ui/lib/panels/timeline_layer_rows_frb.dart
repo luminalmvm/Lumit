@@ -25,6 +25,7 @@ import 'timeline_extras_frb.dart';
 import 'effect_param_row_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'spectral_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'flow_rows_frb.dart';
 import 'fx_section.dart';
@@ -278,7 +279,45 @@ class FoldRow extends StatelessWidget {
   Widget _control(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return switch (row) {
-      FoldWaveformRow() => const SizedBox.shrink(),
+      // The lane-mode chip (K-699, the board's per-layer Wave / Spectral
+      // chips): which of the three pictures this layer's lane draws. On the
+      // lane's own outline row, listening to the session store itself, so a
+      // tap repaints this chip and its lane and rebuilds nothing else.
+      FoldWaveformRow() => Align(
+          alignment: Alignment.centerRight,
+          child: ListenableBuilder(
+            listenable: laneModes,
+            builder: (context, _) {
+              final id = layer.internallayerId.toString();
+              final mode = laneModes.of(id);
+              return LumitTooltip(
+                message: l10n.laneModeTooltip,
+                child: GestureDetector(
+                  key: ValueKey<String>('tl-lane-mode-$id'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => laneModes.cycle(id),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: t.hairlineStrong),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      switch (mode) {
+                        LaneMode.wave => l10n.laneModeWave,
+                        LaneMode.stack => l10n.laneModeStack,
+                        LaneMode.spectral => l10n.laneModeSpectral,
+                      },
+                      style: t.mono
+                          .copyWith(fontSize: 9, color: t.textSecondary),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       FoldGroupRow(:final path, :final label, :final open) => GestureDetector(
           key: ValueKey<String>('tl-group-$path'),
           behavior: HitTestBehavior.opaque,

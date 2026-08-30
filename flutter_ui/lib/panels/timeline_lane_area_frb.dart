@@ -22,6 +22,7 @@ import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
+import 'spectral_lane_frb.dart';
 import 'timeline_snap.dart';
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
@@ -166,6 +167,10 @@ class LayerArea extends StatelessWidget {
   /// Each layer's source peaks, for the waveform lanes.
   final Map<String, BridgeAudioPeaks> peaks;
 
+  /// Each spectral-mode layer's spectrogram window (K-699) — the other
+  /// picture, fetched instead of peaks while a lane's chip reads Spectral.
+  final Map<String, BridgeSpectrogram> spectra;
+
   /// How waveforms draw (K-280, K-285) — the lanes' own answer, handed down so
   /// an open Sequence view's clips agree with it.
   final WaveformStyle waveformStyle;
@@ -290,6 +295,7 @@ class LayerArea extends StatelessWidget {
     this.hScroll,
     this.onClipPreview,
     required this.peaks,
+    this.spectra = const {},
     required this.waveformStyle,
     required this.fps,
     required this.axis,
@@ -923,7 +929,11 @@ class LayerArea extends StatelessWidget {
       List<SnapTarget> snapTargets) {
     final id = entry.layer.internallayerId.toString();
     if (row is FoldWaveformRow) {
-      return ValueListenableBuilder<BarDragPreview?>(
+      // The mode store is listened to here, so flipping a chip repaints this
+      // lane and nothing else — the toggle never rebuilds the table (K-699).
+      return ListenableBuilder(
+        listenable: laneModes,
+        builder: (context, _) => ValueListenableBuilder<BarDragPreview?>(
         valueListenable: dragPreview,
         builder: (context, preview, _) {
           final p = preview?.layerId == id ? preview : null;
@@ -937,8 +947,31 @@ class LayerArea extends StatelessWidget {
               rationalSeconds(span.startOffset) + (p?.offsetShift ?? 0) / fps;
           final secondsPerPixel =
               axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
+          final mode = laneModes.of(id);
           return Stack(
             children: [
+              // Spectral mode draws its texture in a boundary of its own, so
+              // the image repaints without re-recording the block around it;
+              // the wave keeps its plain painter, exactly as before.
+              if (mode == LaneMode.spectral)
+                RepaintBoundary(
+                  key: ValueKey<String>('tl-spectral-$id'),
+                  child: SizedBox(
+                    width: axis.width,
+                    height: t.density.laneRow,
+                    child: SpectralLane(
+                      grid: spectra[id],
+                      originSeconds:
+                          -startOffset - TimelineAxis.pad * secondsPerPixel,
+                      secondsPerPixel: secondsPerPixel,
+                      left: axis.xOf(inFrame),
+                      right: axis.xOf(outFrame),
+                      // Both rows, the wave's own K-437 bargain.
+                      height: t.density.laneRow * 2,
+                    ),
+                  ),
+                )
+              else
               CustomPaint(
                 key: ValueKey<String>('tl-wave-$id'),
                 size: Size(axis.width, t.density.laneRow),
@@ -953,7 +986,13 @@ class LayerArea extends StatelessWidget {
                   left: axis.xOf(inFrame),
                   right: axis.xOf(outFrame),
                   colours: t.waveform,
-                  style: waveformStyle,
+                  // The chip's answer, not the setting's alone: the stack for
+                  // a stack lane, the single wave otherwise, sitting wherever
+                  // the Settings choice puts every wave (K-285).
+                  style: WaveformStyle(
+                    multiwave: mode == LaneMode.stack,
+                    fromBottom: waveformStyle.fromBottom,
+                  ),
                   // Both rows (K-437): the lane's own, and the empty one
                   // belonging to the **Waveform** twirl directly above it. A
                   // centred wave then sits on the divider between the two
@@ -983,6 +1022,7 @@ class LayerArea extends StatelessWidget {
             ],
           );
         },
+        ),
       );
     }
     final rowKeys = laneKeysOf(row);

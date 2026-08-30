@@ -1226,6 +1226,26 @@
   "@foldWaveform": {
     "description": "Heading in a layer's fold-out, over the picture of its sound; also the name of a scope."
   },
+  "laneModeWave": "Wave",
+  "@laneModeWave": {
+    "description": "Chip on the Timeline's waveform row: the lane draws the plain single waveform. Tapping the chip cycles Wave, Stack, Spectral."
+  },
+  "laneModeStack": "Stack",
+  "@laneModeStack": {
+    "description": "Chip on the Timeline's waveform row: the lane draws the three-band multiwave stack (bass, middle, treble over one another)."
+  },
+  "laneModeSpectral": "Spectral",
+  "@laneModeSpectral": {
+    "description": "Chip on the Timeline's waveform row: the lane draws a spectrogram (time along, frequency up, brightness is level)."
+  },
+  "laneModeTooltip": "How this lane draws its sound",
+  "@laneModeTooltip": {
+    "description": "Tooltip on the lane-mode chip that cycles Wave, Stack, Spectral."
+  },
+  "spectralRange": "0–12 kHz",
+  "@spectralRange": {
+    "description": "Caption on the spectrogram lane naming the frequency span its height covers. kHz is a unit symbol and stays as it is."
+  },
   "formatH264": "H.264 video (.mp4)",
   "@formatH264": {
     "description": "Export format. H.264 and .mp4 are technical names and stay as they are."
