@@ -1370,3 +1370,70 @@ fn camera_capture() -> lumit_import::capture::Capture {
     }))
     .expect("the capture parses")
 }
+
+/// **An effect is measured against the layer, not against the composition**
+/// (K-636).
+///
+/// After Effects runs an effect on the layer's own raster, so Motion Tile's
+/// four per cents are per cents of *that* frame and its Tile Center is a point
+/// in it. The capture below is the shape the owner's project has: a 2560 × 1088
+/// precomp placed in a 1920 × 816 comp, with a Motion Tile whose only touched
+/// control is Output Width — everything else left at After Effects' default,
+/// and therefore absent from the capture entirely. Read against the comp, the
+/// defaults landed at the comp's middle and the comp's width, so the tile was
+/// cut from up and to the left of the layer's centre and the window with it;
+/// that is the offset the effect showed. Read against the layer, every number
+/// is the one After Effects means.
+#[test]
+fn a_motion_tile_is_measured_against_its_own_layer_not_the_composition() {
+    let capture: lumit_import::capture::Capture = serde_json::from_value(serde_json::json!({
+        "items": [
+            { "id": 1, "kind": "comp", "name": "Clips" },
+            { "id": 2, "kind": "comp", "name": "Border" }
+        ],
+        "comps": [
+            { "id": 2, "width": 2560, "height": 1088, "fps": 25.0, "duration": 4.0, "layers": [] },
+            {
+                "id": 1,
+                "width": 1920,
+                "height": 816,
+                "fps": 25.0,
+                "duration": 4.0,
+                "layers": [{
+                    "index": 1,
+                    "name": "Border",
+                    "kind": "precomp",
+                    "source_id": 2,
+                    "in_point": 0.0,
+                    "out_point": 4.0,
+                    "properties": [{
+                        "match_name": "ADBE Effect Parade",
+                        "group": [{
+                            "match_name": "ADBE Tile",
+                            "name": "Motion Tile",
+                            "group": [{
+                                "match_name": "ADBE Tile-0004",
+                                "name": "Output Width",
+                                "value_type": "float",
+                                "value": 125.0
+                            }]
+                        }]
+                    }]
+                }]
+            }
+        ]
+    }))
+    .expect("the capture parses");
+
+    let (doc, _report) = map_capture(&capture);
+    let tile = &layer(comp(&doc, "Clips"), "Border").effects[0];
+    assert_eq!(tile.effect.match_name, "tile");
+    let at = |id: &str| tile.float_at(id, 0.0).expect("a float parameter");
+    // The layer's own middle, and the layer's own width and height.
+    assert_eq!((at("tile_centre_x"), at("tile_centre_y")), (1280.0, 544.0));
+    assert_eq!((at("tile_width"), at("tile_height")), (2560.0, 1088.0));
+    // 125 % of the layer is 3200, not 125 % of the comp's 1920.
+    assert_eq!(at("output_width"), 3200.0);
+    // And the untouched Output Height is the layer's own, whole.
+    assert_eq!(at("output_height"), 1088.0);
+}

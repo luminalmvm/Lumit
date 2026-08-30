@@ -114,10 +114,23 @@ pub(crate) fn map_layer(
     let masks = masks(conv, &path, props);
     // Masks before effects, because an effect parameter can name one (K-408).
     conv.masks = super::fx_colour::mask_refs(&masks);
+    // **An effect is measured against the layer, not the composition**
+    // (K-636). After Effects runs an effect on the layer's own raster, so
+    // Motion Tile's per cents are per cents of *that* frame and its Tile
+    // Center is a point in it; a 2560 × 1088 precomp sitting in a 1920 × 816
+    // comp took the comp's numbers and imported with its tile cut from up and
+    // to the left of the middle. A layer with no source of its own — text, a
+    // shape, a null — draws at the comp's size, which is what the fallback is.
+    let comp_size = conv.size;
+    conv.size = ae
+        .source_id
+        .and_then(|id| items.size(id))
+        .unwrap_or(comp_size);
     let effects = group(props, "ADBE Effect Parade")
         .iter()
         .map(|node| map_effect(conv, &path, node).instance())
         .collect();
+    conv.size = comp_size;
 
     let (retime, interpolation) = retime(conv, &path, ae, props, local_in, local_out);
 

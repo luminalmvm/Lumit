@@ -73,11 +73,23 @@ pub(crate) enum ItemKind {
 #[derive(Debug, Default)]
 pub(crate) struct Items {
     by_ae_id: HashMap<i64, (Uuid, ItemKind)>,
+    /// Each item's own raster, where it has one — a comp's dimensions, a
+    /// solid's, a piece of footage's. **A layer's effects are measured against
+    /// this, not against the composition** (K-636): After Effects runs an
+    /// effect on the layer, so its per cents are per cents of the layer's own
+    /// frame and its points are points in it. The two only coincide while the
+    /// layer happens to be the comp's size.
+    sizes: HashMap<i64, (f64, f64)>,
 }
 
 impl Items {
     pub(crate) fn get(&self, ae_id: i64) -> Option<(Uuid, ItemKind)> {
         self.by_ae_id.get(&ae_id).copied()
+    }
+
+    /// The raster an item draws at, for the layers that draw from it.
+    pub(crate) fn size(&self, ae_id: i64) -> Option<(f64, f64)> {
+        self.sizes.get(&ae_id).copied()
     }
 }
 
@@ -93,11 +105,15 @@ pub struct Conv<'a> {
     /// layer that was dragged along the timeline from importing with its
     /// animation in the wrong decade.
     pub(crate) offset: Rational,
-    /// The composition's raster. Effect parameters need it: After Effects
-    /// measures a Twirl radius as a per cent of the layer and a blur centre
-    /// as a point, where Lumit reads px@comp and a per cent of the frame
-    /// (docs/08 §2.3), so those conversions cannot be done without knowing
-    /// the frame.
+    /// **The frame the current layer's effects run on** (K-636). After Effects
+    /// measures a Twirl radius as a per cent of the layer and a blur centre as
+    /// a point, where Lumit reads px@comp and a per cent of the frame (docs/08
+    /// §2.3), so those conversions cannot be done without knowing the frame —
+    /// and the frame an effect sees is the **layer's** raster, not the
+    /// composition's. [`layers::map_layer`] sets this to the layer's source
+    /// size around its effect stack and puts the composition's back afterwards;
+    /// a layer with no source of its own (text, a shape, a null) draws at the
+    /// composition's size, which is what it falls back to.
     pub(crate) size: (f64, f64),
     /// The current layer's own span, in its own timebase. The two clock-reading
     /// After Effects controls (Ripple's Wave Speed, Wave warp's) become
@@ -126,8 +142,9 @@ impl Conv<'_> {
         t.checked_sub(self.offset).unwrap_or(t)
     }
 
-    /// The composition's diagonal in pixels — what After Effects' per cents
-    /// of the layer convert through (docs/08 §2.3).
+    /// The current frame's diagonal in pixels — what After Effects' per cents
+    /// of the layer convert through (docs/08 §2.3). [`Self::size`] says which
+    /// frame that is.
     pub(crate) fn diagonal(&self) -> f64 {
         let (w, h) = self.size;
         (w * w + h * h).sqrt().max(1.0)
@@ -146,6 +163,13 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
     // Pass one: hand every item a Lumit id, so the tree and the layers can
     // both refer to things that have not been built yet.
     let mut items = Items::default();
+    // A comp keeps its dimensions on its `comps` entry rather than on its item
+    // row, so both are read here — the sizes table below wants either.
+    let comps: HashMap<i64, &Comp> = capture
+        .comps
+        .iter()
+        .filter_map(|c| c.id.map(|id| (id, c)))
+        .collect();
     let mut order: Vec<(&Item, Uuid, ItemKind)> = Vec::with_capacity(capture.items.len());
     for item in &capture.items {
         let Some(kind) = item_kind(item) else {
@@ -166,16 +190,25 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
         };
         let uuid = Uuid::now_v7();
         items.by_ae_id.insert(ae_id, (uuid, kind));
+        let raster = match kind {
+            ItemKind::Comp => comps
+                .get(&ae_id)
+                .and_then(|c| c.width.zip(c.height))
+                .map(|(w, h)| (f64::from(w), f64::from(h))),
+            ItemKind::Footage | ItemKind::Solid => item
+                .width
+                .zip(item.height)
+                .map(|(w, h)| (f64::from(w), f64::from(h))),
+            ItemKind::Folder => None,
+        };
+        if let Some((w, h)) = raster.filter(|(w, h)| *w >= 1.0 && *h >= 1.0) {
+            items.sizes.insert(ae_id, (w, h));
+        }
         order.push((item, uuid, kind));
     }
 
     // Pass two: build them, in the capture's own order, which is the Project
     // panel's order.
-    let comps: HashMap<i64, &Comp> = capture
-        .comps
-        .iter()
-        .filter_map(|c| c.id.map(|id| (id, c)))
-        .collect();
     for (item, uuid, kind) in &order {
         let name = item_name(item);
         let built = match kind {
