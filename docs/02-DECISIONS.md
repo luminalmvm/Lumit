@@ -20655,3 +20655,49 @@ nothing crosses the bridge for it — what commits is simply the snapped positio
 
 Regression test: `dragging a box commits its position once, on the grid`
 (graph_panel_frb_test) — snapped with the magnet on, exact with it off.
+
+## K-660 — A Sapphire dissolve imports through the owner's curve, on both third-party roads
+
+**Status: DECIDED (2026-08-30).** K-655 gave a third-party effect two roads and one
+restraint: on the direct road the vendor's own OFX plug-in receives the controls it shares
+by name, and on the nearest road Lumit's closest effect stands in **at its own defaults**,
+because a vendor's number means the vendor's algorithm. Sapphire's dissolve transitions are
+the one place that restraint produces a worse picture than the thing it protects against,
+and the owner's ruling (2026-08-30) settles them.
+
+**The whole transition is one control.** `S_Dissolve`, `S_DissolveLuma`, `S_DissolveGlow`
+and their two dozen siblings are one sweep with a different look painted over it, and every
+one of them is driven by a single keyframed **Dissolve Percent**. A nearest road that leaves
+that behind does not import a transition at its defaults — it imports a wipe frozen
+half-complete for the length of the shot, which is not a visible gap but a still frame that
+looks deliberate. So the dissolve amount crosses, and it is the only dial that does.
+
+**It crosses through the owner's own curve, not one for one.** Sapphire's percentage and
+Lumit's amount are not the same scale: **at 50 % and above the effect is fully on, and below
+50 % it falls in a straight line to nothing at 0 %.** The curve is the owner's, measured
+rather than derived, and it applies on **both** roads — the ruling is about the dissolve, so
+the plug-in's own Dissolve Percent receives the curved number exactly as Lumit's Completion
+does. Every Lumit transition names its amount Completion (docs/08 §3.46, §3.47, §3.70,
+§3.72), so the nearest road has one place to put the answer.
+
+**A keyframed source converts key by key, and says what that costs.** Each key's value goes
+through the curve and its ease is left alone — the K-625 precedent, where an ease describes
+the shape of a move and the move is still the same one. The curve has a corner at 50 %, so
+between two keys either side of it Lumit draws the line through the *mapped* values rather
+than the curve through the interpolated ones. Resampling to close that gap would invent
+keyframes the user never set on a property they will want to edit, so the honest answer is
+the one that keeps their keys and names the approximation in the report
+(`effect_param_approximated`, on both roads) rather than the one that hides it under keys of
+ours.
+
+**Scope is the vendor's own naming.** The curve fires on a table row whose After Effects
+match name begins `S_Dissolve`, which is exactly the Sapphire Transitions dissolve family
+and leaves `S_CutToDissolve` (Sapphire Time) alone. The reference project uses one of them,
+`S_DissolveLuma` with Dissolve Percent keyframed on every instance, and that is the row
+seeded in `ae-effect-map.toml`; its nearest is **Linear wipe**, whose Completion is the same
+sweep and whose Matte row makes it the gradient wipe a luma dissolve is. A sibling is one
+more row and no code.
+
+Regression test: `a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads`
+(lumit-import) — the curve at seven hand-computed points, a keyframed case converting key by
+key with its eases intact, and the same curve again once the plug-in is installed.

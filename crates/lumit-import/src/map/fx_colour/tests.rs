@@ -1335,10 +1335,12 @@ impl lumit_core::fx::EffectDef for PluginDef {
 /// Register a plug-in under `identifier`, as the OFX host does when it finds
 /// one, and answer nothing — the catalogue is a process-global, so this is
 /// idempotent across a test binary that runs its tests in one process.
-fn a_discovered_plugin(identifier: &'static str, label: &'static str) {
-    use lumit_core::fx::{
-        CostClass, EffectTraits, FxCategory, MatteRole, ParamKind, ParamSchema, Roi, Unit,
-    };
+fn a_discovered_plugin(
+    identifier: &'static str,
+    label: &'static str,
+    params: &'static [lumit_core::fx::ParamSchema],
+) {
+    use lumit_core::fx::{CostClass, EffectTraits, FxCategory, MatteRole, Roi};
     let match_name: &'static str = Box::leak(format!("ofx:{identifier}").into_boxed_str());
     if lumit_core::fx::schema(match_name).is_some() {
         return;
@@ -1357,28 +1359,7 @@ fn a_discovered_plugin(identifier: &'static str, label: &'static str) {
                 seeded: false,
                 beat_input: false,
             },
-            params: &[
-                ParamSchema {
-                    id: "brightness",
-                    label: "Brightness",
-                    kind: ParamKind::Float {
-                        default: 1.0,
-                        slider: (0.0, 4.0),
-                        hard: (None, None),
-                    },
-                    unit: Unit::Raw,
-                },
-                ParamSchema {
-                    id: "centre_x",
-                    label: "Centre",
-                    kind: ParamKind::Float {
-                        default: 0.5,
-                        slider: (0.0, 1.0),
-                        hard: (None, None),
-                    },
-                    unit: Unit::Raw,
-                },
-            ],
+            params,
             groups: &[],
             enabled_when: &[],
             matte: MatteRole::None,
@@ -1388,6 +1369,34 @@ fn a_discovered_plugin(identifier: &'static str, label: &'static str) {
         "the plug-in registered"
     );
 }
+
+/// A plug-in control, for the two catalogue entries below.
+const fn control(
+    id: &'static str,
+    label: &'static str,
+    default: f64,
+) -> lumit_core::fx::ParamSchema {
+    lumit_core::fx::ParamSchema {
+        id,
+        label,
+        kind: lumit_core::fx::ParamKind::Float {
+            default,
+            slider: (0.0, 100.0),
+            hard: (None, None),
+        },
+        unit: lumit_core::fx::Unit::Raw,
+    }
+}
+
+/// S_Glow's two, one of which the After Effects side hands over as a colour.
+const GLOW_CONTROLS: &[lumit_core::fx::ParamSchema] = &[
+    control("brightness", "Brightness", 1.0),
+    control("centre_x", "Centre", 0.5),
+];
+
+/// S_DissolveLuma's one that matters: the transition itself (K-660).
+const DISSOLVE_CONTROLS: &[lumit_core::fx::ParamSchema] =
+    &[control("dissolve_percent", "Dissolve Percent", 0.0)];
 
 /// One After Effects leaf of a third-party effect: a numbered match name, which
 /// is why the *displayed* name is what the two builds share.
@@ -1407,7 +1416,11 @@ fn vendor_leaf(match_name: &str, name: &str, kind: &str, value: serde_json::Valu
 /// alike and shaped unlike is reported rather than coerced.
 #[test]
 fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
-    a_discovered_plugin("com.genarts.sapphire.Lighting.S_Glow", "S_Glow");
+    a_discovered_plugin(
+        "com.genarts.sapphire.Lighting.S_Glow",
+        "S_Glow",
+        GLOW_CONTROLS,
+    );
 
     let ran = run(&effect(
         "S_Glow",
@@ -1501,6 +1514,137 @@ fn a_third_party_effect_with_no_plugin_installed_takes_the_tables_nearest_row() 
             Reason::EffectNearest { match_name, .. } if match_name == "S_Shake"
         )),
         "the report says which Lumit effect is standing in"
+    );
+}
+
+// --- the owner's dissolve curve (K-660) ------------------------------------
+
+/// The owner's curve, hand-computed: at and above 50 % fully on, below it a
+/// straight line down to nothing at 0 %.
+const CURVE: &[(f64, f64)] = &[
+    (0.0, 0.0),
+    (10.0, 20.0),
+    (25.0, 50.0),
+    (49.0, 98.0),
+    (50.0, 100.0),
+    (75.0, 100.0),
+    (100.0, 100.0),
+];
+
+/// One Sapphire dissolve, with its Dissolve Percent at `percent`.
+fn a_dissolve(percent: f64) -> AeProp {
+    effect(
+        "S_DissolveLuma",
+        "S_DissolveLuma",
+        vec![vendor_leaf(
+            "S_DissolveLuma-0052",
+            "Dissolve Percent",
+            "float",
+            serde_json::json!(percent),
+        )],
+    )
+}
+
+/// The Completion the nearest road ended up at.
+fn completion(inst: &EffectInstance) -> Option<LumProperty> {
+    inst.params
+        .iter()
+        .find(|p| p.id == "completion")
+        .and_then(|p| match &p.value {
+            EffectValue::Float(v) => Some(v.clone()),
+            _ => None,
+        })
+}
+
+/// **The owner's dissolve curve, on both roads** (K-660).
+///
+/// One test rather than three, and the order inside it is the point: the OFX
+/// catalogue is a process-global, so registering the dissolve plug-in closes
+/// the nearest road for the rest of the binary. The two roads for one row are
+/// therefore walked here in the order a machine walks them — without the
+/// plug-in, then with it — instead of racing each other across threads.
+#[test]
+fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads() {
+    // --- the nearest road: every other control is still at Lumit's default
+    // (K-655), and this one is the exception, because a Sapphire dissolve *is*
+    // its Dissolve Percent and a transition standing in without it would sit
+    // half-complete for the whole shot.
+    for (input, expected) in CURVE {
+        let ran = run(&a_dissolve(*input));
+        assert!(ran.mapped, "the nearest effect is a mapped effect");
+        assert_eq!(ran.inst.effect.match_name, "linear_wipe");
+        assert_eq!(
+            completion(&ran.inst),
+            Some(LumProperty::fixed(*expected)),
+            "Dissolve Percent {input} is Completion {expected}"
+        );
+        assert!(
+            ran.report.rows.iter().any(|r| matches!(
+                &r.reason,
+                Reason::EffectParamApproximated { param, .. } if param == "Dissolve Percent"
+            )),
+            "the curve is named in the report rather than applied silently"
+        );
+    }
+
+    // --- a keyframed dissolve converts key by key and keeps its eases, the
+    // K-625 precedent: each key's value goes through the curve and the shape of
+    // the move around it is left alone. What that costs between two keys either
+    // side of 50 % is what the report row says.
+    let mut amount = keyed(
+        "S_DissolveLuma-0052",
+        &[(0.0, 0.0, 3.0), (1.0, 25.0, 3.0), (2.0, 60.0, 3.0)],
+    );
+    amount.name = Some("Dissolve Percent".to_string());
+    let ran = run(&effect("S_DissolveLuma", "S_DissolveLuma", vec![amount]));
+    let Some(LumProperty {
+        animation: Animation::Keyframed(keys),
+        ..
+    }) = completion(&ran.inst)
+    else {
+        panic!("a keyframed Dissolve Percent is a keyframed Completion");
+    };
+    assert_eq!(
+        keys.iter().map(|k| k.value).collect::<Vec<_>>(),
+        vec![0.0, 50.0, 100.0],
+        "each key's value went through the curve"
+    );
+    for key in &keys {
+        assert!(
+            matches!(key.interp_in, SideInterp::Bezier { speed, .. } if (speed - 3.0).abs() < 1e-9),
+            "the ease is the one After Effects drew, untouched"
+        );
+    }
+    assert!(
+        ran.report.rows.iter().any(|r| matches!(
+            &r.reason,
+            Reason::EffectParamApproximated { imported_as, .. }
+                if imported_as.contains("keyframe")
+        )),
+        "the report says the curve is met at the keys and approximated between them"
+    );
+
+    // --- the direct road: the ruling is about the dissolve, not about which
+    // road it took, so the plug-in's own Dissolve Percent receives the curved
+    // number too.
+    a_discovered_plugin(
+        "com.genarts.sapphire.Transitions.S_DissolveLuma",
+        "S_DissolveLuma",
+        DISSOLVE_CONTROLS,
+    );
+    let ran = run(&a_dissolve(25.0));
+    assert_eq!(
+        ran.inst.effect.match_name, "ofx:com.genarts.sapphire.Transitions.S_DissolveLuma",
+        "the installed plug-in is the effect itself"
+    );
+    assert_eq!(
+        ran.inst
+            .params
+            .iter()
+            .find(|p| p.id == "dissolve_percent")
+            .map(|p| p.value.clone()),
+        Some(EffectValue::Float(LumProperty::fixed(50.0))),
+        "25 % came across as the curve's 50, not as 25 — the same curve on both roads"
     );
 }
 

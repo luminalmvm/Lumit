@@ -2494,6 +2494,23 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   deliberate and is wrong. A default looks obviously untouched, so the user dials it in once
   and knows they have. Either way the report says what happened, which is the rule the whole
   importer is built on — something may arrive different, but never *silently* different.
+
+  There is exactly one dial that breaks that restraint, and it is worth knowing why.
+  Sapphire's **dissolves** — the transitions that take one shot off and bring the next on —
+  are all the same sweep with a different look painted over it, and each is driven by one
+  slider called Dissolve Percent, keyframed from one end of the transition to the other. If
+  Lumit put its own wipe in and left that slider behind, the shot would not arrive "at
+  defaults" in any useful sense: it would arrive stuck half way through the wipe and stay
+  there. So that one number does come across — through a curve the owner measured rather
+  than straight across, because the two scales are not the same one. Above halfway the
+  effect is fully on; below halfway it falls off in a straight line to nothing. When the
+  slider is keyframed, each keyframe's number is put through the curve and the shape of the
+  move around it is left exactly as After Effects drew it. That is exact *at* every
+  keyframe, and between two keyframes that straddle the halfway mark it is close rather than
+  exact — the curve has a corner there and a straight line between two mapped numbers does
+  not. Lumit could smooth that over by inserting keyframes of its own, and deliberately does
+  not: they would be keyframes the user never set, in the way the first time they open the
+  property to adjust it. The report names the approximation instead.
 - `crates/lumit-media/` — **reading media files** (via FFmpeg, the industry-standard
   media library). Two jobs so far: the *probe* (a file's vital statistics — resolution,
   frame rate, duration — shown under each item in the Project panel) and the *frame

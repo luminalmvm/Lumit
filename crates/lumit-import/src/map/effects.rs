@@ -31,11 +31,14 @@
 //!   [`nearest`] puts it in the stack at its own defaults. No dial is guessed
 //!   across a vendor boundary, because a guessed dial is a silently wrong
 //!   picture where a default is a visible one — the report says which effect it
-//!   is standing in for, and it is dialled once.
+//!   is standing in for, and it is dialled once. **A Sapphire dissolve is the
+//!   one exception** (K-660): its Dissolve Percent is the transition itself, so
+//!   it crosses through the owner's own curve on both roads.
 //!
 //! Both roads report. The rule that survives untouched is the one that matters:
 //! nothing is ever *silently* something else.
 
+use lumit_core::anim::{Animation, Property as LumProperty};
 use lumit_core::fx::ParamKind;
 use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
 use uuid::Uuid;
@@ -151,6 +154,7 @@ fn direct(
         &mut inst,
         &mut carried,
         &mut controls,
+        is_dissolve(row),
     );
     conv.report.fold_unreadable_since(mark, here.clone());
 
@@ -193,10 +197,13 @@ fn carry(
     inst: &mut EffectInstance,
     carried: &mut usize,
     controls: &mut usize,
+    dissolve: bool,
 ) {
     for leaf in node.children() {
         if leaf.group.is_some() {
-            carry(conv, at, here, leaf, schema, inst, carried, controls);
+            carry(
+                conv, at, here, leaf, schema, inst, carried, controls, dissolve,
+            );
             continue;
         }
         // A topic heading is not a control (the same exception the placeholder
@@ -223,7 +230,14 @@ fn carry(
                 | ParamKind::Slider { .. }
                 | ParamKind::Int { .. }
                 | ParamKind::Angle { .. },
-            ) => EffectValue::Float(from_node(conv, at, leaf, 0, 0.0)),
+            ) => {
+                let p = from_node(conv, at, leaf, 0, 0.0);
+                EffectValue::Float(if dissolve && folded(name) == DISSOLVE_AMOUNT {
+                    curved(conv, here, schema.label, p)
+                } else {
+                    p
+                })
+            }
             ("colour", ParamKind::Colour { .. }) => EffectValue::Colour([
                 from_node(conv, at, leaf, 0, 0.0),
                 from_node(conv, at, leaf, 1, 0.0),
@@ -259,6 +273,80 @@ fn folded(name: &str) -> String {
         .collect()
 }
 
+/// Sapphire's dissolve transitions, by the vendor's own naming: `S_Dissolve`,
+/// `S_DissolveLuma`, `S_DissolveGlow` and the two dozen siblings. Every one of
+/// them is the same transition with a different look painted over it, and every
+/// one of them is driven by the single control [`DISSOLVE_AMOUNT`] names.
+/// (`S_CutToDissolve` is Sapphire Time rather than a transition, and the prefix
+/// leaves it alone.)
+fn is_dissolve(row: &Row) -> bool {
+    row.ae.starts_with("S_Dissolve")
+}
+
+/// Sapphire's Dissolve Percent, [`folded`].
+const DISSOLVE_AMOUNT: &str = "dissolvepercent";
+
+/// Every Lumit transition's amount is called Completion (docs/08 §3.46, §3.47,
+/// §3.70, §3.72), so the nearest road has one place to put the curve's answer.
+const COMPLETION: &str = "completion";
+
+/// The Dissolve Percent leaf of a Sapphire dissolve, wherever it sits.
+fn amount_leaf(node: &Property) -> Option<&Property> {
+    node.children().iter().find_map(|leaf| {
+        if leaf.group.is_some() {
+            return amount_leaf(leaf);
+        }
+        (folded(display_name(leaf, match_name_of(leaf))) == DISSOLVE_AMOUNT).then_some(leaf)
+    })
+}
+
+/// **The owner's dissolve curve** (K-660, docs/11 §5a).
+///
+/// A Sapphire dissolve's Dissolve Percent is not our amount and copying it
+/// across would over-drive the first half of every transition. The owner's
+/// ruling is the shape: **at 50 % and above the effect is fully on, and below
+/// 50 % it falls in a straight line to nothing at 0 %**.
+fn dissolve_curve(percent: f64) -> f64 {
+    if percent >= 50.0 {
+        100.0
+    } else {
+        (percent * 2.0).max(0.0)
+    }
+}
+
+/// The curve applied to a whole property, **key by key** — the K-625
+/// precedent: each key's value is mapped and its ease is kept, because an ease
+/// describes the shape of the move and the move is still the same one.
+///
+/// What that costs is worth saying out loud, and the report says it: the curve
+/// has a corner at 50 %, and between two keys Lumit draws the line through the
+/// *mapped* values rather than the curve through the interpolated ones. Those
+/// differ wherever a segment crosses 50 %. Resampling to make them agree would
+/// invent keyframes the user never set, on a property they will want to edit —
+/// so the honest answer is the one that keeps their keys and names the
+/// approximation, rather than the one that hides it under keys of ours.
+fn curved(conv: &mut Conv<'_>, here: &ItemPath, effect: &str, p: LumProperty) -> LumProperty {
+    let keyed = matches!(p.animation, Animation::Keyframed(_));
+    let (p, _) = super::fx_colour::map_values(p, dissolve_curve);
+    conv.report.row(
+        here.clone(),
+        Outcome::Adjusted,
+        Reason::EffectParamApproximated {
+            effect: effect.to_string(),
+            param: "Dissolve Percent".to_string(),
+            imported_as: if keyed {
+                "the owner's dissolve curve, applied to each keyframe in turn — between two \
+                 keys either side of 50 % the line runs through the mapped values rather than \
+                 along the curve"
+            } else {
+                "the owner's dissolve curve"
+            }
+            .to_string(),
+        },
+    );
+    p
+}
+
 /// **The closest Lumit effect, at its own defaults** (K-655, docs/11 §5).
 ///
 /// For a third-party effect with no OFX build installed. The effect arrives in
@@ -267,6 +355,10 @@ fn folded(name: &str) -> String {
 /// and carrying them over would be a picture that looks deliberate and is not.
 /// The report names both sides so the one dial-in is somewhere the reader can
 /// find it.
+///
+/// **A Sapphire dissolve is the one exception** (K-660): its Dissolve Percent
+/// *is* the transition rather than a dial on one, so it comes across through
+/// [`dissolve_curve`] rather than being left behind at Completion's default.
 fn nearest(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -275,8 +367,25 @@ fn nearest(
 ) -> Option<EffectInstance> {
     let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
     inst.enabled = node.enabled.unwrap_or(true);
+    let here = path.property(display_name(node, match_name_of(node)));
+
+    // The one dial a nearest road carries, and the owner's ruling rather than a
+    // guess across the vendor boundary: a Sapphire dissolve is *only* its
+    // Dissolve Percent, so a transition standing in with none of it would sit
+    // at half-complete for the whole shot instead of doing the cut.
+    if is_dissolve(row) {
+        if let Some(leaf) = amount_leaf(node) {
+            let label = lumit_core::fx::schema(&row.lumit).map_or(row.lumit.as_str(), |s| s.label);
+            let p = from_node(conv, path, leaf, 0, 0.0);
+            let p = curved(conv, &here, label, p);
+            if let Some(target) = inst.params.iter_mut().find(|p| p.id == COMPLETION) {
+                target.value = EffectValue::Float(p);
+            }
+        }
+    }
+
     conv.report.row(
-        path.property(display_name(node, match_name_of(node))),
+        here,
         Outcome::Adjusted,
         Reason::EffectNearest {
             match_name: match_name_of(node).to_string(),

@@ -286,7 +286,7 @@ The centrepiece. Four grades:
 | Markers (comp + layer) | lossless | |
 | AE built-in effects with a Lumit equivalent | mapped | Via the match-name table (§5); parameters and keyframes carried; pixel output near-identical, not bit-identical |
 | AE built-in effects without an equivalent | placeholder | Full parameter dump preserved; §6 |
-| Third-party effects the §5 table names (Sapphire's S_Glow, S_Shake, S_DistortChroma; Lenscare's two defocus effects, …) | **mapped as the plug-in, else nearest** | Two roads (K-655, §5a). The user has the vendor's own **OFX build** installed → the effect maps straight to it, matched by plug-in identifier equality, with controls carried by displayed name where the types agree; points are not carried and the report counts what was. No installed build → the **closest Lumit effect at its own defaults**, in the right place in the stack, no dial guessed across the vendor boundary. Internals still never map (K-060) — an equivalent is never claimed, and both roads say what they did |
+| Third-party effects the §5 table names (Sapphire's S_Glow, S_Shake, S_DistortChroma; Lenscare's two defocus effects, …) | **mapped as the plug-in, else nearest** | Two roads (K-655, §5a). The user has the vendor's own **OFX build** installed → the effect maps straight to it, matched by plug-in identifier equality, with controls carried by displayed name where the types agree; points are not carried and the report counts what was. No installed build → the **closest Lumit effect at its own defaults**, in the right place in the stack, no dial guessed across the vendor boundary — with the one exception K-660 rules, a Sapphire dissolve's Dissolve Percent, which crosses on both roads through the owner's curve. Internals still never map (K-060) — an equivalent is never claimed, and both roads say what they did |
 | Third-party effects the table does not name (Twixtor, RSMB, Deep Glow, Particular, …) | placeholder | Full parameter dump preserved; §6. The closest guess is offered only where §5 has named one |
 | Expressions | mapped | Imported as source text; run when Lumit's own language can run them ([12-PLUGINS.md](12-PLUGINS.md) §4), else **switched off and listed in the report with their text** (K-625), so the keyframes underneath keep driving the property rather than an expression that answers the same wrong number on every frame. The importer decides by trying it: an expression that neither parses nor evaluates against a bare context is After Effects' own language and is not installed |
 | Text layers — source text + styling | mapped | Font fallback differences possible; missing fonts flagged |
@@ -382,6 +382,25 @@ and takes the placeholder road of §6 with every parameter kept — the closest 
 offered only where this table has named one. The rule K-060 was protecting survives intact:
 nothing is ever *silently* something else.
 
+**A Sapphire dissolve is the one dial either road converts rather than copies** (K-660). The
+dissolve transitions — `S_Dissolve`, `S_DissolveLuma`, `S_DissolveGlow` and their two dozen
+siblings — are one sweep with a different look painted over it, and every one of them is
+driven by a single keyframed **Dissolve Percent**. Leaving it behind on the nearest road
+would not import a transition at its defaults; it would import a wipe frozen half-complete
+for the length of the shot, which looks deliberate and is not. So it crosses, and it crosses
+through **the owner's own curve**: at 50 % and above the effect is fully on, and below 50 %
+it falls in a straight line to nothing at 0 %. The curve applies on **both** roads, the
+ruling being about the dissolve rather than about which road it took, so the plug-in's own
+Dissolve Percent receives the curved number exactly as Lumit's Completion does — every Lumit
+transition names its amount Completion (docs/08 §3.46, §3.47, §3.70, §3.72), so there is one
+place to put the answer. A **keyframed** source converts key by key with its eases untouched
+(the K-625 precedent), which is exact at every key and an approximation between two keys
+either side of 50 %, where Lumit draws the line through the mapped values rather than the
+curve through the interpolated ones; the report says so (`effect_param_approximated`) rather
+than resampling and inventing keyframes on a property the user will want to edit. The scope
+is the vendor's own naming — a match name beginning `S_Dissolve`, which leaves
+`S_CutToDissolve` (Sapphire Time) alone.
+
 Seeded with the montage staples:
 
 | AE effect (match name) | Lumit effect |
@@ -402,6 +421,7 @@ Seeded with the montage staples:
 | "Motion Tile" (`ADBE Tile`) | **Tile** (built, docs/08 §3.39) — Tile Center, the four Tile/Output sizes, Mirror Edges, Phase and Horizontal Phase Shift all have counterparts. AE keeps the four sizes as per cents of the frame and Lumit as px@comp (K-558), so each converts against **the layer's** own extent on the way in — the frame an effect runs on is the layer's raster, not the composition's (K-636) — and is reported as rebased; both defaults are now the identity (K-542), and Output width and height above 100 % grow the layer past its own edges on this side too, so an imported 110 % mirrored tile does what it did in AE |
 | "Offset" (`ADBE Offset`) | **Offset** (built, docs/08 §3.40) — mapped: AE's "Shift Center To" is a destination point and Lumit stores the shift, so the import subtracts the frame centre; "Blend With Original" maps to Mix |
 | "Mirror" (`ADBE Mirror`) | **Mirror** (built, docs/08 §3.41) — direct: Reflection Center and Reflection Angle convert one for one |
+| "S_DissolveLuma" (Sapphire, third-party) | **Linear wipe** (built, docs/08 §3.46) — the **nearest** road, plus the one dial K-660 rules across: Completion is the same sweep and the Matte row makes it the gradient wipe a luma dissolve is, and Dissolve Percent arrives through the owner's curve rather than one for one. Everything else is at Lumit's defaults, as §5a requires. The direct road is open too — the row's OFX identifiers are the two Sapphire rows' own shape with the audited category ("Sapphire Transitions") in the group position, `pending_audit`; wrong, they match nothing and the row takes the nearest road, which is the road every machine without Sapphire takes |
 | "Optics Compensation" (`ADBE Optics Compensation`) | **Lens distort** (built, docs/08 §3.42) — direct on the controls that carry the look: Field of View, Reverse Lens Distortion, FOV Orientation and View Center all have counterparts, and Lumit's Field of view has AE's meaning (the frame's rectilinear field of view across the chosen half-extent). AE's Optimal Pixels / Resize has no equivalent and is reported — Lumit renders effects at the frame's raster (docs/08 §2.3) and has no per-effect resize |
 | "Turbulent Displace" (`ADBE Turbulent Displace`) | **Turbulent displace** (built, docs/08 §3.38) — mapped: Size, Complexity, Offset (turbulence), Evolution and the cycle convert directly, and AE's Turbulent/Horizontal/Vertical Displacement modes are the three Lumit ships. **Amount converts through AE's own base**, because Lumit's is a length in px@comp rather than a per cent (§3.38 decision 5, the same divergence §3.37 decision 1 records for Fractal noise's Scale). Bulge, Twist, the three "Smoother" variants, Cross Displacement, Resize Layer, Antialiasing and the seven mixed Pinning combinations have no equivalent yet and are reported. **Pinning maps at one index only**: the audit records a dropdown's default but not its option strings, so the one pairing that can be pinned from evidence is AE's own default - every edge - and any other index imports at every edge and is reported rather than mapped to a guess |
 | "Fractal Noise" (`ADBE Fractal Noise`) | **Fractal noise** (built, docs/08 §3.37) — mapped: Contrast, Brightness, Complexity, Sub Influence, Sub Scaling, Evolution and the cycle convert directly. **Scale converts through AE's own base**, because Lumit's is a length in px@comp rather than a per cent (§3.37 decision 1) — Adobe does not publish that base, so the import uses the factor that lands AE's default of 100% on Lumit's declared default of 200 px, which is the one point at which both specifications claim the two look alike; AE's dozen Fractal Types collapse onto Basic/Turbulent, its four Noise Types onto Value/Perlin, and Overflow, Sub Rotation, Sub Offset, Perspective Offset and Centre Subscale have no equivalent yet and are reported |

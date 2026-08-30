@@ -466,7 +466,7 @@ fn affine(p: LumProperty, k: f64, c: f64) -> LumProperty {
 /// scene-linear light. Every *value* is exact; a bezier handle's speed is in
 /// the old units and cannot be rescaled by one factor, so the second return
 /// says whether one was left behind and the caller reports it.
-fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty, bool) {
+pub(super) fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty, bool) {
     let mut left_behind = false;
     let animation = match p.animation {
         Animation::Static(v) => Animation::Static(f(v)),

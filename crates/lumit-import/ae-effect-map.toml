@@ -543,6 +543,29 @@ ofx = [
 ]
 pending_audit = true
 
+# Sapphire's dissolve transitions (K-660). The reference project uses exactly
+# one of the family — S_DissolveLuma, whose Dissolve Percent is keyframed on
+# every instance — so that is the row seeded here; a sibling is one more row and
+# no code, the curve being keyed off the `S_Dissolve` prefix rather than off a
+# list. Lumit's nearest is Linear wipe: Completion is the same sweep, and the
+# Matte row makes it a gradient wipe, which is what a luma dissolve is.
+#
+# The identifiers are the two rows above's own shape with the Sapphire category
+# the 2026-08-20 audit records for this effect ("Sapphire Transitions") in the
+# group position — evidence rather than the Lenscare rows' blank, and still
+# `pending_audit`. If it is wrong it matches nothing and the row takes the
+# nearest road, which is the road it takes on every machine without Sapphire.
+[[effect]]
+ae = "S_DissolveLuma"
+name = "S_DissolveLuma"
+lumit = "linear_wipe"
+conversion = "nearest"
+ofx = [
+  "com.genarts.sapphire.Transitions.S_DissolveLuma",
+  "com.borisfx.sapphire.Transitions.S_DissolveLuma",
+]
+pending_audit = true
+
 # Lenscare's two defocus effects. No `ofx` line: the OFX build's identifier was
 # not read off a live installation, and a guessed identifier that matched
 # nothing would read as one that had been checked. Add it here — the identifier
