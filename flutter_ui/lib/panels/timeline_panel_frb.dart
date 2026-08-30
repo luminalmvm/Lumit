@@ -2196,9 +2196,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // "show me what is animated" is a question about the comp as often as
     // about one layer, and refusing to answer it unless something was selected
     // made the commonest use of the key the one it did not serve.
-    final selected = ui.selectedLayer.value;
-    final layers = selected != null
-        ? [selected]
+    //
+    // **The whole selection, not its primary** (K-523): reading
+    // `selectedLayer` meant `Ctrl+A` then `U` revealed the top layer alone,
+    // and looked like a dead key whenever that one layer carried no keys.
+    final selected = ui.selectedLayers.value;
+    final layers = selected.isNotEmpty
+        ? selected
         : [for (final entry in ui.model.layers) entry.layer];
     if (layers.isEmpty) return false;
 

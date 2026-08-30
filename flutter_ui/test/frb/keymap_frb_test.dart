@@ -518,6 +518,66 @@ void main() {
           reason: 'the third tap collapses the layer, cycle unchanged');
     });
 
+    /// **The reveal is the whole selection's** (K-523). `Ctrl+A` then `U` read
+    /// the selection's *primary* and revealed that layer alone — and where the
+    /// top layer carried no keys, which is the ordinary case, the key looked
+    /// dead.
+    testWidgets('U reveals every selected layer, not the primary alone',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      BridgeScalar keyed(double to) => BridgeScalar.keyframed([
+            BridgeKeyframe(
+                time: comp.timeOfFrame(frame: 0),
+                value: 0,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear()),
+            BridgeKeyframe(
+                time: comp.timeOfFrame(frame: 12),
+                value: to,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear()),
+          ]);
+
+      // Four layers, and only the last two carry keys — so a reveal that stops
+      // at the primary shows nothing at all, which is the reported symptom.
+      final layers = [for (var i = 0; i < 4; i++) comp.addSolidLayer()];
+      layers[2]
+          .setTransform(prop: BridgeTransformProp.opacity, value: keyed(100));
+      layers[3]
+          .setTransform(prop: BridgeTransformProp.rotation, value: keyed(45));
+      p.state.notifyDocumentChanged();
+      p.uiState.setSelectedComp(comp);
+
+      await tester.pumpWidget(hostPanel(
+        child: const TimelinePanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      // What the shell's `Ctrl+A` does in the Timeline (K-522): the whole
+      // stack, with the top layer as primary.
+      p.uiState.setSelection(comp.getLayers());
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyU);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyU);
+      await tester.pump();
+
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'the third layer is selected too, and its key qualifies');
+      expect(find.text('Rotation'), findsOneWidget,
+          reason: 'so is the fourth: U runs on every selected layer');
+      expect(find.text('Position'), findsNothing,
+          reason: 'and still stops at the keys (K-622)');
+    });
+
     /// A `U` filters the layers it revealed and **no others**: the reveal is a
     /// question about the selection, and answering it must not quietly hide
     /// rows on a layer nobody asked about.
