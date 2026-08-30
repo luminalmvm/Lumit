@@ -95,6 +95,68 @@ pub struct AudioJob {
     /// The head and tail ramps of a **Sequence clip** (K-695). `None` for a
     /// whole-layer job, which has no join to fade across.
     pub fade: Option<ClipFade>,
+    /// The layer's driver chain, where one is wired onto the Layer out's
+    /// Volume socket (the *Duck under* wire). `None` for the ordinary layer,
+    /// whose Volume keyframes answer as ever.
+    pub driven: Option<Arc<DrivenVolume>>,
+}
+
+/// A wire onto a layer's Volume (the Audio workspace board's *Duck under*):
+/// everything [`volume_bake`] needs to ask the driver chain for the decibels
+/// at each control-rate step, carried on the job because the bake runs long
+/// after the document walk that found the wire.
+///
+/// The chain is evaluated with the same tap a visual driver reads
+/// ([`crate::audio_tap::DocumentAudio`]), built **pre-duck**: a chain that
+/// reads "this comp" hears the mix at everyone's keyframed Volume, never
+/// through another duck — one level of ducking is heard, and a duck driven by
+/// a duck would otherwise be this function calling itself forever.
+pub struct DrivenVolume {
+    pub doc: Arc<lumit_core::model::Document>,
+    /// The comp the layer sits in — not necessarily the comp being mixed,
+    /// because a nested comp's layers duck inside their own timeline.
+    pub comp: Uuid,
+    pub layer: Uuid,
+    pub graph: lumit_core::graph::LayerGraph,
+    /// Comp time where the layer's own time 0 sits (its start offset plus the
+    /// branch base), so `t − offset_s` is the layer time the chain reads at.
+    pub offset_s: f64,
+    /// Where the layer's comp starts on the mixed timeline (the branch base),
+    /// so `t − base_s` is that comp's own clock for the tap and the context.
+    pub base_s: f64,
+}
+
+impl DrivenVolume {
+    /// The decibels the chain answers at mixed-timeline time `t`, or `None`
+    /// when the wire is broken or bypassed (the keyframes come back).
+    #[must_use]
+    pub fn db_at(&self, t: f64) -> Option<f64> {
+        let comp = self.doc.comp(self.comp)?;
+        let t_comp = t - self.base_s;
+        let context = Arc::new(lumit_core::expression::ExpressionContext {
+            document: Arc::clone(&self.doc),
+            comp: Some(self.comp),
+            layer: Some(self.layer),
+            comp_time: t_comp,
+            current_depth: 0,
+        });
+        let tap = crate::audio_tap::DocumentAudio::pre_duck(&self.doc, comp, t_comp);
+        lumit_core::fx::driven_volume_db(&self.graph, t - self.offset_s, context, Some(&tap))
+    }
+}
+
+/// Two jobs compare equal when they would bake the same sound. For the driven
+/// chain that is the wiring and its drivers' values — the document handle is
+/// deliberately not compared, because two snapshots holding the same graph
+/// bake the same envelope.
+impl PartialEq for DrivenVolume {
+    fn eq(&self, other: &Self) -> bool {
+        self.comp == other.comp
+            && self.layer == other.layer
+            && self.graph == other.graph
+            && self.offset_s == other.offset_s
+            && self.base_s == other.base_s
+    }
 }
 
 /// A Sequence clip's own fade ramps, in **comp time** (K-695).
@@ -171,7 +233,15 @@ pub fn volume_bake(
     rate: u32,
 ) -> ([f32; 2], Option<lumit_audio::mix::GainEnvelope>) {
     let gain_at = |t: f64| {
-        let mut g = lumit_audio::mix::db_to_gain(job.volume.value_at(t - job.offset_s));
+        // A wired Volume overrides its keyframes, exactly as a wired effect
+        // parameter does (K-471); a broken or bypassed chain answers `None`
+        // and the keyframes come back.
+        let volume_db = job
+            .driven
+            .as_ref()
+            .and_then(|d| d.db_at(t))
+            .unwrap_or_else(|| job.volume.value_at(t - job.offset_s));
+        let mut g = lumit_audio::mix::db_to_gain(volume_db);
         let mut lr = lumit_audio::mix::pan_gains(job.pan.value_at(t - job.offset_s));
         for c in &job.carriers {
             g *= lumit_audio::mix::db_to_gain(c.volume.value_at(t - c.offset_s));
@@ -189,6 +259,9 @@ pub fn volume_bake(
     let animated = job.volume.is_animated()
         || job.pan.is_animated()
         || job.fade.is_some_and(|f| f.is_active())
+        // A driven Volume follows the sound, which moves whether or not any
+        // keyframe does — always an envelope, never a constant.
+        || job.driven.is_some()
         || job
             .carriers
             .iter()
@@ -2530,6 +2603,7 @@ mod tests {
             pan: Property::zero(),
             carriers: Vec::new(),
             fade: None,
+            driven: None,
         };
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
@@ -2724,6 +2798,7 @@ mod tests {
                 end_s: 1.0,
                 tail_s: 0.0,
             }),
+            driven: None,
         };
 
         let (gain, envelope) = volume_bake(&job, 0, frames, rate);

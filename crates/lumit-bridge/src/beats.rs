@@ -143,7 +143,7 @@ fn run(rx: &Receiver<Job>) {
 /// Built through the same headless input path the exporter uses, so what is
 /// analysed is what will be exported.
 fn analyse(
-    document: &lumit_core::Document,
+    document: &Arc<lumit_core::Document>,
     comp: Uuid,
     duration_seconds: f64,
     sensitivity_percent: u32,

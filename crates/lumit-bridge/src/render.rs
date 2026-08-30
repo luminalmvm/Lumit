@@ -183,7 +183,7 @@ pub(crate) fn thumbnail(
 /// adapter or the comp is unknown. Reuses the same renderer instance the Viewer
 /// path uses, so probes are shared and warm.
 pub(crate) fn with_export_inputs(
-    doc: &lumit_core::model::Document,
+    doc: &std::sync::Arc<lumit_core::model::Document>,
     comp: Uuid,
 ) -> Option<lumit_render::headless::ExportInputs> {
     with_ready(|renderer| renderer.export_inputs(doc, comp)).flatten()

@@ -212,6 +212,51 @@ pub fn resolve_drivers_projected(
     out
 }
 
+/// The decibels a layer's driver chain hands its **Volume** at layer time
+/// `lt`, or `None` when nothing is wired onto the Layer out's Volume socket
+/// (the ordinary layer, whose keyframes answer as ever).
+///
+/// # In plain terms
+///
+/// *Duck under* wires Audio level → Remap → Smooth onto the music layer's
+/// Volume, and this is where that wire is read: the same evaluation a driven
+/// effect parameter gets, with the answer clamped to the Volume property's own
+/// hard range so a runaway chain cannot ask for +400 dB. A bypassed driver, a
+/// broken chain or a non-number all read as `None` — the keyframes come back,
+/// which is the same calm degrade an unwired socket has.
+#[must_use]
+pub fn driven_volume_db(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+) -> Option<f64> {
+    let edge = graph.edges.iter().find(|e| {
+        matches!(
+            &e.to,
+            InputRef::Param { node: NodeRef::Out, port } if port == crate::graph::OUT_VOLUME_PORT.id
+        )
+    })?;
+    let OutputRef::Driver { node, port } = &edge.from else {
+        return None;
+    };
+    let ev = Eval {
+        graph,
+        context,
+        audio,
+        projection: points::Projection::FLAT,
+        budget: Cell::new(EVAL_BUDGET),
+        streams: RefCell::new(Vec::new()),
+        cross: true,
+    };
+    match ev.output(*node, port, lt, 0)? {
+        // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
+        // ceiling +50) — the clamp a typed value already gets.
+        Value::Float(v) => Some(f64::from(v).clamp(-100.0, 50.0)),
+        _ => None,
+    }
+}
+
 /// **One stack effect's points stream**, at layer time `t` and in px@comp
 /// (K-600, points-stream.md §3.3).
 ///
@@ -793,6 +838,54 @@ mod tests {
             .param(NodeRef::Effect(target.id), ParamId::new("radius"))
             .expect("the wire carries something")
             .as_f32()
+    }
+
+    /// The *Duck under* road: a wire onto the Layer out's Volume socket is
+    /// read as decibels, a bypassed or absent chain hands the keyframes back
+    /// (`None`), and a runaway chain is clamped to the Volume property's own
+    /// hard range.
+    #[test]
+    fn a_wire_onto_the_volume_socket_answers_in_decibels() {
+        let constant = |db: f64| {
+            let mut remap = inst("remap");
+            set(&mut remap, "out_low", db);
+            set(&mut remap, "out_high", db);
+            let graph = LayerGraph {
+                edges: vec![edge(
+                    &remap,
+                    "value",
+                    NodeRef::Out,
+                    crate::graph::OUT_VOLUME_PORT.id,
+                )],
+                nodes: vec![remap],
+                ..LayerGraph::default()
+            };
+            (driven_volume_db(&graph, 0.0, ctx(), None), graph)
+        };
+
+        let (answer, graph) = constant(-40.0);
+        assert_eq!(answer, Some(-40.0), "the chain's number is the decibels");
+
+        assert_eq!(
+            driven_volume_db(&LayerGraph::default(), 0.0, ctx(), None),
+            None,
+            "no wire, no override: the keyframes answer as ever"
+        );
+
+        let mut off = graph;
+        off.nodes[0].enabled = false;
+        assert_eq!(
+            driven_volume_db(&off, 0.0, ctx(), None),
+            None,
+            "a bypassed driver hands the keyframes back"
+        );
+
+        let (clamped, _) = constant(-400.0);
+        assert_eq!(
+            clamped,
+            Some(-100.0),
+            "past the −inf knee is the knee, never a denormal whisper"
+        );
     }
 
     /// K-031, and the whole reason a driver is seeded rather than random: the

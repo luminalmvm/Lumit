@@ -677,7 +677,7 @@ impl HeadlessRenderer {
     /// context sharing this renderer's device. `None` when `comp_id` is unknown.
     /// The exporter (`crate::export::start`) takes these and spawns its own
     /// encode thread (K-017), so this call is cheap and holds no GPU work.
-    pub fn export_inputs(&mut self, doc: &Document, comp_id: Uuid) -> Option<ExportInputs> {
+    pub fn export_inputs(&mut self, doc: &Arc<Document>, comp_id: Uuid) -> Option<ExportInputs> {
         let comp = doc.comp(comp_id)?;
         let audio = self.collect_audio(doc, comp);
         Some(ExportInputs { audio })
@@ -685,7 +685,7 @@ impl HeadlessRenderer {
 
     /// Collect `comp`'s audio jobs for export — see [`AudioJobsBuilder`], which
     /// this renderer holds so the has-audio probe cache warms across a session.
-    fn collect_audio(&mut self, doc: &Document, comp: &Composition) -> Vec<AudioJob> {
+    fn collect_audio(&mut self, doc: &Arc<Document>, comp: &Composition) -> Vec<AudioJob> {
         self.audio_jobs.audio_jobs(doc, comp)
     }
 
@@ -2421,6 +2421,38 @@ pub struct AudioJobsBuilder;
 static HAS_AUDIO: LazyLock<Mutex<HashMap<Uuid, bool>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// The layer's *Duck under* wire, if its graph lands one on the Layer out's
+/// Volume socket (K-471, the Out Volume port) — everything the bake needs to
+/// ask the chain later, or `None` for the overwhelmingly ordinary layer.
+///
+/// `offset_s` is where the layer's own time 0 sits on the mixed timeline and
+/// `base_s` where its comp's does, both already in the walk's hand.
+fn driven_volume_of(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    offset_s: f64,
+    base_s: f64,
+) -> Option<std::sync::Arc<crate::export::DrivenVolume>> {
+    use lumit_core::graph::{InputRef, NodeRef, OUT_VOLUME_PORT};
+    let wired = layer.graph.edges.iter().any(|e| {
+        matches!(
+            &e.to,
+            InputRef::Param { node: NodeRef::Out, port } if port == OUT_VOLUME_PORT.id
+        )
+    });
+    wired.then(|| {
+        std::sync::Arc::new(crate::export::DrivenVolume {
+            doc: Arc::clone(doc),
+            comp: comp.id,
+            layer: layer.id,
+            graph: layer.graph.clone(),
+            offset_s,
+            base_s,
+        })
+    })
+}
+
 impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
@@ -2430,7 +2462,7 @@ impl AudioJobsBuilder {
     /// The comp's audio jobs (empty for a silent comp) — the same list export,
     /// beat detection and playback all mix from, so they cannot disagree about
     /// what the comp sounds like.
-    pub fn audio_jobs(&mut self, doc: &Document, comp: &Composition) -> Vec<AudioJob> {
+    pub fn audio_jobs(&mut self, doc: &Arc<Document>, comp: &Composition) -> Vec<AudioJob> {
         let mut jobs = Vec::new();
         let mut visited = vec![comp.id];
         self.walk(
@@ -2449,7 +2481,7 @@ impl AudioJobsBuilder {
     #[allow(clippy::too_many_arguments)]
     fn walk(
         &mut self,
-        doc: &Document,
+        doc: &Arc<Document>,
         comp: &Composition,
         base_s: f64,
         window: (f64, f64),
@@ -2492,6 +2524,7 @@ impl AudioJobsBuilder {
                         pan: layer.pan.clone(),
                         carriers: carriers.to_vec(),
                         fade: None,
+                        driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
                     });
                 }
                 LayerKind::Precomp { comp: nested_id } => {
@@ -2533,7 +2566,7 @@ impl AudioJobsBuilder {
                     visited.pop();
                 }
                 LayerKind::Sequence { clips } => self.sequence_jobs(
-                    doc, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
+                    doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
                 ),
                 _ => {}
             }
@@ -2563,7 +2596,9 @@ impl AudioJobsBuilder {
     #[allow(clippy::too_many_arguments)]
     fn sequence_jobs(
         &mut self,
-        doc: &Document,
+        doc: &Arc<Document>,
+        comp: &Composition,
+        base_s: f64,
         layer: &lumit_core::model::Layer,
         clips: &[lumit_core::sequence::Clip],
         strip: Uuid,
@@ -2644,6 +2679,9 @@ impl AudioJobsBuilder {
                 pan: layer.pan.clone(),
                 carriers: carriers.to_vec(),
                 fade: fade.is_active().then_some(fade),
+                // The row's own duck, riding every clip exactly as the row's
+                // Volume does — the layer's clock, not the clip's.
+                driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
             });
         }
     }
@@ -3983,7 +4021,7 @@ mod tests {
         }
         let comp = doc.comp(comp_id).unwrap().clone();
         let mut builder = AudioJobsBuilder::new();
-        assert!(builder.audio_jobs(&doc, &comp).is_empty());
+        assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
         assert_eq!(
             HAS_AUDIO.lock().unwrap().get(&item_id),
             Some(&false),
@@ -3993,8 +4031,10 @@ mod tests {
         // which is the point of it being a process-wide memo rather than a
         // field: the driver reading the comp's mix makes a fresh builder on
         // every frame it draws, and must not reopen the file for each one.
-        assert!(builder.audio_jobs(&doc, &comp).is_empty());
-        assert!(AudioJobsBuilder::new().audio_jobs(&doc, &comp).is_empty());
+        assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
+        assert!(AudioJobsBuilder::new()
+            .audio_jobs(&Arc::new(doc.clone()), &comp)
+            .is_empty());
     }
 
     /// **Sound inside a precomp reaches the comp that holds it.** A song sits
@@ -4009,6 +4049,79 @@ mod tests {
     /// somewhere else, and the mapping (not merely the presence) is what a
     /// nested placement gets wrong.
     ///
+    /// The *Duck under* road end to end: a layer whose graph wires a constant
+    /// onto the Layer out's Volume socket gets a `driven` handle on its job,
+    /// and the bake then follows the chain instead of the keyframes — always
+    /// as an envelope, because a driven Volume follows the sound. An unwired
+    /// layer carries no handle and bakes exactly as before.
+    #[test]
+    fn a_duck_wire_overrides_the_volume_in_the_bake() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef, OUT_VOLUME_PORT};
+
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let comp = push_comp(&mut doc, "duck", 32, 32);
+        push_layer(&mut doc, comp, LayerKind::Footage { item: song });
+
+        // Remap held at a constant −40 dB, wired onto the Volume socket.
+        let mut remap = lumit_core::fx::instantiate("remap").expect("catalogue");
+        for p in &mut remap.params {
+            if p.id == "out_low" || p.id == "out_high" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(-40.0));
+            }
+        }
+        let node = remap.id;
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
+            c.layers[0].graph = LayerGraph {
+                edges: vec![Edge {
+                    from: OutputRef::Driver {
+                        node,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Out,
+                        port: OUT_VOLUME_PORT.id.to_owned(),
+                    },
+                }],
+                nodes: vec![remap],
+                ..LayerGraph::default()
+            };
+        }
+
+        let mut builder = AudioJobsBuilder::new();
+        seed_has_audio(song);
+        let c = doc.comp(comp).expect("comp").clone();
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
+        assert_eq!(jobs.len(), 1);
+        let job = &jobs[0];
+        let driven = job.driven.as_ref().expect("the wire rides the job");
+        assert_eq!(driven.db_at(0.5), Some(-40.0));
+
+        let (gain, envelope) = crate::export::volume_bake(job, 0, 48_000, 48_000);
+        assert_eq!(gain, [1.0, 1.0], "driven is always an envelope");
+        let envelope = envelope.expect("driven is always an envelope");
+        let want = lumit_audio::mix::db_to_gain(-40.0);
+        assert!(
+            envelope
+                .points
+                .iter()
+                .all(|p| (p[0] - want).abs() < 1e-6 && (p[1] - want).abs() < 1e-6),
+            "the chain's decibels are the bake's gain"
+        );
+
+        // The same layer unwired bakes from its keyframes, with no handle.
+        let mut plain = doc;
+        if let Some(ProjectItem::Composition(c)) = plain.item_mut(comp) {
+            c.layers[0].graph = LayerGraph::default();
+        }
+        let c = plain.comp(comp).expect("comp").clone();
+        let jobs = builder.audio_jobs(&Arc::new(plain), &c);
+        assert!(jobs[0].driven.is_none(), "no wire, no handle");
+        let (gain, envelope) = crate::export::volume_bake(&jobs[0], 0, 48_000, 48_000);
+        assert_eq!(envelope, None);
+        assert_eq!(gain, [1.0, 1.0], "0 dB unity, straight off the keyframes");
+    }
+
     /// No media fixture: the has-audio probe is a cache, so seeding it says
     /// "this item has sound" without a file on disk.
     #[test]
@@ -4029,7 +4142,7 @@ mod tests {
         let mut builder = AudioJobsBuilder::new();
         seed_has_audio(song);
         let comp = doc.comp(outer).unwrap().clone();
-        let jobs = builder.audio_jobs(&doc, &comp);
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &comp);
 
         assert_eq!(jobs.len(), 1, "the song inside the precomp must be heard");
         let job = &jobs[0];
@@ -4078,7 +4191,7 @@ mod tests {
         seed_has_audio(song);
         seed_has_audio(voice);
         let comp = doc.comp(outer).unwrap().clone();
-        let jobs = builder.audio_jobs(&doc, &comp);
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &comp);
         assert_eq!(jobs.len(), 3, "three sources sound");
 
         let (precomp_row, footage_row) = (comp.layers[0].id, comp.layers[1].id);
@@ -4137,7 +4250,7 @@ mod tests {
             builder.layer_has_audio(&doc, &c.layers[0]),
             "a Sequence row whose clips carry sound wears a mute switch"
         );
-        let jobs = builder.audio_jobs(&doc, &c);
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
         assert_eq!(jobs.len(), 3, "every sounding clip is its own job");
 
         // Each clip's source sample 0 sits at its own start less its trim, so
@@ -4173,7 +4286,7 @@ mod tests {
         }
         let c = doc.comp(comp).expect("comp").clone();
         assert_eq!(
-            builder.audio_jobs(&doc, &c).len(),
+            builder.audio_jobs(&Arc::new(doc.clone()), &c).len(),
             2,
             "the retimed clip drops out of the mix"
         );

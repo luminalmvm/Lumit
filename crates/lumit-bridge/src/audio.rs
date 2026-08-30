@@ -185,6 +185,13 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             hash_animation(&mut h, &c.volume.animation);
             hash_animation(&mut h, &c.pan.animation);
         }
+        // A *Duck under* wire changes what the layer sounds like without
+        // touching a keyframe, so the chain — wires and its drivers' values —
+        // folds in. Debug text rather than a field-by-field walk: session-only,
+        // like the rest of this hash, and a graph is a handful of nodes.
+        if let Some(d) = &j.driven {
+            format!("{:?}", d.graph).hash(&mut h);
+        }
     }
     h.finish()
 }
@@ -727,6 +734,7 @@ mod tests {
             pan: Property::zero(),
             carriers: Vec::new(),
             fade: None,
+            driven: None,
         }
     }
 

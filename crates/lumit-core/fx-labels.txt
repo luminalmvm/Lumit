@@ -715,6 +715,7 @@ View
 Vignette
 Violet
 Vivid light
+Volume
 Warming filter (81)
 Warming filter (85)
 Warming filter (LBA)

@@ -271,6 +271,13 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   are one `[left, right]` pair, which is what makes a Precomp layer's balance compose with
   the balances inside it (per-channel multiplication) and what keeps preview and export
   reading the same numbers (K-031).
+- **Volume can be driven by a wire** (K-697): the node graph's Layer out box carries a
+  Number socket named Volume, and a driver chain wired onto it overrides the Volume
+  keyframes in both mixers — evaluated per ~10 ms control step, clamped to the property's
+  own range, keyframes returning the moment the wire breaks or bypasses. This is the
+  landing for the Audio panel's *Duck under…* template (Audio level → Remap inverted →
+  Smooth). The chain's own comp-mix tap reads the **pre-duck** mix, so one level of
+  ducking is heard and a duck driven by a duck terminates.
 - Stereo is the v1 channel model; mono sources upmix centred.
 
 ## 7. Out of scope for v1

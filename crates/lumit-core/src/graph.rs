@@ -47,6 +47,13 @@ pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
 /// footage layer's own stream (K-435), so this accepts no wire in this phase
 /// (§7) — listed rather than faked.
 pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
+/// The Layer out node's **Volume** — the one layer property a wire may land on
+/// (the Audio workspace board's *Duck under*). A number in decibels: driven, it
+/// overrides the layer's own Volume keyframes exactly as a wired effect
+/// parameter overrides its own, and the mixer bakes the chain's answer into the
+/// same gain stage the keyframes would have fed
+/// ([`crate::fx::drivers::driven_volume_db`]).
+pub const OUT_VOLUME_PORT: Port = Port::new("volume", "Volume", PortType::Number);
 
 /// Every port the *derived* nodes draw — the ones no schema declares, because
 /// the Source node, an effect's picture in and out and the Layer out node are
@@ -54,7 +61,14 @@ pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
 ///
 /// Gathered in one list so the K-303 label walk ([`crate::fx::labels`]) can
 /// find their words the same way it finds an effect's.
-pub const DERIVED_PORTS: [Port; 5] = [IMAGE_PORT, MATTE_PORT, INPUT_PORT, OUTPUT_PORT, AUDIO_PORT];
+pub const DERIVED_PORTS: [Port; 6] = [
+    IMAGE_PORT,
+    MATTE_PORT,
+    INPUT_PORT,
+    OUTPUT_PORT,
+    AUDIO_PORT,
+    OUT_VOLUME_PORT,
+];
 
 /// What the canvas calls [`NodeRef::Source`] — display text (K-303).
 pub const SOURCE_LABEL: &str = "Source";
@@ -504,8 +518,15 @@ impl LayerGraph {
                     .ok_or(GraphError::UnknownPort)
             }
             InputRef::Param { node, port } => {
-                // Source and Out draw ports but hold no parameters, so naming
-                // one of them as a parameter destination names nothing.
+                // The Layer out's Volume socket — the one derived port a wire
+                // may land on. A layer property rather than a schema parameter,
+                // so it is answered here rather than through an instance.
+                if matches!(node, NodeRef::Out) && port == OUT_VOLUME_PORT.id {
+                    return Ok(PortType::Number);
+                }
+                // Source and Out otherwise draw ports but hold no parameters,
+                // so naming one of them as a parameter destination names
+                // nothing.
                 let inst = match node {
                     NodeRef::Effect(id) => effects.iter().find(|e| e.id == *id),
                     NodeRef::Driver(id) => self.node(*id),
@@ -889,6 +910,43 @@ mod tests {
             };
             assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
         }
+    }
+
+    /// The one derived socket a wire *may* land on: the Layer out's Volume
+    /// (the Audio panel's *Duck under* writes it). A number is accepted;
+    /// anything else is the ordinary type refusal, and every other made-up
+    /// port on the derived nodes stays refused above.
+    #[test]
+    fn a_number_wire_may_land_on_the_layer_outs_volume() {
+        let wiggle = inst("wiggle");
+        let graph = LayerGraph {
+            edges: vec![param_edge(
+                &wiggle,
+                "value",
+                NodeRef::Out,
+                OUT_VOLUME_PORT.id,
+            )],
+            nodes: vec![wiggle],
+            ..LayerGraph::default()
+        };
+        graph
+            .validate(&[])
+            .expect("a number onto the Volume socket is a legal duck");
+    }
+
+    #[test]
+    fn only_a_number_may_drive_the_volume_socket() {
+        let graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::SourceMatte,
+                to: InputRef::Param {
+                    node: NodeRef::Out,
+                    port: OUT_VOLUME_PORT.id.to_owned(),
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(&[]), Err(GraphError::PortTypeMismatch));
     }
 
     /// §4: the whole graph survives a trip through the file format — wires,

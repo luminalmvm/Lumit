@@ -3042,6 +3042,10 @@
   "@fxVignette": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxVolume": "Volume",
+  "@fxVolume": {
+    "description": "Node graph — the Layer out box's Volume socket, the port a Duck under wire lands on."
+  },
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."

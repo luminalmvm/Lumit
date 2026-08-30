@@ -13791,3 +13791,41 @@ mirror of that list, and it needs it to be data — a file keyed by the plugin's
 identifier — rather than a growing thicket of "if this is that plugin, do this" scattered
 through the code. Today it is empty, which is exactly right: no plugin has yet earned an
 entry, and an empty file that parses is the shipping default.
+
+## 45. Ducking the music with a wire, in plain terms
+
+Every editor knows the move: the voice-over comes in, the music dips; the voice-over
+ends, the music comes back. Most programs do it with an effect or a hidden automation
+pass. Lumit does it with the same wires the node graph already draws.
+
+### The one socket a wire may land on
+
+A layer's graph has always let a driver — Audio level, Remap, Smooth — feed an *effect's*
+parameter: loudness into a glow, loudness into a scale. The Layer out box (the box that
+stands for "what leaves this layer") now carries one more socket, **Volume**. Wire a
+number into it and that number *is* the layer's volume, in decibels, moment by moment —
+the Volume keyframes are overridden for as long as the wire exists, exactly the way a
+wired effect parameter stops reading its own keyframes. Cut the wire (or bypass a box in
+the chain) and the keyframes simply come back; nothing was destroyed.
+
+It is deliberately the only property socket. Volume is the one property the audio mixer
+itself owns, and the mixer is where the wire's answer has to be baked; everything else a
+driver might move already has its own parameter sockets.
+
+### What Duck under actually builds
+
+The Audio panel's *Duck under…* button writes three boxes onto the music layer and wires
+them in a row: **Audio level** listening to the layer you picked (the voice-over),
+**Remap** turned upside down (silence in → 0 dB out, loud in → −18 dB out), and
+**Smooth** so the dip glides instead of fluttering, into the Volume socket. Nothing about
+it is special — you can open the graph, see the three boxes, retune the Remap's floor or
+the Smooth's time, or delete the lot. The button is a template, not a mechanism.
+
+### Why a duck cannot chase its own tail
+
+One trap hides in "listen to the mix": if the music's volume is driven *by* the mix, and
+the mix contains the music, the answer would depend on itself. So the chain that drives a
+Volume always hears the mix as it would be **before any ducking** — every layer at its
+keyframed volume. One level of ducking is heard; a duck can never be driven by a duck.
+That rule is also what makes the whole thing deterministic: preview, export and the beat
+detector all bake the same envelope from the same sound (the K-031 promise, again).

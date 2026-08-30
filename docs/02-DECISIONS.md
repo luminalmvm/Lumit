@@ -21825,3 +21825,39 @@ the next batch without a strike against it; a forged handle is refused rather th
 and the broker survives it; a block crosses the ring sample for sample and a slot nobody
 wrote reads as empty; and a broker announcing another protocol version is refused rather
 than believed.
+
+## K-697 — The Layer out box grows a Volume socket, and Duck under's wire lands on it
+
+**Status: DECIDED (2026-08-30).** Extends K-471 (whose edges ran only driver output →
+effect parameter or matte) and K-694/K-695's gain stage; carries the approved
+AudioWorkspace board's *Duck under* button, whose staged chain has to land somewhere real.
+Nothing is reversed: every other derived socket still refuses a wire, and the Out's Audio
+port stays listed-and-unwireable per K-435.
+
+**One property socket, not a property-port system.** `graph::OUT_VOLUME_PORT` ("volume",
+Number) joins the Layer out box's inputs, and `LayerGraph::validate` accepts a Number wire
+onto exactly that socket — `InputRef::Param { node: Out, port: "volume" }`, a shape the
+model, the file format and the bridge already carried, so no schema or serialisation moved.
+Why not ports for every layer property: Volume is the one property the *mixer* owns, and
+the mix path is where a driven value has to be baked; Transform and friends are already
+drivable the K-471 way on effect parameters, and a general system would be built before a
+second customer exists.
+
+**A driven Volume overrides its keyframes, in both mixers, as an envelope.**
+`fx::driven_volume_db` evaluates the wire with the same `Eval` a driven parameter gets and
+clamps to the property's own hard range (−100 knee, +50 ceiling). The audio-jobs walk hands
+any wired layer's job a `DrivenVolume` (document snapshot, graph clone, the layer's clocks),
+and `volume_bake` asks it per control-rate step — so the live plan, the export mixdown, the
+tap and a Sequence row's clips all duck identically (K-031), and a broken or bypassed chain
+answers `None`, which is the keyframes back.
+
+**A duck hears the pre-duck mix.** The chain's own Audio level, when it reads "this comp",
+reads the mix at everyone's *keyframed* Volume (`DocumentAudio::pre_duck`): one level of
+ducking is heard, and a duck driven by a duck terminates instead of baking the envelope it
+is part of. The plan signature folds the wired graph in, so drawing or reshaping the wire
+re-prepares the mix like any audible edit.
+
+Pinned in `lumit-core`'s `a_number_wire_may_land_on_the_layer_outs_volume`,
+`only_a_number_may_drive_the_volume_socket` and
+`a_wire_onto_the_volume_socket_answers_in_decibels`, and `lumit-render`'s
+`a_duck_wire_overrides_the_volume_in_the_bake`.

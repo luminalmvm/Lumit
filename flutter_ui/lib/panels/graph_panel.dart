@@ -1054,8 +1054,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return false;
     }
     // The Layer out box's Audio socket is drawn, unfilled and honest: audio
-    // comes only from a footage layer's own stream in this phase (K-435).
-    if (into.node is BridgeNodeRef_Out) return false;
+    // comes only from a footage layer's own stream in this phase (K-435). Its
+    // Volume socket is the one exception (K-697): a number wired there drives
+    // the layer's own Volume — the Duck under landing.
+    if (into.node is BridgeNodeRef_Out && into.port.id != 'volume') return false;
     if (out.port.portType != into.port.portType) return false;
     return !_wouldLoop(out.node, into.node);
   }

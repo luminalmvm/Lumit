@@ -760,6 +760,7 @@ Map<String, String> get _table => {
       "Vignette": l10n.fxVignette,
       "Violet": l10n.fxViolet,
       "Vivid light": l10n.blendVividLight,
+      "Volume": l10n.fxVolume,
       "Warming filter (81)": l10n.fxWarmingFilter81,
       "Warming filter (85)": l10n.fxWarmingFilter85,
       "Warming filter (LBA)": l10n.fxWarmingFilterLba,

@@ -138,12 +138,17 @@ fn decoded(path: &Path) -> Option<Arc<AudioBuffer>> {
 /// Borrowed rather than owned: it is made where the draw list is built, from
 /// the document that walk already holds, and lives exactly as long as the walk.
 pub struct DocumentAudio<'a> {
-    doc: &'a Document,
+    doc: &'a Arc<Document>,
     comp: &'a Composition,
     /// The comp time of the frame being built. The mix is read around *this*
     /// moment rather than around a driver's own layer time, because the mix is
     /// the composition's and the composition's clock is this one.
     t_comp: f64,
+    /// Read the mix at everyone's **keyframed** Volume, ignoring any *Duck
+    /// under* wires (K-471, the Out Volume socket). Only the driven-Volume
+    /// evaluation itself sets this: a chain reading "this comp" would
+    /// otherwise be baking the very envelope it is part of, forever.
+    pre_duck: bool,
     /// The comp's audio jobs — what the mixer sums — built at most once per
     /// frame, and only when something actually asks for the mix.
     jobs: std::sync::OnceLock<Vec<crate::export::AudioJob>>,
@@ -156,12 +161,24 @@ impl<'a> DocumentAudio<'a> {
     /// layer sits in — wires never cross layers, and neither does this
     /// (K-471 §1.3) — or names nothing, which is the comp's own mix.
     #[must_use]
-    pub fn new(doc: &'a Document, comp: &'a Composition, t_comp: f64) -> Self {
+    pub fn new(doc: &'a Arc<Document>, comp: &'a Composition, t_comp: f64) -> Self {
         Self {
             doc,
             comp,
             t_comp,
+            pre_duck: false,
             jobs: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// [`Self::new`], hearing the mix **before any duck**: what the
+    /// driven-Volume evaluation reads, so one level of ducking is heard and a
+    /// duck driven by a duck terminates rather than recursing.
+    #[must_use]
+    pub fn pre_duck(doc: &'a Arc<Document>, comp: &'a Composition, t_comp: f64) -> Self {
+        Self {
+            pre_duck: true,
+            ..Self::new(doc, comp, t_comp)
         }
     }
 
@@ -240,7 +257,13 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             return None;
         }
         let jobs = self.jobs.get_or_init(|| {
-            crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp)
+            let mut jobs = crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp);
+            if self.pre_duck {
+                for job in &mut jobs {
+                    job.driven = None;
+                }
+            }
+            jobs
         });
         let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
             .iter()
@@ -299,7 +322,7 @@ mod tests {
 
     /// A document with one footage layer pointing at `path`: the document, its
     /// composition's id, and the layer's id.
-    fn doc_with_audio_layer(path: &Path) -> (Document, Uuid, Uuid) {
+    fn doc_with_audio_layer(path: &Path) -> (Arc<Document>, Uuid, Uuid) {
         use lumit_core::model::{FootageItem, Layer, LinearColour, MediaRef, Switches};
         use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 
@@ -362,7 +385,7 @@ mod tests {
             motion_blur: Default::default(),
             extra: serde_json::Map::new(),
         }));
-        (doc, comp_id, layer_id)
+        (Arc::new(doc), comp_id, layer_id)
     }
 
     /// Two tracks under a budget with room for one: the one just read stays,

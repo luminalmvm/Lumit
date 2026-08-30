@@ -436,6 +436,17 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // Drawn, unfilled, honest: audio comes only from a footage layer's
             // own stream (K-435), so nothing may be wired here in this phase.
             BridgePort::of(graph::AUDIO_PORT, false),
+            // The layer's Volume — the one property socket a wire may land on
+            // (the Audio panel's *Duck under* writes it). Driven, it overrides
+            // the Volume keyframes in the mix exactly as a wired parameter
+            // overrides its own.
+            BridgePort::of(
+                graph::OUT_VOLUME_PORT,
+                input_wired(InputRef::Param {
+                    node: NodeRef::Out,
+                    port: graph::OUT_VOLUME_PORT.id.to_owned(),
+                }),
+            ),
         ],
         outputs: Vec::new(),
     });
