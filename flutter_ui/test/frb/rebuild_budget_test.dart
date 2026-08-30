@@ -211,6 +211,84 @@ void main() {
           reason: 'the playhead did not redraw, so nothing was measured');
     });
 
+    /// **The same question for the work area's band** (the owner's "dragging a
+    /// work-area edge on a large timeline is incredibly laggy").
+    ///
+    /// The band spans the ruler and every lane under it, so an edge drag has
+    /// three washes to move: the lanes' ground, the wash over the bars, and the
+    /// graph's. The panel used to move them by holding the staged span in its
+    /// own state and calling `setState` per pointer move — which rebuilt the
+    /// whole Timeline, outline and rows and key counts included. Measured at
+    /// 59,129 widgets for twenty pointer moves on a twenty-layer comp twirled
+    /// open (~2,950 a move), and it grows with the document.
+    ///
+    /// The rule this pins: **an edge drag repaints the band and rebuilds the
+    /// ruler, and nothing else.**
+    testWidgets('a work-area edge drag repaints the band and not the lanes',
+        (tester) async {
+      final p = await mount(tester);
+      for (final layer in p.comp.getLayers()) {
+        final id = layer.internallayerId.toString();
+        await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+        await tester.pump();
+      }
+      await settleFrb(tester, minRounds: 4);
+
+      int paints(String key) {
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(ValueKey<String>(key)).first);
+        return boundary.debugSymmetricPaintCount +
+            boundary.debugAsymmetricPaintCount;
+      }
+
+      final handle = find.byKey(const ValueKey<String>('tl-work-end'));
+      expect(handle, findsOneWidget);
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump();
+
+      final lanesBefore = paints('tl-lane-blocks');
+      final bandBefore = paints('tl-lane-ground');
+      rebuilds
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await gesture.moveBy(const Offset(-6, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      rebuilds
+        ..counting = false
+        ..remove();
+      final lanesAfter = paints('tl-lane-blocks');
+      final bandAfter = paints('tl-lane-ground');
+      // Let go before asserting, so a failure does not leave a drag standing.
+      await gesture.up();
+      await tester.pump();
+
+      // ignore: avoid_print
+      print('WORK-AREA DRAG REBUILDS ${rebuilds.total} band '
+          '${bandAfter - bandBefore} lanes ${lanesAfter - lanesBefore}\n'
+          '${rebuilds.ranking()}');
+      expect(lanesAfter, lanesBefore,
+          reason: 'the lanes were redrawn for a band moving over them');
+      // The guard: a panel that had simply stopped following the hand would
+      // satisfy the line above. The band must be shown to have moved.
+      expect(bandAfter, greaterThan(bandBefore),
+          reason: 'the work-area band did not redraw, so nothing was measured');
+      // Measured at 254 for twenty moves — the ruler, its two handles and the
+      // band it draws itself. The cap is roughly 2x, in the house style; what
+      // must never come back is a count in the thousands, which is the panel
+      // rebuilding whole.
+      expect(rebuilds.total, lessThan(700),
+          reason: 'an edge drag redrew far too much:\n${rebuilds.ranking()}');
+      // And the signature of that regression, named: an outline row and a lane
+      // bar have nothing to do with where the work area ends.
+      for (final name in ['OutlineRow', 'Bar']) {
+        expect(rebuilds.byName[name] ?? 0, 0,
+            reason: 'a $name redrew on a work-area drag:\n'
+                '${rebuilds.ranking()}');
+      }
+    });
+
     /// The other half of the rule, and the reason the first test cannot be
     /// passed by a panel that has simply gone deaf: a **keyed** parameter shows
     /// the value under the playhead, so its row must redraw on every move.

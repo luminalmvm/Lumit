@@ -2753,6 +2753,77 @@ class WorkAreaGroundPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
+/// The work area's ground, standing over a view and following the edge being
+/// dragged **on its own layer** (K-626's pattern, as the playhead took it).
+///
+/// **Why the span is a listenable and not a field.** The band spans the ruler
+/// and every lane under it, so an edge drag has to move three washes at once —
+/// the lanes' ground, the wash over the bars and the graph's ground. The panel
+/// used to do that by holding the staged span in its own state and calling
+/// `setState` per pointer move, which rebuilt the whole Timeline: the outline,
+/// every row, the lanes, the snap targets, the key counts. Measured at ~2,950
+/// widgets a move on a twenty-layer comp twirled open, and it grows with the
+/// document — that is the whole of "dragging a work-area edge on a large
+/// timeline is incredibly laggy".
+///
+/// Here the staged span is a `ValueListenable` the grounds listen to for
+/// themselves, behind a boundary each: a pointer move repaints three washes and
+/// rebuilds nothing else. The panel still reads [committed] at build time, so a
+/// rebuild that happens mid-drag for its own reasons draws the same span.
+class WorkAreaGround extends StatelessWidget {
+  const WorkAreaGround({
+    super.key,
+    required this.preview,
+    required this.committed,
+    required this.axis,
+    required this.inside,
+    required this.outside,
+    this.edge,
+  });
+
+  /// The span an edge drag has staged, or null when no drag is on. Listened to,
+  /// never read during anybody else's build.
+  final ValueListenable<({int start, int end, bool whole})?> preview;
+
+  /// The span the document has, which is what draws when nothing is staged.
+  final ({int start, int end, bool whole}) committed;
+
+  final TimelineAxis axis;
+  final Color inside;
+  final Color outside;
+  final Color? edge;
+
+  @override
+  // The boundary is the outermost thing built, so the key on this widget names
+  // the layer itself — which is what a paint-count test reads.
+  Widget build(BuildContext context) => Positioned.fill(
+        child: RepaintBoundary(
+          child: IgnorePointer(
+            child: ValueListenableBuilder<({int start, int end, bool whole})?>(
+              valueListenable: preview,
+              builder: (context, staged, _) {
+                final work = staged ?? committed;
+                return CustomPaint(
+                  painter: WorkAreaGroundPainter(
+                    // Null pixels where the span is the whole comp: there is
+                    // no out-of-range ground to wash, and the wash drawn over
+                    // the bars has nothing at all to draw.
+                    startX: work.whole ? null : axis.xOf(work.start),
+                    endX: work.whole ? null : axis.xOf(work.end),
+                    inside: inside,
+                    outside: outside,
+                    edge: edge,
+                    compStartX: axis.xOf(0),
+                    compEndX: axis.xOf(axis.frames),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+}
+
 /// The stretches of a collapsed Sequence layer's bar that no clip covers
 /// (K-248).
 ///

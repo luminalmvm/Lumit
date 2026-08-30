@@ -407,7 +407,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The ruler's staged span while a work-area edge is mid-drag: substituted
   /// for the document's below, so the lane and graph highlights move with the
   /// hand while the write still lands once, on release.
-  ({int start, int end, bool whole})? _workPreview;
+  ///
+  /// **A notifier, not a field the panel rebuilds on** (K-626's pattern). The
+  /// grounds that draw the band listen to it for themselves ([WorkAreaGround]),
+  /// so a pointer move repaints three washes instead of rebuilding the whole
+  /// Timeline — the outline, every row, the lanes, the key counts and the snap
+  /// targets — which is what made an edge drag crawl on a real project. Its
+  /// value is still read at build time, so a rebuild that happens mid-drag for
+  /// its own reasons draws the staged span rather than jumping back.
+  final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
+      ValueNotifier(null);
   BigInt? _workRevision;
   CompositionReference? _workComp;
 
@@ -2748,7 +2757,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       _workComp = comp;
       _workArea = workAreaFrames(comp);
     }
-    final work = _workPreview ?? _workArea!;
+    final work = _workPreview.value ?? _workArea!;
     // The block heights, as a plain list. Still needed even though the rows
     // now carry their own height: a drag measures its travel against the
     // *stack* ([layerDragTarget]), a drop reads a slot out of it
@@ -2995,24 +3004,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     final axis = TimelineAxis(
                                         frames: frames,
                                         width: laneViewport * _zoom);
-                                    // Where the work area falls, read once and handed
-                                    // to the ruler, the lanes and the curves alike
-                                    // (K-203) — and null pixels when it covers the
-                                    // whole comp, which is when there is no
-                                    // out-of-range ground to wash.
-                                    final graphWork = work.whole
-                                        ? null
-                                        : (
-                                            axis.xOf(work.start),
-                                            axis.xOf(work.end)
-                                          );
                                     return _graph
                                         ? _graphHalf(context, ui, comp,
                                             axis: axis,
                                             channels: channels,
                                             rows: rows,
                                             work: work,
-                                            graphWork: graphWork,
                                             frames: frames,
                                             fpsNum: fpsNum,
                                             fpsDen: fpsDen)
@@ -3259,29 +3256,64 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               fps: ui.model.fps,
               onChanged: ui.model.refresh,
             ),
-          // The outline's own end of the bottom bar: the column-group
-          // toggles, where the lane side carries the zoom and the scrollbar
-          // (K-448). The block was already reserved to keep the two halves the
-          // same height — it now has something in it.
-          ColumnToggles(
-            groups: _toggleableGroups,
-            labels: _chromeLabels,
-            hidden: _hiddenGroups,
-            onToggle: (group) => setState(() {
-              if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
-            }),
-            animatedOnly: _animatedOnly,
-            onToggleAnimated: () =>
-                setState(() => _animatedOnly = !_animatedOnly),
-            comp: comp,
-            model: ui.model,
-            playhead: ui.playheadFrame,
-            razor: _razorArmed(ui),
-            onToggleRazor: () => _toggleRazor(ui),
-            hideShy: _hideShy,
-            onToggleHideShy: () => setState(() => _hideShy = !_hideShy),
-            onChanged: ui.model.refresh,
-          ),
+          // The outline's own end of the bottom bar: the key commands and the
+          // column-group toggles, where the lane side carries the zoom and the
+          // scrollbar (K-448). The block was already reserved to keep the two
+          // halves the same height — it now has something in it.
+          //
+          // One row, two runs. The strip is loose, so at any ordinary outline
+          // width it takes exactly the room its buttons need and the toggles
+          // keep the rest; squeezed, neither run overflows — each scrolls
+          // inside its own share.
+          Row(children: [
+            Flexible(
+              child: KeyCommandStrip(
+                // The keyframe strip (K-458) in Layers, the graph's own
+                // commands in graph view — the same seven or ten buttons that
+                // stood on the lane bar, in the same order.
+                strip: !_graph,
+                lens: _graph ? _graphLens : null,
+                onLens: (lens) => setState(() {
+                  _graphLens = lens;
+                  _publishEasingClaim();
+                }),
+                autoFit: _graphAutoFit,
+                onToggleAutoFit: () =>
+                    setState(() => _graphAutoFit = !_graphAutoFit),
+                onInterp: (side) => _applyInterp(side),
+                onTangentMode: _applyTangentMode,
+                onOpenEasing: _openEasing,
+                onEaseBlock: (buttonContext) {
+                  final box = buttonContext.findRenderObject();
+                  if (box is! RenderBox) return;
+                  _openEasePopover(box.localToGlobal(Offset.zero));
+                },
+                onReverse: _reverseSelectedKeys,
+                onCopy: _copySelectedKeys,
+                onPaste: _pasteKeysIntoSelection,
+              ),
+            ),
+            Expanded(
+                child: ColumnToggles(
+              groups: _toggleableGroups,
+              labels: _chromeLabels,
+              hidden: _hiddenGroups,
+              onToggle: (group) => setState(() {
+                if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
+              }),
+              animatedOnly: _animatedOnly,
+              onToggleAnimated: () =>
+                  setState(() => _animatedOnly = !_animatedOnly),
+              comp: comp,
+              model: ui.model,
+              playhead: ui.playheadFrame,
+              razor: _razorArmed(ui),
+              onToggleRazor: () => _toggleRazor(ui),
+              hideShy: _hideShy,
+              onToggleHideShy: () => setState(() => _hideShy = !_hideShy),
+              onChanged: ui.model.refresh,
+            )),
+          ]),
         ],
       ),
     );
@@ -3297,7 +3329,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required List<GraphChannel> channels,
     required List<LayerRow> rows,
     required ({int start, int end, bool whole}) work,
-    required (double, double)? graphWork,
     required int frames,
     required int fpsNum,
     required int fpsDen,
@@ -3341,8 +3372,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 comp.setWorkArea(span: span);
                                 setState(() {});
                               },
+                              // No `setState`: the grounds listen for
+                              // themselves, so an edge drag repaints the band
+                              // and rebuilds nothing (K-626's pattern).
                               onWorkPreview: (span) =>
-                                  setState(() => _workPreview = span),
+                                  _workPreview.value = span,
                               onMarkersChanged: () => setState(() {}),
                               // The graph shares the ruler, so it shares the
                               // ruler's snapping (docs/07 §4.5).
@@ -3369,27 +3403,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                   // being delivered is
                                   // never only a mark
                                   // on the ruler.
-                                  Positioned.fill(
-                                    child: IgnorePointer(
-                                      child: CustomPaint(
-                                        painter: WorkAreaGroundPainter(
-                                          startX: graphWork?.$1,
-                                          endX: graphWork?.$2,
-                                          // The same band the ruler hangs and
-                                          // the lanes carry (§12A.2: nothing
-                                          // about the work area changes on a
-                                          // mode switch).
-                                          inside: Color.alphaBlend(
-                                              t.animated.withValues(
-                                                  alpha: workAreaLaneFillAlpha),
-                                              t.surface1),
-                                          outside: t.timelineOutOfRange,
-                                          edge: workAreaEdgeColour(t),
-                                          compStartX: axis.xOf(0),
-                                          compEndX: axis.xOf(frames),
-                                        ),
-                                      ),
-                                    ),
+                                  WorkAreaGround(
+                                    key: const ValueKey<String>(
+                                        'tl-graph-ground'),
+                                    preview: _workPreview,
+                                    committed: work,
+                                    axis: axis,
+                                    // The same band the ruler hangs and the
+                                    // lanes carry (§12A.2: nothing about the
+                                    // work area changes on a mode switch).
+                                    inside: Color.alphaBlend(
+                                        t.animated.withValues(
+                                            alpha: workAreaLaneFillAlpha),
+                                        t.surface1),
+                                    outside: t.timelineOutOfRange,
+                                    edge: workAreaEdgeColour(t),
                                   ),
                                   GraphEditorFrb(
                                     key: _graphPane,
@@ -3460,16 +3488,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           onZoomDragStart: _zoomDragStart,
           onZoomDragEnd: _zoomDragEnd,
           maxZoom: _maxZoom,
-          lens: _graphLens,
-          onLens: (lens) => setState(() {
-            _graphLens = lens;
-            _publishEasingClaim();
-          }),
-          autoFit: _graphAutoFit,
-          onToggleAutoFit: () => setState(() => _graphAutoFit = !_graphAutoFit),
-          onInterp: (side) => _applyInterp(side),
-          onTangentMode: _applyTangentMode,
-          onOpenEasing: _openEasing,
         ),
       ],
     );
@@ -3545,8 +3563,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       onEase: _openEasePopover,
                       onDeselectAll: () => _deselectAll(ui),
                       work: work,
-                      onWorkPreview: (span) =>
-                          setState(() => _workPreview = span),
+                      onWorkPreview: (span) => _workPreview.value = span,
+                      workPreview: _workPreview,
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),
@@ -3588,19 +3606,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           onZoomDragStart: _zoomDragStart,
           onZoomDragEnd: _zoomDragEnd,
           maxZoom: _maxZoom,
-          // The keyframe strip (K-458), which came here when Keys mode went
-          // (K-529): the seven commands the owner values, on the bar of the
-          // mode that now carries every way of picking a key.
-          strip: true,
-          onInterp: (side) => _applyInterp(side),
-          onEaseBlock: (buttonContext) {
-            final box = buttonContext.findRenderObject();
-            if (box is! RenderBox) return;
-            _openEasePopover(box.localToGlobal(Offset.zero));
-          },
-          onReverse: _reverseSelectedKeys,
-          onCopy: _copySelectedKeys,
-          onPaste: _pasteKeysIntoSelection,
         ),
       ],
     );

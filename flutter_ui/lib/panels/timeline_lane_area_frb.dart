@@ -248,6 +248,11 @@ class LayerArea extends StatelessWidget {
   /// `_workPreview` there.
   final ValueChanged<({int start, int end, bool whole})?> onWorkPreview;
 
+  /// And the same span coming back down, as something to listen to: the
+  /// grounds follow an edge being dragged without the panel rebuilding
+  /// (see [WorkAreaGround]).
+  final ValueListenable<({int start, int end, bool whole})?> workPreview;
+
   /// The layer drag in flight, and the block heights it slides by — the
   /// outline makes the gesture, and these are what let this side move with it
   /// rather than sit still while its layers are reordered (K-208).
@@ -305,6 +310,7 @@ class LayerArea extends StatelessWidget {
     required this.onDeselectAll,
     required this.work,
     required this.onWorkPreview,
+    required this.workPreview,
     required this.layerDrag,
     required this.blockHeights,
     required this.fpsNum,
@@ -480,11 +486,6 @@ class LayerArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Where the work area falls in this area's own pixels, or null when it
-    // covers the whole comp — in which case there is no out-of-range ground to
-    // wash and the strip stays one colour.
-    final workAreaPixels =
-        work.whole ? null : (axis.xOf(work.start), axis.xOf(work.end));
     // Gathered once for the whole area, not once per lane (docs/07 §4.5).
     final snap = _snapTargets();
     // Where a razor cut lands, as a frame — the *one* answer the blade's line
@@ -602,27 +603,21 @@ class LayerArea extends StatelessWidget {
                             // row almost nothing to stand out against — and left the
                             // span you are actually delivering invisible below the
                             // ruler.
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: CustomPaint(
-                                  painter: WorkAreaGroundPainter(
-                                    startX: workAreaPixels?.$1,
-                                    endX: workAreaPixels?.$2,
-                                    // The lower reach of the one band the
-                                    // ruler starts (§12A.1) — behind the bars,
-                                    // the keys and the marquee, because it is
-                                    // the ground they stand on.
-                                    inside: Color.alphaBlend(
-                                        t.animated.withValues(
-                                            alpha: workAreaLaneFillAlpha),
-                                        t.surface1),
-                                    outside: t.timelineOutOfRange,
-                                    edge: workAreaEdgeColour(t),
-                                    compStartX: axis.xOf(0),
-                                    compEndX: axis.xOf(axis.frames),
-                                  ),
-                                ),
-                              ),
+                            WorkAreaGround(
+                              key: const ValueKey<String>('tl-lane-ground'),
+                              preview: workPreview,
+                              committed: work,
+                              axis: axis,
+                              // The lower reach of the one band the ruler
+                              // starts (§12A.1) — behind the bars, the keys
+                              // and the marquee, because it is the ground they
+                              // stand on.
+                              inside: Color.alphaBlend(
+                                  t.animated
+                                      .withValues(alpha: workAreaLaneFillAlpha),
+                                  t.surface1),
+                              outside: t.timelineOutOfRange,
+                              edge: workAreaEdgeColour(t),
                             ),
                             // Behind the bars: dragging empty lane space boxes up
                             // keyframes (docs/07 §4.3); bars and key handles above
@@ -825,22 +820,18 @@ class LayerArea extends StatelessWidget {
                             // in it, which is exactly the rows being looked at. Kept
                             // light, so what is out of range is dimmed rather than
                             // hidden.
-                            if (workAreaPixels != null)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: CustomPaint(
-                                    painter: WorkAreaGroundPainter(
-                                      startX: workAreaPixels.$1,
-                                      endX: workAreaPixels.$2,
-                                      inside: t.surface1.withValues(alpha: 0),
-                                      outside: t.timelineOutOfRange
-                                          .withValues(alpha: 0.55),
-                                      compStartX: axis.xOf(0),
-                                      compEndX: axis.xOf(axis.frames),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            WorkAreaGround(
+                              key: const ValueKey<String>('tl-lane-wash'),
+                              preview: workPreview,
+                              committed: work,
+                              axis: axis,
+                              // Transparent inside, so this draws the two
+                              // outside strips and nothing else — and nothing
+                              // at all where the span is the whole comp.
+                              inside: t.surface1.withValues(alpha: 0),
+                              outside:
+                                  t.timelineOutOfRange.withValues(alpha: 0.55),
+                            ),
                             // The row hairlines, over everything and touching
                             // nothing (K-190): they run the full width of the lane
                             // area so the eye can track a row across the table,
