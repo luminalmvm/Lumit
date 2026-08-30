@@ -20834,6 +20834,21 @@ Tests: `settings_test.dart` (the shipped default, and a stored `adaptive` surviv
 `viewer_panel_frb_test.dart` (a comp never set is at Full; Auto stored per comp),
 `menu_bar_frb_test.dart` (the default does not follow the panel down).
 
+## K-672 — The console's width fits its category strip
+
+**Status: DECIDED (2026-08-30).** Owner's item: category kickers in the Ctrl+Space
+console's strip were truncated — the strip carries the whole effect catalogue's
+groupings plus Presets, and the board's 320px cut most of them off. Amends K-658's board
+reading: the approved `Console.dc.html` width of 320px is a **floor**, not the width.
+The popover grows to fit every kicker the strip carries — measured from the strip's own
+text style, the same numbers the strip lays out with — and is capped at 720px; past the
+cap the strip scrolls sideways rather than clipping, since a plugin catalogue may
+declare any number of groupings (K-593). The drawing is updated to carry the ruling
+(`width: fit-content; min-width: 320px; max-width: 720px`).
+
+Regression tests: `the popover grows to fit every category kicker` and `a catalogue past
+the cap scrolls the strip instead` (fx_console_test).
+
 ## K-671 — An option row leaves the menu open, and the pointer leaving takes it away
 
 **Status: DECIDED (2026-08-30).** Extends K-520 from checkbox rows to **option rows**: a
@@ -20868,3 +20883,4 @@ Tests: `viewer_panel_frb_test.dart` — three picks on one opening of the qualit
 the menu going when the pointer leaves it but not before an option has been picked;
 `menu_bar_frb_test.dart` — five resolution tiers picked from one opening of View ▸
 Resolution, and a click away still closing it.
+

@@ -272,6 +272,52 @@ void main() {
           reason: 'no composition, nothing to snapshot');
     });
 
+    /// **The strip is never truncated** (owner item: every category kicker
+    /// shows). The popover's width is the board's 320 as a floor, grown to fit
+    /// the whole strip; past the 720 cap the strip scrolls sideways rather
+    /// than clipping — either way no kicker is cut and nothing overflows.
+    testWidgets('the popover grows to fit every category kicker',
+        (tester) async {
+      await open(
+        tester,
+        FxConsoleModel(entries: [
+          for (final group in [
+            'Blur & sharpen',
+            'Colour',
+            'Distortion',
+            'Generate',
+            'Stylise',
+          ])
+            effect('$group thing', group: group),
+        ]),
+        anchor: const Offset(400, 300),
+      );
+      final bar = tester.getRect(find.byKey(const ValueKey('fx-console-bar')));
+      expect(bar.width, greaterThan(320),
+          reason: 'five real groupings need more than the board\'s floor');
+      for (final group in ['Blur & sharpen', 'Distortion', 'Stylise']) {
+        expect(find.byKey(ValueKey<String>('fx-console-cat-$group')),
+            findsOneWidget, reason: 'every kicker is on screen, whole');
+      }
+      // No RenderFlex overflow: the test framework rethrows one as a failure,
+      // so reaching this line is the assertion.
+    });
+
+    testWidgets('a catalogue past the cap scrolls the strip instead',
+        (tester) async {
+      await open(
+        tester,
+        FxConsoleModel(entries: [
+          for (var i = 0; i < 24; i++)
+            effect('Effect $i', group: 'A rather long grouping name $i'),
+        ]),
+      );
+      final bar = tester.getRect(find.byKey(const ValueKey('fx-console-bar')));
+      expect(bar.width, 720, reason: 'the sane max holds');
+      // The strip scrolls; nothing threw, nothing was clipped away silently.
+      expect(find.byKey(const ValueKey('fx-console-cat-*all')), findsOneWidget);
+    });
+
     testWidgets('a click beside the popover closes it', (tester) async {
       await open(tester, FxConsoleModel(entries: [effect('Glow')]),
           anchor: const Offset(400, 300));

@@ -360,7 +360,8 @@ Every control on either strip keeps the behaviour its item below defines. The it
 2. **Preview resolution** dropdown: Full / Half / Third / Quarter / Auto (glossary §5).
    True raster downsampling — Half renders a quarter of the pixels. **Auto** renders only
    the pixels the current magnification can display. The setting is **stored per comp** in
-   the project. Preview resolution MUST never affect export.
+   the project, and a comp that has never been given one previews at **Full** (K-670).
+   Preview resolution MUST never affect export.
 3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). One
    **bare mark** on the bar, opening a menu that lists the names in full. The closed face
    is a **coloured circle for the view in force** (K-478, §5's one glyph with colour of its
@@ -2413,8 +2414,10 @@ hold focus for the console's whole life — anything typed lands in the box from
 keystroke — and every command handler stands down (`lumitModalOpen`), so a keystroke aimed
 at the box can never run a shortcut underneath.
 
-**Four bands, top to bottom** (widths, heights and insets per the approved board,
-`Console.dc.html`):
+**Four bands, top to bottom** (heights and insets per the approved board,
+`Console.dc.html`; the board's 320px width is a **floor** — the popover grows to fit
+every kicker in its category strip whole, capped at 720px, past which the strip scrolls
+sideways rather than truncating, K-672):
 
 - The **search row**: the magnifier, the query, and a kicker at the right naming the key
   that opened it ("Ctrl+Space" from the shell, "Tab" from the graph canvas) — one surface,

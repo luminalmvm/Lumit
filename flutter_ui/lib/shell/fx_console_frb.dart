@@ -187,9 +187,11 @@ class _FxConsole extends StatefulWidget {
   State<_FxConsole> createState() => _FxConsoleState();
 }
 
-// The popover's manifest, from the approved board (Console.dc.html): its
-// width, and each band's height and inset.
+// The popover's manifest, from the approved board (Console.dc.html): each
+// band's height and inset. The width is the board's 320 as a floor, grown to
+// fit the category strip — see [_FxConsoleState._width].
 const double _popWidth = 320;
+const double _popWidthMax = 720;
 const double _searchRowHeight = 28;
 const double _stripHeight = 22;
 const double _rowHeight = 26;
@@ -295,10 +297,40 @@ class _FxConsoleState extends State<_FxConsole> {
     }
   }
 
+  /// The strip's own kicker face — one definition, so the measurement below
+  /// and the drawing cannot disagree about a pixel.
+  TextStyle _kickerStyle(LumitTheme t) => t.kicker.copyWith(letterSpacing: 0.54);
+
+  /// The popover's width: the board's 320 as the floor, grown so every
+  /// category kicker in the strip fits without truncation (the longest set is
+  /// the whole effect catalogue's groupings plus Presets), and capped at
+  /// [_popWidthMax] — past the cap the strip scrolls sideways rather than
+  /// clipping, since a plugin may declare any number of groupings.
+  double _width(LumitTheme t) {
+    double text(String label) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: _kickerStyle(t)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    // The strip's row: 10 padding each side, All, then 10 of air before each
+    // group — the same numbers [_categoryStrip] lays out with.
+    var strip = 20 + text(l10n.fxConsoleAll);
+    for (final group in _groups) {
+      strip += 10 + text(group);
+    }
+    return strip.clamp(_popWidth, _popWidthMax);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final matches = _matches;
+    final width = _width(t);
 
     return Focus(
       onKeyEvent: (node, event) {
@@ -335,7 +367,7 @@ class _FxConsoleState extends State<_FxConsole> {
           // vertical padding — so a pointer at the very bottom still shows a
           // usable console rather than a bar with nothing under it.
           final left = _fit(
-              anchor.dx - _popWidth / 2, _margin, box.maxWidth - _popWidth - _margin);
+              anchor.dx - width / 2, _margin, box.maxWidth - width - _margin);
           final top = _fit(anchor.dy - _searchRowHeight / 2, _margin,
               box.maxHeight - _searchRowHeight - _stripHeight - _footHeight - 56 - _margin);
           final room = box.maxHeight -
@@ -361,7 +393,7 @@ class _FxConsoleState extends State<_FxConsole> {
                 key: const ValueKey('fx-console-bar'),
                 left: left,
                 top: top,
-                width: _popWidth,
+                width: width,
                 child: _popover(t, matches, room),
               ),
             ],
@@ -468,18 +500,23 @@ class _FxConsoleState extends State<_FxConsole> {
 
   /// The strip of category kickers: All, then every group the entries carry.
   /// The chosen one reads at full strength; choosing narrows the list to that
-  /// group, and All lets everything back in.
+  /// group, and All lets everything back in. The popover is sized so the whole
+  /// strip fits ([_width]); the scroll view is the ceiling for a plugin
+  /// catalogue past the cap, never a truncation.
   Widget _categoryStrip(LumitTheme t) => Container(
         height: _stripHeight,
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(
-          children: [
-            _categoryKicker(t, label: l10n.fxConsoleAll, category: null),
-            for (final group in _groups) ...[
-              const SizedBox(width: 10),
-              _categoryKicker(t, label: group, category: group),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _categoryKicker(t, label: l10n.fxConsoleAll, category: null),
+              for (final group in _groups) ...[
+                const SizedBox(width: 10),
+                _categoryKicker(t, label: group, category: group),
+              ],
             ],
-          ],
+          ),
         ),
       );
 
@@ -494,9 +531,8 @@ class _FxConsoleState extends State<_FxConsole> {
         _highlighted = 0;
       }),
       child: Text(label,
-          style: t.kicker.copyWith(
-              letterSpacing: 0.54,
-              color: chosen ? t.textPrimary : t.textMuted)),
+          style: _kickerStyle(t)
+              .copyWith(color: chosen ? t.textPrimary : t.textMuted)),
     );
   }
 
