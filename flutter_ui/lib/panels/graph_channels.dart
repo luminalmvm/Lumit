@@ -13,7 +13,6 @@ import 'layer_fold_frb.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
-
 /// A value drag in flight **in the layer area**, published for the graph pane to
 /// draw (K-333).
 ///
@@ -149,8 +148,10 @@ class GraphChannel {
   /// with both. A transform, a mask value and the Retime are unbounded here,
   /// which is the honest answer — their limits are not a parameter's range.
   (double?, double?) get hardBounds => switch (param?.kind) {
-        BridgeParamKind_Float(:final hardMin, :final hardMax) =>
-          (hardMin, hardMax),
+        BridgeParamKind_Float(:final hardMin, :final hardMax) => (
+            hardMin,
+            hardMax
+          ),
         BridgeParamKind_Int(:final hardMin, :final hardMax) => (
             hardMin?.toDouble(),
             hardMax?.toDouble()
@@ -168,6 +169,18 @@ class GraphChannel {
     if (high != null && value > high) return high;
     return value;
   }
+
+  /// The curve's value at `t` seconds as the pane should **draw** it: the
+  /// engine's own evaluation, held inside the hard range.
+  ///
+  /// Clamping the dragged key was only half of M28. A cubic span between two
+  /// in-range keys bulges past both of them, so the line still crossed a bound
+  /// the parameter cannot hold — most visibly while a key was being pushed
+  /// against one, which is where it was reported. docs/08 §1.2 is plain that a
+  /// hard range MUST NOT be exceeded, so a line drawn outside one is drawing a
+  /// value that does not exist.
+  double drawnValueAt(List<BridgeKeyframe> keys, double t) =>
+      clampToBounds(evaluateKeys(keys, t));
 
   List<BridgeKeyframe> get keys => keysOf(scalar);
   bool get isStatic => scalar is BridgeScalar_Static;
@@ -221,7 +234,8 @@ List<GraphChannel> graphChannels({
 
     if (path.startsWith('${transformPath(layerId)}/')) {
       final lead = path.substring(path.lastIndexOf('/') + 1);
-      for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
+      for (final group in transformGroups(
+          threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
         if (group.axes.first.prop.name != lead) continue;
         for (final axis in group.axes) {
           out.add(GraphChannel(
@@ -353,7 +367,6 @@ List<GraphChannel> graphChannels({
 }
 
 String axisLetter(int i) => switch (i) { 0 => 'x', 1 => 'y', _ => 'z' };
-
 
 /// [keys] with a key of [value] at [frame] — replacing the one already there,
 /// because two keys at one time is not a curve the engine will take (K-301).

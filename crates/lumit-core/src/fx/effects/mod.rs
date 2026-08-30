@@ -88,6 +88,7 @@ pub mod saturation;
 pub mod scanlines;
 pub mod scatter;
 pub mod scribble;
+pub mod set_channels;
 pub mod set_matte;
 pub mod shadow_highlight;
 pub mod shake;

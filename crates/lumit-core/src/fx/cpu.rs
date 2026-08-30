@@ -6115,6 +6115,74 @@ pub fn set_matte(
     }
 }
 
+/// One output channel's source under Set channels (docs/08 §3.94) — a
+/// `SET_CHANNELS_OPTIONS` index, read on **straight** values.
+///
+/// `this` and `src` are both already unpremultiplied, so the five channel reads
+/// mean the same thing whichever picture they come from. An index no option
+/// claims reads as Full off, which is what an out-of-range choice degrades to
+/// rather than faulting (14-ENGINEERING-RULES §4).
+#[must_use]
+fn set_channels_pick(pick: u32, this: [f32; 4], src: [f32; 4]) -> f32 {
+    match pick {
+        0 => this[0],
+        1 => this[1],
+        2 => this[2],
+        3 => this[3],
+        4 => channel_of(&this, 0),
+        5 => src[0],
+        6 => src[1],
+        7 => src[2],
+        8 => src[3],
+        9 => channel_of(&src, 0),
+        10 => 1.0,
+        _ => 0.0,
+    }
+}
+
+/// Set channels (docs/08 §3.94) — the CPU reference: the §1.6 oracle the WGSL
+/// kernel must agree with, and the degradation ladder's fallback rung (K-019).
+///
+/// **In plain terms.** Each of the four output channels is told where to come
+/// from: one of this layer's own channels, one of a chosen source layer's, or
+/// flat on or flat off. That is the whole effect — no filtering, no sampling,
+/// one pixel in and one pixel out.
+///
+/// **It runs on straight values**, as Set matte does and for the same reason
+/// (§2.2): the job is to move coverage and colour about independently, and a
+/// premultiplied channel carries its own alpha inside it, so reading one as if
+/// it were a colour would read the alpha twice. The unpremultiply, the shuffle
+/// and the re-premultiply are fused into the one pass.
+///
+/// `source` is the chosen layer rendered alone at this raster, premultiplied,
+/// or **empty** when the row is unset — in which case every `Source …` pick
+/// reads zero, because a picture nobody has supplied contributes nothing. The
+/// four `This layer` picks still work, so the effect is not a passthrough
+/// merely because no layer was named. A source shorter than the picture leaves
+/// the rest of it reading zero rather than faulting.
+///
+/// Mix 0 is the bit-exact identity.
+pub fn set_channels(rgba: &mut [f32], source: &[f32], picks: [u32; 4], mix: f32) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let d = i * 4;
+        let this_rgb = unpremult(px);
+        let this = [this_rgb[0], this_rgb[1], this_rgb[2], px[3]];
+        let src = match source.get(d..d + 4) {
+            Some(s) => {
+                let rgb = unpremult(s);
+                [rgb[0], rgb[1], rgb[2], s[3]]
+            }
+            None => [0.0; 4],
+        };
+        let a = set_channels_pick(picks[3], this, src);
+        for c in 0..3 {
+            let straight = set_channels_pick(picks[c], this, src);
+            px[c] = px[c] * (1.0 - mix) + straight * a * mix;
+        }
+        px[3] = px[3] * (1.0 - mix) + a * mix;
+    }
+}
+
 /// One resolved Linear wipe (docs/08 §3.46), reduced to what both paths read.
 /// The frame's extent along the sweep is deliberately absent: it is a function
 /// of the raster, which the kernel knows and the host does not (§3.39).

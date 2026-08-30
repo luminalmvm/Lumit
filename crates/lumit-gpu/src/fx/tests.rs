@@ -8336,6 +8336,128 @@ fn wgsl_set_matte_matches_the_cpu_oracle() {
     );
 }
 
+/// The §1.6 oracle for Set channels (docs/08 §3.94): a pointwise effect, so
+/// fp16 ULPs on the alpha corpus — and its partial-alpha pixels are the point,
+/// since every pick is read through an unpremultiply/re-premultiply round trip.
+///
+/// Three claims beyond parity. **A pick fetches the channel it names**, from
+/// the picture it names. **An unbound Source row is not a passthrough** — the
+/// four `This layer` picks still shuffle, which is what separates this effect
+/// from Set matte — but every `Source …` pick then reads zero. And **Mix 0 is
+/// the bit-exact identity**.
+#[test]
+fn wgsl_set_channels_matches_the_cpu_oracle() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = alpha_corpus(w, h);
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+
+    // A source with a different value in every channel, so a pick can be told
+    // apart: red ramps across, green down, blue is flat, alpha is a block. It
+    // is premultiplied, as a rendered layer is, so the kernel and the oracle
+    // both have to undo that before reading a channel.
+    let mut source = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let a = if x > 8 && x < 24 && y > 6 && y < 18 {
+                1.0
+            } else {
+                0.5
+            };
+            source[i] = (x as f32 / (w - 1) as f32) * a;
+            source[i + 1] = (y as f32 / (h - 1) as f32) * a;
+            source[i + 2] = 0.25 * a;
+            source[i + 3] = a;
+        }
+    }
+    let source: Vec<f32> = source.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    let source_tex = upload_linear_f32(&ctx, &source, w, h);
+
+    for (name, picks, mix) in [
+        ("identity", [0u32, 1, 2, 3], 1.0f32),
+        ("swap-rb", [2, 1, 0, 3], 1.0),
+        ("luma-to-alpha", [0, 1, 2, 4], 1.0),
+        ("source-rgb", [5, 6, 7, 3], 1.0),
+        ("source-alpha", [0, 1, 2, 8], 1.0),
+        ("source-luma-to-alpha", [0, 1, 2, 9], 1.0),
+        ("all-from-source", [5, 6, 7, 8], 1.0),
+        ("full-on-off", [10, 11, 10, 11], 1.0),
+        ("mixed", [2, 1, 0, 9], 0.6),
+        ("mix-zero", [11, 11, 11, 11], 0.0),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::set_channels(&mut cpu, &source, picks, mix);
+        let out = fx.set_channels(
+            &ctx,
+            &tex,
+            w,
+            h,
+            Some(&source_tex),
+            &SetChannelsOp { picks, mix },
+        );
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_f16_ulp(&cpu, &gpu);
+        eprintln!("set_channels {name}: worst {worst} ulp");
+        assert!(worst <= 2, "{name}: worst {worst} fp16 ULP");
+        if name == "mix-zero" {
+            assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+        }
+    }
+
+    // **A pick fetches what it names.** Alpha from the source's straight red,
+    // at full mix: every output alpha is that number, to fp16.
+    let out = fx.set_channels(
+        &ctx,
+        &tex,
+        w,
+        h,
+        Some(&source_tex),
+        &SetChannelsOp {
+            picks: [0, 1, 2, 5],
+            mix: 1.0,
+        },
+    );
+    let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+    for i in (0..gpu.len()).step_by(4) {
+        let want = source[i] / source[i + 3];
+        assert!(
+            (gpu[i + 3] - want).abs() < 1e-3,
+            "alpha at {} is {} not {want}",
+            i / 4,
+            gpu[i + 3]
+        );
+    }
+
+    // **An unbound Source row still shuffles this layer**, and reads the source
+    // as zero — the two halves of the row's documented no-source behaviour.
+    let mut cpu = img.clone();
+    lumit_core::fx::cpu::set_channels(&mut cpu, &[], [2, 1, 0, 8], 1.0);
+    let none = fx.set_channels(
+        &ctx,
+        &tex,
+        w,
+        h,
+        None,
+        &SetChannelsOp {
+            picks: [2, 1, 0, 8],
+            mix: 1.0,
+        },
+    );
+    let gpu = readback_linear_f32(&ctx, &none, w, h).unwrap();
+    assert!(
+        worst_f16_ulp(&cpu, &gpu) <= 2,
+        "an unset Source row must still shuffle this layer's own channels"
+    );
+    for px in gpu.chunks_exact(4) {
+        assert_eq!(px[3], 0.0, "a Source pick with no layer bound reads zero");
+    }
+}
+
 /// The §1.6 oracle for Linear wipe (docs/08 §3.46), on the smooth corpus and by
 /// absolute difference.
 ///

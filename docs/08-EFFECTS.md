@@ -563,6 +563,7 @@ specified in §3.1's original text but surfaced as layer UI, not an effect. Summ
 | 3.37 | Fractal noise | AE Fractal Noise | moderate | `{0}` |
 | 3.43 | Drop shadow | AE Drop Shadow (`ADBE Drop Shadow`) | moderate | `{0}` |
 | 3.44 | Set matte | AE Set Matte (`ADBE Set Matte3`) | trivial | `{0}` |
+| 3.94 | Set channels | AE Set Channels (`ADBE Set Channels`) | trivial | `{0}` |
 | 3.45 | Channel blur | AE Channel Blur | moderate | `{0}` |
 | 3.46 | Linear wipe | AE Linear Wipe | trivial | `{0}` |
 | 3.47 | Radial wipe | AE Radial Wipe | cheap | `{0}` |
@@ -5976,6 +5977,65 @@ Threshold 100, Density 0, Size 0 and Mix 0 are all the identity.
 
 AE's nearest equivalent is CC Ball Action's brightness sampling or a Particular emitter set
 to a layer's luminance; both are simulations, and this is arithmetic.
+
+### 3.94 Set channels — every output channel told where it comes from
+
+**Parameters:** Source (this effect's own layer row, §2.6's carriage but not its Matte),
+Red from / Green from / Blue from / Alpha from (each: Red, Green, Blue, Alpha, Luminance,
+Source red, Source green, Source blue, Source alpha, Source luminance, Full on, Full off —
+defaults Red, Green, Blue, Alpha), Mix. The universal Matte row (§2.6) is there too, doing
+the ordinary strength dissolve.
+
+**Algorithm sketch.** One texture read a pixel, no neighbourhood:
+
+```
+own = unpremultiply(src)                    # rgb straight, alpha kept beside it
+s   = unpremultiply(source at p)            # the Source layer, or 0 0 0 0 when unset
+a'      = pick(alpha_from, own, s)
+rgb'    = pick(red_from), pick(green_from), pick(blue_from)
+out.rgb = src.rgb·(1 − mix) + rgb'·a'·mix   # re-premultiplied by the new alpha
+out.a   = src.a·(1 − mix)   + a'·mix
+```
+
+`pick` is the option list read literally: indices 0–4 are this layer's R, G, B, A and
+Rec. 709 luminance, 5–9 the Source layer's same five, 10 is 1 and 11 is 0.
+
+Four notes:
+
+- **It runs unpremultiplied** (§2.2), for §3.44's reason: a premultiplied channel carries
+  its own alpha inside it, so reading one as a colour would read that alpha twice — and
+  this effect's whole business is moving colour and coverage about independently. The
+  round trip is fused into the one pass.
+- **The Source row is not a matte** (K-429's test, docs/impl/layer-input.md). A Matte row
+  answers "how much of me happens here" and this row answers "where do these numbers come
+  from", so it rides the ordinary auxiliary-layer carriage beside Light wrap's Background
+  and Texturize's Texture, and the universal Matte row stays where it is. "Reassign the
+  channels, but only over the sky" is a sentence that needs both.
+- **After Effects has four source layers; this has one.** The carriage carries one
+  auxiliary layer per effect, and four would need four carriages. What the four buy is a
+  single question asked per output channel — is this channel mine or somebody else's — and
+  every one of the ten instances in the reference project answers it with at most one other
+  layer, six of them with the same layer four times over. The import maps that shape
+  exactly and reports anything wider rather than guessing (§11 §5). A second source layer
+  is a second copy of the effect.
+- **An unset Source row is not a passthrough**, which is where this effect parts company
+  with every other layer-input one. The four `This layer` picks are a shuffle of the
+  picture the stack is already carrying, so they work with nothing bound; a `Source …` pick
+  then reads **zero**, because a picture nobody has supplied contributes nothing and any
+  other reading would invent one.
+
+`trivial` cost, `Exact` ROI, temporal window `{0}`. **The defaults are the identity
+assignment** — Red from Red, and so on — which is the one exception §1.2's no-no-op rule
+has to allow here: any other default would scramble the picture the moment the effect was
+added, and After Effects' own default is the same. Mix 0 is the bit-exact identity.
+
+**Not in v1:** AE's Hue, Lightness and Saturation channel options (nothing encodes a
+channel as a hue, exactly as §2.6's Channel list says, and the import reports the collapse
+onto Luminance), and its per-source "Stretch Layers to Fit" (Lumit renders the Source at
+this raster, so there is nothing to stretch). **AE's "None" source layer is not
+reproduced**: what that plug-in does with an unchosen source is not documented anywhere the
+project could check, and Lumit will not copy behaviour it has only guessed at, so the
+import reports such a channel and leaves it at its identity default (§11 §5).
 
 ---
 

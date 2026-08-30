@@ -363,6 +363,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &MotionBlur,
     &MatteKey,
     &SetMatte,
+    &SetChannels,
     &BroadcastSafe,
     &Invert,
     &Tint,
@@ -2290,6 +2291,38 @@ impl GpuEffect for SetMatte {
                 invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
                 mix,
             },
+        )
+    }
+}
+
+struct SetChannels;
+impl GpuEffect for SetChannels {
+    fn match_name(&self) -> &'static str {
+        "set_channels"
+    }
+    /// **The Source row is not a matte** (K-429): it is this effect's own Layer
+    /// row, rendered alone at this raster and arriving on the ordinary
+    /// auxiliary-layer carriage beside Light wrap's Background. The universal
+    /// Matte row stays, so the generic strength dissolve runs beside this kernel
+    /// as it does for every effect that does not claim its matte.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (picks, mix) = effects::set_channels::SetChannels::read(p).packed();
+        fx.set_channels(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.layer_input(),
+            &lumit_gpu::fx::SetChannelsOp { picks, mix },
         )
     }
 }
@@ -6878,6 +6911,113 @@ mod tests {
             source,
             "Set matte must consume nothing from the matte carriage"
         );
+    }
+
+    /// **Set channels reads a Source layer *and* keeps its Matte row.**
+    ///
+    /// It is Set matte's neighbour and the opposite arrangement, which is the
+    /// silent-failure this pins: both effects take another layer's channel,
+    /// both bind it off the layer-input carriage, and one of them carries no
+    /// Matte row while the other keeps the generic strength dissolve. Wiring
+    /// the source onto the matte list would compile, render, and quietly hand
+    /// the kernel nothing — indistinguishable from an unset row. So the test
+    /// walks the whole route: a texture on the layer-input list reaches the
+    /// kernel, the same texture on the matte list does not, and the schema
+    /// still declares the universal `Strength` matte.
+    #[test]
+    fn set_channels_reads_a_source_layer_and_keeps_its_matte_row() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        // Opaque white, so a change in the picture is the channels moving.
+        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
+        // A left half opaque and a right half clear, so Alpha from Source alpha
+        // is unmistakable.
+        let shape: Vec<f32> = (0..(w * h))
+            .flat_map(|i| {
+                let lit = f32::from(i % w < w / 2);
+                [lit, lit, lit, lit]
+            })
+            .collect();
+        let shape_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &shape, w, h);
+
+        let mut inst = lumit_core::fx::instantiate("set_channels").expect("a built-in");
+        for p in &mut inst.params {
+            if p.id == "alpha_from" {
+                // Source alpha: index 8 of SET_CHANNELS_OPTIONS.
+                p.value = lumit_core::model::EffectValue::Choice(8);
+            }
+        }
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            0.0,
+            ((w * w + h * h) as f32).sqrt(),
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        let schema = ops.iter().next().expect("one op").def.schema();
+        assert_eq!(
+            schema.matte,
+            lumit_core::fx::MatteRole::Strength,
+            "Set channels keeps the universal Matte row: its source is not a matte"
+        );
+        assert_eq!(
+            schema.layer_input(),
+            Some("source"),
+            "the Source row is the auxiliary layer, not the matte"
+        );
+
+        let rendered = |layers: &[crate::fxops::LayerInput],
+                        mattes: &[crate::fxops::LayerInput]| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                &ops,
+                &[],
+                &[],
+                &[],
+                layers,
+                &[],
+                mattes,
+                &[],
+                &[],
+                None,
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+
+        // Bound on the layer-input list: the alpha becomes the source's.
+        let cut = rendered(&[crate::fxops::LayerInput::Texture(shape_tex.clone())], &[]);
+        for y in 0..h {
+            let left = ((y * w) * 4 + 3) as usize;
+            let right = ((y * w + w - 1) * 4 + 3) as usize;
+            assert_eq!(cut[left], 1.0, "the opaque half must stay opaque");
+            assert_eq!(cut[right], 0.0, "the clear half must be cut away");
+        }
+
+        // The same texture on the *matte* list reaches the kernel not at all:
+        // it is the generic strength dissolve there, and this pick has no
+        // source to read, so every alpha goes to zero rather than half of them.
+        let on_matte = rendered(
+            &[crate::fxops::LayerInput::Absent],
+            &[crate::fxops::LayerInput::Texture(shape_tex)],
+        );
+        for y in 0..h {
+            let left = ((y * w) * 4 + 3) as usize;
+            assert_eq!(
+                on_matte[left], 0.0,
+                "a Source pick with no layer bound reads zero, whatever the matte says"
+            );
+        }
     }
 
     /// **Fast motion blur reads a flow field, a Motion vectors layer and a

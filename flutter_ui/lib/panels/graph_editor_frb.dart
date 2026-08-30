@@ -50,6 +50,7 @@ export 'graph_clipboard.dart';
 export 'graph_edits.dart';
 export 'graph_key_fields.dart';
 export 'graph_painters.dart';
+
 /// How wide a keyframe's grab target is, and a tangent handle's. Both are
 /// bigger than the glyph they carry: these are small marks that must be
 /// caught first time, and a miss on a handle is worse than a miss on empty
@@ -72,7 +73,6 @@ const double _selectedKeyGlyph = 12;
 /// the box, so a key at a corner keeps every gesture it has and the edge is
 /// grabbable everywhere else along its length (P5).
 const double _boxGrab = 10;
-
 
 // ---------------------------------------------------------------------------
 // The pane.
@@ -1627,7 +1627,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (replaced) return out;
     // The playhead genuinely sits between keys and the plant has not landed
     // yet: show the key the release will write, in order.
-    final planted = keyframeAmong(out,
+    final planted = keyframeAmong(
+        out,
         timeOfSubframe(row.frame.toDouble(), widget.fpsNum, widget.fpsDen),
         row.value);
     final at = out.indexWhere((k) => keyFrame(k, widget.fps) > row.frame);
@@ -2535,7 +2536,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 }
 
-
 /// How wide the **value gutter** is: the drawing's 34px strip down the right
 /// of the graph, on a translucent ground, where every value label lives
 /// (§12A.2 — "value labels live in a fixed right-hand gutter, never on the
@@ -2674,8 +2674,11 @@ class _GraphPainter extends CustomPainter {
       } else {
         for (var x = 0.0; x <= size.width; x += step) {
           final seconds = axis.frameAtExact(x) / f;
+          // The line is held inside the parameter's hard range (M28's
+          // leftover, [GraphChannel.drawnValueAt]). Unbounded channels — a
+          // transform, a mask value, the Retime — clamp nothing.
           final v = chLens == GraphLens.value
-              ? evaluateKeys(keys, seconds)
+              ? channel.drawnValueAt(keys, seconds)
               : evaluateKeysSpeed(keys, seconds) * speedScale;
           final point = Offset(x, _yOf(v, range, size));
           if (first) {

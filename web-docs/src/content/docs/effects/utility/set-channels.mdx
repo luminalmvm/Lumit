@@ -1,0 +1,69 @@
+---
+title: Set channels
+description: "Every output channel told which channel of which layer it comes from."
+---
+
+Set channels is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Four dropdowns, one per output channel, each saying where that channel is fetched from:
+one of this layer's own four channels or its brightness, the same five off a **Source**
+layer you pick, or flat on and flat off. It is how a depth pass is moved into the alpha,
+how a luma pass becomes a red channel, and how a colour is thrown away without a Fill.
+
+At its defaults it copies each channel to itself, so adding it changes nothing until you
+tell a channel where to come from.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source** | Layer | Any layer in the composition | None | - |
+| **Red from** | Dropdown | Red · Green · Blue · Alpha · Luminance · Source red · Source green · Source blue · Source alpha · Source luminance · Full on · Full off | Red | - |
+| **Green from** | Dropdown | Red · Green · Blue · Alpha · Luminance · Source red · Source green · Source blue · Source alpha · Source luminance · Full on · Full off | Green | - |
+| **Blue from** | Dropdown | Red · Green · Blue · Alpha · Luminance · Source red · Source green · Source blue · Source alpha · Source luminance · Full on · Full off | Blue | - |
+| **Alpha from** | Dropdown | Red · Green · Blue · Alpha · Luminance · Source red · Source green · Source blue · Source alpha · Source luminance · Full on · Full off | Alpha | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source**: the other layer the five **Source** options read. Leave it unset and those
+  options read nothing at all — black, and clear in the alpha.
+- **Red from**, **Green from**, **Blue from**, **Alpha from**: where each output channel
+  comes from. The first five options are this layer's own red, green, blue, alpha and
+  brightness; the next five are the Source layer's same five; **Full on** and **Full off**
+  are 1 and 0 everywhere.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+Note that the Source layer may be this layer, which is worth knowing when you are
+converting an After Effects project: After Effects gives every output channel its own
+layer picker, and Lumit's one Source row plus the five *this layer* options cover the same
+ground for every project we have measured.
+
+## Related
+
+- [Set matte](/effects/utility/set-matte/)
+- [Invert](/effects/utility/invert/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

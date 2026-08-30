@@ -49,6 +49,7 @@ Map<String, String> get _table => {
       "Alpha": l10n.fxAlpha,
       "Alpha bias": l10n.fxAlphaBias,
       "Alpha blur": l10n.fxAlphaBlur,
+      "Alpha from": l10n.fxAlphaFrom,
       "Amount": l10n.fxAmount,
       "Amplitude": l10n.fxAmplitude,
       "Analyse": l10n.fxAnalyse,
@@ -142,6 +143,7 @@ Map<String, String> get _table => {
       "Bezier warp": l10n.fxBezierWarp,
       "Black and white": l10n.fxBlackAndWhite,
       "Blue blur": l10n.fxBlueBlur,
+      "Blue from": l10n.fxBlueFrom,
       "Blues": l10n.fxBlues,
       "Border": l10n.fxBorder,
       "Both": l10n.fxBoth,
@@ -407,6 +409,8 @@ Map<String, String> get _table => {
       "Fractal type": l10n.fxFractalType,
       "Frame rate": l10n.fxFrameRate,
       "Frequency": l10n.fxFrequency,
+      "Full off": l10n.fxFullOff,
+      "Full on": l10n.fxFullOn,
       "Gain": l10n.fxGain,
       "Gamma": l10n.fxGamma,
       "Gaussian": l10n.fxGaussian,
@@ -423,6 +427,7 @@ Map<String, String> get _table => {
       "Gradient": l10n.fxGradient,
       "Green": l10n.fxGreen,
       "Green blur": l10n.fxGreenBlur,
+      "Green from": l10n.fxGreenFrom,
       "Greens": l10n.fxGreens,
       "Hard": l10n.fxHard,
       "Hard colour": l10n.fxHardColour,
@@ -573,6 +578,7 @@ Map<String, String> get _table => {
       "Rectangular to polar": l10n.fxRectangularToPolar,
       "Red": l10n.fxRed,
       "Red blur": l10n.fxRedBlur,
+      "Red from": l10n.fxRedFrom,
       "Reds": l10n.fxReds,
       "Reduce brightness": l10n.fxReduceBrightness,
       "Reduce saturation": l10n.fxReduceSaturation,
@@ -624,6 +630,7 @@ Map<String, String> get _table => {
       "Seed": l10n.fxSeed,
       "Segments": l10n.fxSegments,
       "Sepia": l10n.fxSepia,
+      "Set channels": l10n.fxSetChannels,
       "Set matte": l10n.fxSetMatte,
       "Shadow amount": l10n.fxShadowAmount,
       "Shadow colour": l10n.fxShadowColour,
@@ -648,8 +655,13 @@ Map<String, String> get _table => {
       "Soft light": l10n.fxSoftLight,
       "Softness": l10n.fxSoftness,
       "Source": l10n.fxSource,
+      "Source alpha": l10n.fxSourceAlpha,
+      "Source blue": l10n.fxSourceBlue,
+      "Source green": l10n.fxSourceGreen,
       "Source height": l10n.fxSourceHeight,
       "Source layer": l10n.fxSourceLayer,
+      "Source luminance": l10n.fxSourceLuminance,
+      "Source red": l10n.fxSourceRed,
       "Source width": l10n.fxSourceWidth,
       "Spherize": l10n.fxSpherize,
       "Spiky": l10n.fxSpiky,
@@ -1055,7 +1067,9 @@ String? colourProblem(String key, Map<String, String> args) {
   final sentence = _colourRefusal(key, (name) => args[name] ?? '');
   if (sentence == null) return null;
   final inSpace = args['in_space'] ?? '';
-  return inSpace.isEmpty ? sentence : l10n.ocioProblemInSpace(sentence, inSpace);
+  return inSpace.isEmpty
+      ? sentence
+      : l10n.ocioProblemInSpace(sentence, inSpace);
 }
 
 String? _colourRefusal(String key, String Function(String) a) {

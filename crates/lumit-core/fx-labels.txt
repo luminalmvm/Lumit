@@ -9,6 +9,7 @@ All edges
 Alpha
 Alpha bias
 Alpha blur
+Alpha from
 Amount
 Amplitude
 Analyse
@@ -45,6 +46,7 @@ Block size
 Bloom
 Blue
 Blue blur
+Blue from
 Blues
 Blur & sharpen
 Border
@@ -246,6 +248,8 @@ Fractal noise
 Fractal type
 Frame rate
 Frequency
+Full off
+Full on
 Gain
 Gamma
 Gaussian
@@ -266,6 +270,7 @@ Gradient
 Gravity
 Green
 Green blur
+Green from
 Greens
 Grid
 Hard
@@ -488,6 +493,7 @@ Rectangle outline
 Rectangular to polar
 Red
 Red blur
+Red from
 Reds
 Reduce brightness
 Reduce saturation
@@ -546,6 +552,7 @@ Seed
 Segment length
 Segments
 Sepia
+Set channels
 Set matte
 Shadow amount
 Shadow colour
@@ -577,8 +584,13 @@ Soft colour
 Soft light
 Softness
 Source
+Source alpha
+Source blue
+Source green
 Source height
 Source layer
+Source luminance
+Source red
 Source width
 Spacing
 Spacing x

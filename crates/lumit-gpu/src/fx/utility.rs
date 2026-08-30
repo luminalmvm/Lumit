@@ -1,6 +1,7 @@
-//! The utility and transition kernels (docs/08 §3.44, §3.46–§3.47): Set matte,
-//! Linear wipe and Radial wipe — the effects that decide how much of a pixel
-//! there is rather than what colour it is.
+//! The utility and transition kernels (docs/08 §3.44, §3.46–§3.47, §3.94): Set
+//! matte, Linear wipe, Radial wipe and Set channels — the effects that decide
+//! how much of a pixel there is, or which of its numbers goes where, rather than
+//! what colour it is.
 //!
 //! Each op mirrors its `lumit_core::fx::cpu` parameter struct field-for-field so
 //! the kernel and the CPU oracle consume the identical numbers (K-031). Nothing
@@ -34,6 +35,26 @@ struct SetMatteParams {
     invert: f32,
     mix_amt: f32,
     _pad: [f32; 3],
+}
+
+/// One resolved Set channels (docs/08 §3.94). Mirrors the arguments of
+/// `lumit_core::fx::cpu::set_channels`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SetChannelsOp {
+    /// `SET_CHANNELS_OPTIONS` indices for R, G, B and A: 0..4 this layer's
+    /// R/G/B/A/luminance, 5..9 the Source layer's, 10 full on, 11 full off.
+    pub picks: [u32; 4],
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SetChannelsParams {
+    picks: [u32; 4],
+    source_on: f32,
+    mix_amt: f32,
+    _pad: [f32; 2],
 }
 
 /// One resolved Linear wipe (docs/08 §3.46). Mirrors
@@ -130,6 +151,44 @@ impl FxEngine {
                 invert: f32::from(op.invert),
                 mix_amt: op.mix,
                 _pad: [0.0; 3],
+            }),
+        );
+        out
+    }
+
+    /// Apply one Set channels (docs/08 §3.94) to a linear working texture,
+    /// returning a new texture of the same size. One pass.
+    ///
+    /// `source` is this effect's **own** layer row (K-429), not a matte: it
+    /// rides the ordinary auxiliary-layer carriage and reaches the kernel
+    /// through the same optional-second-texture seam a matte does. With none
+    /// bound every `Source …` pick reads zero, and the four `This layer` picks
+    /// still shuffle the picture, so the pass is not a passthrough merely
+    /// because no layer was named.
+    pub fn set_channels(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        source: Option<&wgpu::Texture>,
+        op: &SetChannelsOp,
+    ) -> wgpu::Texture {
+        let out = work_texture(ctx, w, h, "fx-set-channels-out");
+        self.dispatch_matted(
+            ctx,
+            &self.set_channels,
+            src,
+            src,
+            source,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&SetChannelsParams {
+                picks: op.picks,
+                source_on: f32::from(source.is_some()),
+                mix_amt: op.mix,
+                _pad: [0.0; 2],
             }),
         );
         out

@@ -242,6 +242,7 @@ pub struct FxEngine {
     /// and the only one for which the matte *is* the output rather than a
     /// modifier of it.
     set_matte: wgpu::ComputePipeline,
+    set_channels: wgpu::ComputePipeline,
     /// Linear wipe (docs/08 §3.46): a straight edge swept across the frame.
     linear_wipe: wgpu::ComputePipeline,
     /// Radial wipe (docs/08 §3.47): a wedge swept round a centre.

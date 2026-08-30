@@ -2,6 +2,7 @@
 // (docs/07 §5) — selected properties as curves, key drags, easing, the F9
 // family, the speed lens, and keyframe copy/paste.
 
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -1125,6 +1126,35 @@ void main() {
       expect(channels.single.clampToBounds(140), 100);
       expect(channels.single.clampToBounds(-20), 0);
       expect(channels.single.clampToBounds(40), 40);
+
+      // **And the line drawn between two in-range keys is held there too** —
+      // the rest of M28. Both keys below sit exactly on the bound and both
+      // lean away from it, so the cubic between them bulges past 100: a
+      // completion the parameter cannot hold, drawn as if it could.
+      const lean =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 240, influence: 60));
+      final bulging = [
+        for (final (f, v) in [(0, 100.0), (100, 100.0)])
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: f),
+            value: v,
+            interpIn: lean,
+            interpOut: lean,
+          ),
+      ];
+      final at = [
+        for (var f = 1; f < 100; f++)
+          rationalSeconds(p.comp.timeOfFrame(frame: f))
+      ];
+      expect(at.map((t) => evaluateKeys(bulging, t)).reduce(math.max),
+          greaterThan(100),
+          reason: 'the span really does overshoot — otherwise this proves '
+              'nothing about the clamp');
+      expect(
+          at
+              .map((t) => channels.single.drawnValueAt(bulging, t))
+              .reduce(math.max),
+          100);
     });
 
     /// A transform has no parameter range to be held inside, so its curve is

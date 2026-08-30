@@ -104,6 +104,7 @@ use super::effects::{
     scanlines::{Scanlines, ScanlinesDef},
     scatter::{Scatter, ScatterDef},
     scribble::{Scribble, ScribbleDef},
+    set_channels::{SetChannels, SetChannelsDef},
     set_matte::{SetMatte, SetMatteDef},
     shadow_highlight::{ShadowHighlight, ShadowHighlightDef},
     shake::{Shake, ShakeDef},
@@ -221,6 +222,9 @@ crate::catalogue![
     MatteKeyDef => MatteKey,
     // Set matte, at the Utility family's end (K-400).
     SetMatteDef => SetMatte,
+    // Set channels, beside it: the same question asked of all four channels
+    // rather than only of the alpha.
+    SetChannelsDef => SetChannels,
     // Broadcast safe (docs/08 §3.69, K-405), after it — a delivery tool rather
     // than a look, which is what Utility is for.
     BroadcastSafeDef => BroadcastSafe,

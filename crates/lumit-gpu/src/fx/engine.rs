@@ -350,6 +350,7 @@ impl FxEngine {
         let chan_blur_mod = module(include_str!("../fx_chanblur.wgsl"), "fx-channel-blur");
         let drop_shadow_mod = module(include_str!("../fx_dropshadow.wgsl"), "fx-drop-shadow");
         let set_matte_mod = module(include_str!("../fx_setmatte.wgsl"), "fx-set-matte");
+        let set_channels_mod = module(include_str!("../fx_setchannels.wgsl"), "fx-set-channels");
         let linear_wipe_mod = module(include_str!("../fx_linearwipe.wgsl"), "fx-linear-wipe");
         let radial_wipe_mod = module(include_str!("../fx_radialwipe.wgsl"), "fx-radial-wipe");
         let venetian_blinds_mod = module(
@@ -469,6 +470,7 @@ impl FxEngine {
         let channel_blur = pipeline(&chan_blur_mod, "fx-channel-blur", "channel_blur");
         let drop_shadow = pipeline(&drop_shadow_mod, "fx-drop-shadow", "drop_shadow");
         let set_matte = pipeline(&set_matte_mod, "fx-set-matte", "set_matte");
+        let set_channels = pipeline(&set_channels_mod, "fx-set-channels", "set_channels");
         let linear_wipe = pipeline(&linear_wipe_mod, "fx-linear-wipe", "linear_wipe");
         let radial_wipe = pipeline(&radial_wipe_mod, "fx-radial-wipe", "radial_wipe");
         let venetian_blinds = pipeline(
@@ -690,6 +692,7 @@ impl FxEngine {
             channel_blur,
             drop_shadow,
             set_matte,
+            set_channels,
             linear_wipe,
             radial_wipe,
             venetian_blinds,

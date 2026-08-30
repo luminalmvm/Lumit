@@ -2554,6 +2554,54 @@
   "@fxSeed": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxSetChannels": "Set channels",
+  "@fxSetChannels": {
+    "description": "Effect name in the Add effect menu — every output channel is told which channel of which layer it comes from."
+  },
+  "fxRedFrom": "Red from",
+  "@fxRedFrom": {
+    "description": "Effect controls — a control on Set channels: which channel of which layer this output channel comes from."
+  },
+  "fxGreenFrom": "Green from",
+  "@fxGreenFrom": {
+    "description": "Effect controls — a control on Set channels: which channel of which layer this output channel comes from."
+  },
+  "fxBlueFrom": "Blue from",
+  "@fxBlueFrom": {
+    "description": "Effect controls — a control on Set channels: which channel of which layer this output channel comes from."
+  },
+  "fxAlphaFrom": "Alpha from",
+  "@fxAlphaFrom": {
+    "description": "Effect controls — a control on Set channels: which channel of which layer this output channel comes from."
+  },
+  "fxSourceRed": "Source red",
+  "@fxSourceRed": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the Source layer's red."
+  },
+  "fxSourceGreen": "Source green",
+  "@fxSourceGreen": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the Source layer's green."
+  },
+  "fxSourceBlue": "Source blue",
+  "@fxSourceBlue": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the Source layer's blue."
+  },
+  "fxSourceAlpha": "Source alpha",
+  "@fxSourceAlpha": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the Source layer's alpha."
+  },
+  "fxSourceLuminance": "Source luminance",
+  "@fxSourceLuminance": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the Source layer's brightness."
+  },
+  "fxFullOn": "Full on",
+  "@fxFullOn": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 1 everywhere."
+  },
+  "fxFullOff": "Full off",
+  "@fxFullOff": {
+    "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 0 everywhere."
+  },
   "fxSetMatte": "Set matte",
   "@fxSetMatte": {
     "description": "Effect name in the Add effect menu — takes another layer's channel as this layer's transparency."

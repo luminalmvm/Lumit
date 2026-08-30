@@ -11362,6 +11362,189 @@
       "matte_role": "none"
     },
     {
+      "slug": "set-channels",
+      "match_name": "set_channels",
+      "label": "Set channels",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "red_from",
+          "label": "Red from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Red",
+            "Green",
+            "Blue",
+            "Alpha",
+            "Luminance",
+            "Source red",
+            "Source green",
+            "Source blue",
+            "Source alpha",
+            "Source luminance",
+            "Full on",
+            "Full off"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "green_from",
+          "label": "Green from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Red",
+            "Green",
+            "Blue",
+            "Alpha",
+            "Luminance",
+            "Source red",
+            "Source green",
+            "Source blue",
+            "Source alpha",
+            "Source luminance",
+            "Full on",
+            "Full off"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "blue_from",
+          "label": "Blue from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Red",
+            "Green",
+            "Blue",
+            "Alpha",
+            "Luminance",
+            "Source red",
+            "Source green",
+            "Source blue",
+            "Source alpha",
+            "Source luminance",
+            "Full on",
+            "Full off"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "alpha_from",
+          "label": "Alpha from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Red",
+            "Green",
+            "Blue",
+            "Alpha",
+            "Luminance",
+            "Source red",
+            "Source green",
+            "Source blue",
+            "Source alpha",
+            "Source luminance",
+            "Full on",
+            "Full off"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
+    },
+    {
       "slug": "broadcast-safe",
       "match_name": "broadcast_safe",
       "label": "Broadcast safe",

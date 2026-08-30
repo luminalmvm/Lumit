@@ -20050,3 +20050,49 @@ somebody else's index: a reference that cannot be resolved is None, never a gues
 Regression test: `a_layer_reference_is_reported_as_a_stacking_index_not_a_layer_id`
 (`aep::props`).
 
+## K-644 — Set channels has one Source layer, and every channel picker names it or this layer
+
+**Status: DECIDED (2026-08-30).** Adds [08-EFFECTS.md](08-EFFECTS.md) §3.94 and the
+`ADBE Set Channels` row of `crates/lumit-import/ae-effect-map.toml`.
+
+**What After Effects has.** Set Channels gives each of the four output channels its own
+**layer picker** and its own channel dropdown: eight controls, four of which are layer
+references. It is the third most-used effect in the reference project that Lumit had nothing
+for at all — ten instances.
+
+**What the carriage allows.** Since K-429 an effect carries a matte and **one** auxiliary
+layer, both settled by the schema rather than by a table (docs/impl/layer-input.md). Four
+layer rows would need four carriages, and widening the carriage for one effect is the seam
+that arrangement was built to avoid.
+
+**So the four fold onto one, and the fold is not a loss.** The question each picker actually
+asks is *is this channel mine or somebody else's*, and "mine" needs no carriage at all: the
+option list names this layer's five channels and the Source layer's same five, twelve
+options in one dropdown per output, ending at Full on and Full off where After Effects ends
+its own. Every one of the ten instances in the reference project is covered exactly — six
+take all four channels off a single other layer, two take three off one layer and the fourth
+off the layer the effect is on, and two name a source of None. A project wanting a second
+source layer adds a second copy of the effect, which is the honest shape of that ask.
+
+**The Source row is not a matte** (K-429's test). A matte answers "how much of me happens
+here" and this row answers "where do these numbers come from", so it rides the ordinary
+auxiliary-layer carriage beside Light wrap's Background and Texturize's Texture, and the
+universal Matte row stays where it is, doing the generic strength dissolve. "Reassign the
+channels, but only over the sky" is a sentence that needs both.
+
+**Two things the effect does that no other layer-input effect does.** Its defaults are the
+**identity** assignment rather than a no-op it grew into — any other default would scramble
+a picture the moment the effect was added, and After Effects' own default is the same. And
+an **unset Source row is not a passthrough**: the four `This layer` picks are a shuffle of
+the picture the stack already carries, so they work with nothing bound, and a `Source …`
+pick then reads zero, because a picture nobody has supplied contributes nothing.
+
+**After Effects' "None" source is reported, not reproduced.** What that plug-in does with an
+unchosen source is not documented anywhere this project can check, and the import will not
+copy behaviour it has only guessed at (docs/11 §5's "never the closest guess"), so such a
+channel is reported and left at its identity default. Two of the ten instances carry one.
+
+Regression tests: `wgsl_set_channels_matches_the_cpu_oracle` (lumit-gpu),
+`set_channels_reads_a_source_layer_and_keeps_its_matte_row` (lumit-render),
+`set_channels_folds_four_source_layers_onto_one_source_row` (lumit-import).
+
