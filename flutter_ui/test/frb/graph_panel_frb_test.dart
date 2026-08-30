@@ -1246,6 +1246,124 @@ void main() {
           reason: 'two picked is no single point to stop at');
     });
 
+    // --- The image chain's own wires (K-674, owner item 10) ----------------
+    //
+    // The chain is the effect list (§1.1), so every gesture on its wires
+    // lowers to the stack's own ops: re-route = reorder, discard = the fed
+    // box leaves the list, neighbours joining by construction.
+
+    List<String> chainNames(LayerReference layer) =>
+        [for (final e in layer.getEffects()) e.getInfo().name];
+
+    Finder chainInput(LayerReference layer, int i) => find.byKey(ValueKey<String>(
+        'graph-socket-effect:${stackIds(layer)[i]}-input'));
+
+    testWidgets('a chain wire dropped on empty takes the fed effect out',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      expect(chainNames(p.layer), ['blur', 'exposure']);
+
+      // Grab the wire feeding the exposure box and drop it on bare canvas.
+      final at = tester.getCenter(chainInput(p.layer, 1));
+      await tester.dragFrom(at, const Offset(40, 220));
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['blur'],
+          reason: 'the connection went, and with it the box it fed — the '
+              'honest inverse of dropping a box into a wire');
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
+          reason: 'a wire being taken off is not a wire looking for a node');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'one gesture, one undo step');
+    });
+
+    testWidgets('unplugging the Layer out takes the last effect',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      final at = tester
+          .getCenter(find.byKey(const ValueKey<String>('graph-socket-out-image')));
+      await tester.dragFrom(at, const Offset(40, 220));
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['blur'],
+          reason: 'the wire into Layer out is the last effect\'s place');
+    });
+
+    testWidgets('a chain wire dropped on another chain input reorders',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      // The wire Source → blur, dropped on exposure's input: the Source feeds
+      // exposure now, so exposure moves to the head of the stack.
+      final from = tester.getCenter(chainInput(p.layer, 0));
+      final to = tester.getCenter(chainInput(p.layer, 1));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['exposure', 'blur'],
+          reason: 'rewiring the chain is a reorder (§1.1)');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'one reorder op, one undo step');
+    });
+
+    testWidgets('a chain wire dropped on the Layer out moves its source last',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      // The wire blur → exposure, dropped on the Layer out: blur feeds the
+      // out now, so blur moves to the end of the stack.
+      final from = tester.getCenter(chainInput(p.layer, 1));
+      final to = tester
+          .getCenter(find.byKey(const ValueKey<String>('graph-socket-out-image')));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['exposure', 'blur']);
+    });
+
+    testWidgets('a stationary press on a chain input changes nothing',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      await tester.tapAt(tester.getCenter(chainInput(p.layer, 1)));
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'a chain discard costs an effect, so a slip must not be one');
+    });
+
+    testWidgets('a chain wire dropped on a driver socket is declined',
+        (tester) async {
+      final p = withTwoEffects();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      p.uiState.model.refresh();
+      await tester.pump();
+      await mount(tester, p);
+
+      final from = tester.getCenter(chainInput(p.layer, 1));
+      final to = tester.getCenter(socket('driver:$wiggle', 'amount'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'the picture\'s path cannot leave the chain, and nothing '
+              'crossed the bridge');
+    });
+
     // --- Named groups (K-651) ---------------------------------------------
 
     /// A temporary library folder, cleaned up with the test.

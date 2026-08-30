@@ -20920,3 +20920,34 @@ alone` (graph_panel_frb_test); `the graph's add surface is the console, in its o
 words` (graph_panel_metrics_test); `the console adds a box, committed as one undo step`,
 `a wire dropped on empty canvas opens the console`, `a wheel over the console leaves the
 inner zoom alone` (shader_graph_frb_test).
+
+## K-674 — The image chain's wires answer the gestures stored wires answer
+
+**Status: DECIDED (2026-08-30).** Owner's item 10: "connections between effect boxes in
+the image chain cannot be removed." Extends the N5 grab to the chain, inside K-445's one
+rule — the chain *is* the effect list, so every answer lowers to the stack's own ops:
+
+- Pressing a **chain input** picks the wire feeding it up by its far end, exactly as a
+  stored wire is grabbed. A chain output still takes no drag: a fresh chain wire is not
+  a thing that can exist.
+- Dropped on **another chain input**, it re-routes — node-graph.md §1.1's "rewiring the
+  chain = reorder": the box whose input took the drop moves to sit right after the
+  wire's source (one `reorder` op); dropped on the Layer out, it is the source that
+  moves, to the end of the list.
+- Dropped on **empty canvas**, the connection goes the only honest way a derived wire
+  can: the box it fed leaves the list (`remove`), neighbours joining by construction —
+  the inverse of N7's drop-into-a-wire insert. The Heal toggle governs stored wires; the
+  chain, as Delete already records, heals by construction either way. Unplugging the
+  Layer out takes the last effect, which is the box that connection is.
+- A press that never travelled does nothing — a chain discard costs an effect, and that
+  must never be a slip's price — and a drop on any non-chain socket is declined without
+  a bridge call. No console opens from a chain drop: a wire being taken off is not a
+  wire looking for a node.
+
+Each answer is one op and therefore one undo step.
+
+Regression tests: `a chain wire dropped on empty takes the fed effect out`, `unplugging
+the Layer out takes the last effect`, `a chain wire dropped on another chain input
+reorders`, `a chain wire dropped on the Layer out moves its source last`, `a stationary
+press on a chain input changes nothing`, `a chain wire dropped on a driver socket is
+declined` (graph_panel_frb_test).

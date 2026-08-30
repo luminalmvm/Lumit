@@ -488,8 +488,14 @@ class _InFlight {
   /// for a wire being drawn afresh.
   final BridgeGraphEdge? detached;
 
+  /// An **image-chain** wire in hand (K-674): the chain index of the box the
+  /// grabbed wire feeds. The chain's wires are not stored anywhere — they are
+  /// the effect list — so the drag carries the index rather than an edge, and
+  /// the drop lowers to the stack's own ops. Null for every stored wire.
+  final int? chain;
+
   Offset to;
-  _InFlight(this.from, this.to, {this.detached});
+  _InFlight(this.from, this.to, {this.detached, this.chain});
 }
 
 /// Boxes being dragged: where the pointer took hold, and where each box being
@@ -881,6 +887,95 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     ]));
   }
 
+  // --- The image chain's own wires (K-674) --------------------------------
+
+  /// A chain wire let go (owner item 10). The chain **is** the effect list
+  /// (§1.1), so both answers lower to the stack's own ops, each one op and so
+  /// one undo step:
+  ///
+  /// * **on another chain input** — re-route, which §1.1 names outright:
+  ///   "rewiring the chain = reorder". The box whose input took the drop
+  ///   moves to sit right after the wire's source; dropped on the Layer out,
+  ///   it is the source that moves, to the end of the list.
+  /// * **on empty canvas** — the connection goes, and the only honest way a
+  ///   derived wire can go is for the box it fed to leave the list: the
+  ///   effect is removed, its neighbours joining by construction — the
+  ///   inverse of N7's drop-into-a-wire insert. The Heal toggle governs
+  ///   stored wires; the chain, as Delete already documents, "heals by
+  ///   construction either way". Unplugging the Layer out takes the last
+  ///   effect, which is the box that connection is.
+  ///
+  /// A drop on anything else — a driver socket, a parameter — is declined
+  /// without a bridge call: the picture's path cannot leave the chain.
+  void _chainDrop(int held, _Socket? landed, _Layout layout) {
+    final layer = _layer;
+    final chain = layout.chain;
+    if (layer == null || held < 1 || held >= chain.length) return;
+    final upstream = _effectIdOf(chain[held - 1].node.node);
+
+    if (landed == null) {
+      final victim =
+          _effectIdOf(chain[held].node.node) ?? upstream;
+      if (victim == null) return; // Source → Out: no effect to take out.
+      try {
+        for (final instance in layer.getEffects()) {
+          if (instance.id() == victim) {
+            layer.removeEffect(effect: instance);
+            break;
+          }
+        }
+      } catch (_) {
+        // Refused, or the stack moved under us; re-reading is the recovery.
+      }
+      _ui?.model.refresh();
+      _reload();
+      return;
+    }
+
+    if (!_isChainType(landed.port.portType) || !landed.isInput) return;
+    final j = chain.indexWhere(
+        (b) => graphNodeKey(b.node.node) == graphNodeKey(landed.node));
+    if (j < 0 || j == held) return;
+    final moved = _effectIdOf(chain[j].node.node);
+    if (moved == null) {
+      // Dropped on the Layer out: the wire's source becomes the last effect.
+      if (upstream != null) _reorderToEnd(layer, upstream);
+    } else {
+      _reorderAfter(layer, moved, upstream);
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  /// Move [moved] to sit immediately after [after] in the stack — null puts
+  /// it first, which is what a wire out of the Source means. One `reorder`
+  /// op, so one undo step.
+  void _reorderAfter(LayerReference layer, UuidValue moved, UuidValue? after) {
+    try {
+      final stack = layer.getEffects();
+      final ids = [for (final e in stack) e.id()];
+      final from = ids.indexOf(moved);
+      if (from < 0 || moved == after) return;
+      var to = after == null ? 0 : ids.indexOf(after) + 1;
+      if (after != null && to == 0) return;
+      // `newIndex` is the slot in the list *after* removal.
+      if (from < to) to -= 1;
+      if (to != from) layer.reorderEffect(effect: stack[from], newIndex: to);
+    } catch (_) {
+      // Refused, or the stack moved under us; re-reading is the recovery.
+    }
+  }
+
+  void _reorderToEnd(LayerReference layer, UuidValue moved) {
+    try {
+      final stack = layer.getEffects();
+      final from = stack.indexWhere((e) => e.id() == moved);
+      if (from < 0 || from == stack.length - 1) return;
+      layer.reorderEffect(effect: stack[from], newIndex: stack.length - 1);
+    } catch (_) {
+      // Refused, or the stack moved under us; re-reading is the recovery.
+    }
+  }
 
   /// The stored wire landing on [socket], if one does.
   BridgeGraphEdge? _edgeInto(_Socket socket) {
@@ -1516,7 +1611,35 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _pressAt = event.localPosition;
 
     final socket = layout.socketAt(at);
-    if (socket != null && !_isChainType(socket.port.portType)) {
+    if (socket != null && _isChainType(socket.port.portType)) {
+      // **The image chain's wires can be picked up too** (K-674, owner item
+      // 10: "connections between effect boxes can't be removed"). Pressing a
+      // chain *input* takes hold of the wire feeding it, by its far end,
+      // exactly as a stored wire is grabbed — drop it on another chain input
+      // to re-route (a stack reorder), or on empty canvas to take the fed box
+      // out of the chain. A chain *output* still takes no drag: one output
+      // feeding one input is the list's own law, and a fresh chain wire is
+      // not a thing that can exist.
+      if (socket.isInput) {
+        final chain = layout.chain;
+        final i = chain.indexWhere(
+            (b) => graphNodeKey(b.node.node) == graphNodeKey(socket.node));
+        if (i >= 1) {
+          final upstream = chain[i - 1];
+          final portId = i - 1 == 0 ? 'image' : 'output';
+          final k = upstream.outputs.indexWhere((p) => p.id == portId);
+          final from = upstream.socket(portId, false);
+          if (k >= 0 && from != null) {
+            setState(() => _flight = _InFlight(
+                _Socket(upstream.node.node, upstream.outputs[k], false, from),
+                at,
+                chain: i));
+            return;
+          }
+        }
+      }
+      // Fall through: a press on a chain output lands on the box beneath.
+    } else if (socket != null) {
       // **A wire that is already there is grabbed by its far end** (owner, desk
       // test: "connections that already exist can't be un-done"). Pressing a
       // wired input used to start a *second* wire from that input, which no
@@ -1654,6 +1777,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (_flight case final flight?) {
       setState(() => _flight = null);
       final landed = layout.socketAt(at);
+      if (flight.chain case final held?) {
+        // A press that never travelled is no gesture at all here: a stored
+        // wire unplugs on a stationary click, but a chain wire's discard
+        // costs an effect, and that must never be the price of a slip.
+        if (moved) _chainDrop(held, landed, layout);
+        return;
+      }
       if (flight.detached case final held?) {
         // The wire in hand came off an input. Dropped on another socket that
         // will take it, it moves there; dropped on anything else — empty
@@ -2579,6 +2709,9 @@ class _GraphPainter extends CustomPainter {
     // the stack view impossible to contradict.
     final chain = layout.chain;
     for (var i = 0; i + 1 < chain.length; i++) {
+      // The chain wire in the hand (K-674) is the dashed flight, not a drawn
+      // segment: the wire has visibly left its input.
+      if (flight?.chain == i + 1) continue;
       final from = chain[i].socket(i == 0 ? 'image' : 'output', false);
       final to = chain[i + 1]
           .socket(i + 1 == chain.length - 1 ? 'image' : 'input', true);
