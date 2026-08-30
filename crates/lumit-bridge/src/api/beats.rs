@@ -165,6 +165,32 @@ impl CompositionReference {
         })
     }
 
+    /// Confirm — or clear, with `None` — the beat grid by hand (K-698): the
+    /// road a typed BPM or a tap takes when no detection ran, and the road a
+    /// test seeds a grid down. One op, one undo step; a tempoless grid is
+    /// refused by the op itself.
+    #[frb(sync)]
+    pub fn set_beat_grid(&self, grid: Option<BridgeBeatGrid>) -> Result<(), BridgeError> {
+        let grid = match grid {
+            None => None,
+            Some(g) => Some(lumit_core::model::BeatGrid {
+                bpm: g.bpm,
+                phase: lumit_core::Rational::from_f64_on_grid(g.phase_seconds, 1000)
+                    .map_err(|_| BridgeError::InvalidTime)?,
+            }),
+        };
+        let state = self.project()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(lumit_core::Op::SetBeatGrid {
+                comp: self.id,
+                grid,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// The comp's confirmed beat grid (K-698), or `None` while no detection
     /// with a tempo has run — what the beat band numbers bars from.
     #[frb(sync)]

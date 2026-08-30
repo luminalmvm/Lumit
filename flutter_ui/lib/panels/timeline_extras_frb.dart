@@ -14,6 +14,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
@@ -1524,6 +1525,33 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 ),
               ),
             ),
+            // The beat band's bar numbers (K-698, docs/09 §5): dim marks in
+            // the ruler's lower row, from the confirmed grid — the same row
+            // the markers and the work-area band already share, because
+            // K-682 pinned the ruler's geometry and a third band would push
+            // every row under it. The beat ticks themselves are the beat
+            // markers below, dressed as ticks.
+            if (beatGridOf(comp) case final grid?)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: widget.height / 2,
+                bottom: TimelineCacheBar.height,
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    key: const ValueKey('tl-beat-bars'),
+                    painter: BeatBandPainter(
+                      grid: grid,
+                      axis: axis,
+                      fps: widget.fps,
+                      label: t.mono.copyWith(
+                        fontSize: 7,
+                        color: t.textMuted.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             // The work area's two edges, draggable (K-202). Grabbable rather
             // than drawn-only: the menu's "set from playhead" is precise but
             // roundabout, and a span you can see is one you expect to be able
@@ -1733,12 +1761,19 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       _escape.end();
                       _abandonMarkerDrag();
                     },
-                    child: MarkerFlag(
-                      label: marker.label,
-                      fill: t.marker,
-                      pill: t.surface4,
-                      text: markerLabelStyle(t),
-                    ),
+                    // A detected beat wears a tick, not a flag (K-698): the
+                    // board's grammar, and the only one that survives forty
+                    // of them in a row. It is still the same marker with the
+                    // same drag, menu and snapping — only the clothing
+                    // changed.
+                    child: marker.isBeat
+                        ? BeatTick(fill: t.animated)
+                        : MarkerFlag(
+                            label: marker.label,
+                            fill: t.marker,
+                            pill: t.surface4,
+                            text: markerLabelStyle(t),
+                          ),
                   ),
                 ),
               ),
@@ -1918,6 +1953,127 @@ class _MarkerFlagPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MarkerFlagPainter old) => old.fill != fill;
+}
+
+/// A detected beat on the ruler (K-698): a small tick standing on the cache
+/// bar where an ordinary marker wears its flag. The same footprint as a flag,
+/// so the drag and the menu that come with being a marker keep their target;
+/// smaller and gold, so forty of them read as rhythm rather than as a picket
+/// fence of bookmarks.
+class BeatTick extends StatelessWidget {
+  /// The tick — the board draws it in the animated gold, the colour that
+  /// already means "generated, in step with the music".
+  final Color fill;
+
+  /// How tall the tick stands off the ruler's floor. Shorter than a flag's
+  /// point: a beat is a member of a crowd, not a labelled place.
+  static const double pointHeight = 4;
+
+  const BeatTick({super.key, required this.fill});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: MarkerFlag.width,
+        height: MarkerFlag.height,
+        child: CustomPaint(painter: _BeatTickPainter(fill: fill)),
+      );
+}
+
+class _BeatTickPainter extends CustomPainter {
+  final Color fill;
+
+  const _BeatTickPainter({required this.fill});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Base on the floor, point up — the flag's own stance, at beat size.
+    final base = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(size.width / 2 - 3, base)
+        ..lineTo(size.width / 2 + 3, base)
+        ..lineTo(size.width / 2, base - BeatTick.pointHeight)
+        ..close(),
+      Paint()..color = fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BeatTickPainter old) => old.fill != fill;
+}
+
+/// Where the beat band's bar numbers land (K-698): each labelled bar and the
+/// frame it starts on, from the confirmed grid — four beats to the bar, the
+/// labelling step doubling (1, 2, 4, 8 bars…) until neighbouring numbers
+/// clear each other at the current zoom.
+///
+/// A function of its own so the maths is testable without a canvas: the
+/// painter draws exactly this list.
+List<({int bar, double frame})> beatBarLabels({
+  required BridgeBeatGrid grid,
+  required double fps,
+  required double perFrame,
+  required double untilFrame,
+  double minLabelPx = 34,
+}) {
+  if (grid.bpm <= 0 || fps <= 0 || perFrame <= 0 || untilFrame <= 0) {
+    return const [];
+  }
+  final secondsPerBar = 240.0 / grid.bpm;
+  final barPx = secondsPerBar * fps * perFrame;
+  if (barPx <= 0) return const [];
+  var step = 1;
+  while (barPx * step < minLabelPx && step < 1 << 16) {
+    step *= 2;
+  }
+  final out = <({int bar, double frame})>[];
+  for (var bar = 1;; bar += step) {
+    final frame = (grid.phaseSeconds + (bar - 1) * secondsPerBar) * fps;
+    if (frame > untilFrame) break;
+    if (frame >= 0) out.add((bar: bar, frame: frame));
+  }
+  return out;
+}
+
+/// The bar numbers along the ruler's lower row, dim and mono — the beat
+/// band's own furniture, beside the ticks the beat markers wear.
+class BeatBandPainter extends CustomPainter {
+  final BridgeBeatGrid grid;
+  final TimelineAxis axis;
+  final double fps;
+  final TextStyle label;
+
+  const BeatBandPainter({
+    required this.grid,
+    required this.axis,
+    required this.fps,
+    required this.label,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final at in beatBarLabels(
+      grid: grid,
+      fps: fps,
+      perFrame: axis.perFrame,
+      untilFrame: axis.frames.toDouble(),
+    )) {
+      final x = axis.xOf(at.frame);
+      if (x < -20 || x > size.width + 20) continue;
+      final painter = TextPainter(
+        text: TextSpan(text: '${at.bar}', style: label),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(canvas, Offset(x + 2, 0));
+    }
+  }
+
+  @override
+  bool shouldRepaint(BeatBandPainter old) =>
+      old.grid != grid ||
+      old.axis != axis ||
+      old.fps != fps ||
+      old.label != label;
 }
 
 /// Ask for what a marker says. Returns the new label, or null when the user

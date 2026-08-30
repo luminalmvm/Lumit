@@ -14,6 +14,7 @@
 // — is the only thing that can change a frame rate, and therefore the only
 // thing that can make a remembered answer wrong.
 
+import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
@@ -107,6 +108,27 @@ void writeMarkers(CompositionReference comp, List<BridgeMarker> markers) {
   _markers.remove(comp);
 }
 
+/// A comp's confirmed beat grid (K-698), remembered until the document
+/// changes — the ruler's beat band reads it on every rebuild, and what it
+/// answers can only change when the document does. `null` is an answer too
+/// (no grid confirmed), so presence in the map is what "asked already" means.
+final _beatGrids = <CompositionReference, BridgeBeatGrid?>{};
+
+/// The comp's beat grid, from memory when it is there. Prefer this to
+/// `comp.getBeatGrid()` anywhere that runs during a build or a paint.
+BridgeBeatGrid? beatGridOf(CompositionReference comp) {
+  if (_beatGrids.containsKey(comp)) return _beatGrids[comp];
+  BridgeBeatGrid? grid;
+  try {
+    grid = comp.getBeatGrid();
+  } catch (_) {
+    // A comp mid-close answers nothing; ask again next time.
+    return null;
+  }
+  _beatGrids[comp] = grid;
+  return grid;
+}
+
 /// The engine's answers to "what does this curve read at this time",
 /// remembered per (scalar, time): the engine still computes each answer, once,
 /// rather than once per rebuild of every animated row (K-184). A freezed
@@ -191,6 +213,7 @@ void clearCompTimeCache({bool rate = true}) {
     _frames.clear();
   }
   _markers.clear();
+  _beatGrids.clear();
   _scalarSamples.clear();
   // [_hot] deliberately survives: it is not an answer that can go stale, only
   // the list of curves something drew last. Emptying it would cost the next

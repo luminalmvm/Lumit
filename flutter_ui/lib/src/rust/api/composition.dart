@@ -1114,6 +1114,14 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceSetBackground(
           that: this, rgba: rgba);
 
+  /// Confirm — or clear, with `None` — the beat grid by hand (K-698): the
+  /// road a typed BPM or a tap takes when no detection ran, and the road a
+  /// test seeds a grid down. One op, one undo step; a tempoless grid is
+  /// refused by the op itself.
+  void setBeatGrid({BridgeBeatGrid? grid}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
+          that: this, grid: grid);
+
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
