@@ -105,4 +105,45 @@ void main() {
       expect(layerDropSlot(const [], 500), 0);
     });
   });
+
+  /// Which blocks a lazy half has to build. Pure for the same reason the drag
+  /// maths is: both halves window against it, and they have to agree exactly
+  /// or the table comes apart.
+  group('the window a viewport builds', () {
+    // A hundred even rows: 2200 tall against a 200 viewport.
+    final tall = List<double>.filled(100, 22);
+
+    test('an unmeasured viewport builds the whole stack', () {
+      expect(blockWindow(tall, 0, 0), (0, 100));
+    });
+
+    test('a stack shorter than the band is built whole', () {
+      // Three screenfuls is 600, and ten rows is 220.
+      expect(blockWindow(List<double>.filled(10, 22), 0, 200), (0, 10));
+    });
+
+    test('a screenful either side of the rows in view', () {
+      // Scrolled to 660: the band runs 460..1060, rows 20 through 48.
+      final (first, last) = blockWindow(tall, 660, 200);
+      expect(first, 20);
+      expect(last, 49);
+      expect(last - first, lessThan(30),
+          reason: 'the cost follows the viewport, not the hundred rows');
+    });
+
+    test('the band slides back onto the stack at either end', () {
+      // At the very bottom there is nothing below to spend the lower third
+      // on, so it is spent above instead: the band is three screenfuls
+      // wherever it sits.
+      final (first, last) = blockWindow(tall, 2000, 200);
+      expect(last, 100, reason: 'the last row is in view');
+      // Three screenfuls of 22px rows, give or take the row the band's edge
+      // happens to fall inside.
+      expect(last - first, inInclusiveRange(27, 29),
+          reason: 'and the band is the size it is in the middle');
+      // The same at the top, where the offset cannot go negative.
+      expect(blockWindow(tall, 0, 200).$1, 0);
+      expect(blockWindow(tall, 0, 200).$2, 28);
+    });
+  });
 }

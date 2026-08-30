@@ -19797,3 +19797,104 @@ it is set, so every effect in the table follows without an edit of its own.
 Regression test: `a_motion_tile_is_measured_against_its_own_layer_not_the_composition`
 (`lumit-import`) — a 2560 × 1088 precomp in a 1920 × 816 comp whose Motion Tile carries only
 Output Width, asserting the centre, both tile sizes and both output sizes are the layer's.
+
+## K-638 — The Timeline builds the rows in view, and blanks for the rest
+
+**Status:** DECIDED — 2026-08-30
+
+Both halves of the Timeline built **every** layer's block in a `Column` inside a scroll
+view, so the cost of the panel followed the composition rather than the panel. Measured on
+the owner's `songcutfull` precomp, 2026-08-28: a select-all, a twirl or a `U` walked
+thousands of widgets, and a delete rebuilt 2330. A comp with two thousand layers built two
+thousand rows and two thousand bars to show a dozen of each.
+
+**The ordinary answer does not fit.** A sliver list windows a scroll view by giving the
+viewport the coordinate space, and the lane half draws four things *across* the stack in
+the **stack's own** pixels — the work-area wash, the marquee that catches keyframes, the
+row seams, and the key-block box, whose places come from a walk down the row heights
+(`_selectedKeyPlaces`, `_keysIn`). Moving those into a viewport's space means shifting
+every one of them by the scroll offset, which is four coordinate translations bought to
+save one `Column`.
+
+**So the stack keeps its height and loses its contents.** `LazyBlocks`
+(`timeline_metrics_frb.dart`) builds a blank for everything above the window, the blocks in
+the window, and a blank for everything below — from the same `blockHeights` list both
+halves already read, so the two windows cannot disagree and the two `maxScrollExtent`s stay
+equal, which is what the scroll mirror rests on. Every overlay, `layerDropSlot`,
+`layerDragTarget` and `LayerDragSlide` are untouched: they measure the stack, and the stack
+is the height it always was.
+
+The window is **three screenfuls** — the one in view and one either side — and is slid back
+onto the stack at either end rather than left hanging off it, so a short stack is built
+whole. The margin is not padding: a layer drag slides the blocks it passes, and a block
+that slid in from just off screen must be a real widget to slide, while the dragged block
+itself travels no further than the pointer, which is inside the viewport.
+
+This does **not** reverse the refusal to merge the two halves into one scrollable
+(`docs/TODO.md`, *The Timeline's two halves are still two widget trees*): the ruler still
+cannot ride the vertical scroll, and the outline still must not ride the horizontal one.
+What the merge was reaching for — cost that follows the view — is what this buys, with the
+two trees left where they are.
+
+Regression tests: `a select-all costs the rows on screen, not the rows in the comp`
+(`rebuild_budget_test.dart`) — two hundred layers in a 300px panel, asserting 28 rows and
+28 bars rather than two hundred of each — and `the window a viewport builds`
+(`timeline_drag_test.dart`), which pins the arithmetic without a widget tree.
+
+## K-639 — The Curves blob is decoded, and the decode carries its own proof
+
+**DECIDED 2026-08-30.** K-410 recorded an honesty note: After Effects' own scripting
+cannot read a `CUSTOM_VALUE` property, so **Curves imported as a placeholder** — its
+five channels' control points live in one such blob. K-412 left the target standing
+("the day a blob decoder lands, the target can carry the whole curve"). The decoder
+has landed, and this entry records what it found and the rule it works under.
+
+**The layout**, 1,644 bytes, written out in `docs/impl/ae-import.md` §7.2 and
+implemented in `crates/lumit-import/src/map/curves.rs`: four bytes of header (a
+version word, 1), then **five baked 256-entry lookup tables** — After Effects' own
+answer for each 8-bit input — then **five records of 72 bytes**, sixteen `(x, y)`
+pairs of big-endian 16-bit numbers followed by a `u32` count (2..=16) and an `i32`
+selected-point index. Both halves run in the channel order After Effects' own Channel
+menu lists and docs/08 §3.30 declares: **Master, Red, Green, Blue, Alpha**.
+Coordinates are 8-bit display values, so a point crosses to Lumit's unit square as
+`x / 255`, and at most sixteen of them is exactly the sixteen `CurvePoints` holds —
+nothing is sampled away.
+
+**The decode carries its own proof, at run time.** The blob's two halves are written
+by different code inside After Effects, and they agree: **every control point sits
+exactly on the table baked from it**, `table[x] == y` to the byte, on all 95 channels
+of the nineteen Curves instances in the reference project and on the golden fixture's.
+A misread offset, a wrong endianness or a shifted record breaks that agreement at
+once — so the check is not a test that ran once. `decode` performs it on **every blob
+it is handed** and refuses one that fails, which means a future After Effects that
+changes the layout gets the placeholder it used to get rather than a curve of the
+wrong shape. This is the general rule the entry is worth writing down for: *a format
+read by inference ships with the inference re-checked on every file*, never with a
+comment saying it was checked once.
+
+**Which route, which outcome.** The bytes are only in the file, so **the direct `.aep`
+route maps Curves** and a **Bridge bundle still places it** — its capture has the
+property and no bytes. That is K-410's own division ("the Bridge cannot read a
+`CUSTOM_VALUE` blob and the direct parser can") reaching the one effect it was written
+about, and it supersedes K-412's clause that "Curves still imports as a placeholder"
+for the direct route only.
+
+**What the points cannot carry**, as two `EffectDiffers` rows rather than silence:
+the curve bends **scene-linear light** where After Effects bent display values; and
+the line drawn between the points is Lumit's **clamped** cubic where After Effects
+draws a **natural** one. The second is measured rather than asserted — a natural
+spline reproduced all 95 of the reference project's baked tables byte for byte, and
+Lumit's clamped fit through the same points parts from them by up to 15/255 between
+the outer points of a steep bend, 1–2/255 on the ordinary grades. Whether §3.30's end
+condition should become the natural one now that After Effects' is known is a
+question for the effect, and is left open rather than answered here; the importer
+does not bend the points to hide it.
+
+Regression tests: `the Curves blob decodes to the curve After Effects baked`
+(`aep_differential.rs`) re-derives the offsets longhand against the golden `.aep`'s
+own bytes — so a change to the decoder cannot make the test agree with it by
+construction — asserts `table[x] == y` at every point, and then asserts the mapped
+document holds a real Curves with five identity diagonals and the two rows; and
+`map::curves`' own unit tests, which build blobs to the layout and pin every way one
+is refused (short, long, unknown version, count out of range, byte-swapped, a record
+read at a shifted offset, a point off the table).

@@ -561,6 +561,155 @@ class LayerDragSlide extends StatelessWidget {
   }
 }
 
+/// Which blocks a viewport [viewport] tall, scrolled to [offset], has to have
+/// built — as `[first, last)` into [heights].
+///
+/// **Three screenfuls: the one in view and one either side of it**, which is
+/// not a guess. Two things reach outside the visible band and both are bounded
+/// by it — a layer drag slides the blocks it passes by the dragged block's own
+/// height, and the dragged block itself travels no further than the pointer,
+/// which is inside the viewport. Build a screenful either side and every block
+/// a gesture can move is a real widget while it moves.
+///
+/// The band is **slid back onto the stack** at either end of the scroll rather
+/// than left hanging off it, so a stack shorter than three screenfuls is built
+/// whole and a long one is given the same room at its ends as in its middle.
+///
+/// A viewport of zero has not been measured yet — before the first layout, or
+/// in a test that never gave the panel a size — and windows nothing away, since
+/// hiding the whole table is a worse answer than building it.
+(int, int) blockWindow(List<double> heights, double offset, double viewport) {
+  if (viewport <= 0) return (0, heights.length);
+  final span = viewport * 3;
+  var content = 0.0;
+  for (final h in heights) {
+    content += h;
+  }
+  final slack = content - span;
+  final top = slack <= 0 ? 0.0 : (offset - viewport).clamp(0.0, slack);
+  final bottom = top + span;
+  var first = heights.length;
+  var last = 0;
+  var y = 0.0;
+  for (var i = 0; i < heights.length; i++) {
+    final next = y + heights[i];
+    if (next > top && y < bottom) {
+      if (i < first) first = i;
+      last = i + 1;
+    }
+    y = next;
+  }
+  return first < last ? (first, last) : (0, 0);
+}
+
+/// A stack of layer blocks with only the ones in view built, and the rest held
+/// open by a blank above and a blank below.
+///
+/// **Why this rather than a `ListView`.** Both halves of the Timeline built
+/// every layer's block in a `Column` inside a scroll view, so a select-all, a
+/// twirl or a `U` on the owner's `songcutfull` precomp walked thousands of
+/// widgets and a delete rebuilt 2330 — cost that grew with the layer count
+/// rather than with what is on screen. A sliver list is the ordinary answer,
+/// and it cannot be used here: the lane half draws its ground, its marquee,
+/// its row seams and its key-block box as `Positioned.fill` overlays *in
+/// content coordinates* over the same stack, and a viewport would take that
+/// stack's coordinate space away from them. Two blanks keep the content
+/// exactly the height it always was — which is also what keeps the two halves'
+/// `maxScrollExtent` equal, the thing the scroll mirror rests on — while the
+/// middle costs what is visible.
+class LazyBlocks extends StatefulWidget {
+  const LazyBlocks({
+    super.key,
+    required this.controller,
+    required this.heights,
+    required this.viewport,
+    required this.builder,
+  });
+
+  /// The scroll this stack sits in. Listened to rather than rebuilt from
+  /// above: only a scroll that brings a *different* block into view costs
+  /// anything at all.
+  final ScrollController controller;
+
+  /// Every block's height, in order — [LayerRow.height], which both halves
+  /// already hand down as `blockHeights`.
+  final List<double> heights;
+
+  /// The viewport's height, from the half's own `LayoutBuilder`.
+  final double viewport;
+
+  final Widget Function(BuildContext context, int index) builder;
+
+  @override
+  State<LazyBlocks> createState() => _LazyBlocksState();
+}
+
+class _LazyBlocksState extends State<LazyBlocks> {
+  /// The last offset a single attached position reported. Held rather than
+  /// read, because [positionOf] answers null for the frame a rebuild has two
+  /// views on one controller — and taking that as zero would snap the window
+  /// to the top of the stack and blank the rows being looked at.
+  double _offset = 0;
+  late (int, int) _window = _windowNow();
+
+  (int, int) _windowNow() {
+    _offset = positionOf(widget.controller)?.pixels ?? _offset;
+    return blockWindow(widget.heights, _offset, widget.viewport);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(covariant LazyBlocks old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_follow);
+      widget.controller.addListener(_follow);
+    }
+    // An edit or a resize is rebuilding this anyway, and either can change
+    // which blocks are in view, so take the window again rather than hold one
+    // measured against heights that have gone.
+    _window = _windowNow();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_follow);
+    super.dispose();
+  }
+
+  void _follow() {
+    final next = _windowNow();
+    if (next == _window) return;
+    setState(() => _window = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (first, last) = _window;
+    var above = 0.0;
+    for (var i = 0; i < first && i < widget.heights.length; i++) {
+      above += widget.heights[i];
+    }
+    var below = 0.0;
+    for (var i = last; i < widget.heights.length; i++) {
+      below += widget.heights[i];
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (above > 0) SizedBox(height: above),
+        for (var i = first; i < last; i++) widget.builder(context, i),
+        if (below > 0) SizedBox(height: below),
+      ],
+    );
+  }
+}
+
 /// A controller's scroll position, or null when there is not exactly one
 /// view attached.
 ///

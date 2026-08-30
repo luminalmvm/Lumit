@@ -284,8 +284,7 @@ void main() {
       // The Timeline: the layer the effect belongs to is marked, and it was
       // redrawn to say so.
       final row = tester.widgetList<OutlineRow>(find.byType(OutlineRow)).where(
-          (r) =>
-              r.entry.layer.internallayerId == picked.layer.internallayerId);
+          (r) => r.entry.layer.internallayerId == picked.layer.internallayerId);
       expect(row, isNotEmpty, reason: 'the layer has a row on screen');
       expect(
         row.first.highlighted,
@@ -416,6 +415,95 @@ void main() {
       // And the shell heard it too (K-341): the Viewer outlines the layer a
       // picked row belongs to.
       expect(picked.ui.selectedProperties.value, contains(picked.path));
+    });
+
+    /// The **scale** rule, and the one the three budgets above cannot state:
+    /// what an interaction costs must follow the rows **on screen**, not the
+    /// rows the composition has.
+    ///
+    /// Measured on the owner's `songcutfull` precomp, 2026-08-28: both halves
+    /// of the Timeline built every layer's block in a `Column` inside a scroll
+    /// view, so a select-all walked thousands of widgets, a twirl and a `U`
+    /// walked them again, and a delete rebuilt 2330. Nothing above catches it,
+    /// because every fixture above is small enough that "every layer" and
+    /// "every layer on screen" are the same list.
+    ///
+    /// So the fixture here is deliberately far taller than its panel: two
+    /// hundred layers in a 300px Timeline, which shows a couple of dozen rows.
+    /// The claim is that the count is a function of the panel's height.
+    testWidgets(
+        'a select-all costs the rows on screen, not the rows in '
+        'the comp', (tester) async {
+      const layers = 200;
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      for (var i = 0; i < layers; i++) {
+        comp.addSolidLayer();
+      }
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+
+      // Short, so the stack cannot fit: this is the whole point of the
+      // fixture. Wide, so the outline's columns are not the thing being
+      // measured.
+      const size = Size(1600, 300);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: size,
+        child: const TimelinePanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      rebuilds
+        ..reset()
+        ..counting = true;
+      p.uiState.setSelection(comp.getLayers());
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+
+      // ignore: avoid_print
+      print('SELECT ALL REBUILDS ${rebuilds.total} over '
+          '${rebuilds.byName['OutlineRow'] ?? 0} rows and '
+          '${rebuilds.byName['Bar'] ?? 0} bars\n${rebuilds.ranking()}');
+      // **This is the assertion.** Measured at 28 rows and 28 bars: a
+      // screenful is roughly nine rows at this height and the window holds a
+      // screenful either side of it, so a drag has real widgets to slide. The
+      // cap is roughly 2x, in the house style. What must never come back is a
+      // count that tracks the *comp* — two hundred of each, whatever the panel
+      // is showing.
+      for (final name in ['OutlineRow', 'Bar']) {
+        expect(
+          rebuilds.byName[name] ?? 0,
+          lessThan(60),
+          reason: 'the $name count is following the comp rather than the '
+              'viewport:\n${rebuilds.ranking()}',
+        );
+      }
+      // And the same claim as a total, since a row's own subtree is most of
+      // what a rebuild costs: measured at 5033 for those 28 blocks, against
+      // the ~36,000 the same click cost when every layer was built.
+      expect(
+        rebuilds.total,
+        lessThan(10000),
+        reason: 'a select-all redrew the whole comp:\n${rebuilds.ranking()}',
+      );
+
+      // And the honest half: the rows that *are* on screen were redrawn, and
+      // they came up selected. A budget met by a panel that had simply stopped
+      // building rows would be an outline with nothing in it.
+      final rows = tester.widgetList<OutlineRow>(find.byType(OutlineRow));
+      expect(rows, isNotEmpty, reason: 'the outline still has rows on screen');
+      expect(rows.every((r) => r.selected), isTrue,
+          reason: 'every row on screen came up selected');
+      expect(rebuilds.byName['OutlineRow'] ?? 0, greaterThan(0),
+          reason: 'no row redrew, so nothing on screen changed:\n'
+              '${rebuilds.ranking()}');
     });
   }, skip: !engineAvailable);
 }

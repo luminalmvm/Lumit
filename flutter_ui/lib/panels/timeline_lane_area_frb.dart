@@ -271,7 +271,8 @@ class LayerArea extends StatelessWidget {
   /// bar's own build.
   final bool barNames;
 
-  const LayerArea({super.key, 
+  const LayerArea({
+    super.key,
     required this.comp,
     required this.rows,
     this.barNames = false,
@@ -654,172 +655,166 @@ class LayerArea extends StatelessWidget {
                                 onTapAt: _tapGround,
                               ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (var i = 0; i < rows.length; i++)
+                            // Only the blocks in view are built, the rest
+                            // held open by two blanks — so the stack keeps
+                            // the height every overlay around it is drawn
+                            // in this area's own pixels against, while a
+                            // long precomp costs what is on screen.
+                            LazyBlocks(
+                              controller: vScroll,
+                              heights: blockHeights,
+                              viewport: box.maxHeight,
+                              builder: (context, i) =>
                                   // The block slides by the same rule and
                                   // the same heights the outline's does, so
                                   // a layer dragged up the stack takes its
                                   // bar and its lanes with it (K-208).
                                   LayerDragSlide(
-                                    drag: layerDrag,
-                                    heights: blockHeights,
-                                    index: i,
-                                    child: Container(
-                                      // One outline around the layer's own
-                                      // bar row and everything its open
-                                      // view added, so it reads as one
-                                      // region belonging to one layer
-                                      // rather than as loose strips that
-                                      // happen to sit under it (K-248).
-                                      // A *foreground* decoration: a
-                                      // border in the ordinary one insets
-                                      // its child, which made the lane's
-                                      // block two pixels taller than the
-                                      // outline reserved and put the two
-                                      // halves back out of step. This
-                                      // paints over the content and
-                                      // occupies no layout at all.
-                                      foregroundDecoration:
-                                          rows[i].sequenceExtra != null
-                                              ? BoxDecoration(
-                                                  border: Border.all(
-                                                    color: t.accent
-                                                        .withValues(alpha: 0.5),
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                )
-                                              : null,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          // An open sequence view takes the
-                                          // layer's own bar row as the top
-                                          // of its clip area, so the bar
-                                          // itself stands down: three rows
-                                          // of clips is one region, and a
-                                          // bar drawn across the first of
-                                          // them would put a seam through
-                                          // the middle of it (K-248).
-                                          if (rows[i].sequenceExtra == null)
-                                            Bar(
-                                              key: ValueKey<String>(
-                                                  'tl-bar-${rows[i].id}'),
-                                              comp: comp,
-                                              entry: rows[i].entry,
-                                              axis: axis,
-                                              razor: razor,
-                                              selected: selectedIds.contains(
-                                                  rows[i]
-                                                      .entry
-                                                      .layer
-                                                      .internallayerId),
-                                              playheadFrame: () =>
-                                                  playhead.value,
-                                              onRazor: (frame) =>
-                                                  onRazor(rows[i].entry, frame),
-                                              razorFrameAt: razorFrameAt,
-                                              onSelect: () =>
-                                                  onSelect(rows[i].entry.layer),
-                                              onOpenSequence: rows[i]
-                                                          .entry
-                                                          .info
-                                                          .kind ==
+                                drag: layerDrag,
+                                heights: blockHeights,
+                                index: i,
+                                child: Container(
+                                  // One outline around the layer's own
+                                  // bar row and everything its open
+                                  // view added, so it reads as one
+                                  // region belonging to one layer
+                                  // rather than as loose strips that
+                                  // happen to sit under it (K-248).
+                                  // A *foreground* decoration: a
+                                  // border in the ordinary one insets
+                                  // its child, which made the lane's
+                                  // block two pixels taller than the
+                                  // outline reserved and put the two
+                                  // halves back out of step. This
+                                  // paints over the content and
+                                  // occupies no layout at all.
+                                  foregroundDecoration: rows[i].sequenceExtra !=
+                                          null
+                                      ? BoxDecoration(
+                                          border: Border.all(
+                                            color:
+                                                t.accent.withValues(alpha: 0.5),
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(3),
+                                        )
+                                      : null,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      // An open sequence view takes the
+                                      // layer's own bar row as the top
+                                      // of its clip area, so the bar
+                                      // itself stands down: three rows
+                                      // of clips is one region, and a
+                                      // bar drawn across the first of
+                                      // them would put a seam through
+                                      // the middle of it (K-248).
+                                      if (rows[i].sequenceExtra == null)
+                                        Bar(
+                                          key: ValueKey<String>(
+                                              'tl-bar-${rows[i].id}'),
+                                          comp: comp,
+                                          entry: rows[i].entry,
+                                          axis: axis,
+                                          razor: razor,
+                                          selected: selectedIds.contains(rows[i]
+                                              .entry
+                                              .layer
+                                              .internallayerId),
+                                          playheadFrame: () => playhead.value,
+                                          onRazor: (frame) =>
+                                              onRazor(rows[i].entry, frame),
+                                          razorFrameAt: razorFrameAt,
+                                          onSelect: () =>
+                                              onSelect(rows[i].entry.layer),
+                                          onOpenSequence:
+                                              rows[i].entry.info.kind ==
                                                       BridgeLayerKind.sequence
                                                   ? () => onOpenSequence
                                                       ?.call(rows[i].entry)
                                                   : null,
-                                              onChanged: onChanged,
-                                              dragPreview: dragPreview,
-                                              bounds: bounds[rows[i].id] ??
-                                                  BarBounds.free,
-                                              summaryKeys: rows[i].summaryKeys,
-                                              fps: fps,
-                                              snapTargets: snap,
-                                              magnet: magnet,
-                                              showName: barNames,
-                                            ),
-                                          // A Sequence layer's own clips and
-                                          // their speed envelope, in the room
-                                          // the row grew for them (K-248) —
-                                          // the same `sequenceExtra` the
-                                          // outline left the gap for, so the
-                                          // view and its room are one answer.
-                                          if (rows[i].sequenceExtra != null)
-                                            SequenceViewFrb(
-                                              key: ValueKey<String>(
-                                                  'tl-seq-${rows[i].id}'),
-                                              entry: rows[i].entry,
-                                              axis: axis,
-                                              fps: fps,
-                                              fpsNum: fpsNum,
-                                              fpsDen: fpsDen,
-                                              hScroll: hScroll,
-                                              style: waveformStyle,
-                                              razor: razor,
-                                              onRazor: (frame) =>
-                                                  onRazor(rows[i].entry, frame),
-                                              razorFrameAt: razorFrameAt,
-                                              onSelect: () =>
-                                                  onSelect(rows[i].entry.layer),
-                                              onClose: () => onOpenSequence
-                                                  ?.call(rows[i].entry),
-                                              // Whatever the row grew, less
-                                              // the two clip rows: the
-                                              // rest is the graph's, so
-                                              // the view fills exactly the
-                                              // room the outline left.
-                                              graphHeight:
-                                                  rows[i].sequenceExtra! -
-                                                      sequenceClipExtra,
-                                              onGraphHeight: (h) =>
-                                                  onGraphHeight?.call(
-                                                      rows[i].entry, h),
-                                              onPreview: (clip, keys) =>
-                                                  onClipPreview?.call(
-                                                      rows[i].entry,
-                                                      clip,
-                                                      keys),
-                                              onChanged: onChanged,
-                                            ),
-                                          // One lane per fold-out row the outline shows,
-                                          // from the same list it builds: keyframe rows
-                                          // draw their diamonds, the waveform row its
-                                          // peaks (K-172), the rest leave their room.
-                                          // **The key selection is listened
-                                          // to here, one layer at a time** —
-                                          // the seam that keeps a click on a
-                                          // property's name off the layers it
-                                          // did not touch.
-                                          if (rows[i].open)
-                                            _LayerKeys(
-                                              keys: selectedKeys,
-                                              layerId: rows[i].id,
-                                              builder: (context) => Column(
-                                                key: ValueKey<String>(
-                                                    'tl-lanes-${rows[i].id}'),
-                                                children: [
-                                                  for (final row
-                                                      in rows[i].drawnRows)
-                                                    SizedBox(
-                                                      height: t.density.laneRow,
-                                                      child: _lane(
-                                                          t,
-                                                          rows[i].entry,
-                                                          row,
-                                                          snap),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
+                                          onChanged: onChanged,
+                                          dragPreview: dragPreview,
+                                          bounds: bounds[rows[i].id] ??
+                                              BarBounds.free,
+                                          summaryKeys: rows[i].summaryKeys,
+                                          fps: fps,
+                                          snapTargets: snap,
+                                          magnet: magnet,
+                                          showName: barNames,
+                                        ),
+                                      // A Sequence layer's own clips and
+                                      // their speed envelope, in the room
+                                      // the row grew for them (K-248) —
+                                      // the same `sequenceExtra` the
+                                      // outline left the gap for, so the
+                                      // view and its room are one answer.
+                                      if (rows[i].sequenceExtra != null)
+                                        SequenceViewFrb(
+                                          key: ValueKey<String>(
+                                              'tl-seq-${rows[i].id}'),
+                                          entry: rows[i].entry,
+                                          axis: axis,
+                                          fps: fps,
+                                          fpsNum: fpsNum,
+                                          fpsDen: fpsDen,
+                                          hScroll: hScroll,
+                                          style: waveformStyle,
+                                          razor: razor,
+                                          onRazor: (frame) =>
+                                              onRazor(rows[i].entry, frame),
+                                          razorFrameAt: razorFrameAt,
+                                          onSelect: () =>
+                                              onSelect(rows[i].entry.layer),
+                                          onClose: () => onOpenSequence
+                                              ?.call(rows[i].entry),
+                                          // Whatever the row grew, less
+                                          // the two clip rows: the
+                                          // rest is the graph's, so
+                                          // the view fills exactly the
+                                          // room the outline left.
+                                          graphHeight: rows[i].sequenceExtra! -
+                                              sequenceClipExtra,
+                                          onGraphHeight: (h) => onGraphHeight
+                                              ?.call(rows[i].entry, h),
+                                          onPreview: (clip, keys) =>
+                                              onClipPreview?.call(
+                                                  rows[i].entry, clip, keys),
+                                          onChanged: onChanged,
+                                        ),
+                                      // One lane per fold-out row the outline shows,
+                                      // from the same list it builds: keyframe rows
+                                      // draw their diamonds, the waveform row its
+                                      // peaks (K-172), the rest leave their room.
+                                      // **The key selection is listened
+                                      // to here, one layer at a time** —
+                                      // the seam that keeps a click on a
+                                      // property's name off the layers it
+                                      // did not touch.
+                                      if (rows[i].open)
+                                        _LayerKeys(
+                                          keys: selectedKeys,
+                                          layerId: rows[i].id,
+                                          builder: (context) => Column(
+                                            key: ValueKey<String>(
+                                                'tl-lanes-${rows[i].id}'),
+                                            children: [
+                                              for (final row
+                                                  in rows[i].drawnRows)
+                                                SizedBox(
+                                                  height: t.density.laneRow,
+                                                  child: _lane(t, rows[i].entry,
+                                                      row, snap),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                              ],
+                                ),
+                              ),
                             ),
                             // The same wash again, over the bars this time: under
                             // them it was invisible along any row that had a layer
@@ -872,19 +867,19 @@ class LayerArea extends StatelessWidget {
                                     valueListenable: selectedKeys,
                                     builder: (context, _, __) =>
                                         KeyBlockOverlay(
-                              places: _selectedKeyPlaces(),
-                              axis: axis,
-                              stretch: stretch,
-                              magnet: magnet,
-                              snapTargets: snap,
-                              fpsNum: fpsNum,
-                              fpsDen: fpsDen,
-                              project: project,
-                              onEase: onEase,
-                              onChanged: onChanged,
-                              onSelectKey: _selectKey,
-                              onKeyMenu: onKeyMenu,
-                            ))),
+                                          places: _selectedKeyPlaces(),
+                                          axis: axis,
+                                          stretch: stretch,
+                                          magnet: magnet,
+                                          snapTargets: snap,
+                                          fpsNum: fpsNum,
+                                          fpsDen: fpsDen,
+                                          project: project,
+                                          onEase: onEase,
+                                          onChanged: onChanged,
+                                          onSelectKey: _selectKey,
+                                          onKeyMenu: onKeyMenu,
+                                        ))),
                           ],
                         ),
                       ),

@@ -5352,6 +5352,45 @@ effects, and puts the composition's back afterwards. A layer with no source pict
 own — a text layer, a shape, a null — draws at the composition's size, so for those two
 answers are the same one and nothing about them moved.
 
+### Reading a lump of bytes nobody documented, and proving you read it right (K-639)
+
+Most of an After Effects project file is made of parts we can identify: a number here, a
+name there, a list of keyframes. A few controls are not. After Effects lets an effect
+store whatever it likes in what it calls *arbitrary data* — a lump of bytes only that
+effect understands — and Curves is one of them: all five of its channels' control points
+live in one such lump. Worse, After Effects' own scripting refuses to hand those lumps
+over, so the script route could not see it at all and a Curves used to arrive as an empty
+placeholder. Reading the project file directly at least got us the lump. The question was
+what is inside it.
+
+There is no published answer, so the answer has to be worked out by staring at real
+examples — which is exactly the kind of work that produces something that *looks* right
+and quietly is not. What made this one safe is a lucky accident of how After Effects
+writes it. The lump holds the same information **twice**: once as the control points the
+user dragged, and once as a finished table of 256 answers — "an input of 40 comes out as
+57" — which After Effects worked out from those points and keeps around so it does not
+have to redo the sums. Two different pieces of code inside After Effects wrote those two
+halves. They can only agree if both have been read correctly.
+
+So the reading checks itself: every control point must land exactly on the table's own
+answer for its input, to the byte. That held for every channel of every Curves in the
+projects we had — and, more importantly, it is checked **every time a project is opened**,
+not once during development. A lump that fails the check is refused, and the effect goes
+back to being the placeholder it used to be. So if a future After Effects moves the
+furniture around, the worst that happens is the old behaviour returning with a line in the
+import report saying so — never a grade that is silently the wrong shape.
+
+That is the general habit worth taking away: when you have had to *infer* a format rather
+than read a specification, ship the inference with its own proof attached, and run the
+proof on every file. A comment saying "this was verified in August" is not a proof.
+
+The same trick answered a second question for free. The table also shows how After Effects
+draws the smooth line *between* the points, and it turns out to be a slightly different
+spline from the one Lumit's Curves draws — the two part by a couple of levels out of 255
+on an ordinary grade, and by about six on a very steep one. Nothing is fudged to hide
+that: the imported points are exactly After Effects' points, and the import report carries
+a line saying the line through them is drawn differently.
+
 ### The list of After Effects effects is a file, not a program (K-623)
 
 Every effect in After Effects has a second, hidden name that never changes: Gaussian
@@ -10302,6 +10341,36 @@ after every keyboard handler, so it is reached only when no rung claimed the pre
 that is the right place for it, because a field should not need to know the ladder exists.
 The order itself is written down in the interface spec (`docs/07-UI-SPEC.md` §14.1), which
 is the part a reader should be able to check the behaviour against.
+
+### Why a thousand-layer precomp is no slower than a ten-layer one
+
+A window on screen is not a picture. It is a tree of small pieces — a row, and inside it a
+switch, a name, a picker, a dot — and every one of those pieces is an object the toolkit
+has to make, measure and place. The Timeline used to make *all* of them: open a precomp
+with two thousand layers and both halves of the table built two thousand rows and two
+thousand bars, even though the panel is a few inches tall and shows perhaps a dozen. Then
+select everything, or twirl the stack open, or press `U`, and it made them all again.
+That is what the owner felt as the panel going treacly on `songcutfull`.
+
+The fix is the one every long list uses: build the rows you can see and leave the rest
+alone. What makes it awkward here is that the Timeline's lane half draws several things
+*across* the whole stack rather than inside any row — the shading that marks the work
+area, the box you drag to catch keyframes, the hairlines between rows, the frame around a
+block of selected keys. Each of those is positioned by measuring down from the top of the
+stack, so the stack has to keep its full height whether or not the rows in it exist.
+
+So the panel keeps the height and drops the contents. The list of rows becomes: a blank
+tall enough to stand in for everything above the view, then the real rows around the view,
+then a blank for everything below. The overlays measure down past the blanks exactly as
+they always did and land where they always did; the two halves of the table still add up
+to the same height, which is what keeps them scrolling in step. Scroll, and the panel
+works out which rows have come into range and swaps the blanks for them.
+
+It builds a little more than it shows — a screenful above and a screenful below. That is
+not padding for its own sake. While you drag a layer up or down the stack, the rows it
+passes slide out of its way, and a row that slid in from just off screen has to be a real
+row to slide at all. A screenful either side is more than any drag can reach, because your
+pointer never leaves the panel.
 
 
 ## 18. The Viewer's two strips, in plain terms
