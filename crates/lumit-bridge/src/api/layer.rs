@@ -4655,12 +4655,21 @@ impl LayerReference {
         Ok(())
     }
 
-    /// Append the built-in effect named `name` to this layer's stack.
+    /// Append the built-in effect named `name` to this layer's stack — or, when
+    /// `name` is a **driver**, to this layer's graph.
     ///
     /// Seeded at composition size, because a few effects' defaults are positions
     /// (a transform's anchor and position start at the centre of the frame), and
     /// a fresh effect should look like identity rather than dragging the picture
     /// to a corner. An unknown name is refused; nothing partial is committed.
+    ///
+    /// **The fork is here rather than in each caller.** A driver is browsed as
+    /// one more Controls entry, so the console, the Effect menu, the palette and
+    /// the browser all offer one — and a driver on an effect *stack* would be a
+    /// node that changes no pixel. Every one of those routes goes through this
+    /// method, so the one question "is this a driver" is asked once and the node
+    /// lands on the graph, unwired and unplaced (the panel auto-places a node
+    /// with no layout entry). One op either way, so one undo step either way.
     #[frb(sync)]
     pub fn add_effect(&self, name: String) -> Result<(), BridgeError> {
         let comp = self.composition()?;
@@ -4675,6 +4684,24 @@ impl LayerReference {
         // flare's Matte source, whose natural reading is "the lights in this
         // picture" — and on an adjustment layer, the composite below.
         lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+
+        if lumit_core::fx::BUILTIN_DEFS
+            .get(&name)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+        {
+            let mut graph = self.item()?.graph;
+            graph.nodes.push(instance);
+            let proj = self.project()?;
+            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store
+                .commit(lumit_core::Op::SetLayerGraph {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    graph: Box::new(graph),
+                })
+                .map_err(BridgeError::OpError)?;
+            return Ok(());
+        }
 
         self.with_effects(move |effects| {
             effects.push(instance);

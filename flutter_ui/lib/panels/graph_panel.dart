@@ -48,6 +48,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -129,16 +130,12 @@ Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
     ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
 }
 
-/// The glyphs in the toolbar and the search popover. A size down from the
+/// The glyphs in the toolbar. A size down from the
 /// row glyphs' 16 (K-456: the manifest's number, not a preference).
 const double graphIconSize = 13;
 
-/// The Tab search popover: the width of its content (the box is two wider,
-/// one for the hairline each side), and the three bands down it.
-const double graphSearchWidth = 220;
-const double graphSearchHeadHeight = 25;
-const double graphSearchRowHeight = 20;
-const double graphSearchFootHeight = 19;
+// The Tab search is the Ctrl+Space console (K-645): one search surface, opened
+// by two keys. `shell/fx_console_frb.dart` owns its shape.
 
 /// Where an unplaced box lands: the chain marches right, the drivers sit
 /// below it. The drawing's own spacing — a node's width plus 88 of air.
@@ -600,19 +597,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Offset? _marqueeTo;
   bool _marqueeAdds = false;
 
-  /// The Tab search: where it opened, and the wire (if any) that opened it.
-  Offset? _searchAt;
-  _Socket? _searchWire;
-  final TextEditingController _search = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
+  /// Whether the search console is up, so Tab cannot open a second one.
+  bool _searching = false;
 
   final FocusNode _canvasFocus = FocusNode(debugLabel: 'graph canvas');
-
-  @override
-  void initState() {
-    super.initState();
-    _search.addListener(() => setState(() {}));
-  }
 
   @override
   void didChangeDependencies() {
@@ -673,8 +661,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   @override
   void dispose() {
     _unbind();
-    _search.dispose();
-    _searchFocus.dispose();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -1119,19 +1105,43 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   // --- The Tab search -----------------------------------------------------
 
-  void _openSearch(Offset at, {_Socket? wire}) {
-    setState(() {
-      _searchAt = at;
-      _searchWire = wire;
-      _search.text = '';
-    });
-    _searchFocus.requestFocus();
+  /// Tab, and a wire let go over empty canvas, open **the console** (K-645) —
+  /// the same surface Ctrl+Space opens, with no ring to offer and a foot line
+  /// saying what a row will do. One search surface, two doors: what the canvas
+  /// contributes is the list (the drivers a dragged wire could land on), the
+  /// spot the box lands on, and the sentence.
+  Future<void> _openSearch(Offset at, {_Socket? wire}) async {
+    if (_searching) return;
+    setState(() => _searching = true);
+    final all = (widget.driversLister ?? listDrivers)();
+    try {
+      await showFxConsoleFrb(
+        context: context,
+        anchor: lastKnownPointerPosition,
+        model: FxConsoleModel(
+          radialTitle: '',
+          radial: const [],
+          keyHint: l10n.graphSearchKey,
+          footer: wire == null ? l10n.graphSearchAdds : l10n.graphSearchWires,
+          entries: [
+            // With a wire in hand the list is the entries that wire could
+            // actually land on, which is what makes the foot's sentence true:
+            // pick one and it is connected.
+            for (final driver in all)
+              if (wire == null || _fitsWire(driver, wire))
+                FxConsoleEntry(
+                  label: engineLabel(driver.label),
+                  kind: FxConsoleKind.effect,
+                  group: engineLabel(driver.categoryLabel),
+                  run: () => _addDriver(driver, at, wire),
+                ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
   }
-
-  void _closeSearch() => setState(() {
-        _searchAt = null;
-        _searchWire = null;
-      });
 
   /// Drop a driver where the search opened, and — with Auto-wire on and a wire
   /// in hand — join it to whichever of the new box's sockets fits.
@@ -1143,12 +1153,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// §3), which is what makes "drag a wire out, pick a driver" one undo step
   /// rather than two. It can, because a catalogue entry carries the ports it
   /// declares — the socket is known before the node is in the document.
-  void _addDriver(BridgeEffectInfo info) {
+  void _addDriver(BridgeEffectInfo info, Offset at, _Socket? wire) {
     final layer = _layer;
-    final at = _searchAt;
-    if (layer == null || at == null || _graph == null) return;
-    final wire = _searchWire;
-    _closeSearch();
+    if (layer == null || _graph == null) return;
 
     final BridgeEffectInstance made;
     try {
@@ -1286,10 +1293,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       _claimed = false;
       return;
     }
-    if (_searchAt != null) {
-      _closeSearch();
-      return;
-    }
+    // A press while the console is up never reaches here: it floats over the
+    // canvas in the overlay and its own scrim catches the click that means
+    // "never mind".
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
@@ -1612,7 +1618,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.tab && _searchAt == null) {
+        if (event.logicalKey == LogicalKeyboardKey.tab && !_searching) {
           _openSearch(_toCanvas(Offset(size.width / 2, size.height / 2)));
           return KeyEventResult.handled;
         }
@@ -1623,10 +1629,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         }
         return KeyEventResult.ignored;
       },
-      // The popover is a sibling of the canvas rather than a child of it: the
-      // canvas takes every pointer that lands on it — that is how a socket is
-      // grabbed without a gesture detector per socket — and a press inside the
-      // search would otherwise be read as a press on the ground behind it.
+      // The search floats in the overlay rather than here (K-645): the canvas
+      // takes every pointer that lands on it — that is how a socket is grabbed
+      // without a gesture detector per socket — so a popover drawn inside it
+      // would have its presses read as presses on the ground behind it.
       child: Stack(
         children: [
           Positioned.fill(
@@ -1731,7 +1737,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
               ),
             ),
           ),
-          if (_searchAt != null) _searchPopover(t),
         ],
       ),
     );
@@ -1766,120 +1771,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           ],
         ),
       );
-
-  Widget _searchPopover(LumitTheme t) {
-    final at = _searchAt!;
-    final needle = _search.text.trim().toLowerCase();
-    final all = (widget.driversLister ?? listDrivers)();
-    // With a wire in hand the list is the entries that wire could actually land
-    // on, which is what makes the footer's sentence true: pick one and it is
-    // connected. Without one, everything.
-    final wire = _searchWire;
-    final shown = [
-      for (final d in all)
-        if ((needle.isEmpty ||
-                engineLabel(d.label).toLowerCase().contains(needle)) &&
-            (wire == null || _fitsWire(d, wire)))
-          d,
-    ];
-    final screen = at * _zoom + _pan;
-    return Positioned(
-      left: screen.dx,
-      top: screen.dy,
-      // Not a `FloatSurface`: that one insets its child by 6 all round, and
-      // this popover's bands run edge to edge — the head's hairline is the
-      // full width of the box, which is how the drawing draws it. The float's
-      // *shadow* and radius are shared, so it still reads as one of the
-      // family rather than as a stray card.
-      child: Container(
-        // The content width, plus the hairline each side — the same reading
-        // the node card takes.
-        width: graphSearchWidth + 2,
-        decoration: BoxDecoration(
-          color: t.surface1,
-          borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-          border: Border.all(color: t.hairline),
-          boxShadow: t.floatShadow,
-        ),
-        child: Column(
-          key: const ValueKey('graph-search'),
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              key: const ValueKey('graph-search-head'),
-              height: graphSearchHeadHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: t.hairline)),
-              ),
-              child: Row(
-                children: [
-                  glyph.LumitIcon(LumitIcons.search,
-                      size: graphIconSize, colour: t.textMuted),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: HouseTextField(
-                      key: const ValueKey('graph-search-field'),
-                      controller: _search,
-                      focusNode: _searchFocus,
-                      width: 120,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(l10n.graphSearchKey,
-                      style: t.kicker.copyWith(letterSpacing: 0.54)),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final driver in shown)
-                    GestureDetector(
-                      key: ValueKey<String>('graph-search-${driver.name}'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _addDriver(driver),
-                      child: Container(
-                        height: graphSearchRowHeight,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(engineLabel(driver.label),
-                                  style: t.body,
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                            Text(engineLabel(driver.categoryLabel),
-                                style: t.kicker),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Container(
-              key: const ValueKey('graph-search-foot'),
-              height: graphSearchFootHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: t.hairline)),
-              ),
-              child: Text(
-                wire == null ? l10n.graphSearchAdds : l10n.graphSearchWires,
-                style: t.kicker.copyWith(letterSpacing: 0.54),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// One box on the canvas: a header strip carrying its enable tick, its twirl

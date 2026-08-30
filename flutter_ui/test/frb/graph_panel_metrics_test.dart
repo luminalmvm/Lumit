@@ -176,7 +176,7 @@ void main() {
           reason: 'hollow: the card\'s own ground shows through');
     });
 
-    /// 5. **The header wears the application's own grammar** (K-637): an
+    /// 5. **The header wears the application's own grammar** (K-645): an
     /// enable tick left of the name — the Effect controls heading's switch
     /// face, the same widget at the same scale — and a twirl beside it that
     /// opens the box up. No lettered badges: the canvas says what it means
@@ -325,9 +325,12 @@ void main() {
       expect(find.text('Types'), findsOneWidget);
     });
 
-    /// 8. **The search popover is 220 wide** with a 25/20/19 head, row and
-    /// footer, and the drawing's 13px glyph in its head.
-    testWidgets('the Tab search is the drawing\'s popover', (tester) async {
+    /// 8. **Tab opens the console** (K-645), wearing the canvas's own words:
+    /// the key that opened it in the head's kicker, and a foot line saying what
+    /// picking a row will do. The popover's own shape is the console's now, so
+    /// its numbers are asserted where it lives rather than here.
+    testWidgets('the Tab search is the console, in the canvas\'s words',
+        (tester) async {
       final p = withBlur();
       await mount(tester, p);
 
@@ -336,13 +339,14 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
 
-      expect(at(tester, 'graph-search').width, graphSearchWidth);
-      expect(at(tester, 'graph-search-head').height, graphSearchHeadHeight);
-      expect(at(tester, 'graph-search-foot').height, graphSearchFootHeight);
-      expect(at(tester, 'graph-search-wiggle').height, graphSearchRowHeight);
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
       expect(find.text('Tab'), findsOneWidget);
       expect(find.text('Adds a driver node'), findsOneWidget,
-          reason: 'no wire in hand, so the footer says what a pick will do');
+          reason: 'no wire in hand, so the foot says what a pick will do');
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
+          findsOneWidget,
+          reason: 'and with no ring to offer the list stands open');
     });
 
     /// 9. **A wire always leaves its socket** (owner, desk test). The cubic's

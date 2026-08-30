@@ -654,6 +654,23 @@ impl FxCategory {
         }
     }
 
+    /// The family this entry is **browsed** under — every category but
+    /// [`FxCategory::Drivers`], which browses under [`FxCategory::Controls`].
+    ///
+    /// The variant stays: it is what tells a driver from an effect, and the
+    /// manual's own Drivers pages are written against it. What merges is only
+    /// the *grouping* the application shows — the console's and the browser's
+    /// heading — because a hand looking for Wiggle looks under the family that
+    /// already holds Slider control, and two headings for one idea is one
+    /// heading too many. A driver still lands on the layer's graph rather than
+    /// its stack; where it is filed says nothing about what it is.
+    pub const fn grouping(self) -> FxCategory {
+        match self {
+            FxCategory::Drivers => FxCategory::Controls,
+            other => other,
+        }
+    }
+
     /// Every category, in menu order.
     pub const ALL: [FxCategory; 10] = [
         FxCategory::BlurSharpen,

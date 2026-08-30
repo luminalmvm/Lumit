@@ -79,7 +79,9 @@ void main() {
               to: BridgeInputRef.param(node: blur, port: 'radius'),
             ),
           ],
-          layout: [BridgeNodePosition(node: BridgeNodeRef.driver(id), x: 8, y: 4)],
+          layout: [
+            BridgeNodePosition(node: BridgeNodeRef.driver(id), x: 8, y: 4)
+          ],
           exposed: const [],
         ),
       );
@@ -138,15 +140,15 @@ void main() {
           reason: 'a refused write leaves the document exactly as it was');
     });
 
-    test('the Drivers family lists separately from the effects', () {
+    test('the Drivers family lists under Controls, and in the one listing', () {
       final drivers = listDrivers();
       expect(drivers.map((d) => d.name), contains('wiggle'));
-      expect(drivers.every((d) => d.category == 'drivers'), isTrue);
+      expect(drivers.every((d) => d.category == 'controls'), isTrue);
       expect(hasEngineLabel(drivers.first.categoryLabel), isTrue);
       expect(
         listEffects().map((e) => e.name),
-        isNot(contains('wiggle')),
-        reason: 'a driver changes no pixel, so it is not an Add-effect entry',
+        contains('wiggle'),
+        reason: 'one search surface offers a driver beside an effect (K-645)',
       );
     });
   });

@@ -8951,12 +8951,12 @@ fn a_drivers_parameter_keyframes_like_any_other() {
     assert_eq!(layer.get_graph().expect("graph").wiring.edges.len(), 1);
 }
 
-/// **The Drivers family has its own listing** (WP1's note, discharged here).
-/// A driver is not an Add-effect entry — dropping one on a stack would add a
-/// node that changes no pixel — so it answers the graph canvas's question
-/// instead, in the same shape and with its own category heading.
+/// **The Drivers family keeps its listing and loses its heading.** The canvas
+/// still asks its own narrower question — what may be *dropped on the graph* —
+/// but every entry is filed under Controls wherever it is browsed, and the one
+/// search surface offers drivers beside effects.
 #[test]
-fn the_drivers_listing_is_the_family_with_its_category() {
+fn the_drivers_listing_is_the_family_filed_under_controls() {
     use crate::api::effect::list_drivers;
 
     let drivers = list_drivers();
@@ -8974,19 +8974,42 @@ fn the_drivers_listing_is_the_family_with_its_category() {
     assert!(
         drivers
             .iter()
-            .all(|d| d.category == "drivers" && d.category_label == "Drivers"),
-        "every entry carries the family's key and its translated heading"
+            .all(|d| d.category == "controls" && d.category_label == "Controls"),
+        "every entry carries the family it is browsed under"
     );
 
     let effects = list_effects();
     assert!(
-        !effects.iter().any(|e| names.contains(&e.name.as_str())),
-        "and no driver is offered as something to add to a stack"
+        names
+            .iter()
+            .all(|name| effects.iter().any(|e| &e.name == name)),
+        "and every driver is offered by the one listing the search reads"
     );
     assert!(
         effects.iter().any(|e| e.name == "blur"),
         "the effects listing is otherwise untouched"
     );
+}
+
+/// **Applying a driver lands it on the graph, not the stack.** It is browsed as
+/// one more Controls entry, so every route that adds an effect can hand one
+/// over — and `add_effect` is where that fork lives, so no caller has to know.
+#[test]
+fn applying_a_driver_adds_a_graph_node_rather_than_a_stack_effect() {
+    let (project, layer) = layer_to_wire();
+
+    layer.add_effect("blur".into()).expect("an effect");
+    layer.add_effect("wiggle".into()).expect("a driver");
+
+    let effects = layer.get_effects().expect("stack");
+    assert_eq!(effects.len(), 1, "the stack took only the picture effect");
+    let drivers = layer.get_graph_drivers().expect("drivers");
+    assert_eq!(drivers.len(), 1, "and the graph took the driver");
+
+    // One op, so one undo step: the driver leaves and the blur stays.
+    project.undo().expect("undone");
+    assert!(layer.get_graph_drivers().expect("drivers").is_empty());
+    assert_eq!(layer.get_effects().expect("stack").len(), 1);
 }
 
 /// **A catalogue entry carries its declared ports** (K-471 §1.3), which is what

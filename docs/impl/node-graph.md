@@ -342,7 +342,15 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   `set_effects`; driver params reuse the property calls, from the staged instances
   `get_graph_drivers()` hands out.
 - **Catalogue**: the Drivers category rides the existing effect-catalogue listing,
-  through `list_drivers()` of its own. **Built 2026-08-24**: an entry carries the ports it
+  through `list_drivers()` of its own. **Amended 2026-08-30 (K-645)**: `list_drivers()`
+  still answers the canvas's narrower question — what may be *dropped on the graph* — but
+  the family is no longer filtered out of `list_effects()`, and every entry now carries the
+  `controls` grouping key and heading, because `FxCategory::grouping()` files Drivers under
+  Controls. The variant is unchanged, and so are the docs' own Drivers pages: what merged
+  is the application's browse grouping, nothing else. Applying a driver from any of those
+  listings lands it on the layer's **graph** rather than its stack, and
+  `LayerReference::add_effect` is where that fork lives so no caller has to know.
+  **Built 2026-08-24**: an entry carries the ports it
   declares (`BridgeEffectInfo::inputs` / `outputs`, `wired` always false), which is what
   lets the panel fold the auto-wire into the add's own commit and filter the Tab search to
   the entries a dragged wire could land on. Without it the auto-wire had to be a second op,

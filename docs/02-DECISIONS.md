@@ -20096,3 +20096,42 @@ Regression tests: `wgsl_set_channels_matches_the_cpu_oracle` (lumit-gpu),
 `set_channels_reads_a_source_layer_and_keeps_its_matte_row` (lumit-render),
 `set_channels_folds_four_source_layers_onto_one_source_row` (lumit-import).
 
+
+## K-645 — One search surface, and the drivers file under Controls
+
+**Status: DECIDED (2026-08-30).** Amends [impl/node-graph.md](impl/node-graph.md) §5's
+catalogue bullet. Two halves of one idea: **there is one place to search for a thing to
+apply**, and **a driver is one of the things it offers**.
+
+**Tab opens the console.** The Graph panel had a search popover of its own — Tab on the
+canvas, or a wire let go over empty ground — drawn to the same anatomy as the Ctrl+Space
+console and sharing none of its code. Two search surfaces is one too many: a hand that has
+learnt to type "gau, Enter" should not meet a second box with its own ranking, its own
+keys and its own idea of what a match is. So the canvas opens **the console**, and what it
+contributes is what only the canvas knows — the list (the drivers a dragged wire could
+actually land on), the spot the box lands on, and one sentence saying what a pick will do.
+The console gained exactly two fields for that: `keyHint`, the kicker naming the key that
+opened it, and `footer`, the line under the list. Where a caller offers **no ring** the
+list stands open from the first frame rather than waiting for a query, because with
+nothing radial to offer an empty float would be an empty offer.
+
+**The drivers file under Controls.** `FxCategory::Drivers` stays a variant — it is what
+tells a driver from an effect, and the manual's own Drivers pages are written against it —
+but `FxCategory::grouping()` files it under `Controls` for every listing the *application*
+shows. The split is deliberate and this is the record of it: **the docs' category stays
+Drivers; only the console's and the browser's grouping merges.** K-471 kept them apart on
+the grounds that "a Slider control *holds* a number, a driver *computes* one", which is
+true and is not a reason for a second heading — a hand looking for Wiggle looks where
+Slider control already is.
+
+**So a driver is appliable like any other effect**, from the console, the Effect menu, the
+palette and the browser. It lands on the layer's **graph**, not its stack, and
+`LayerReference::add_effect` is where that fork lives: one guard in the one method every
+one of those routes already goes through, rather than the same question asked in four
+places. One `SetLayerGraph`, so one undo step, exactly as `add_effect` has always been one
+op. `list_drivers()` survives for the canvas's narrower question — what may be *dropped on
+the graph* — which is not the same question as what may be applied to a layer.
+
+Regression tests: `the_drivers_listing_is_the_family_filed_under_controls` and
+`applying_a_driver_adds_a_graph_node_rather_than_a_stack_effect` (lumit_bridge);
+`the Tab search is the console, in the canvas's words` (graph_panel_metrics_test).

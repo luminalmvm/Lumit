@@ -178,7 +178,7 @@ void main() {
       await tester.dragFrom(radius, const Offset(0, 220));
       await tester.pump();
       expect(p.layer.getGraph().wiring.edges, isEmpty);
-      expect(find.byKey(const ValueKey<String>('graph-search')), findsNothing,
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
           reason: 'a wire being taken off is not a wire looking for a node');
 
       // And it is one undo step of its own, like every other gesture here.
@@ -386,10 +386,10 @@ void main() {
       await tester.dragFrom(from, const Offset(220, 60));
       await tester.pump();
       expect(
-          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
 
       await tester
-          .tap(find.byKey(const ValueKey<String>('graph-search-smooth')));
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
       await tester.pump();
 
       final graph = p.layer.getGraph();
@@ -413,7 +413,7 @@ void main() {
           const Offset(220, 60));
       await tester.pump();
       await tester
-          .tap(find.byKey(const ValueKey<String>('graph-search-smooth')));
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
       await tester.pump();
       expect(p.layer.getGraphDrivers(), hasLength(2));
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
@@ -441,7 +441,7 @@ void main() {
       await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
           const Offset(240, 60));
       await tester.pump();
-      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
           findsOneWidget);
       // A press anywhere puts the popover away.
       await tester.tapAt(const Offset(860, 560));
@@ -453,10 +453,10 @@ void main() {
           const Offset(240, 60));
       await tester.pump();
       expect(
-          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
           findsNothing);
-      expect(find.byKey(const ValueKey<String>('graph-search-wiggle')),
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
           findsNothing);
 
       // Without a wire the whole family is back.
@@ -464,7 +464,7 @@ void main() {
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
-      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
           findsOneWidget);
     });
 
@@ -532,7 +532,7 @@ void main() {
           const Offset(220, 60));
       await tester.pump();
       await tester
-          .tap(find.byKey(const ValueKey<String>('graph-search-smooth')));
+          .tap(find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
       await tester.pump();
 
       expect(p.layer.getGraphDrivers(), hasLength(2));
@@ -691,10 +691,11 @@ void main() {
       await tester.pump();
 
       expect(
-          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('graph-search-points_sample')),
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-item-Points sample')),
           findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('graph-search-wiggle')),
+      expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
           findsNothing,
           reason: 'a wiggle has nothing a points stream could land on');
     });

@@ -125,11 +125,23 @@ class FxConsoleModel {
   /// (no composition open), which greys the button.
   final VoidCallback? onSnapshot;
 
+  /// The key that opened this — drawn as a kicker at the bar's right end, the
+  /// way the drawing has it ("Ctrl+Space" from the shell, "Tab" from the graph
+  /// canvas). Null draws nothing.
+  final String? keyHint;
+
+  /// One quiet sentence under the list saying what choosing a row will do
+  /// ("Enter applies to the selected layers", "Accepts the dragged number
+  /// wire"). Null draws no foot at all.
+  final String? footer;
+
   const FxConsoleModel({
     required this.entries,
     required this.radial,
     required this.radialTitle,
     this.onSnapshot,
+    this.keyHint,
+    this.footer,
   });
 }
 
@@ -300,11 +312,17 @@ class _FxConsoleState extends State<_FxConsole> {
 
   bool get _typing => _query.text.trim().isNotEmpty;
 
+  /// Whether the list stands in for the ring. With no slices to offer — the
+  /// graph canvas's flavour, which has nothing radial to say — an empty bar
+  /// shows the whole list rather than an empty float, so Tab still opens a
+  /// list you can arrow down without typing first (K-645).
+  bool get _listIsTheOffer => widget.model.radial.isEmpty;
+
   List<FxConsoleEntry> get _matches =>
       fxConsoleMatches(widget.model.entries, _query.text);
 
   void _runHighlighted(List<FxConsoleEntry> matches) {
-    if (!_typing) {
+    if (!_typing && !_listIsTheOffer) {
       // Enter on an empty bar: nothing chosen, nothing to run — the key that
       // usually means "done" closes the console rather than sitting inert.
       widget.onClose();
@@ -436,7 +454,7 @@ class _FxConsoleState extends State<_FxConsole> {
                 height: _barHeight,
                 child: _searchBar(t, matches),
               ),
-              if (_typing)
+              if (_typing || _listIsTheOffer)
                 Positioned(
                   key: const ValueKey('fx-console-dropdown'),
                   left: at.barLeft,
@@ -477,6 +495,15 @@ class _FxConsoleState extends State<_FxConsole> {
                 onSubmitted: (_) => _runHighlighted(matches),
               ),
             ),
+            // The key that opened this, in the corner the drawing puts it —
+            // "Ctrl+Space" from the shell, "Tab" from the graph canvas. One
+            // surface, and the kicker is what says which door was used.
+            if (widget.model.keyHint case final hint?) ...[
+              const SizedBox(width: 6),
+              Text(hint,
+                  key: const ValueKey('fx-console-key'),
+                  style: t.kicker.copyWith(letterSpacing: 0.54)),
+            ],
             const SizedBox(width: 6),
             // The snapshot button, in the corner FX Console puts it: one press
             // writes the frame on screen to a PNG, so two versions of a look
@@ -500,8 +527,9 @@ class _FxConsoleState extends State<_FxConsole> {
         ),
       );
 
-  /// The matches, under the bar, only while there is a query to match: an
-  /// empty bar offers the ring, not a directory (K-325).
+  /// The matches, under the bar. While there is a ring to offer, an empty bar
+  /// lists nothing — the ring is the offer (K-325); where there is no ring the
+  /// list takes its place and stands open from the first frame.
   Widget _dropdown(
     LumitTheme t,
     List<FxConsoleEntry> matches,
@@ -514,7 +542,30 @@ class _FxConsoleState extends State<_FxConsole> {
     return Container(
       decoration: _float(t),
       padding: const EdgeInsets.all(4),
-      child: ConstrainedBox(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _list(t, matches, room),
+          // One quiet sentence saying what a row will do. Drawn only where the
+          // caller has something to say, so the shell's own console is
+          // unchanged unless it asks for one.
+          if (widget.model.footer case final footer?) ...[
+            Container(height: 1, color: t.hairline),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 5, 6, 2),
+              child: Text(footer,
+                  key: const ValueKey('fx-console-foot'),
+                  style: t.kicker.copyWith(letterSpacing: 0.54)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _list(LumitTheme t, List<FxConsoleEntry> matches, double room) {
+    return ConstrainedBox(
         constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
         child: ListView.builder(
           shrinkWrap: true,
@@ -560,9 +611,7 @@ class _FxConsoleState extends State<_FxConsole> {
               ],
             );
           },
-        ),
-      ),
-    );
+        ));
   }
 
   String _sectionLabel(FxConsoleKind kind) => switch (kind) {

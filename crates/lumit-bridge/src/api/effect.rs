@@ -71,23 +71,25 @@ pub struct BridgeEffectInfo {
 /// Stateless, so it is a free function rather than a method: the menu is
 /// available before any project is open.
 ///
-/// The Drivers family is not here; it has [`list_drivers`] of its own. The two
-/// lists are two different questions — what may be added to an effect *stack*,
-/// and what may be dropped on the graph *canvas* — and a driver only ever
-/// answers the second.
+/// **The drivers are here too**, filed under Controls
+/// ([`FxCategory::grouping`](lumit_core::fx::FxCategory::grouping)): one search
+/// surface offers everything a layer can be given, and applying a driver puts
+/// it on the layer's graph rather than its stack — `LayerReference::add_effect`
+/// decides that, so no caller has to. [`list_drivers`] still answers the
+/// canvas's narrower question: which entries may be *dropped on the graph*.
 #[frb(sync)]
 pub fn list_effects() -> Vec<BridgeEffectInfo> {
-    catalogue(|category| category != lumit_core::fx::FxCategory::Drivers)
+    catalogue(|_| true)
 }
 
 /// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
 ///
 /// Its own listing rather than a filter the frontend applies, because the
-/// distinction is the engine's: a driver makes a value, not a picture, so
-/// dropping one on a stack would add a node that changes no pixel. Every entry
-/// carries `category` `drivers` and the translated heading beside it, so the
-/// search groups them exactly as the Add-effect menu groups effects.
+/// distinction is the engine's: a driver makes a value, not a picture, so the
+/// canvas is the only place one can be *dropped*. Every entry carries the
+/// `controls` grouping key and heading its browse family gives it, so a driver
+/// reads as one more Controls entry wherever it is listed.
 #[frb(sync)]
 pub fn list_drivers() -> Vec<BridgeEffectInfo> {
     catalogue(|category| category == lumit_core::fx::FxCategory::Drivers)
@@ -141,12 +143,16 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 label: schema.label.to_owned(),
                 // Shared with v0 rather than restated, so the two frontends cannot
                 // disagree about which key a category has.
+                //
+                // The *browse* family, not the declared one: a driver declares
+                // Drivers and is filed under Controls, and this is the one seam
+                // where that merge happens.
                 category: plugin.as_ref().map_or_else(
-                    || crate::edits::fx_category_key(schema.category).to_owned(),
+                    || crate::edits::fx_category_key(schema.category.grouping()).to_owned(),
                     |found| plugin_category_key(&found.grouping),
                 ),
                 category_label: plugin.as_ref().map_or_else(
-                    || schema.category.label().to_owned(),
+                    || schema.category.grouping().label().to_owned(),
                     |found| found.grouping.clone(),
                 ),
                 // **Built-in means in the compile-time slice**, not "the scan
@@ -359,11 +365,38 @@ pub(crate) fn presets_in(dir: &std::path::Path) -> Vec<BridgePresetInfo> {
 /// key *times* (which cross as integer pairs), not of a sampled value.
 #[frb(sync)]
 pub fn sample_scalar(scalar: BridgeScalar, time: BridgeRational) -> f64 {
-    let seconds = if time.den == 0 {
+    sample_at(scalar, seconds_of(time))
+}
+
+/// Every one of `scalars` at the same `time`, in the order they were given.
+///
+/// The same answers as calling [`sample_scalar`] once per scalar, and the reason
+/// it exists is that the panel wants them all at once: on each frame of a scrub
+/// or a playback, *every* animated row on screen asks what its curve reads now.
+/// That was one crossing of the boundary per row per frame — chatter that grew
+/// with the number of lanes open, so a `U` on a busy layer made the playhead
+/// lag over frames the cache already held. One crossing carries the lot.
+#[frb(sync)]
+pub fn sample_scalars(scalars: Vec<BridgeScalar>, time: BridgeRational) -> Vec<f64> {
+    let seconds = seconds_of(time);
+    scalars
+        .into_iter()
+        .map(|scalar| sample_at(scalar, seconds))
+        .collect()
+}
+
+/// A bridge time in seconds, and zero for the denominator no rational has.
+fn seconds_of(time: BridgeRational) -> f64 {
+    if time.den == 0 {
         0.0
     } else {
         time.num as f64 / time.den as f64
-    };
+    }
+}
+
+/// The shared body of the two samplers above: what one scalar reads at
+/// `seconds`, with no expression context.
+fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
     match scalar {
         BridgeScalar::Static(value) => value,
         BridgeScalar::Keyframed(keys) => {
@@ -388,11 +421,7 @@ pub fn sample_scalar_with_context(
     time: BridgeRational,
     layer: LayerReference,
 ) -> f64 {
-    let seconds = if time.den == 0 {
-        0.0
-    } else {
-        time.num as f64 / time.den as f64
-    };
+    let seconds = seconds_of(time);
     match scalar {
         BridgeScalar::Static(value) => value,
         BridgeScalar::Keyframed(keys) => {
