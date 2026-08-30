@@ -28,11 +28,13 @@
                               the stale ones (K-653: a translation whose English moved on
                               is deleted, not served).
 
-    A locale entry counts as translated when the key is present AND differs from the
-    English. The Crowdin exports these files came from wrote untranslated strings as their
-    source text, so 1,032 of the 1,036 keys in app_de.arb are English wearing a German
-    filename; counting those as done would hide a thousand strings from every translator
-    who ever opens the page.
+    A locale entry counts as translated when the key is present and either differs from the
+    English or has a line in the sidecar. The Crowdin exports these files came from wrote
+    untranslated strings as their source text, so 1,032 of the 1,036 keys in app_de.arb are
+    English wearing a German filename; counting those as done would hide a thousand strings
+    from every translator who ever opens the page. The sidecar is what separates those from
+    an answer that happens to read the same in both languages - sRGB is sRGB in German -
+    because a line there means somebody looked at the row and decided.
 
 .PARAMETER L10nDir
     The folder holding app_*.arb. Defaults to flutter_ui/lib/l10n next to this script;
@@ -190,7 +192,11 @@ function Get-Status {
         $translated = 0; $stale = 0; $orphan = 0
         foreach ($k in (Get-MessageKeys $arb)) {
             if (-not $en.Contains($k)) { $orphan++; continue }
-            if ($arb[$k] -ceq $en[$k]) { continue }   # the source text copied through, not a translation
+            # The source text copied through is not a translation - unless the sidecar
+            # records an answer for the key, because sRGB is sRGB in German too. This is
+            # the same test the page makes, and the two must agree or a row a translator
+            # has already answered comes back to them for ever.
+            if ($arb[$k] -ceq $en[$k] -and -not $seen.ContainsKey($k)) { continue }
             if ($seen.ContainsKey($k) -and -not ($seen[$k] -ceq $en[$k])) { $stale++ } else { $translated++ }
         }
         $rows += [pscustomobject]@{
@@ -395,6 +401,15 @@ function Invoke-SelfTest {
         Assert ((Invoke-Seed) -eq $script:Locales.Count) 'seed adopts only the real translations, not the English copies'
         $s = (Get-Status | Where-Object { $_.Locale -eq 'de' })
         Assert ($s.Translated -eq 1 -and $s.Missing -eq 2 -and $s.Orphaned -eq 1) 'status counts translated, missing and orphaned'
+
+        # An answer that reads the same in both languages is an answer, once the sidecar
+        # says somebody wrote it. Without the record it is the source text copied through,
+        # which is what the line above counts as missing.
+        $same = Join-Path $tmp 'same.json'
+        Write-JsonMap $same ([ordered]@{ locale = 'de'; entries = [ordered]@{ apply = 'Apply' } })
+        Invoke-Ingest $same | Out-Null
+        $s = (Get-Status | Where-Object { $_.Locale -eq 'de' })
+        Assert ($s.Translated -eq 2 -and $s.Missing -eq 1) 'an identical answer counts once the sidecar records it'
 
         # A file with a placeholder dropped is refused whole.
         $bad = Join-Path $tmp 'bad.json'

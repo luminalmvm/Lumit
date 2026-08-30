@@ -1069,37 +1069,13 @@
   "@fxConfidence": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxConsoleAddEffect": "Add effect",
-  "@fxConsoleAddEffect": {
-    "description": "The FX console radial menu: opens the Effects & presets panel."
-  },
-  "fxConsoleAddToComp": "Add to comp",
-  "@fxConsoleAddToComp": {
-    "description": "The FX console radial menu with a Project panel item picked: places the item in the open composition."
-  },
   "fxConsoleAll": "Барлығы",
   "@fxConsoleAll": {
     "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
   },
-  "fxConsoleCompositions": "Compositions",
-  "@fxConsoleCompositions": {
-    "description": "The FX console search list: the heading over the composition results."
-  },
-  "fxConsoleEffects": "Effects",
-  "@fxConsoleEffects": {
-    "description": "The FX console search list: the heading over the effect results."
-  },
   "fxConsoleHint": "Search effects and compositions",
   "@fxConsoleHint": {
     "description": "Placeholder in the FX console’s search field."
-  },
-  "fxConsoleKeyframe": "Keyframe",
-  "@fxConsoleKeyframe": {
-    "description": "The FX console radial menu: the slice that expands into one slice per transform row, each planting a keyframe at the playhead."
-  },
-  "fxConsoleNothingSelected": "Nothing selected",
-  "@fxConsoleNothingSelected": {
-    "description": "Shown in the middle of the FX console’s radial menu when nothing is selected."
   },
   "fxConsoleSnapshotTip": "Save a snapshot of this frame",
   "@fxConsoleSnapshotTip": {
