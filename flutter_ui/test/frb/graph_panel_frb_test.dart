@@ -14,7 +14,8 @@
 
 import 'dart:io';
 
-import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
+import 'package:flutter/gestures.dart'
+    show PointerScrollEvent, kDoubleTapMinTime;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -383,9 +384,9 @@ void main() {
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
     });
 
-    /// Auto-wire: let a wire go over empty canvas, pick a node from the search,
-    /// and the wire is on it when it lands.
-    testWidgets('the Tab search adds a driver and auto-wire joins it',
+    /// Auto-wire: let a wire go over empty canvas, pick a node from the
+    /// console, and the wire is on it when it lands.
+    testWidgets('the console adds a driver and auto-wire joins it',
         (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
@@ -436,10 +437,47 @@ void main() {
           reason: 'and the wire with it — the two were one commit');
     });
 
+    /// **Scrolling the console never zooms the canvas beneath** (owner item
+    /// 12). The console floats in the overlay, whose click-catcher is opaque
+    /// to hit tests, so a wheel over the popover — list or margin — cannot
+    /// reach the canvas's own scroll-zoom listener. The old inner-graph
+    /// popover leaked exactly this way by sitting *inside* the canvas's
+    /// listener; this holds the road every console now takes.
+    testWidgets('a wheel over the console leaves the canvas zoom alone',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+
+      String zoom() =>
+          tester.widget<Text>(find.byKey(const ValueKey('graph-zoom'))).data!;
+      final before = zoom();
+
+      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
+          const Offset(240, 80));
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+
+      // Over the result list…
+      final list = tester.getCenter(
+          find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
+      await tester.sendEventToBinding(
+          PointerScrollEvent(position: list, scrollDelta: const Offset(0, 40)));
+      await tester.pump();
+      // …and over the invisible catcher, well away from the popover.
+      await tester.sendEventToBinding(const PointerScrollEvent(
+          position: Offset(60, 560), scrollDelta: Offset(0, 40)));
+      await tester.pump();
+
+      expect(zoom(), before,
+          reason: 'the scroll is the console\'s, never the graph\'s');
+    });
+
     /// **The search shows what the wire in hand could land on** (WP3), so the
     /// footer's promise — "connects the dragged wire where it fits" — is true
     /// of every row it offers.
-    testWidgets('the Tab search filters by the dragged wire\'s type',
+    testWidgets('the console filters by the dragged wire\'s type',
         (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
@@ -468,13 +506,57 @@ void main() {
       expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
           findsNothing);
 
-      // Without a wire the whole family is back.
+      // Without a wire — Ctrl+Space, answered through the claim (K-673) —
+      // the whole family is back.
       await tester.tapAt(const Offset(860, 560));
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      p.uiState.activePanel.value = Panel.graph;
+      expect(p.uiState.consoleClaim!(), isTrue,
+          reason: 'the graph claims the console while it is the focused panel');
       await tester.pump();
       expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
           findsOneWidget);
+    });
+
+    /// **Ctrl+Space is the graph's one add surface** (K-673): with the panel
+    /// focused, the shell's console stands down and this one offers the
+    /// effects beside the drivers — a chosen effect joins the stack, so its
+    /// box lands on the chain.
+    testWidgets('the console adds an effect to the chain', (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+
+      p.uiState.activePanel.value = Panel.graph;
+      expect(p.uiState.consoleClaim!(), isTrue);
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
+
+      // Reach the row the way a hand does, by typing: the effects list after
+      // the driver family, past the list's fold.
+      await tester.enterText(
+          find.byKey(const ValueKey('fx-console-query')), 'exposure');
+      await tester.pump();
+      await tester.tap(
+          find.byKey(const ValueKey<String>('fx-console-item-Exposure')));
+      await tester.pump();
+
+      expect([for (final e in p.layer.getEffects()) e.getInfo().name],
+          ['blur', 'exposure'],
+          reason: 'the chosen effect joined the stack, which is the chain');
+    });
+
+    /// The claim is the graph's only while the graph is focused: anywhere
+    /// else, the shell's own console answers as it always did.
+    testWidgets('the console claim stands down when another panel is focused',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+
+      p.uiState.activePanel.value = Panel.timeline;
+      expect(p.uiState.consoleClaim!(), isFalse,
+          reason: 'not this panel\'s key, so the shell\'s console opens');
+      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
     });
 
     /// **Removing a wired effect is one op** (K-471 §1.5). The stack's own
@@ -1246,11 +1328,11 @@ void main() {
           groups: () => [BridgePresetInfo(name: 'Audio rig', path: path)]);
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      p.uiState.activePanel.value = Panel.graph;
+      expect(p.uiState.consoleClaim!(), isTrue);
       await tester.pump();
-      // The saved groups list after every driver, and the driver family has
-      // grown past the list's fold — so reach the row the way a hand does,
-      // by typing.
+      // The saved groups list after every driver and effect, past the list's
+      // fold — so reach the row the way a hand does, by typing.
       await tester.enterText(
           find.byKey(const ValueKey('fx-console-query')), 'audio rig');
       await tester.pump();

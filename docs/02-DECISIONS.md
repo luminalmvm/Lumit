@@ -20884,3 +20884,39 @@ the menu going when the pointer leaves it but not before an option has been pick
 `menu_bar_frb_test.dart` — five resolution tiers picked from one opening of View ▸
 Resolution, and a click away still closing it.
 
+## K-673 — One add surface: the graph's Tab door goes, and Ctrl+Space answers by context
+
+**Status: DECIDED (2026-08-30).** The owner's ruling, their words in caps: get rid of the
+Tab for the node card — it needs to just be the effects console. Supersedes the Tab half
+of K-645 and K-658's "Tab" kicker; K-645's one-surface rule is what this finishes.
+
+**Ctrl+Space is the console's one key.** With the Graph panel focused (the Nodes
+workspace included), the same popover opens wearing the canvas's own list — every
+driver, every effect (a chosen effect joins the layer's stack, which *is* the image
+chain, so its box lands wired into the picture's path by construction), and the saved
+node groups. The routing is a claim (`LumitUiState.consoleClaim`), chained exactly as
+the Delete claim is: the shell's console asks it first and stands down when the graph
+answers. A wire let go over empty canvas still summons the console filtered to what the
+wire could land on; it wears no key kicker, because no key opened it.
+
+**Inside a Custom shader's inner graph** (CS4) the same key lists the shader vocabulary,
+Parameter box included — the owner's "can't add options in the custom shader view" fix —
+and the inner graph's own Tab popover (`shader-search`) is deleted outright: binding,
+widget and the arb string only it used. This also closes the owner's scroll-leak item
+(item 12): that popover sat *inside* the canvas's pointer listener, so a wheel over its
+list also reached the canvas's zoom; the console floats in the overlay, whose catch-all
+is opaque to hit tests, and the wheel cannot pass — held by regression tests on both
+graphs. The inner list is deliberately unfiltered with a wire in hand and the picked box
+lands unwired: the inner panel never learns the type rules (the engine is asked per
+drop, custom-shader.md), so it cannot promise what a wire fits.
+
+Strings: `graphSearchKey` ("Tab") and `shaderGraphSearchHint` go; `graphSearchAdds` is
+reworded as the new key `graphConsoleAdds` ("Adds a box to the graph") and
+`shaderSearchAdds` ("Adds a shader box") joins.
+
+Regression tests: `the console adds an effect to the chain`, `the console claim stands
+down when another panel is focused`, `a wheel over the console leaves the canvas zoom
+alone` (graph_panel_frb_test); `the graph's add surface is the console, in its own
+words` (graph_panel_metrics_test); `the console adds a box, committed as one undo step`,
+`a wire dropped on empty canvas opens the console`, `a wheel over the console leaves the
+inner zoom alone` (shader_graph_frb_test).

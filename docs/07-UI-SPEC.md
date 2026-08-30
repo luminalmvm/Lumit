@@ -362,6 +362,11 @@ Every control on either strip keeps the behaviour its item below defines. The it
    the pixels the current magnification can display. The setting is **stored per comp** in
    the project, and a comp that has never been given one previews at **Full** (K-670).
    Preview resolution MUST never affect export.
+   **Its rows are option rows** (K-671): picking one runs it, moves the tick and leaves the
+   menu open — here, in View ▸ Resolution, and in the Viewer's quality picker, whose other
+   half is the playback mode — so two tiers can be compared without reopening the menu
+   between looks. The menu goes when the pointer leaves it, on Escape, or on a click away.
+   An ordinary command row still closes on the choice.
 3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). One
    **bare mark** on the bar, opening a menu that lists the names in full. The closed face
    is a **coloured circle for the view in force** (K-478, §5's one glyph with colour of its
@@ -2400,8 +2405,12 @@ A second, narrower command surface, and deliberately not a duplicate of §12: th
 every command by name, the console is **effects, fast**. Modelled on Video Copilot's FX
 Console, which is what After Effects users install first. The radial ring the console once
 raised, and the scrim under it, are gone by the owner's ruling (K-658, superseding the
-radial half of K-325/K-326/K-327): the console is **one search popover**, and the graph
-canvas's `Tab` opens the very same surface (K-645).
+radial half of K-325/K-326/K-327): the console is **one search popover**, and it is the
+graph's one add surface too (K-645, K-673). Opened with the Graph panel focused — or
+summoned by a wire let go over empty canvas — the same popover wears the canvas's own
+list: effects (which join the stack, and so the chain), drivers, saved groups; inside a
+Custom shader's inner graph, the shader vocabulary, Parameter box included. The graph's
+own `Tab` door went with K-673: one surface, one key.
 
 **Where it opens.** The popover MUST open **on the pointer** — its search row under the
 hand, anywhere in the window, pulled in just enough that the whole popover stays on
@@ -2420,9 +2429,8 @@ every kicker in its category strip whole, capped at 720px, past which the strip 
 sideways rather than truncating, K-672):
 
 - The **search row**: the magnifier, the query, and a kicker at the right naming the key
-  that opened it ("Ctrl+Space" from the shell, "Tab" from the graph canvas) — one surface,
-  and the kicker is what says which door was used. The snapshot button sits at the row's
-  end.
+  that opened it — "Ctrl+Space" wherever a key did; a console a wire-drop summoned wears
+  none (K-673). The snapshot button sits at the row's end.
 - The **category strip**: `All`, then every grouping the results carry (the browse
   groupings, drivers filed under Controls per K-645). Choosing one narrows the list to
   that group; `All` lets everything back in. A result with no grouping (a composition)

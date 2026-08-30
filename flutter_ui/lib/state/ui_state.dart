@@ -240,6 +240,17 @@ class LumitUiState extends ChangeNotifier {
   /// chord simply by handling it.
   bool Function()? deleteClaim;
 
+  /// The graph's claim on `Ctrl+Space` (K-673), set by the Graph panel while
+  /// it is mounted and — when a Custom shader's inner graph is the panel's
+  /// face — by that graph over it, chained exactly as [deleteClaim] is.
+  ///
+  /// The console is one surface with two answers: over the work it applies an
+  /// effect to the selected layers, over the graph it **adds a box to the
+  /// canvas**. The shell asks this first and stands down when it returns true,
+  /// so the same key opens the same popover wearing whichever list the focused
+  /// surface contributes.
+  bool Function()? consoleClaim;
+
   /// The same claim, for Copy and Paste (K-300). The Timeline sets these while
   /// it is mounted: with keyframes selected, `Mod+C` means those keyframes, and
   /// `Mod+V` puts them back — the layer clipboard is what the chord falls
