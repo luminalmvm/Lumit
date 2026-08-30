@@ -1007,14 +1007,18 @@ collection, the recording mode, the panel) is in the entry above.
 
 - **The menu bar names its own backlog (K-244).** Every row marked
     "(Not implemented)" in File/Edit/Composition/Layer/Animation/View/Help is a
-    command with a place waiting for it: Close project, History,
-    layer settings and the mask/transform/blending/matte/style families, the
-    whole Animation menu, the View menu's grid/ruler/wireframe/snap rows,
-    Trim and Crop comp to work area (Add to export queue and Check for
-    updates are built — K-296; so are the View menu's magnification and
-    resolution rows and the Help menu's two documentation links). Delete each
-    mark as the command lands. Suggested chords for the AE-shaped ones are in
-    K-244.
+    command with a place waiting for it. What is left, now that the rows whose
+    engine call already existed have been wired: **History**, **Trim** and
+    **Crop comp to work area**, **Layer styles**, **Preserve transparency**,
+    **Auto-outline**, the Layer menu's **Camera** family, **Save** and **Apply
+    animation preset**, **Track motion**, the four **Reveal** rows, and the
+    View menu's **grid**, **ruler** and **snap** rows. Two are marked for a
+    reason rather than for want of time: **Add text selector** has nothing to
+    add while a K-609 animator carries exactly one range selector, and
+    **Show wireframe** is wired to the layer-controls switch until the full
+    wireframe display mode (docs/07 §2.2 item 5) gives it something of its own.
+    Delete each mark as the command lands. K-244 suggests no chords for these;
+    the shipped table is docs/07 §15.
 
 - **A Flatpak remote, so `flatpak update` has something to update from (K-297).**
     Releases ship a single-file `.flatpak` bundle, which installs perfectly well
