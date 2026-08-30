@@ -20,6 +20,19 @@ pub struct BridgeHistory {
     pub can_redo: bool,
 }
 
+/// One row of the History list (K-688): what the step is called, and whether it
+/// has been undone.
+///
+/// The name is the engine's English (`Op::name`), translated on arrival like
+/// every other engine word (K-303) — an undone row is still on the list, greyed,
+/// until a fresh commit clears the forward history.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeHistoryEntry {
+    pub name: String,
+    pub undone: bool,
+}
+
 /// One colour on the project's shelf (K-448): four 0–1 channels and an
 /// optional name. Empty `name` means unnamed, which is the ordinary case — a
 /// shelf is read by eye.
@@ -263,6 +276,7 @@ impl ProjectReference {
         };
 
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name,
             width: settings.width.clamp(16, 16384),
@@ -772,6 +786,47 @@ impl ProjectReference {
             can_undo: state.store.can_undo(),
             can_redo: state.store.can_redo(),
         })
+    }
+
+    /// The History list (K-688): every step still applied, oldest first, then
+    /// every step that has been undone, in the order redoing would put them
+    /// back. [`Self::applied_steps`] says where the two halves meet.
+    #[frb(sync)]
+    pub fn history_entries(&self) -> Result<Vec<BridgeHistoryEntry>, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state
+            .store
+            .history()
+            .into_iter()
+            .map(|e| BridgeHistoryEntry {
+                name: e.name.to_string(),
+                undone: e.undone,
+            })
+            .collect())
+    }
+
+    /// How many of [`Self::history_entries`]'s rows are applied — the point the
+    /// document stands at on the list.
+    #[frb(sync)]
+    pub fn applied_steps(&self) -> Result<u32, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(u32::try_from(state.store.applied_steps()).unwrap_or(u32::MAX))
+    }
+
+    /// Take the document to the point where exactly `applied` steps have been
+    /// applied — what clicking a row of the History list does (K-688).
+    ///
+    /// Undo and redo in a loop, so a jump reaches only states the keyboard
+    /// could; a number past either end stops at that end rather than failing.
+    #[frb(sync)]
+    pub fn jump_history(&self, applied: u32) -> Result<(), BridgeError> {
+        let s = self.state()?;
+        let s = s.read().map_err(|_| BridgeError::ReadFailed)?;
+        s.store
+            .jump_to(applied as usize)
+            .map_err(BridgeError::OpError)
     }
 
     #[frb(sync)]

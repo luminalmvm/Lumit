@@ -80,6 +80,10 @@ pub enum BridgeError {
     InvalidBlendMode,
     /// A scope's colour list was not five `[r, g, b]` triples.
     InvalidScopeColours,
+    /// A region of interest that is not four finite comp fractions, or that
+    /// comes to less than a pixel either way (K-687). There is no composition
+    /// inside it to crop to.
+    InvalidRegion,
     /// The text handed to `load_preset` is not a `.lumfx` document.
     InvalidPreset,
     /// The text handed to `set_shader_graph` is not a graph document — a
@@ -207,6 +211,9 @@ impl fmt::Display for BridgeError {
             BridgeError::InvalidBlendMode => write!(f, "No blend mode at that index"),
             BridgeError::InvalidScopeColours => {
                 write!(f, "A scope needs five red/green/blue triples")
+            }
+            BridgeError::InvalidRegion => {
+                write!(f, "That region of interest is smaller than a pixel")
             }
             BridgeError::InvalidPreset => write!(f, "That is not a valid effect preset"),
             BridgeError::InvalidShaderGraph => write!(f, "That is not a shader graph"),
