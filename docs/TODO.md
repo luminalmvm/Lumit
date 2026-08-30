@@ -676,12 +676,15 @@ before the switch can honestly exist); and the Settings drawing's slider face (2
 track, primary knob, no fill) disagrees with the Main drawing's zoom slider that
 `HouseSlider` was built from — each surface should wear its own manifest's face.
 
-**A composition thumbnail over the seam** (K-468). The welcome screen's save-time
-thumbnail photographs the Viewer's own picture boundary, which is honest but means a
-project saved with no Viewer up gets no picture. The better shape, when wanted: a
-`comp_thumbnail(frame, max_edge)` returning encoded pixels off the playback path — the
-worker's private `render_preview` already produces the RGBA; only the capture function
-in `viewer_panel_frb.dart` would change.
+**An autosave does not refresh the welcome picture** (K-468, K-667). Every *save*
+files one, and opening a project that has none draws one, so no row is empty any
+more. An autosave is the one write that does not: it runs on the engine's own timer
+thread, and the file it would have to write is named by a digest the frontend owns
+(`Workspace.thumbnailKey`) in a folder the frontend owns. Teaching the engine that
+name would make one filename two sources of truth. The cost is only that a picture
+can be up to one editing session stale, which is what it has always been; the fix,
+if it is ever wanted, is an "autosaved" event on the change stream that the frontend
+answers by drawing a fresh thumbnail — not the engine writing the file.
 
 **A control for an image sequence's frame rate** (K-539). The rate is stored,
 saved and read by everything that opens the run, but nothing can change it: an

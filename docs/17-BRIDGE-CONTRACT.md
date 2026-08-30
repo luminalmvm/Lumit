@@ -784,6 +784,18 @@ path, documented beside the types in
     the same payload Windows does, because both are one opaque integer naming a
     surface plus its size (an NT handle there, an `IOSurfaceID` here). Only
     Linux needs more (fd, stride, offset, DRM format).
+- **A composition's own small still crosses as pixels too** (K-667, superseding
+    K-468's Viewer photograph). `CompositionReference::thumbnail(frame, max_edge)`
+    answers a `BridgeRenderedFrame` whose longest edge is `max_edge` — 128 px for
+    the welcome screen's recent rows, which is 36 KiB against a 1080p frame's 8
+    MiB. It is **not** a second frame transport and cannot become one: the caller
+    names the size, the picture is asked for once after a save or an open, and the
+    Viewer's own frames still cross only as handles. Asynchronous, because it
+    renders; the document snapshot is taken under the read guard and the guard is
+    dropped before the render begins. It drives the session-lifetime renderer in
+    `render.rs` — the one the export-input builder already shares — rather than
+    the Viewer worker's, so a picture taken because a project was saved neither
+    waits behind a frame somebody is watching nor holds one up.
 - **Small stills still cross as pixels**, deliberately: footage thumbnails
     (`BridgeRenderedFrame`), the 256×256 scope traces and the dropper's
     129×129 windows (`BridgeSampledPixels`, K-210 — 66 KiB). All are bounded and

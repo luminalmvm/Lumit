@@ -148,6 +148,35 @@ fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -
     };
     Some(f(renderer))
 }
+/// One small still of `comp` at `frame`, composited at `scale` — the picture a
+/// project's welcome row carries (K-468).
+///
+/// **This renderer, not the worker's.** The worker's renderer is a queue of
+/// frames somebody is watching; a still taken because a project was saved has
+/// no business waiting behind one, and less business holding one up. It is the
+/// same instance the export-input builder drives, so a thumbnail taken beside
+/// an export shares its warm probes rather than opening a second device.
+///
+/// `None` on a machine with no graphics adapter — the calm nothing every other
+/// render answers there, and a row with no picture is an ordinary state.
+pub(crate) fn thumbnail(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+) -> Option<(Vec<u8>, u32, u32)> {
+    with_ready(|renderer| {
+        // The colour choice decides the display transform the picture is read
+        // back through, so a thumbnail taken without it would be a different
+        // picture from the one the Viewer shows of the same frame.
+        renderer.sync_colour(doc);
+        renderer
+            .render_preview(doc, comp, frame, quality_for(scale), scale)
+            .ok()
+    })
+    .flatten()
+}
+
 /// Build the footage/audio inputs and a GPU export context for `comp` through
 /// the headless seam (K-175), so the export driver can hand them to the exact
 /// egui exporter (`lumit_render::export::start`). `None` when the machine has no GPU

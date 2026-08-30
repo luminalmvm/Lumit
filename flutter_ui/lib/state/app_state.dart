@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
 
 /// The window's title: plain 'Lumit' until the project has a home on disk,
@@ -290,6 +291,34 @@ class LumitState extends ChangeNotifier {
 
     refreshWindowTitle();
     notifyListeners();
+    unawaited(_backfillThumbnail());
+  }
+
+  /// A project opened with no picture on file grows one, once (K-468).
+  ///
+  /// Every save has filed a thumbnail since the engine could draw one, but
+  /// projects that predate it — an After Effects conversion, everything saved
+  /// before — have none, and their welcome rows are empty wells until the next
+  /// save. This is the one place that fixes them: the first time such a project
+  /// is opened, its first composition is drawn and filed.
+  ///
+  /// Deliberately at the end of adopting, and deliberately not awaited: it is
+  /// nobody's business but the welcome screen's, and an open must not wait for
+  /// a picture of the project it has already loaded. A project with a picture
+  /// already, or with no path to key one by, costs one `existsSync`.
+  Future<void> _backfillThumbnail() async {
+    try {
+      final path = project?.path();
+      if (path == null || Workspace.thumbnailFile(path).existsSync()) return;
+      final comps = this.comps();
+      if (comps.isEmpty) return;
+      // Frame 0 of the first comp: nothing has been fronted yet at this point
+      // in an open, and the session restore that will front one runs after.
+      await Workspace.fileCompThumbnail(path, comps.first.$1);
+    } catch (_) {
+      // A project whose picture would not draw keeps its placeholder, which is
+      // exactly the state it was already in.
+    }
   }
 
   /// Put the project's name in the title bar. Called when the document's path

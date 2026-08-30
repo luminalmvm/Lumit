@@ -565,16 +565,21 @@ void main() {
           reason: 'the second save replaced the first picture');
     });
 
-    /// 17. **A capture that fails costs a picture and nothing else.** No
-    /// Viewer up, a boundary that has not painted, a driver that will not read
-    /// the texture back — the save has already happened by then and must not
-    /// be told about any of it.
+    /// 17. **A capture that fails costs a picture and nothing else.** A
+    /// boundary that has not painted, a driver that will not read the texture
+    /// back, a machine with no graphics adapter — the save has already happened
+    /// by then and must not be told about any of it. **Both** roads have to
+    /// fail for the row to go without: that is the point of there being two.
     testWidgets('a failing capture does not fail the save', (tester) async {
       final scratch = scratchProject('Unphotographed');
       projectThumbnailCapture = () async => throw StateError('no Viewer');
       addTearDown(() => projectThumbnailCapture = captureViewerPicturePng);
+      final wasEngine = Workspace.compThumbnailPng;
+      Workspace.compThumbnailPng = (comp, frame) async => null;
+      addTearDown(() => Workspace.compThumbnailPng = wasEngine);
 
       final p = await mount(tester);
+      p.uiState.setSelectedComp(p.state.project!.newComposition(name: 'Scene'));
       await tester.runAsync(() => saveProjectFrb(p.state, p.uiState,
           forcePicker: true, picker: () async => scratch.project));
 
@@ -585,6 +590,93 @@ void main() {
           reason: 'the user is told the save worked, because it did');
       expect(scratch.thumb.existsSync(), isFalse,
           reason: 'and the row simply shows its placeholder');
+    });
+
+    /// 18. **A save with no Viewer up still files a picture** (K-468). This is
+    /// the whole regression: an After Effects conversion, an agent, a save from
+    /// a workspace with the Viewer closed — every one of them photographed a
+    /// Viewer that was not there, filed nothing, and left the owner's welcome
+    /// screen a column of empty wells. The engine draws the fronted composition
+    /// instead, and the picture is filed exactly as the photograph would be.
+    testWidgets('a headless save files the engine\'s picture', (tester) async {
+      final scratch = scratchProject('Headless');
+      // Precisely the headless case: there is no Viewer, so the photograph
+      // answers null rather than throwing.
+      projectThumbnailCapture = () async => null;
+      addTearDown(() => projectThumbnailCapture = captureViewerPicturePng);
+      final asked = <int>[];
+      final wasEngine = Workspace.compThumbnailPng;
+      Workspace.compThumbnailPng = (comp, frame) async {
+        asked.add(frame);
+        return onePixelPng;
+      };
+      addTearDown(() => Workspace.compThumbnailPng = wasEngine);
+
+      final p = await mount(tester);
+      p.uiState.setSelectedComp(p.state.project!.newComposition(name: 'Scene'));
+      p.uiState.playheadFrame.value = 12;
+      await tester.runAsync(() async {
+        await saveProjectFrb(p.state, p.uiState,
+            forcePicker: true, picker: () async => scratch.project);
+        // The picture is deliberately not awaited by the save (K-468), so let
+        // the road it was sent down finish before reading the folder.
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+
+      expect(asked, [12],
+          reason: 'the engine was asked for the frame the playhead is on');
+      expect(scratch.thumb.existsSync(), isTrue,
+          reason: 'no Viewer is no longer no picture');
+      expect(scratch.thumb.readAsBytesSync(), onePixelPng);
+    });
+
+    /// 19. **Opening a project with no picture grows one, once** (K-468). The
+    /// backfill is what gives the owner's already-converted projects their
+    /// rows back: they were saved before the engine could draw a thumbnail, so
+    /// nothing but opening them will ever fill their wells.
+    ///
+    /// And it is genuinely once — a project that already has a picture is not
+    /// redrawn on every open, because the picture it has is of the frame it was
+    /// last *saved* at and a fresh one would be of frame 0.
+    testWidgets('opening a project without a picture backfills it',
+        (tester) async {
+      final scratch = scratchProject('Converted');
+      projectThumbnailCapture = () async => null;
+      addTearDown(() => projectThumbnailCapture = captureViewerPicturePng);
+      var drawn = 0;
+      final wasEngine = Workspace.compThumbnailPng;
+      Workspace.compThumbnailPng = (comp, frame) async {
+        drawn++;
+        return onePixelPng;
+      };
+      addTearDown(() => Workspace.compThumbnailPng = wasEngine);
+
+      // A project on disk with a composition in it, and no picture filed —
+      // which is every project saved before this road existed.
+      final p = await mount(tester);
+      p.state.project!.newComposition(name: 'Scene');
+      await tester.runAsync(() => p.state.project!.save(path: scratch.project));
+      if (scratch.thumb.existsSync()) scratch.thumb.deleteSync();
+
+      final reopened = freshProject();
+      await tester.runAsync(() async {
+        await reopened.state.openProject(scratch.project);
+        // The backfill is deliberately not awaited by the open, so let its
+        // microtasks and the two bridge calls behind them run.
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+
+      expect(drawn, 1, reason: 'the missing picture was drawn');
+      expect(scratch.thumb.existsSync(), isTrue);
+      expect(scratch.thumb.readAsBytesSync(), onePixelPng);
+
+      // Opened again, with a picture already on file: nothing is drawn.
+      final again = freshProject();
+      await tester.runAsync(() async {
+        await again.state.openProject(scratch.project);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      expect(drawn, 1, reason: 'a project that has a picture keeps it');
     });
   }, skip: !engineAvailable);
 

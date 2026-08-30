@@ -158,6 +158,14 @@ pub(crate) fn sweep(keep: u32) -> Vec<PathBuf> {
 /// Consider one project. `None` when there was nothing to write, or when the
 /// write failed — a failed autosave is not an error anybody can act on, and the
 /// next round will try again.
+///
+// ponytail: an autosave does not refresh the welcome screen's thumbnail
+// (K-667). The file it would write is named by a digest the *frontend* owns
+// (`Workspace.thumbnailKey`) in a folder the frontend owns, so writing it here
+// would make one filename two sources of truth. The trigger for changing that
+// is somebody minding that a picture can be an editing session stale; the
+// upgrade is an "autosaved" event on the change stream that the frontend
+// answers by drawing one, not a write made from this thread.
 pub(crate) fn sweep_one(id: Uuid, keep: u32) -> Option<PathBuf> {
     let state = {
         let projects = crate::api::state::PROJECTS.read().ok()?;

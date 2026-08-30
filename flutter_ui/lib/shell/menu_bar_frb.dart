@@ -1417,16 +1417,35 @@ Future<Uint8List?> Function() projectThumbnailCapture = captureViewerPicturePng;
 ///
 /// **Nothing here may cost anybody a save.** It runs after the write has
 /// finished and the notice has been posted, and it swallows everything: a
-/// Viewer that is not up (saving from the welcome screen itself, before the
-/// shell exists), a boundary that has not painted, a driver that will not read
-/// the texture back, a read-only appdata folder. Every one of those costs one
-/// row its picture and shows the placeholder instead, which is a state the row
-/// is built for.
-Future<void> fileProjectThumbnail(String path) async {
+/// boundary that has not painted, a driver that will not read the texture back,
+/// a machine with no graphics adapter, a read-only appdata folder. Every one of
+/// those costs one row its picture and shows the placeholder instead, which is
+/// a state the row is built for.
+///
+/// **The Viewer first, the engine after.** A Viewer that is up has already
+/// painted the frame, so photographing it costs nothing and shows exactly what
+/// the user was looking at. A Viewer that is not — a headless save, an After
+/// Effects conversion, the welcome screen's own New project card before the
+/// shell exists, a workspace with the panel closed — used to end here with no
+/// picture at all, which is what made the feature read as removed. [comp] is
+/// what the engine draws instead, at [frame].
+Future<void> fileProjectThumbnail(String path,
+    {CompositionReference? comp, int frame = 0}) async {
+  Uint8List? png;
   try {
-    final png = await projectThumbnailCapture();
-    if (png != null) Workspace.writeThumbnail(path, png);
-  } catch (_) {}
+    png = await projectThumbnailCapture();
+  } catch (_) {
+    // A boundary that would not photograph is not the end of it: the engine can
+    // still draw the composition itself.
+  }
+  if (png == null && comp != null) {
+    try {
+      png = await Workspace.compThumbnailPng(comp, frame);
+    } catch (_) {}
+  }
+  // The write swallows its own failures; a read-only appdata folder costs one
+  // row its picture and nothing else.
+  if (png != null) Workspace.writeThumbnail(path, png);
 }
 
 /// Save the project, asking for a location only when there is not one already
@@ -1467,8 +1486,16 @@ Future<void> saveProjectFrb(
     app.refreshWindowTitle();
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it (K-468): the save is done, the notice is posted, and
-    // photographing the picture happens on its own time.
-    unawaited(fileProjectThumbnail(written));
+    // taking the picture happens on its own time. The fronted composition at
+    // the playhead is what it is a picture of, falling back to the project's
+    // first comp — a save made from the welcome screen fronts nothing, and a
+    // project's first comp is the one its row is recognised by.
+    final comps = app.comps();
+    unawaited(fileProjectThumbnail(
+      written,
+      comp: ui.selectedComp ?? (comps.isEmpty ? null : comps.first.$1),
+      frame: ui.playheadFrame.value,
+    ));
   } catch (_) {
     // The work is still in the document and the journal; say so calmly and let
     // the user pick somewhere writable.

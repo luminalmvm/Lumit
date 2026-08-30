@@ -3,6 +3,7 @@
 // settings structs), held in one ChangeNotifier and written to a JSON file —
 // the Flutter counterpart of eframe's storage (docs/archive/flutter-port/03).
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -10,6 +11,7 @@ import 'dart:ui';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
@@ -1388,6 +1390,15 @@ class Workspace extends ChangeNotifier {
   // redirect above covers it for nothing: a `flutter test` run writes its
   // thumbnails into the same scratch folder its settings go to.
 
+  /// How many pixels across a project thumbnail is captured at, whichever road
+  /// takes it.
+  ///
+  /// The welcome row draws it 64 wide, so this is that at 200 % and no more: a
+  /// picture nobody will ever see at full size is bytes on somebody's disk,
+  /// milliseconds on every save, and — on the engine's road — pixels crossing
+  /// the bridge that nothing will look at.
+  static const int projectThumbnailPixels = 128;
+
   /// The folder the thumbnails live in — `%APPDATA%\lumit\thumbnails` in the
   /// application, the scratch folder under [storeOverride] in a test.
   static Directory thumbnailDir() => Directory(
@@ -1426,6 +1437,53 @@ class Workspace extends ChangeNotifier {
       final f = thumbnailFile(path);
       f.parent.createSync(recursive: true);
       f.writeAsBytesSync(png);
+    } catch (_) {}
+  }
+
+  /// The engine's own picture of [comp] at [frame] as a PNG — the road that
+  /// needs no Viewer.
+  ///
+  /// K-468 filed the picture by photographing the Viewer widget, because a
+  /// composition frame had no way of reaching Dart as pixels at all. It has one
+  /// now (`CompositionReference.thumbnail`), and this is the seam every save
+  /// road falls back to when there is no Viewer to photograph: a headless save,
+  /// an After Effects conversion, a workspace with the panel closed, a project
+  /// being opened for the first time since it grew a picture.
+  ///
+  /// **A field rather than a function**, so a test can put its own picture here:
+  /// no widget test has a graphics adapter to render one on, and the wiring is
+  /// what those tests are about.
+  static Future<Uint8List?> Function(CompositionReference comp, int frame)
+      compThumbnailPng = _compThumbnailPng;
+
+  static Future<Uint8List?> _compThumbnailPng(
+      CompositionReference comp, int frame) async {
+    final still = await comp.thumbnail(
+        frame: BigInt.from(frame), maxEdge: projectThumbnailPixels);
+    if (still == null || still.width == 0 || still.height == 0) return null;
+    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
+    // own photograph goes through, so the two roads file the same kind of file.
+    final decoded = Completer<Image>();
+    decodeImageFromPixels(still.rgba, still.width, still.height,
+        PixelFormat.rgba8888, decoded.complete);
+    final image = await decoded.future;
+    try {
+      final png = await image.toByteData(format: ImageByteFormat.png);
+      return png?.buffer.asUint8List();
+    } finally {
+      image.dispose();
+    }
+  }
+
+  /// File the engine's picture of [comp] at [frame] as the thumbnail of the
+  /// project at [path]. Best-effort throughout: a machine with no graphics
+  /// adapter, a comp that will not draw and an unwritable folder all cost one
+  /// row its picture, which is a state the row is built for.
+  static Future<void> fileCompThumbnail(String path, CompositionReference comp,
+      {int frame = 0}) async {
+    try {
+      final png = await compThumbnailPng(comp, frame);
+      if (png != null) writeThumbnail(path, png);
     } catch (_) {}
   }
 }

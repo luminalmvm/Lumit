@@ -5935,23 +5935,59 @@ and there are several ordinary ways it can — nothing is said. A row with no
 picture just shows a small grey placeholder, which is a perfectly normal thing
 for a row to show.
 
-**Where does the picture come from?** From the Viewer, by photographing what is
-already on screen. This sounds like a shortcut and is not one: it is the only
-option there is. A rendered composition frame **never crosses from Rust into
-Dart as pixels**. The frame is drawn on the graphics card and handed over as a
+**Where does the picture come from?** From one of two places, and the first
+explains why there had to be a second.
+
+The first is the Viewer, by photographing what is already on screen. That sounds
+like a shortcut and was not one: for a while it was the only option there was. A
+rendered composition frame **never crosses from Rust into Dart as pixels** on the
+Viewer's own path. The frame is drawn on the graphics card and handed over as a
 *handle* to that card memory — the picture stays where it was made and Flutter
 draws it from there, which is the whole reason the Viewer is fast. There is no
-"give me the pixels" call to make, because giving Dart the pixels is precisely
-what that design avoids. So the picture on screen is the only copy of the frame
-that Dart can reach at all, and Lumit photographs it exactly where the Viewer's
-own **Snapshot** button already does.
+"give me the pixels" call on that path, because giving Dart the pixels is
+precisely what it avoids. So the picture on screen was the only copy of the frame
+Dart could reach, and Lumit photographs it exactly where the Viewer's own
+**Snapshot** button already does.
 
-Two consequences follow, and both are fine. A project saved with no Viewer up —
-from the welcome screen's own *New project* card, before the editor has even been
-built — gets no picture until the next save from inside the editor. And if the
-engine ever *does* grow a way to render a composition straight to bytes, there is
-exactly one function to change (`captureViewerPicturePng`), and nothing else in
-the chain knows or cares where the bytes came from.
+The trouble was what happened when there was no Viewer. A project saved from the
+welcome screen's own *New project* card, from a workspace with the Viewer panel
+closed, or by an After Effects conversion had nothing to photograph, so it got no
+picture at all — and once you notice how many saves that covers, a list of grey
+placeholders stops looking like an occasional blank and starts looking like a
+feature that was removed.
+
+So the engine grew the second road: **a call that draws one small still of a
+composition on its own** (`CompositionReference.thumbnail`). It is worth being
+precise about why this does not contradict the paragraph above. That rule is
+about the *per-frame* path — twenty-five or sixty pictures a second, each several
+megabytes, which is what would be ruinous to copy. This is one picture, 128
+pixels across (about 36 KB), asked for once when a project is saved or opened.
+The caller says how big, so it cannot quietly grow into a frame transport, and it
+draws on a *different* renderer from the Viewer's — the same one the exporter
+prepares its work on — so taking a picture never has to wait behind a frame
+somebody is watching, and never holds one up.
+
+The Viewer photograph is still tried first, because when there is a Viewer it is
+free: the frame is already painted, and it is exactly the picture the person
+saving was looking at. The engine draws one only when there is nothing on screen
+to photograph.
+
+**What about the projects that already have no picture?** Pictures are filed
+under the project's path, so every project saved before any of this existed —
+including everything converted from After Effects — would have kept its grey
+placeholder until the next time it happened to be saved. So opening a project
+whose picture is missing draws one, once, in the same place that adopts the
+document. A project that already has a picture is left alone: the one it has is
+of the frame it was last *saved* at, and redrawing it on open would replace that
+with frame 0.
+
+One thing that deliberately does *not* refresh the picture is an **autosave**.
+The autosave runs on a timer inside the engine, and the picture's file name is
+worked out by the front end (it is a scramble of the path, in a folder the front
+end owns). Teaching the engine that naming rule would mean two places in the
+program deciding one file name — the sort of duplication that is fine for a week
+and wrong for ever after — and all it would buy is a picture being fresher in a
+list you do not see until the next launch. So it is left, and written down.
 
 The list is yours to prune: **Clear** empties it, and the **×** at the end of a row
 forgets that one. Neither asks you first, because neither destroys anything — the

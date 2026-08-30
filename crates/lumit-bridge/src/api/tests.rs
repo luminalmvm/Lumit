@@ -10993,3 +10993,69 @@ fn setting_a_shader_source_is_one_undo_step() {
         "and leaves the effect it was made on"
     );
 }
+
+// --- The project's own picture, off the Viewer (K-468) ---------------------
+
+/// **The road a headless save takes.** The welcome screen's thumbnail used to be
+/// a photograph of the Viewer widget, so a project saved with no Viewer on
+/// screen — an After Effects conversion, an agent, an autosave with the panel
+/// closed — got no picture and the row showed an empty well. Nothing here starts
+/// a worker or mounts anything: a project, a composition, a layer, and a still.
+///
+/// `max_edge` is honoured on the *longest* edge, so a 16:9 comp answers 128×72
+/// and the row's 64×36 well is filled at 200 % and no more.
+///
+/// Skips itself calmly on a machine with no graphics adapter, the way every
+/// other test that needs one does — and that is the same `None` a row treats as
+/// "no picture yet", not as an error.
+#[test]
+fn a_composition_draws_its_own_thumbnail_without_a_viewer() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = add_comp(&project, "Scene");
+    comp.add_solid_layer().expect("something to draw");
+
+    let Some(thumb) = comp.thumbnail(0, 128).expect("the comp is a comp") else {
+        eprintln!("no graphics adapter; skipping");
+        return;
+    };
+
+    assert_eq!(
+        (thumb.width, thumb.height),
+        (128, 72),
+        "the longest edge is what `max_edge` names, and the shape is the comp's"
+    );
+    assert_eq!(
+        thumb.rgba.len(),
+        128 * 72 * 4,
+        "tightly packed RGBA8, as the type promises"
+    );
+    assert!(
+        thumb.rgba.iter().any(|&byte| byte != 0),
+        "a solid on a comp is not an empty picture"
+    );
+
+    project.close().expect("closed");
+}
+
+/// A comp small enough that `max_edge` is above it is drawn at its own size
+/// rather than blown up: a thumbnail is a reduction, and there is nothing to be
+/// gained by storing an enlargement of one.
+#[test]
+fn a_thumbnail_is_never_larger_than_the_composition() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = add_comp(&project, "Scene");
+    comp.set_settings(BridgeCompSettings {
+        width: 64,
+        height: 64,
+        ..comp.get_settings().expect("settings")
+    })
+    .expect("resized");
+
+    let Some(thumb) = comp.thumbnail(0, 128).expect("the comp is a comp") else {
+        eprintln!("no graphics adapter; skipping");
+        return;
+    };
+    assert_eq!((thumb.width, thumb.height), (64, 64));
+
+    project.close().expect("closed");
+}

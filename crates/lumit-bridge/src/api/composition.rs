@@ -10,7 +10,7 @@ use crate::api::{
     effect::BridgeEffectInstance,
     footage::FootageReference,
     layer::LayerReference,
-    state::{LumitBridgeState, PROJECTS},
+    state::{BridgeRenderedFrame, LumitBridgeState, PROJECTS},
     worker_thread::{
         RenderCompRequest, RenderCompRequestWithPreview, RenderScopeRequest, SamplePixelsRequest,
         WorkerRequest,
@@ -2054,6 +2054,62 @@ impl CompositionReference {
             window,
             layer,
         }))
+    }
+
+    /// One small still of this composition at `frame`, its longest edge
+    /// `max_edge` pixels — the picture a project's welcome row carries (K-468).
+    ///
+    /// **Why a still may cross when a frame may not.** Zero-copy is the only
+    /// Viewer transport (K-183): a composition frame reaches the frontend as a
+    /// texture handle, and the read-back path was deleted because serialising a
+    /// 1080p frame a byte at a time measured 8.8 ms. This is 128 px across — 36
+    /// KiB, a seventh of a scope trace — and it is asked for once, after a save.
+    /// The size is what makes it a reading rather than a picture transport, and
+    /// it is the caller's `max_edge` that keeps it one.
+    ///
+    /// Before this, the welcome screen photographed the Viewer widget, so a
+    /// project saved with no Viewer on screen — a headless save, an After
+    /// Effects conversion, a workspace with the panel closed — got no picture at
+    /// all. This is the road K-468 named as the one that would replace it.
+    ///
+    /// Async rather than `#[frb(sync)]` deliberately: it renders, and a render
+    /// on the interface thread is the interface stopped. The snapshot is taken
+    /// under the read guard and the guard is dropped before the render begins
+    /// (docs/14 §5) — a save must never wait behind a picture of itself.
+    ///
+    /// `None` on a machine with no graphics adapter, which is the same calm
+    /// nothing every other render answers there; the row draws its placeholder.
+    pub fn thumbnail(
+        &self,
+        frame: u64,
+        max_edge: u32,
+    ) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
+        let (document, longest) = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let snapshot = proj.store.snapshot();
+            let Some(lumit_core::model::ProjectItem::Composition(comp)) = snapshot.item(self.id)
+            else {
+                return Err(BridgeError::InvalidComp);
+            };
+            let longest = comp.width.max(comp.height).max(1);
+            (snapshot, longest)
+        };
+
+        // Everything from here is outside the lock. The scale is what the
+        // returned buffer is sized by, so `max_edge` is honoured exactly rather
+        // than through the preview ladder the composite itself snaps to.
+        let scale = (f64::from(max_edge.max(1)) / f64::from(longest)).clamp(1e-4, 1.0) as f32;
+        Ok(
+            crate::render::thumbnail(&document, self.id, frame, scale).map(
+                |(rgba, width, height)| BridgeRenderedFrame {
+                    frame,
+                    width,
+                    height,
+                    rgba,
+                },
+            ),
+        )
     }
 
     /// Ask for `frame` with `layer`'s transform replaced by `transform` — the

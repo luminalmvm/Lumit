@@ -64,6 +64,7 @@ import '../l10n/strings.dart';
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
+import '../state/workspace.dart';
 import '../widgets/controls.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
@@ -88,26 +89,22 @@ export 'viewer_strips.dart';
 // already showing, inside the very [RepaintBoundary] the Snapshot button
 // photographs.
 //
-// **So no engine call is involved, and none exists.** A composition frame never
-// crosses the bridge as pixels: zero-copy is the only Viewer transport (K-183),
-// so a rendered frame reaches Dart as a texture handle and the read-back path
-// was deleted. Photographing the boundary is not a workaround around a call
-// that exists — it is the only place in the process where those pixels are
-// addressable at all. If the engine ever grows a call that renders a
-// composition to bytes off the playback path, this is the one function that
-// should change.
+// **It is the first road, and no longer the only one.** A composition frame
+// never crosses the bridge as pixels on the Viewer's own path: zero-copy is the
+// only transport there (K-183), so a rendered frame reaches Dart as a texture
+// handle and the read-back was deleted. That is why photographing the boundary
+// came first — for a while it was the only place in the process where those
+// pixels were addressable at all. K-468 named what would replace it, and the
+// engine has since grown it: `CompositionReference.thumbnail` draws a still off
+// the playback path at a size that is a reading rather than a picture
+// transport. The photograph stays because it is free when the Viewer is up —
+// already painted, already the frame the user is looking at — and
+// `Workspace.compThumbnailPng` is what every save falls back to when it is not.
 
 /// The picture boundary of the Viewer currently on screen, or null when there
 /// is no Viewer up — the welcome screen's window, or a workspace with the panel
 /// closed. Set by the panel while it is mounted; see `_lendPicture`.
 GlobalKey? viewerPictureKey;
-
-/// How many pixels across a project thumbnail is captured at.
-///
-/// The welcome row draws it 64 wide, so this is that at 200 % and no more: a
-/// picture nobody will ever see at full size is bytes on somebody's disk and
-/// milliseconds on every save.
-const double projectThumbnailPixels = 128;
 
 /// Photograph the composition on screen as a small PNG, for the welcome
 /// screen's recent rows (K-468).
@@ -123,7 +120,8 @@ Future<Uint8List?> captureViewerPicturePng() async {
   // The boundary is the *whole* picture at the current magnification, not the
   // visible part of it (see the stack in `_stage`), so this is the composition
   // frame however the Viewer happens to be zoomed or panned.
-  final ratio = (projectThumbnailPixels / size.width).clamp(0.001, 1.0);
+  final ratio =
+      (Workspace.projectThumbnailPixels / size.width).clamp(0.001, 1.0);
   final shot = await boundary.toImage(pixelRatio: ratio);
   try {
     final png = await shot.toByteData(format: dartui.ImageByteFormat.png);

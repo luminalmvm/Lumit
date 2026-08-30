@@ -20745,3 +20745,126 @@ the K-258 byte-identity at four axes, the preserved determinant, and the lean it
 axes; `wgsl_transform_matches_the_cpu_oracle` (lumit-gpu) gains a `skew` and a
 `skew-axis-and-spin` case, so the GPU agrees with the oracle to the same 2 fp16 ULP;
 `transform_carries_the_two_points_the_scales_and_the_skew` (lumit-import).
+
+---
+
+## K-667 — A composition draws its own thumbnail; the Viewer photograph becomes the fast path
+
+**Status: DECIDED (2026-08-30).** Supersedes one clause of K-468 — "the picture is
+photographed from the Viewer, and that is not a shortcut" — and nothing else. K-468's own
+words named the condition: *"Should the engine ever grow a call that renders a composition
+to bytes off the playback path, `captureViewerPicturePng` is the single function that
+changes."* It has, and this is that change.
+
+**What was wrong.** K-468 was right that a composition frame never crosses the bridge as
+pixels on the Viewer's road — zero-copy is the only transport there (K-183) and the
+read-back was deleted — and so a photograph of the `RepaintBoundary` was the only place in
+the process where those pixels were addressable at all. The consequence it accepted was
+that a project saved with no Viewer on screen simply has no picture. That consequence
+turned out to be most of the saves the owner actually makes: an After Effects conversion,
+an agent, a workspace with the Viewer closed. Every recent row was an empty well, and a
+feature that is absent for the ordinary case is a feature that reads as removed.
+
+**The road.** `CompositionReference::thumbnail(frame, max_edge)` renders one still through
+the session-lifetime headless renderer in `render.rs` — the instance the export-input
+builder already drives, not the Viewer worker's, so a picture taken because a project was
+saved neither waits behind a frame somebody is watching nor holds one up. It answers a
+`BridgeRenderedFrame` whose **longest** edge is `max_edge`; the frontend encodes the PNG
+through `dart:ui`, the same encoder the photograph already went through, so both roads file
+the same kind of file.
+
+**This does not reopen the frame transport.** 128 px is 36 KiB — a seventh of a scope trace,
+and asked for once after a save. The caller names the size, which is what keeps it a
+*reading* rather than a picture transport, and the Viewer's own frames still cross only as
+handles. The rule K-183 protects is about the per-frame path, not about whether a byte may
+ever cross.
+
+**The photograph stays, and stays first.** A Viewer that is up has already painted the frame:
+photographing it costs nothing, and it shows exactly what the user was looking at, zoom and
+all. The engine's road is the fallback, and every save takes it when there is no Viewer to
+photograph. Which one a picture came from is not recorded, because a row cannot tell and
+neither can anybody looking at it.
+
+**Opening a project with no picture draws one, once.** Keyed by path, a thumbnail exists only
+for projects saved since the feature landed, so every project converted or saved before this
+would have kept an empty well until its next save. Adopting a project — the one funnel every
+open, import and recovery passes through — checks for the file and draws one when it is
+missing. Not on every open: a project that has a picture keeps it, because the one it has is
+of the frame it was last *saved* at.
+
+**An autosave still does not refresh it,** and that is deliberate rather than pending. The
+autosave sweep is an engine timer thread, and the file it would write is named by a digest
+the frontend owns in a folder the frontend owns; teaching the engine that name would make
+one filename two sources of truth for the sake of a picture nobody sees until the next
+launch. Recorded in docs/TODO.md with the shape it would take if it is ever wanted — an
+event the frontend answers, not a write the engine makes.
+
+Regression tests: `a_composition_draws_its_own_thumbnail_without_a_viewer` and
+`a_thumbnail_is_never_larger_than_the_composition` (lumit-bridge); *a headless save files
+the engine's picture*, *opening a project without a picture backfills it* and the amended
+*a failing capture does not fail the save*, which now needs **both** roads to fail
+(`welcome_metrics_test.dart`).
+
+
+## K-670 — The preview opens at Full and plays every frame
+
+**Status: DECIDED (2026-08-30).** Two shipped defaults reversed, on the owner's call. A
+composition that has never been given a preview resolution previews at **Full** rather than
+Auto (K-357), and a fresh install's playback mode is **Every frame** rather than Adaptive.
+Neither touches a choice already made: a comp with a stored tier keeps it, a settings file
+with a stored mode keeps that, and both controls are one dropdown away.
+
+**Why the default is the one that shows the picture.** Auto renders only the pixels the
+current magnification can display, which is cheap and is what the Viewer had always quietly
+done — but it makes the sharpness of the picture a function of how wide the panel happens
+to be. Adaptive keeps time by dropping resolution under load, which is the right answer for
+a timing pass and the wrong one for a first look. Both defaults were chosen as the *safe*
+answer and both fail the same way: they answer a question about quality without being asked,
+and a preview that softens itself reads as work that is soft. The cheap answers are still
+there, and now they are chosen rather than assumed.
+
+**Auto becomes a stored tier.** It was the absent entry in the per-comp map — "no entry"
+and "Auto" were the same state, which was correct while Auto was the default and is not
+now. Every tier is written, so a comp set to Auto stays Auto and an absent entry means only
+"never chosen". `PerformanceSettings()` is likewise the one place the playback default is
+written down: the Preview & cache page's Reset and the fallback for an unreadable stored
+name both read it rather than repeating a mode name that can drift.
+
+Tests: `settings_test.dart` (the shipped default, and a stored `adaptive` surviving it),
+`viewer_panel_frb_test.dart` (a comp never set is at Full; Auto stored per comp),
+`menu_bar_frb_test.dart` (the default does not follow the panel down).
+
+## K-671 — An option row leaves the menu open, and the pointer leaving takes it away
+
+**Status: DECIDED (2026-08-30).** Extends K-520 from checkbox rows to **option rows**: a
+row that picks one of several *and* changes the picture behind the menu runs its command,
+redraws the ticks in place and stays put. The Viewer's quality menu — the preview
+resolutions and the two playback modes — and View ▸ Resolution are where they exist today.
+Ordinary command rows still close, which is what doing something should do.
+
+**Why K-520's line moves.** That entry left "a row that picks one of several — a workspace
+preset, a preview resolution — an ordinary row, because closing is what a choice should
+do", and that holds for a choice whose result you cannot see until the menu is out of the
+way. It does not hold for a choice whose whole result is on screen *behind* the menu:
+picking Half is nearly always comparing Half with Full, and a menu that shut after each
+pick made comparing two tiers a matter of reopening the menu between every look. The
+distinction is not "toggle versus choice", it is **whether the menu is in the way of the
+answer**.
+
+**The way out is the pointer leaving.** A row that no longer closes the menu needs a
+dismissal that is not a click, so a surface on which an option row has been pressed closes
+when the pointer leaves it; Escape and a click away work as they always did. It is armed by
+the press rather than standing: a menu nobody has picked from is still dismissed the way it
+was opened. The menu bar's own lists are deliberately left out of the pointer rule — their
+flyouts are navigated by moving off one surface and onto another, where "the pointer left"
+is not a dismissal — so an option row there behaves exactly as a K-520 toggle does.
+
+The convention lives in the popup chain rather than in either call site: `MenuRow.option`
+for the surfaces raised through `showMenuAt`, `MenuEntry.option` for the menu bar. Both read
+their tick through a closure, which is what lets the mark move to the row just pressed
+instead of showing what the menu said when it was raised.
+
+Tests: `viewer_panel_frb_test.dart` — three picks on one opening of the quality menu, and
+the menu going when the pointer leaves it but not before an option has been picked;
+`menu_bar_frb_test.dart` — five resolution tiers picked from one opening of View ▸
+Resolution, and a click away still closing it.
