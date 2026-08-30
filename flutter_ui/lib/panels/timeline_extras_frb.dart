@@ -321,7 +321,7 @@ Future<void> showCompTabMenuFrb({
   if (await showCompSettingsFrb(context: context, comp: comp)) onChanged();
 }
 
-class _CompTab extends StatelessWidget {
+class _CompTab extends StatefulWidget {
   final String name;
   final bool active;
 
@@ -344,74 +344,104 @@ class _CompTab extends StatelessWidget {
   });
 
   @override
+  State<_CompTab> createState() => _CompTabState();
+}
+
+class _CompTabState extends State<_CompTab> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final round = t.shape == ThemeShape.round;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onSecondaryTapUp: (d) => onMenu(d.globalPosition),
-      child: Container(
-        padding: const EdgeInsets.only(left: 10, right: 10),
-        decoration: BoxDecoration(
-          // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
-          // seats the fronted tab in the panel's own surface, so the tab and
-          // the comp under it read as one thing.
-          color: dropping
-              ? t.accent.withValues(alpha: 0.18)
-              : (active ? (round ? t.accent : t.surface1) : null),
-          // **No accent tick, and no seams** (§12A.1): the seated surface
-          // colour alone marks the open composition, exactly as the mockup
-          // draws it — it computes no border on any tab. The accent's "active
-          // tab tick" (§3.1) is the workspace tabs', not these, and the
-          // hairlines that used to rule each seam only turned the strip into a
-          // grid over a header that already reads as one row.
-          //
-          // The sides are still *reserved*, transparent: a tab that lost its
-          // border would be two pixels narrower than the same tab in Round,
-          // and every tab would shift the moment the shape changed.
-          border: round
-              ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
-              : Border.symmetric(
-                  vertical: BorderSide(color: t.hairline.withValues(alpha: 0)),
+    final name = widget.name;
+    final active = widget.active;
+    final dropping = widget.dropping;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onSecondaryTapUp: (d) => widget.onMenu(d.globalPosition),
+        child: Container(
+          padding: const EdgeInsets.only(left: 10, right: 10),
+          // **The pointer says the tab is a control** (K-640). A tab that is
+          // not the open one answered a hover with nothing at all, so there
+          // was no way to tell a name from a name you could press. It wears
+          // the value well's own hover face — one pixel of `hairlineStrong`
+          // (docs/15 §3.1) — and it is a *foreground* decoration so it costs
+          // no layout: a border in the box's own decoration insets the child
+          // and every tab beside it would shift as the pointer crossed.
+          foregroundDecoration: _hover && !active && !dropping
+              ? BoxDecoration(
+                  border: Border.all(color: t.hairlineStrong, width: 1),
+                  borderRadius: round
+                      ? BorderRadius.circular(t.tokens.controlRadius)
+                      : null,
+                )
+              : null,
+          decoration: BoxDecoration(
+            // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
+            // seats the fronted tab in the panel's own surface, so the tab and
+            // the comp under it read as one thing.
+            color: dropping
+                ? t.accent.withValues(alpha: 0.18)
+                : (active ? (round ? t.accent : t.surface1) : null),
+            // **No accent tick, and no seams** (§12A.1): the seated surface
+            // colour alone marks the open composition, exactly as the mockup
+            // draws it — it computes no border on any tab. The accent's "active
+            // tab tick" (§3.1) is the workspace tabs', not these, and the
+            // hairlines that used to rule each seam only turned the strip into a
+            // grid over a header that already reads as one row.
+            //
+            // The sides are still *reserved*, transparent: a tab that lost its
+            // border would be two pixels narrower than the same tab in Round,
+            // and every tab would shift the moment the shape changed.
+            border: round
+                ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
+                : Border.symmetric(
+                    vertical:
+                        BorderSide(color: t.hairline.withValues(alpha: 0)),
+                  ),
+            borderRadius:
+                round ? BorderRadius.circular(t.tokens.controlRadius) : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                // Body, not `small`: a composition's name is the *user's* text
+                // (§7.1), and the mockup sets both states at 11. Only the colour
+                // tells the fronted tab from the rest.
+                child: Text(
+                  name,
+                  style: !active
+                      ? t.body.copyWith(color: t.textMuted)
+                      : round
+                          ? t.bodyPrimary.copyWith(color: t.surface0)
+                          : t.bodyPrimary,
                 ),
-          borderRadius:
-              round ? BorderRadius.circular(t.tokens.controlRadius) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              // Body, not `small`: a composition's name is the *user's* text
-              // (§7.1), and the mockup sets both states at 11. Only the colour
-              // tells the fronted tab from the rest.
-              child: Text(
-                name,
-                style: !active
-                    ? t.body.copyWith(color: t.textMuted)
-                    : round
-                        ? t.bodyPrimary.copyWith(color: t.surface0)
-                        : t.bodyPrimary,
               ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              key: closeKey,
-              behavior: HitTestBehavior.opaque,
-              onTap: onClose,
-              child: SizedBox(
-                width: 12,
-                height: 22,
-                child: Center(
-                  // Muted, unless it is sitting on Round's filled accent —
-                  // where muted grey is barely there. Same flip as the label.
-                  child: Text('×',
-                      style: t.body.copyWith(
-                          color: round && active ? t.surface0 : t.textMuted)),
+              const SizedBox(width: 8),
+              GestureDetector(
+                key: widget.closeKey,
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onClose,
+                child: SizedBox(
+                  width: 12,
+                  height: 22,
+                  child: Center(
+                    // Muted, unless it is sitting on Round's filled accent —
+                    // where muted grey is barely there. Same flip as the label.
+                    child: Text('×',
+                        style: t.body.copyWith(
+                            color: round && active ? t.surface0 : t.textMuted)),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

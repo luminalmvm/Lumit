@@ -91,6 +91,59 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// **A hovered comp tab wears the value well's own hover outline**
+    /// (K-640). A tab that is not the open one used to answer a hover with
+    /// nothing at all: the pointer crossed it and the strip did not admit it
+    /// was a control. It now takes the same face a well takes — one pixel of
+    /// `hairlineStrong` — in a *foreground* decoration, so nothing about the
+    /// strip's layout moves as the pointer travels along it.
+    testWidgets('a hovered comp tab outlines, and does not move',
+        (tester) async {
+      final p = withComp();
+      final second = p.state.project!.newComposition(name: 'Other');
+      p.uiState.setSelectedComp(second);
+      await mount(tester, p);
+
+      final key = ValueKey<String>('tl-tab-${p.comp.internalid}');
+      Container box() => tester.widget<Container>(find
+          .descendant(of: find.byKey(key), matching: find.byType(Container))
+          .first);
+
+      expect(box().foregroundDecoration, isNull,
+          reason: 'an untouched tab wears no outline');
+      final before = tester.getSize(find.byKey(key));
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(tester.getCenter(find.byKey(key)));
+      await tester.pumpAndSettle();
+
+      final t = LumitTheme.dark();
+      final outline =
+          (box().foregroundDecoration! as BoxDecoration).border! as Border;
+      expect(outline.top.color, t.hairlineStrong,
+          reason: "the well's own hover edge, and no other grey");
+      expect(outline.top.width, 1);
+      expect(tester.getSize(find.byKey(key)), before,
+          reason: 'and the outline costs the strip no layout');
+
+      // The open tab already says so with its seated surface, so it stays as
+      // it is under the pointer.
+      final open = ValueKey<String>('tl-tab-${second.internalid}');
+      await gesture.moveTo(tester.getCenter(find.byKey(open)));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<Container>(find
+                  .descendant(
+                      of: find.byKey(open), matching: find.byType(Container))
+                  .first)
+              .foregroundDecoration,
+          isNull,
+          reason: 'the open tab is already marked; hover adds nothing');
+    });
+
     /// The open composition is marked by the seated surface alone (§12A.1) —
     /// **no accent tick**. The accent's "active tab" job is the workspace
     /// tabs', not these.
@@ -1300,8 +1353,7 @@ void main() {
 
       final id = layer.internallayerId;
       expect(find.byKey(ValueKey<String>('tl-row-$id')), findsOneWidget);
-      expect(
-          find.byKey(ValueKey<String>('tl-keys-prop-$id/transform')),
+      expect(find.byKey(ValueKey<String>('tl-keys-prop-$id/transform')),
           findsNothing);
     });
   }, skip: !engineAvailable);

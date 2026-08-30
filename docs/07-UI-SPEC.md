@@ -1128,7 +1128,7 @@ had, so a comp reopened from the strip is a return rather than a fresh start at 
 fully zoomed out. Like the Viewer's exposure (K-314), the preview resolution (K-357) and
 the region of interest (K-362), this is session state — it rides in the session blob and
 so in the `.lum`'s `ui_state` (K-245), never in an op, so a scrub never lands on the undo
-stack or makes the project dirty. Right-clicking a tab opens **Composition settings…** for that comp, the same
+stack or makes the project dirty. **A tab that is not the fronted one outlines under the pointer** (K-640): the value well's own hover edge, one pixel of `hairline_strong`, drawn over the tab rather than inside it so nothing on the strip moves as the pointer travels. The fronted tab is already marked by its seated surface and adds nothing under the pointer. Right-clicking a tab opens **Composition settings…** for that comp, the same
 dialog the Project panel's context menu opens, reached from the comp being worked in. Below them the outline carries two header rows
 of its own: the **toolbar** (the playhead as `HH:MM:SS:FF` timecode plus a zero-based
 frame readout `f72` — both in **fixed-width slots** and both **click-to-type**, per K-287:

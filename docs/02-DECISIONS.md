@@ -19898,3 +19898,32 @@ document holds a real Curves with five identity diagonals and the two rows; and
 `map::curves`' own unit tests, which build blobs to the layout and pin every way one
 is refused (short, long, unknown version, count out of range, byte-swapped, a record
 read at a shifted offset, a point off the table).
+
+
+## K-640 — A comp tab outlines under the pointer, the way a value well does
+
+**Status: DECIDED (2026-08-30).** Amends [07-UI-SPEC.md](07-UI-SPEC.md) §12A.1's comp-tab
+strip. K-188's arrangement and K-394's fronted-tab fill both stand.
+
+**What was wrong.** A comp tab that was not the fronted one answered a hover with nothing
+at all. The fronted tab is marked by its seated surface, so the rest are bare names on the
+header — and a bare name that does not react is a caption, not a control. The pointer
+crossed the strip and the strip said nothing back.
+
+**The rule now.** A tab that is not the fronted one takes **the value well's own hover
+face**: one pixel of `hairline_strong`, the same edge a well swaps its resting hairline for
+under the pointer (§3.1). It is one treatment for "you can press this", learned once. The
+fronted tab is already saying what it is and adds nothing; a tab a drag is hovering over
+keeps the accent wash that says where the drop would land.
+
+**Drawn over, not inside.** The outline is a *foreground* decoration. A border in the box's
+own decoration insets the child, so a tab would grow two pixels each way the moment the
+pointer touched it and every tab beside it would shift — the same trap `HouseButton`
+already avoids by reserving a transparent border. Nothing on the strip moves.
+
+The workspace strip's tabs need no change: they are `HouseButton`s, and a frameless
+`HouseButton` already lifts to `surface3` with a `hairline_strong` edge under the pointer.
+
+Regression test: `a hovered comp tab outlines, and does not move`
+(`timeline_extras_frb_test`) — an unfronted tab gains the one-pixel `hairline_strong`
+outline and keeps its size, and the fronted tab gains nothing.
