@@ -546,6 +546,103 @@ void main() {
       expect(picked.ui.selectedProperties.value, contains(picked.path));
     });
 
+    /// And the fourth selection path: clicking a **layer's** name.
+    ///
+    /// It was the one left holding the panel-wide `setState` after the other
+    /// three stopped needing one, because a row and a bar took their lit state
+    /// as a build-time flag — so the only way to move the light was to rebuild
+    /// the panel that hands the flag down. On the owner's 64-layer comp that
+    /// cost one **69 ms** build frame for a click that changes the shading of
+    /// two blocks (docs/impl/ui-performance.md §3.1, WP-2). The layer ids ride
+    /// in [TimelineSelection] now and each block reads its own slice.
+    Future<({dynamic ui, LayerReference layer})> clickALayer(
+        WidgetTester tester) async {
+      final p = await mount(tester);
+      // The layer that is *not* already selected: a click that changes nothing
+      // would meet any budget going.
+      final LayerReference layer = p.comp.getLayers().last;
+      // On the name, not the row's centre — the centre lands on the blend
+      // dropdown (the same reason `bridge_call_budget_test` names this cell).
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
+      rebuilds
+        ..reset()
+        ..counting = true;
+      await tester.tapAt(tester.getTopLeft(name) + const Offset(5, 8));
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      // The row's own double-click window (K-243's rename) is a 40 ms timer,
+      // and the binding refuses to end a test with one pending. Off the count,
+      // because a click that has already lit its row is what is being measured.
+      await tester.pump(const Duration(milliseconds: 100));
+      return (ui: p.ui, layer: layer);
+    }
+
+    testWidgets('clicking a layer lights it without redrawing the panel',
+        (tester) async {
+      await clickALayer(tester);
+
+      // ignore: avoid_print
+      print('LAYER CLICK REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
+      // None of the Timeline's chrome can say which layer is picked, so only a
+      // rebuild of the whole panel reaches these. They are the trap for one
+      // coming back — by `setState` here, or by a shell-wide `notifyListeners`
+      // from anything the click touches on its way through.
+      for (final name in [
+        'ColumnHeader',
+        'Toolbar',
+        'Outline',
+        'LayerArea',
+        'TimelineRuler',
+      ]) {
+        expect(
+          rebuilds.byName[name] ?? 0,
+          0,
+          reason: 'the whole Timeline redrew for one layer click ($name):\n'
+              '${rebuilds.ranking()}',
+        );
+      }
+      // Measured at 914, against 1506 before: two outline rows, two bars,
+      // and — most of it — the Effect controls panel showing the layer's own
+      // stack, which is the one thing a layer click genuinely gives a new
+      // picture to (§4.4). The cap is roughly 2x, in the house style.
+      expect(
+        rebuilds.total,
+        lessThan(1800),
+        reason: 'clicking a layer redrew far too much:\n${rebuilds.ranking()}',
+      );
+    });
+
+    /// The honest half: the row and the bar the click lights must actually
+    /// redraw, or the budget above is met by an outline that has gone deaf.
+    testWidgets('the clicked layer still lights its row and its bar',
+        (tester) async {
+      final picked = await clickALayer(tester);
+
+      final rows = tester.widgetList<OutlineRow>(find.byType(OutlineRow)).where(
+          (r) => r.entry.layer.internallayerId == picked.layer.internallayerId);
+      expect(rows, isNotEmpty, reason: 'the clicked layer has a row on screen');
+      expect(rows.first.selected, isTrue,
+          reason: 'the clicked row did not draw itself selected — the outline '
+              'stopped following the layer selection');
+      // Both halves of the table draw the same answer (K-217), and the bar is
+      // the half that reads it through the lanes' own blocks.
+      final bars = tester.widgetList<Bar>(find.byType(Bar)).where(
+          (b) => b.entry.layer.internallayerId == picked.layer.internallayerId);
+      expect(bars, isNotEmpty, reason: 'the clicked layer has a bar on screen');
+      expect(bars.first.selected, isTrue,
+          reason: 'the bar did not outline — the lanes stopped following the '
+              'layer selection');
+      expect(rebuilds.byName['OutlineRow'] ?? 0, greaterThan(0),
+          reason: 'no row redrew, so nothing on screen changed:\n'
+              '${rebuilds.ranking()}');
+      // And the shell holds it, so the Viewer and Delete act on it.
+      expect(picked.ui.selectedLayer.value?.equals(layer: picked.layer), isTrue,
+          reason: 'the click did not reach the shell selection');
+    });
+
     /// The **scale** rule, and the one the three budgets above cannot state:
     /// what an interaction costs must follow the rows **on screen**, not the
     /// rows the composition has.

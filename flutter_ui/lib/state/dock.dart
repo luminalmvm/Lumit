@@ -419,17 +419,27 @@ DockTabs? _firstTabs(DockNode node) {
 
 /// Bring `panel`'s tab to the front of whichever tab group holds it (the
 /// start-up "always open on Project" rule).
-void activatePanelTab(DockNode node, Panel panel) {
+///
+/// **Says whether anything moved**, so a caller can keep quiet when it did
+/// not: fronting is asked for on every layer click (`LumitUiState.frontPanel`,
+/// item 6.28), and the tab is nearly always fronted already — a front that
+/// changes no tab must not repaint the shell or write the workspace to disk
+/// (docs/impl/ui-performance.md §4.4).
+bool activatePanelTab(DockNode node, Panel panel) {
   switch (node) {
     case DockPane():
-      break;
+      return false;
     case DockTabs(:final children):
       final i = children.indexWhere((c) => c.panel == panel);
-      if (i >= 0) node.active = i;
+      if (i < 0 || node.active == i) return false;
+      node.active = i;
+      return true;
     case DockSplit(:final children):
+      var moved = false;
       for (final c in children) {
-        activatePanelTab(c, panel);
+        if (activatePanelTab(c, panel)) moved = true;
       }
+      return moved;
   }
 }
 

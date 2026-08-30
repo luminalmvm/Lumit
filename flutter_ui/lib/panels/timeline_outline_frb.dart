@@ -648,10 +648,21 @@ class KeyReadoutRow extends StatelessWidget {
 /// else. Same rule as the playhead's (see `rebuild_budget_test`).
 class TimelineSelection {
   const TimelineSelection({
+    this.layers = const {},
     this.properties = const [],
     this.highlighted,
     this.colours = const {},
   });
+
+  /// The selected **layers**, as their ids in string form — the shell's list
+  /// (K-217) as the rows read it.
+  ///
+  /// It travels here rather than down the build as a set, because a row that
+  /// takes its lit state as a build-time flag can only be lit by rebuilding the
+  /// panel that hands it down: the first visit to a layer cost one 39–67 ms
+  /// build frame for a click that changes two rows' shading
+  /// (docs/impl/ui-performance.md §3.1).
+  final Set<String> layers;
 
   /// The selected properties' fold paths, in selection order.
   final List<String> properties;
@@ -667,11 +678,15 @@ class TimelineSelection {
 /// rows draw, and nothing another layer's selection can change.
 class LayerSelection {
   const LayerSelection({
+    required this.selected,
     required this.highlighted,
     required this.properties,
     required this.colours,
   });
 
+  /// Whether this layer is one of the selected ones — what its row and its bar
+  /// draw lit.
+  final bool selected;
   final bool highlighted;
   final List<String> properties;
   final Map<String, List<Color>> colours;
@@ -682,6 +697,7 @@ class LayerSelection {
         if (isUnderPath(layerId, path)) path,
     ];
     return LayerSelection(
+      selected: all.layers.contains(layerId),
       // A layer marks itself when its fold was last touched, and when a
       // selected property is one of its own (docs/07 §4.3).
       highlighted: all.highlighted == layerId || mine.isNotEmpty,
@@ -697,6 +713,7 @@ class LayerSelection {
   /// are compared as well as the paths: a curve's colour is its place in the
   /// whole selection, so picking a row on one layer can re-colour another's.
   bool sameAs(LayerSelection other) {
+    if (selected != other.selected) return false;
     if (highlighted != other.highlighted) return false;
     if (!listEquals(properties, other.properties)) return false;
     if (colours.length != other.colours.length) return false;
@@ -709,22 +726,35 @@ class LayerSelection {
 
 /// Rebuilds one layer's block only when that layer's own slice of the
 /// selection changes.
-class _LayerBlock extends StatefulWidget {
-  const _LayerBlock({
+///
+/// Public because both halves of the table need it: the lane bar draws itself
+/// lit from the same slice the outline row does, and a bar left taking its
+/// `selected` as a build-time flag would put the panel-wide `setState` back for
+/// the half that has the most widgets in it.
+class LayerBlock extends StatefulWidget {
+  const LayerBlock({
+    super.key,
     required this.selection,
     required this.layerId,
     required this.builder,
+    this.onlyLit = false,
   });
 
   final ValueListenable<TimelineSelection> selection;
   final String layerId;
   final Widget Function(BuildContext context, LayerSelection mine) builder;
 
+  /// Watch the lit state alone, not the whole slice — what the lane half
+  /// wants: a bar draws a layer's span and whether the layer is chosen, and a
+  /// property picked *inside* the layer moves neither. Without it, picking a
+  /// row redrew the bar beside it (`rebuild_budget_test` counts exactly that).
+  final bool onlyLit;
+
   @override
-  State<_LayerBlock> createState() => _LayerBlockState();
+  State<LayerBlock> createState() => _LayerBlockState();
 }
 
-class _LayerBlockState extends State<_LayerBlock> {
+class _LayerBlockState extends State<LayerBlock> {
   late LayerSelection _mine = _read();
 
   LayerSelection _read() =>
@@ -737,7 +767,7 @@ class _LayerBlockState extends State<_LayerBlock> {
   }
 
   @override
-  void didUpdateWidget(covariant _LayerBlock old) {
+  void didUpdateWidget(covariant LayerBlock old) {
     super.didUpdateWidget(old);
     if (old.selection != widget.selection) {
       old.selection.removeListener(_follow);
@@ -757,12 +787,22 @@ class _LayerBlockState extends State<_LayerBlock> {
 
   void _follow() {
     final next = _read();
-    if (next.sameAs(_mine)) return;
+    final same = widget.onlyLit
+        ? next.selected == _mine.selected
+        : next.sameAs(_mine);
+    if (same) return;
     setState(() => _mine = next);
   }
 
+  /// **The block paints on its own layer.** Rebuilding one block is cheap
+  /// (0.1 ms measured), but the band behind it sits on a single repaint
+  /// boundary (K-649), so one dirty row made the whole three-screenful picture
+  /// re-record: 10–15 ms of the click frame with nothing else in it
+  /// (docs/impl/ui-performance.md §4.3). With a layer per block the click
+  /// re-records the two blocks whose light moved and the rest translate.
   @override
-  Widget build(BuildContext context) => widget.builder(context, _mine);
+  Widget build(BuildContext context) =>
+      RepaintBoundary(child: widget.builder(context, _mine));
 }
 
 /// The left column: one row per layer, with its switches and columns.
@@ -783,13 +823,9 @@ class Outline extends StatelessWidget {
   /// the panel's one answer for the whole outline (K-463).
   final bool matteToggles;
 
-  /// The whole selection as ids (K-217), worked out once by the panel: a row
-  /// asking "am I selected?" is then one set lookup rather than a walk of the
-  /// list per row per paint.
-  final Set<UuidValue> selectedIds;
-
-  /// Which rows are picked and which layer is marked — listened to rather than
-  /// read, so a click repaints the rows it changed. See [TimelineSelection].
+  /// Which layers and rows are picked and which layer is marked — listened to
+  /// rather than read, so a click repaints the rows it changed. See
+  /// [TimelineSelection].
   final ValueListenable<TimelineSelection> selection;
   final ValueChanged<String> onSelectProperty;
   final ValueChanged<String> onEditProperty;
@@ -824,7 +860,6 @@ class Outline extends StatelessWidget {
     required this.groupOrder,
     required this.widths,
     required this.matteToggles,
-    required this.selectedIds,
     required this.selection,
     required this.onSelectProperty,
     required this.onEditProperty,
@@ -867,7 +902,7 @@ class Outline extends StatelessWidget {
         // **The selection is listened to here, one layer at a time.** A
         // click that lights a row must not redraw the layers it did not
         // touch, and this is the seam that decides that.
-        child: _LayerBlock(
+        child: LayerBlock(
           selection: selection,
           layerId: rows[i].id,
           builder: (context, mine) => Column(
@@ -884,9 +919,7 @@ class Outline extends StatelessWidget {
                 matteToggles: matteToggles,
                 index: i,
                 count: rows.length,
-                // A local compare, not a bridge call: both ids already sit here.
-                selected:
-                    selectedIds.contains(rows[i].entry.layer.internallayerId),
+                selected: mine.selected,
                 highlighted: mine.highlighted,
                 open: rows[i].open,
                 hasAudio: rows[i].hasAudio,

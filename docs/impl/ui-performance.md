@@ -371,6 +371,18 @@ per block (~57 on screen maximised); if zoom-fly raster regresses from the added
 layers (a flight re-records every block anyway), the boundaries are disabled during
 flights — the probe decides, not taste.
 
+**The per-block boundary landed with WP-2**, ahead of the rest of this section,
+because the click needed it: with the layer selection listenable and each block
+rebuilding in 0.1 ms, a select click still cost a **9.8–15.3 ms** frame, all of it
+the band's single boundary re-recording fifty-seven rows to move the light on two
+(§7's WP-2 row). It sits in `LayerBlock`, which both halves of the table build
+through, so one line covers rows and bars. The flight worry above was then measured
+rather than argued: with the layers in, zoom-fly raster **fell** 33.0 → 28.5 ms and
+the playhead sweep 47.7 → 27.7 — less picture to re-record, not more — so no
+flight-time disabling is needed. What WP-3 still owns here is the first bullet, the
+widget identity across window slides, and the scroll gate itself (slide builds are
+still ~59 ms p90).
+
 ### 4.4 Selection is listenable row state, never a panel `setState`
 
 The property-selection path is already right: `TimelineSelection` published on a
@@ -382,6 +394,22 @@ draw their lit state from their block's slice; `_selectLayer` publishes and **do
 next frame, whatever else the click causes. The Effect controls panel keeps its
 listener — it genuinely has a new stack to show — asynchronously, off the lit-row
 frame.
+
+**Two things the click paid for that this section had not seen** (found by
+attributing the surviving frame with a stopwatch per builder, WP-2):
+
+- **The menu bar built every row of every menu on every layer click** — 12.9–15.5 ms
+  of it, most of it the Effect menu's entry per effect in the catalogue — because a
+  row's enabled state reads the selection, so the bar listens to it, and its sections
+  held their rows as built lists. A `MenuSection` now holds its rows as a closure the
+  heading calls when it opens: a closed menu costs the record, an open one costs what
+  it always did, on a deliberate press. That also took the bar's own document
+  questions (`history`, `getKind`) out of the click — **9–16 sync calls, 1.3–2.8 ms**,
+  from 14–22 and 4.3–12.5.
+- **Fronting a panel that was already in front** repainted the shell and wrote the
+  workspace to disk. `activatePanelTab` now says whether a tab actually moved and
+  `frontPanel` only `touch`es when one did: the Effect controls are fronted on every
+  layer click (docs/07 item 6.28) and are nearly always fronted already.
 
 And the full canvas-band conversion is priced, and parked. Direction (a) in full —
 lanes and outline as data-driven `CustomPaint` bands, the graph editor's shape — was
@@ -484,6 +512,15 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    **< 8.3 ms** (was 39–67); revisit clicks unchanged at ~0. *Gate (CI):*
    rebuild-budget asserts a layer click rebuilds only the blocks whose slice changed
    (plus Effect controls' own subtree).
+   **Landed 2026-08-30.** Worst build frame on a first-visit click **5.1–5.4 ms**
+   (9.3 ms on a session's very first select, where the caches are cold), from
+   38.7–66.8; sync calls in the click path **9–16 for 1.3–2.8 ms**, from 14–22 for
+   4.3–12.5; a revisit still draws no frame at all. Three costs, in the order they
+   were found: the panel-wide `setState` (§4.4), the menu bar's rows and the
+   already-fronted panel front (§4.4's addendum), and the band's single repaint
+   boundary (§4.3, brought forward). The last two were invisible to the widget
+   counters — 600–950 rebuilds a click, of which the rows and bars are 4 — and
+   turned up only by timing each builder in the running app.
 3. **WP-3 — Scroll is incremental.** §4.3, both halves. *Gate (probe):* wheel-scroll
    the Clips comp — build p90 **< 8.3 ms** (slide frames were ~70–75 ms), raster med
    **< 8 ms** on the pinned backend, span p90 **< 16.6 ms**, ≥ 60 fps effective.

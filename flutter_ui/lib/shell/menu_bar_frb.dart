@@ -323,8 +323,16 @@ class MenuEntry {
   bool get enabled => onPressed != null || (children?.isNotEmpty ?? false);
 }
 
-/// One top-level menu.
-typedef MenuSection = ({String title, List<MenuEntry> items});
+/// One top-level menu: its heading, and its rows **built when it opens**.
+///
+/// The rows are a closure rather than a list because the bar is rebuilt by
+/// things that have nothing to do with what is on screen in it — every layer
+/// click, for one, since a row's enabled state reads the selection. Building
+/// them eagerly there cost **12.9–15.5 ms of the click**, most of it the Effect
+/// menu's entry per effect in the catalogue, for rows nobody was looking at
+/// (docs/impl/ui-performance.md §4.4, WP-2). A closed menu now costs the record
+/// that holds it; an open one costs what it always did, on a deliberate press.
+typedef MenuSection = ({String title, List<MenuEntry> Function() items});
 
 class LumitMenuBarFrb extends StatelessWidget {
   final LumitState app;
@@ -691,7 +699,7 @@ List<MenuSection> lumitMenus(
   return [
     (
       title: l10n.menuFile,
-      items: [
+      items: () => [
         MenuEntry(l10n.menuNew, app.newProject, action: 'file.new'),
         MenuEntry(
             l10n.menuOpenProject, () => openProjectFrb(app, picker: openPicker),
@@ -769,7 +777,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuEdit,
-      items: [
+      items: () => [
         MenuEntry(l10n.menuUndo,
             (history?.canUndo ?? false) ? () => undoFrb(app) : null,
             action: 'edit.undo'),
@@ -831,7 +839,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuComposition,
-      items: [
+      items: () => [
         MenuEntry(l10n.newComposition,
             project == null ? null : () => newCompositionFrb(context, app),
             action: 'comp.new'),
@@ -868,7 +876,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuLayer,
-      items: [
+      items: () => [
         MenuEntry.submenu(l10n.menuNew, [
           MenuEntry(l10n.menuSolid, onComp((c) => c.addSolidLayer())),
           MenuEntry(l10n.menuText, onComp((c) => c.addTextLayer())),
@@ -998,10 +1006,10 @@ List<MenuSection> lumitMenus(
             action: 'layer.precompose'),
       ]
     ),
-    (title: l10n.menuEffect, items: _effectMenu(app, layers)),
+    (title: l10n.menuEffect, items: () => _effectMenu(app, layers)),
     (
       title: l10n.menuAnimation,
-      items: [
+      items: () => [
         MenuEntry.todo(l10n.menuSaveAnimationPreset),
         MenuEntry.todo(l10n.menuApplyAnimationPreset),
         MenuEntry.divider(),
@@ -1033,7 +1041,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuView,
-      items: [
+      items: () => [
         // Magnification: the same three jumps the Viewer's own keyboard makes
         // (docs/07 §2.2). Greyed with no composition fronted, because there is
         // no picture in the panel to magnify.
@@ -1073,7 +1081,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuWindow,
-      items: [
+      items: () => [
         MenuEntry.submenu(l10n.menuWorkspace, [
           for (final preset in WorkspacePreset.values)
             MenuEntry(
@@ -1120,7 +1128,7 @@ List<MenuSection> lumitMenus(
     ),
     (
       title: l10n.menuHelp,
-      items: [
+      items: () => [
         MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
         MenuEntry.live(
           ui.updates,
@@ -1666,7 +1674,7 @@ List<PlatformMenuItem> platformMenusFor(
   MenuEntry? take(String title, String label) {
     for (final menu in menus) {
       if (menu.title != title) continue;
-      for (final item in menu.items) {
+      for (final item in menu.items()) {
         if (item.label == label) return item;
       }
     }
@@ -1710,7 +1718,7 @@ List<PlatformMenuItem> platformMenusFor(
       PlatformMenu(
         label: menu.title,
         menus: rows([
-          for (final item in menu.items)
+          for (final item in menu.items())
             if (!identical(item, settings) && !identical(item, about)) item,
         ]),
       ),
@@ -1774,7 +1782,8 @@ VoidCallback? _closeHeading;
 
 class _MenuButton extends StatelessWidget {
   final String title;
-  final List<MenuEntry> items;
+  /// Built when the menu opens, not when the bar does — see [MenuSection].
+  final List<MenuEntry> Function() items;
   const _MenuButton({required this.title, required this.items});
 
   @override
@@ -1801,6 +1810,9 @@ class _MenuButton extends StatelessWidget {
     final origin = box.localToGlobal(Offset(0, box.size.height));
     _closeHeading?.call();
     _openHeading = title;
+    // Built here, once, rather than inside the popup's builder: the rows are
+    // this menu's answer at the moment it was asked for.
+    final rows = items();
     showLumitPopup<void>(
       context: context,
       position: origin,
@@ -1811,7 +1823,7 @@ class _MenuButton extends StatelessWidget {
         if (_openHeading == title) _closeHeading = () => close(null);
         return _OpenMenu(
           title: title,
-          child: _MenuList(items: items, close: () => close(null)),
+          child: _MenuList(items: rows, close: () => close(null)),
         );
       },
     );

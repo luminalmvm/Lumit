@@ -10,7 +10,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:uuid/uuid.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -26,6 +25,7 @@ import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
 import 'waveform_frb.dart';
 import 'timeline_metrics_frb.dart';
+import 'timeline_outline_frb.dart';
 import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
@@ -137,10 +137,11 @@ class LayerArea extends StatelessWidget {
   /// again, so this half cannot come to a different answer from the other.
   final List<LayerRow> rows;
 
-  /// The selection as ids, the same set the outline draws from (K-217) — a bar
-  /// outlines when its name row is lit, so the two halves of the table never
-  /// disagree about what is chosen.
-  final Set<UuidValue> selectedIds;
+  /// The same selection the outline draws from (K-217) — a bar outlines when
+  /// its name row is lit, so the two halves of the table never disagree about
+  /// what is chosen. **Listened to, one layer at a time** ([LayerBlock]): a
+  /// click that lights a bar must not rebuild the fifty-six it did not touch.
+  final ValueListenable<TimelineSelection> selection;
 
   /// Open or close a Sequence layer's view (K-248).
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
@@ -281,7 +282,7 @@ class LayerArea extends StatelessWidget {
     required this.comp,
     required this.rows,
     this.barNames = false,
-    required this.selectedIds,
+    required this.selection,
     this.onOpenSequence,
     this.onGraphHeight,
     this.sequenceBlanks = const [],
@@ -710,39 +711,51 @@ class LayerArea extends StatelessWidget {
                                       // bar drawn across the first of
                                       // them would put a seam through
                                       // the middle of it (K-248).
+                                      // **The layer selection is listened to
+                                      // here**, the same way the outline row
+                                      // listens to it: a bar draws itself lit
+                                      // from its own layer's slice, so a click
+                                      // that lights one bar rebuilds one bar
+                                      // (docs/impl/ui-performance.md §4.4).
                                       if (rows[i].sequenceExtra == null)
-                                        Bar(
-                                          key: ValueKey<String>(
-                                              'tl-bar-${rows[i].id}'),
-                                          comp: comp,
-                                          entry: rows[i].entry,
-                                          axis: axis,
-                                          razor: razor,
-                                          selected: selectedIds.contains(rows[i]
-                                              .entry
-                                              .layer
-                                              .internallayerId),
-                                          playheadFrame: () => playhead.value,
-                                          onRazor: (frame) =>
-                                              onRazor(rows[i].entry, frame),
-                                          razorFrameAt: razorFrameAt,
-                                          onSelect: () =>
-                                              onSelect(rows[i].entry.layer),
-                                          onOpenSequence:
-                                              rows[i].entry.info.kind ==
-                                                      BridgeLayerKind.sequence
-                                                  ? () => onOpenSequence
-                                                      ?.call(rows[i].entry)
-                                                  : null,
-                                          onChanged: onChanged,
-                                          dragPreview: dragPreview,
-                                          bounds: bounds[rows[i].id] ??
-                                              BarBounds.free,
-                                          summaryKeys: rows[i].summaryKeys,
-                                          fps: fps,
-                                          snapTargets: snap,
-                                          magnet: magnet,
-                                          showName: barNames,
+                                        LayerBlock(
+                                          selection: selection,
+                                          layerId: rows[i].id,
+                                          // A bar draws the span and the lit
+                                          // state, nothing the property
+                                          // selection moves: picking a key row
+                                          // must not redraw the bar above it.
+                                          onlyLit: true,
+                                          builder: (context, mine) => Bar(
+                                            key: ValueKey<String>(
+                                                'tl-bar-${rows[i].id}'),
+                                            comp: comp,
+                                            entry: rows[i].entry,
+                                            axis: axis,
+                                            razor: razor,
+                                            selected: mine.selected,
+                                            playheadFrame: () => playhead.value,
+                                            onRazor: (frame) =>
+                                                onRazor(rows[i].entry, frame),
+                                            razorFrameAt: razorFrameAt,
+                                            onSelect: () =>
+                                                onSelect(rows[i].entry.layer),
+                                            onOpenSequence:
+                                                rows[i].entry.info.kind ==
+                                                        BridgeLayerKind.sequence
+                                                    ? () => onOpenSequence
+                                                        ?.call(rows[i].entry)
+                                                    : null,
+                                            onChanged: onChanged,
+                                            dragPreview: dragPreview,
+                                            bounds: bounds[rows[i].id] ??
+                                                BarBounds.free,
+                                            summaryKeys: rows[i].summaryKeys,
+                                            fps: fps,
+                                            snapTargets: snap,
+                                            magnet: magnet,
+                                            showName: barNames,
+                                          ),
                                         ),
                                       // A Sequence layer's own clips and
                                       // their speed envelope, in the room

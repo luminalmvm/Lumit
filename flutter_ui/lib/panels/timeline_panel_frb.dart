@@ -535,45 +535,63 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// A layer's properties are not selected with it: a click on a layer's name
   /// means "this layer", and leaving a property of the layer before it lit is
   /// the highlight belonging to nothing on screen that K-203 went looking for.
+  ///
+  /// **Published, not `setState`** (docs/impl/ui-performance.md §4.4). A layer
+  /// click used to redraw the whole panel to move one row's lit state: measured
+  /// at one 39–67 ms build frame on the owner's comp, which is four frames of
+  /// the 8.3 ms budget for a click that changes the shading of two blocks. The
+  /// rows and the bars listen for their own slice of [TimelineSelection]
+  /// instead, so what redraws is the layer let go of and the layer taken up.
+  /// Graph mode is the exception the property paths already carve out: the
+  /// picked properties *are* its curves, and dropping them gives it a new
+  /// picture to draw.
   void _selectLayer(LumitUiState ui, LayerReference? layer,
-          {List<BridgeLayerEntry> among = const []}) =>
-      setState(() {
-        if (ui.selectedLayer.value?.internallayerId != layer?.internallayerId) {
-          // The one place this is decided, shared with the listener that
-          // catches a selection made in the Viewer (K-275). The highlight goes
-          // with the property selection it belongs to: left behind, the
-          // previous layer's row stayed lit after a click on a different
-          // layer.
-          _dropLayerLocalSelection();
-        }
-        if (layer == null) {
-          ui.clearSelection();
-          return;
-        }
-        final keys = HardwareKeyboard.instance;
-        if (keys.isControlPressed || keys.isMetaPressed) {
-          ui.toggleSelected(layer);
-          return;
-        }
-        final held = ui.selectedLayer.value;
-        if (keys.isShiftPressed && held != null) {
-          final a = among.indexWhere(
-              (e) => e.layer.internallayerId == held.internallayerId);
-          final b = among.indexWhere(
-              (e) => e.layer.internallayerId == layer.internallayerId);
-          if (a >= 0 && b >= 0) {
-            // The clicked layer stays the primary — it is the one just asked
-            // for, and everything that acts on one layer acts on that.
-            ui.setSelection([
-              layer,
-              for (var i = a < b ? a : b; i <= (a < b ? b : a); i++)
-                if (i != b) among[i].layer,
-            ]);
-            return;
-          }
-        }
-        ui.setSelection([layer]);
-      });
+      {List<BridgeLayerEntry> among = const []}) {
+    _aimLayerSelection(ui, layer, among);
+    _publishRowSelection();
+    _publishLaneKeys();
+    if (_graph) setState(() {});
+  }
+
+  /// The click rules themselves, so [_selectLayer] can say what happens after
+  /// them without a closure around every early return.
+  void _aimLayerSelection(
+      LumitUiState ui, LayerReference? layer, List<BridgeLayerEntry> among) {
+    if (ui.selectedLayer.value?.internallayerId != layer?.internallayerId) {
+      // The one place this is decided, shared with the listener that catches a
+      // selection made in the Viewer (K-275). The highlight goes with the
+      // property selection it belongs to: left behind, the previous layer's
+      // row stayed lit after a click on a different layer.
+      _dropLayerLocalSelection();
+    }
+    if (layer == null) {
+      ui.clearSelection();
+      return;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isControlPressed || keys.isMetaPressed) {
+      ui.toggleSelected(layer);
+      return;
+    }
+    final held = ui.selectedLayer.value;
+    if (keys.isShiftPressed && held != null) {
+      final a = among
+          .indexWhere((e) => e.layer.internallayerId == held.internallayerId);
+      final b = among
+          .indexWhere((e) => e.layer.internallayerId == layer.internallayerId);
+      if (a >= 0 && b >= 0) {
+        // The clicked layer stays the primary — it is the one just asked for,
+        // and everything that acts on one layer acts on that.
+        ui.setSelection([
+          layer,
+          for (var i = a < b ? a : b; i <= (a < b ? b : a); i++)
+            if (i != b) among[i].layer,
+        ]);
+        return;
+      }
+    }
+    ui.setSelection([layer]);
+  }
 
   /// Fill in any layer's has-audio and has-picture answers we do not have, off
   /// the build. Both come from probing the source, so both are asked once per
@@ -719,12 +737,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// draw has changed, so a publish that says the same thing costs no repaint.
   void _publishRowSelection([Map<String, List<Color>>? colours]) {
     final next = TimelineSelection(
+      // The shell's list (K-217) as the rows read it: strings, because that is
+      // what a block is keyed by on both sides of the table.
+      layers: {
+        for (final layer in _ui?.selectedLayers.value ?? const [])
+          layer.internallayerId.toString(),
+      },
       properties: List<String>.unmodifiable(_selectedProperties),
       highlighted: _highlighted,
       colours: colours ?? _colourOfChannels(_channelsNow()),
     );
     final held = _rowSelection.value;
     if (held.highlighted == next.highlighted &&
+        setEquals(held.layers, next.layers) &&
         listEquals(held.properties, next.properties) &&
         _sameColours(held.colours, next.colours)) {
       return;
@@ -1453,6 +1478,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // the ambiguity K-203 set out to remove.
     _primary = _ui!.selectedLayer.value?.internallayerId;
     _ui!.selectedLayer.addListener(_onPrimaryChanged);
+    _ui!.selectedLayers.addListener(_onLayerSelectionChanged);
     // Switching measuring off takes the render-time column away entirely, and
     // the outline is that much narrower for it — a layout change, so the panel
     // has to hear about it rather than only the cells inside the column.
@@ -1515,7 +1541,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (now == _primary) return;
     _primary = now;
     if (!mounted) return;
-    setState(_dropLayerLocalSelection);
+    _dropLayerLocalSelection();
+    // Published rather than `setState`, for [_selectLayer]'s reason: this is
+    // the same click arriving from somewhere else — the Viewer's picture, a
+    // keyboard command — and it lights the same two blocks.
+    _publishRowSelection();
+    _publishLaneKeys();
+    if (_graph) setState(() {});
+  }
+
+  /// The selection changed without the primary moving: a select-all, a
+  /// Ctrl+click adding a second layer, a Viewer marquee. The rows still have to
+  /// hear it, and the primary's listener above cannot say so.
+  void _onLayerSelectionChanged() {
+    if (mounted) _publishRowSelection();
   }
 
   /// Everything the panel holds that belongs to one layer. Called whenever the
@@ -2322,6 +2361,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.selectedLayer.removeListener(_onPrimaryChanged);
+    _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
@@ -3168,7 +3208,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             groupOrder: groupOrder,
                                             widths: groupWidths,
                                             matteToggles: matteToggles,
-                                            selectedIds: ui.selectedLayerIds,
                                             selection: _rowSelection,
                                             onSelectProperty: _selectProperty,
                                             onEditProperty: _selectOnEdit,
@@ -3531,7 +3570,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       comp: comp,
                       rows: rows,
                       barNames: _barNames,
-                      selectedIds: ui.selectedLayerIds,
+                      selection: _rowSelection,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,
                       onOpenSequence: _toggleSequenceView,

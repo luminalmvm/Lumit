@@ -157,10 +157,14 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// Which tab a group fronts is part of the arrangement, and the arrangement
   /// persists — `touch` both redraws the dock and writes it down.
+  /// **Only when a tab actually moves.** This is asked for on every layer
+  /// click, and the tab it fronts is nearly always fronted already; `touch`
+  /// notifies the whole shell and saves the workspace, so the quiet case was
+  /// repainting every panel and writing a file to front what was in front
+  /// (docs/impl/ui-performance.md §4.4).
   void frontPanel(Panel panel) {
     if (!panelVisible(split, panel)) return;
-    activatePanelTab(split, panel);
-    workspace.touch();
+    if (activatePanelTab(split, panel)) workspace.touch();
   }
 
   /// Bumped when `Ctrl+F` asks the focused panel to put the cursor in its

@@ -162,11 +162,16 @@ void main() {
     final root = defaultLayout();
     final left = (root.children[0] as DockSplit).children[0] as DockTabs;
     left.active = 1;
-    activatePanelTab(root, Panel.project);
+    expect(activatePanelTab(root, Panel.project), isTrue);
     expect(left.active, 0);
     // A panel not in any tab group is a no-op.
-    activatePanelTab(root, Panel.viewer);
+    expect(activatePanelTab(root, Panel.viewer), isFalse);
     expect(left.active, 0);
+    // And a tab already fronted moved nothing — what `frontPanel` reads before
+    // it repaints the shell and writes the workspace down. Fronting the Effect
+    // controls is asked for on every layer click, and it is nearly always
+    // already in front (docs/impl/ui-performance.md §4.4).
+    expect(activatePanelTab(root, Panel.project), isFalse);
   });
 
   test('panel titles are the glossary names', () {
