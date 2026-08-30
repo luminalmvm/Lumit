@@ -14,7 +14,7 @@ use crate::api::{
 // type has to exist whatever the build.
 use crate::api::state::BridgeRenderedFrame;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[frb]
 pub struct FootageReference {
     #[frb(name = "internalproject")]

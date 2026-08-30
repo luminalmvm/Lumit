@@ -172,9 +172,24 @@ void _markHot(BridgeScalar scalar, BridgeRational time) {
 }
 
 /// Forget everything. Called on every committed engine change.
-void clearCompTimeCache() {
-  _times.clear();
-  _frames.clear();
+/// Forget what the document has made stale.
+///
+/// **Frame ↔ time only when the item tree moved** (K-680). The two maps above
+/// hold a *frame rate's* arithmetic, and the header of this file has always
+/// said what can make one wrong: comp settings, or an undo of one — which is
+/// an item-scoped change (`op_scope` sets the flag for it, because the name
+/// travels with it). Emptying them on every committed change meant every
+/// switch, every keyframe, every nudge threw away the whole rate table, and
+/// the rows rebuilding behind that edit re-asked the engine for every key's
+/// frame — the wave WP-5 exists to remove (docs/impl/ui-performance.md §4.5).
+///
+/// The other two are values, not arithmetic: markers and sampled curves change
+/// with any edit at all, so they go every time.
+void clearCompTimeCache({bool rate = true}) {
+  if (rate) {
+    _times.clear();
+    _frames.clear();
+  }
   _markers.clear();
   _scalarSamples.clear();
   // [_hot] deliberately survives: it is not an answer that can go stale, only

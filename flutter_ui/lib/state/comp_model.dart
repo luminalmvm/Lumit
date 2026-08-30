@@ -132,14 +132,32 @@ class CompModel extends ChangeNotifier {
 
   /// Re-read the whole model — one bridge call — and repaint whoever listens.
   ///
-  /// Called when the engine reports a change, and by panels right after they
-  /// commit an op, so their own edit is on screen without waiting for the
-  /// change stream's round trip.
+  /// Called by panels right after they commit an op, so their own edit is on
+  /// screen without waiting for the change stream's round trip.
   void refresh() {
     _revision = null;
     _checkedIn = null;
     _freshen();
     notifyListeners();
+  }
+
+  /// Re-read **only if the document is actually somewhere this model has not
+  /// been**, and say nothing when it is not (K-680).
+  ///
+  /// What the engine's change stream calls. A panel that commits its own op
+  /// calls [refresh] the moment it commits — that is the wave that puts the
+  /// edit on screen — and the stream's event for the *same* revision then
+  /// arrived a turn later and set the whole thing off again: every panel
+  /// rebuilt twice for one click, and the second wave found nothing new to
+  /// draw. One refresh per revision is the rule
+  /// (docs/impl/ui-performance.md §4.5); a change nobody in Dart caused — an
+  /// undo, a recovery, the engine's own edit — still moves the number, so it
+  /// still refreshes and still notifies.
+  void refreshIfMoved() {
+    final was = _revision;
+    _checkedIn = null;
+    _freshen();
+    if (_revision != was) notifyListeners();
   }
 
   /// Re-read only if the document has moved since the last read.

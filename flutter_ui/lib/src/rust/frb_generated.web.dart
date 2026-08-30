@@ -150,6 +150,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompSettings dco_decode_box_autoadd_bridge_comp_settings(dynamic raw);
 
   @protected
+  BridgeCompSize dco_decode_box_autoadd_bridge_comp_size(dynamic raw);
+
+  @protected
   BridgeEffectValue dco_decode_box_autoadd_bridge_effect_value(dynamic raw);
 
   @protected
@@ -947,6 +950,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeCompSize? dco_decode_opt_box_autoadd_bridge_comp_size(dynamic raw);
+
+  @protected
   BridgeExportSpec? dco_decode_opt_box_autoadd_bridge_export_spec(dynamic raw);
 
   @protected
@@ -1134,6 +1140,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCompSettings sse_decode_box_autoadd_bridge_comp_settings(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeCompSize sse_decode_box_autoadd_bridge_comp_size(
       SseDeserializer deserializer);
 
   @protected
@@ -2068,6 +2078,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeCompSize? sse_decode_opt_box_autoadd_bridge_comp_size(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExportSpec? sse_decode_opt_box_autoadd_bridge_export_spec(
       SseDeserializer deserializer);
 
@@ -2270,6 +2284,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_comp_settings(
       BridgeCompSettings self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_comp_size(
+      BridgeCompSize self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_effect_value(
@@ -3277,6 +3295,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_comp_settings(
       BridgeCompSettings? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_comp_size(
+      BridgeCompSize? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_export_spec(

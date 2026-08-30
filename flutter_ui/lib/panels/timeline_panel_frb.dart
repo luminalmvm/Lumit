@@ -378,12 +378,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final id = entry.layer.internallayerId.toString();
       try {
         if (entry.info.flow) flowParams[id] = entry.layer.getFlowParams();
-        if (_hasAudio[id] ?? false) volumeDb[id] = entry.layer.getVolumeDb();
+        // Off the read model (K-680), where the Flow rate has always been: it
+        // was a `get_volume_db` per sounding layer on every document revision.
+        if (_hasAudio[id] ?? false) volumeDb[id] = entry.info.volumeDb;
         // Which parameters a wire is deciding (K-471, K-627), so a fold-out
         // row draws its *driven* mark where its stopwatch would be. Only a
         // layer with an effect stack can have one, and the answer rides down
         // on the row rather than being asked for per rebuild.
-        if (entry.info.effects.isNotEmpty) {
+        //
+        // **And only a layer with a wire in it at all** (K-680). Reading the
+        // graph is the most expensive question on this walk, and it was asked
+        // of every layer carrying effects on every document revision — 49
+        // crossings and 17 ms per click on the owner's project — to hear "no
+        // wires" from every one of them. The model says so for nothing.
+        if (entry.info.wired && entry.info.effects.isNotEmpty) {
           final wired = drivenParamsOf(entry.layer);
           if (wired.isNotEmpty) driven[id] = wired;
         }
@@ -434,11 +442,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         case BridgeLayerKind.footage:
           sourceFrames = _footageFrames[entry.layer.internallayerId.toString()];
         case BridgeLayerKind.precomp:
-          final source = entry.layer.getSourceItem();
-          if (source is ItemReference_Composition) {
-            sourceFrames = frameOfTime(
-                source.field0.getSettings().duration, fpsNum, fpsDen);
-          }
+          // Off the read model (K-680), already at *this* comp's rate. It was
+          // a `get_source_item` and a `get_settings` per precomp layer, run
+          // again on every document revision — the two calls this walk cost
+          // that the engine's own model walk already had in hand
+          // (docs/impl/ui-performance.md §4.5).
+          sourceFrames = info.sourceFrames;
         default:
           // Every generated kind: nothing to run out of, both ends free.
           sourceFrames = null;

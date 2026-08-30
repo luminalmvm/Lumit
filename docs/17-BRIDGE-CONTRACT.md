@@ -284,6 +284,26 @@ one question the document already knows the answer to:
     comp, a footage item's comes from the media probe — so the **seam** supplies it, which is
     why `read_layer_info` now takes the project's state and its document.
 
+### What a layer is made of is a fact, not a call (K-680)
+
+`BridgeLayerInfo` carries the layer's **source** — the same `ItemReference`
+`get_source_item` answers with — plus `source_size` (a Precomp's comp size, a Solid's
+dimensions; `None` for footage, whose size is a question about a file), `source_frames`
+(a Precomp's length at *this* comp's rate), `volume_db`, and `wired`, which says whether
+the layer's node graph has any wire in it at all.
+
+None of them is new information: the comp-wide walk that builds the read model already
+holds the document, so each is a match arm rather than a crossing. They are here because
+of what happened without them. Every committed edit moves the document revision, and
+three panels answered that by asking **per layer**: the Viewer walked every layer for its
+footage list, the Timeline read every layer's graph, source and volume for its bar
+bounds, and the bounds cache asked each layer's source for its size. One click on a
+switch cost 306 sync crossings and 96 ms of engine time on the owner's project — the
+follow-on wave [ui-performance.md](impl/ui-performance.md) §4.5 names. `wired` is the
+shape of the general rule: **a fact the model can state for nothing turns a per-layer
+question into no question at all**, and the expensive read (`get_graph`, to find which
+parameters a wire is deciding) is then made only for the layers that can possibly answer.
+
 ### The effect schema crosses as four lists, not one
 
 An effect's parameters are one question; how the panel *arranges* them is another, and they

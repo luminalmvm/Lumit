@@ -294,29 +294,19 @@ class LayerBoundsCache extends ChangeNotifier {
       return _compSize(compSize);
     }
 
-    final ItemReference? source;
-    try {
-      source = entry.layer.getSourceItem();
-    } catch (_) {
-      // The layer has gone between the model being read and this call.
-      return _compSize(compSize);
-    }
-
-    switch (source) {
-      // A nested comp is exactly as big as the comp inside it.
-      case ItemReference_Composition(:final field0):
-        try {
-          return _compSize(field0.getSize());
-        } catch (_) {
-          return _compSize(compSize);
-        }
-      case ItemReference_Solid(:final field0):
-        try {
-          final def = field0.getDefinition();
-          return Size(def.width.toDouble(), def.height.toDouble());
-        } catch (_) {
-          return _compSize(compSize);
-        }
+    // **All three of these come off the read model** (K-680), which is what
+    // makes an edit cheap: this cache is emptied on every document revision, so
+    // asking the engine per layer here cost a `get_source_item` — and a
+    // `get_size` or a `get_definition` behind it — for every layer on screen,
+    // the moment any switch anywhere was clicked
+    // (docs/impl/ui-performance.md §4.5).
+    switch (entry.info.source) {
+      // A nested comp is exactly as big as the comp inside it; a solid is the
+      // size it was made at. The engine's own walk reads both into the model.
+      case ItemReference_Composition() || ItemReference_Solid():
+        final size = entry.info.sourceSize;
+        if (size == null) return _compSize(compSize);
+        return Size(size.width.toDouble(), size.height.toDouble());
       case ItemReference_Footage(:final field0):
         final item = field0.internalid;
         final probed = _media[item];

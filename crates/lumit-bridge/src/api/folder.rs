@@ -8,7 +8,7 @@ use crate::api::{
     BridgeError,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[frb]
 pub struct FolderReference {
     #[frb(name = "internalproject")]

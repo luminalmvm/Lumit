@@ -10948,6 +10948,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeCompSize dco_decode_box_autoadd_bridge_comp_size(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_comp_size(raw);
+  }
+
+  @protected
   BridgeEffectValue dco_decode_box_autoadd_bridge_effect_value(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_effect_value(raw);
@@ -12116,8 +12122,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeLayerInfo dco_decode_bridge_layer_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 25)
-      throw Exception('unexpected arr length: expect 25 but see ${arr.length}');
+    if (arr.length != 30)
+      throw Exception('unexpected arr length: expect 30 but see ${arr.length}');
     return BridgeLayerInfo(
       name: dco_decode_String(arr[0]),
       kind: dco_decode_bridge_layer_kind(arr[1]),
@@ -12144,6 +12150,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       flowInputRate: dco_decode_bridge_scalar(arr[22]),
       trackCorrected: dco_decode_bool(arr[23]),
       textAnimators: dco_decode_list_bridge_text_animator(arr[24]),
+      source: dco_decode_opt_box_autoadd_item_reference(arr[25]),
+      sourceSize: dco_decode_opt_box_autoadd_bridge_comp_size(arr[26]),
+      sourceFrames: dco_decode_opt_box_autoadd_i_64(arr[27]),
+      volumeDb: dco_decode_bridge_scalar(arr[28]),
+      wired: dco_decode_bool(arr[29]),
     );
   }
 
@@ -13807,6 +13818,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeCompSize? dco_decode_opt_box_autoadd_bridge_comp_size(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bridge_comp_size(raw);
+  }
+
+  @protected
   BridgeExportSpec? dco_decode_opt_box_autoadd_bridge_export_spec(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_bridge_export_spec(raw);
@@ -14225,6 +14242,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_comp_settings(deserializer));
+  }
+
+  @protected
+  BridgeCompSize sse_decode_box_autoadd_bridge_comp_size(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_comp_size(deserializer));
   }
 
   @protected
@@ -15457,6 +15481,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_flowInputRate = sse_decode_bridge_scalar(deserializer);
     var var_trackCorrected = sse_decode_bool(deserializer);
     var var_textAnimators = sse_decode_list_bridge_text_animator(deserializer);
+    var var_source = sse_decode_opt_box_autoadd_item_reference(deserializer);
+    var var_sourceSize =
+        sse_decode_opt_box_autoadd_bridge_comp_size(deserializer);
+    var var_sourceFrames = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_volumeDb = sse_decode_bridge_scalar(deserializer);
+    var var_wired = sse_decode_bool(deserializer);
     return BridgeLayerInfo(
         name: var_name,
         kind: var_kind,
@@ -15482,7 +15512,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         flow: var_flow,
         flowInputRate: var_flowInputRate,
         trackCorrected: var_trackCorrected,
-        textAnimators: var_textAnimators);
+        textAnimators: var_textAnimators,
+        source: var_source,
+        sourceSize: var_sourceSize,
+        sourceFrames: var_sourceFrames,
+        volumeDb: var_volumeDb,
+        wired: var_wired);
   }
 
   @protected
@@ -17587,6 +17622,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeCompSize? sse_decode_opt_box_autoadd_bridge_comp_size(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_comp_size(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BridgeExportSpec? sse_decode_opt_box_autoadd_bridge_export_spec(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -18130,6 +18177,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeCompSettings self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_comp_settings(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_comp_size(
+      BridgeCompSize self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_comp_size(self, serializer);
   }
 
   @protected
@@ -19141,6 +19195,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.flowInputRate, serializer);
     sse_encode_bool(self.trackCorrected, serializer);
     sse_encode_list_bridge_text_animator(self.textAnimators, serializer);
+    sse_encode_opt_box_autoadd_item_reference(self.source, serializer);
+    sse_encode_opt_box_autoadd_bridge_comp_size(self.sourceSize, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.sourceFrames, serializer);
+    sse_encode_bridge_scalar(self.volumeDb, serializer);
+    sse_encode_bool(self.wired, serializer);
   }
 
   @protected
@@ -20796,6 +20855,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_comp_settings(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_comp_size(
+      BridgeCompSize? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_comp_size(self, serializer);
     }
   }
 

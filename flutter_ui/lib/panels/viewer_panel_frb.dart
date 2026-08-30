@@ -358,40 +358,38 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   }
 
   /// What this panel has to ask the *engine* about the composition, as against
-  /// what it reads from the model: its settings, its pixel size, and which of
-  /// its layers have a file behind them.
+  /// what it reads from the model: its settings and its pixel size.
   ///
-  /// Asked once and held until an edit lands (K-230). None of the three can
-  /// change without one, and they were being re-asked on every rebuild — which
-  /// meant every pointer movement of a Hand-tool pan crossed the bridge four
-  /// times and more, one of them walking every layer in the composition. A pan
-  /// changes where the picture is drawn and nothing else; it must ask the
-  /// engine nothing at all.
-  ({
-    BridgeCompSettings settings,
-    BridgeCompSize size,
-    List<FootageReference> footage,
-  })? _facts;
+  /// Asked once and held until an edit lands (K-230). Neither can change
+  /// without one, and they were being re-asked on every rebuild — which meant
+  /// every pointer movement of a Hand-tool pan crossed the bridge four times
+  /// and more. A pan changes where the picture is drawn and nothing else; it
+  /// must ask the engine nothing at all.
+  ///
+  /// **The third fact used to live here and no longer does** (K-680): which
+  /// layers have a file behind them was a `get_layers` plus a
+  /// `get_source_item` per layer, and while a *rebuild* never paid it, every
+  /// committed edit did — 65 sync crossings on the owner's project each time
+  /// any switch anywhere was clicked. The read model carries each layer's
+  /// source now, so the list below is a walk over data already in hand
+  /// (docs/impl/ui-performance.md §4.5).
+  ({BridgeCompSettings settings, BridgeCompSize size})? _facts;
 
-  ({
-    BridgeCompSettings settings,
-    BridgeCompSize size,
-    List<FootageReference> footage,
-  }) _factsOf(CompositionReference comp) {
+  ({BridgeCompSettings settings, BridgeCompSize size}) _factsOf(
+      CompositionReference comp) {
     final held = _facts;
     if (held != null) return held;
-    final next = (
-      settings: comp.getSettings(),
-      size: comp.getSize(),
-      footage: <FootageReference>[
-        for (final layer in comp.getLayers())
-          if (layer.getSourceItem() case ItemReference_Footage(:final field0))
-            field0,
-      ],
-    );
+    final next = (settings: comp.getSettings(), size: comp.getSize());
     _facts = next;
     return next;
   }
+
+  /// Which of the comp's layers have a file behind them, off the read model.
+  List<FootageReference> _footageOf(LumitUiState ui) => <FootageReference>[
+        for (final entry in ui.model.heldLayers)
+          if (entry.info.source case ItemReference_Footage(:final field0))
+            field0,
+      ];
 
   /// The shell's transport intent (the space bar). Subscribed here rather than
   /// exposed as a callback so the key is a quiet no-op when no Viewer is
@@ -473,6 +471,11 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
 
     final facts = _factsOf(comp);
     final settings = facts.settings;
+    // Once per rebuild of the panel rather than per rebuild of the stage: the
+    // stage redraws on every arriving frame, and a walk of the model there
+    // would be sixty list builds a second to answer a question only an edit
+    // changes.
+    final footage = _footageOf(ui);
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     _animationLevel = scope.animationLevel;
@@ -576,7 +579,6 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
         // frame during playback, so `getLayers` plus a `getSourceItem` per
         // layer crossed the bridge sixty times a second to re-answer a
         // question edits change and playback never does.
-        final footage = facts.footage;
 
         void applyZoom(ViewerZoom next) => _goToZoom(
               next.scale,

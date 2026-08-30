@@ -21159,3 +21159,64 @@ asserts the premise as a measurement rather than assuming it; the two scrub budg
 pin `time_of_frame` at **0**, one of them with the memory deliberately emptied first, and
 `times_of_frames` at no more than one. The engine's span is checked against its own
 single call frame by frame, negative frames included, plus the cap.
+
+## K-680 — An edit's follow-on is one wave, and a fact the model can state is not a call
+
+**Status: DECIDED (2026-08-30).** WP-5 of K-676's note (docs/impl/ui-performance.md §4.5).
+A click that commits an op — a switch, a solo, a lock, which is what most Timeline clicks
+are — cost **306 synchronous bridge crossings and 96 ms of engine time** on the owner's
+project, measured by the parked probe in the owner's own conditions. None of it was the
+edit. The document revision moved, and every mounted panel answered by re-asking its own
+questions **one item at a time**.
+
+**The rule this settles, which is general and not five fixes:** a value the comp-wide read
+model can state *for nothing* — because the engine's own walk already holds the document
+when it builds the model — must be stated there rather than asked for per layer when the
+revision moves. `BridgeLayerInfo` grew five such values: `source` (the same
+`ItemReference` `get_source_item` answers with), `source_size`, `source_frames` (a
+Precomp's length at the *outer* comp's rate), `volume_db`, and `wired` — whether the
+layer's node graph has any wire in it at all. Five walks then stopped: the Viewer's
+footage list, the bounds cache's per-layer measure, the Timeline's bar bounds, its Volume
+row, and — the dearest — its driven marks, which read `get_graph` on every layer carrying
+effects to hear "no wires" from every one of them. `wired` is the pattern to copy: the
+expensive question is asked only of the rows that can possibly answer it.
+
+**Two caches were invalidated by more than could make them wrong.** The comp-tab strip's
+list of every composition and its name was dropped whenever a change *named a comp*,
+which every layer edit does, so the next build re-read `get_settings` for all
+forty-eight comps in the project; only the **item** scope can add, remove or rename a
+comp (`op_scope` sets it for exactly those, comp settings included), and that is what it
+listens to now. And the frame↔time tables were emptied on every committed change, though
+the file's own header has always said that only a frame-rate change can make one wrong —
+which is an item-scoped edit too.
+
+**And the wave was two waves.** A panel that commits an op calls `CompModel.refresh()`
+immediately, which is what puts the edit on screen; the engine's report of the *same*
+revision then arrived a turn later and set the whole thing off again. `refreshIfMoved()`
+is what the change stream calls now — it reads the revision and says nothing when the
+model is already there — so one revision is one refresh and one rebuild wave. This is
+also the answer to the experiment K-679 recorded as reverted: the per-frame revision
+check stays, because the duplicate *wave* was the cost, not the check.
+
+**Measured after** (medians of six switch clicks, owner's conditions): **15 calls,
+18.5 ms**, acknowledgement 173 → 94 ms. Of that 18.5 ms, **15 is `set_switch` itself**,
+leaving **3.5 ms of follow-on** against the gate's 5. The work-area drag fell from 481
+calls and 99.8 ms to 169 and 23.7, its release frame 107.7 → 35.5 ms.
+
+**What is named rather than changed.** `set_switch` costs ~15 ms and `set_work_area`
+~13 ms — two ops with nothing in common paying the same, which is a fixed per-commit
+price, not either op's work: `JournalFile::append` opens the journal, writes a line and
+calls **`sync_data`** — an fsync on the UI thread inside the synchronous call. That is
+crash durability, not fan-out; trading it is a decision of its own and belongs to the
+owner, so it is measured and left. Likewise the ~37 ms build frame and ~650 ms settle
+that follow a switch click: a plain **select** click on the same rows settles in 836 ms
+with a 41.9 ms build frame while crossing the bridge nine times for 0.2 ms, so that tail
+is a post-click rebuild class on the select path rather than the edit's wave, and it
+belongs to WP-6's repaint matrix. The probe now distinguishes them: `settled=` counts to
+the last frame the interface *built* something in, where the old `quiet=` kept counting
+while the preview republished behind the edit.
+
+Regression test: `bridge_call_budget_test.dart` — "an edit refreshes the model once and
+walks no layer" mounts the Viewer and the Timeline over a mixed stack of solids and
+precomps, commits one switch, delivers the change, and pins **one** `get_model`, **zero**
+`get_source_item`, `get_graph` and `get_volume_db`, and at most two `get_settings`.

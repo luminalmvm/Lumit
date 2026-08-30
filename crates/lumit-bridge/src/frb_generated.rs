@@ -13108,6 +13108,13 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
         let mut var_trackCorrected = <bool>::sse_decode(deserializer);
         let mut var_textAnimators =
             <Vec<crate::api::assets::BridgeTextAnimator>>::sse_decode(deserializer);
+        let mut var_source =
+            <Option<crate::api::project_item::ItemReference>>::sse_decode(deserializer);
+        let mut var_sourceSize =
+            <Option<crate::api::composition::BridgeCompSize>>::sse_decode(deserializer);
+        let mut var_sourceFrames = <Option<i64>>::sse_decode(deserializer);
+        let mut var_volumeDb = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_wired = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeLayerInfo {
             name: var_name,
             kind: var_kind,
@@ -13134,6 +13141,11 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
             flow_input_rate: var_flowInputRate,
             track_corrected: var_trackCorrected,
             text_animators: var_textAnimators,
+            source: var_source,
+            source_size: var_sourceSize,
+            source_frames: var_sourceFrames,
+            volume_db: var_volumeDb,
+            wired: var_wired,
         };
     }
 }
@@ -15691,6 +15703,19 @@ impl SseDecode for Option<crate::api::composition::BridgeCompSettings> {
     }
 }
 
+impl SseDecode for Option<crate::api::composition::BridgeCompSize> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::composition::BridgeCompSize>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::export::BridgeExportSpec> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -18162,6 +18187,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerInfo {
             self.flow_input_rate.into_into_dart().into_dart(),
             self.track_corrected.into_into_dart().into_dart(),
             self.text_animators.into_into_dart().into_dart(),
+            self.source.into_into_dart().into_dart(),
+            self.source_size.into_into_dart().into_dart(),
+            self.source_frames.into_into_dart().into_dart(),
+            self.volume_db.into_into_dart().into_dart(),
+            self.wired.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -21377,6 +21407,11 @@ impl SseEncode for crate::api::layer::BridgeLayerInfo {
         <crate::api::effect::BridgeScalar>::sse_encode(self.flow_input_rate, serializer);
         <bool>::sse_encode(self.track_corrected, serializer);
         <Vec<crate::api::assets::BridgeTextAnimator>>::sse_encode(self.text_animators, serializer);
+        <Option<crate::api::project_item::ItemReference>>::sse_encode(self.source, serializer);
+        <Option<crate::api::composition::BridgeCompSize>>::sse_encode(self.source_size, serializer);
+        <Option<i64>>::sse_encode(self.source_frames, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.volume_db, serializer);
+        <bool>::sse_encode(self.wired, serializer);
     }
 }
 
@@ -23359,6 +23394,16 @@ impl SseEncode for Option<crate::api::composition::BridgeCompSettings> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::composition::BridgeCompSettings>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::composition::BridgeCompSize> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::composition::BridgeCompSize>::sse_encode(value, serializer);
         }
     }
 }

@@ -1210,6 +1210,38 @@ pub struct BridgeLayerInfo {
     /// its curves from here, and asking per row per frame is exactly the cost
     /// K-184 exists to remove. Edits still go through `set_text`.
     pub text_animators: Vec<crate::api::assets::BridgeTextAnimator>,
+    /// The project item this layer is made of, or None for a kind with its
+    /// content in the document (Text, Shape, Null, Camera, Adjustment).
+    ///
+    /// Exactly what [`LayerReference::get_source_item`] answers, carried in the
+    /// read model because three separate panels asked it **per layer** the
+    /// moment any edit landed — the Viewer's footage list, the bounds cache,
+    /// the Timeline's bar bounds — which is 64 sync crossings on the owner's
+    /// project for a fact this walk already has in hand
+    /// (docs/impl/ui-performance.md §4.5).
+    pub source: Option<crate::api::project_item::ItemReference>,
+    /// How big that source is in its own pixels, where the *document* knows
+    /// without opening a file: a Precomp's comp size, a Solid's dimensions.
+    /// None for footage, whose size is a question about a file (probed
+    /// asynchronously and held for the session), and for the sourceless kinds.
+    pub source_size: Option<crate::api::composition::BridgeCompSize>,
+    /// How long the source runs, **in this comp's frames** — a Precomp's own
+    /// length, which is what decides where its bar's source-end ghost falls.
+    /// None for every other kind; footage length arrives with the probe.
+    pub source_frames: Option<i64>,
+    /// The layer's volume in decibels (K-172), the one property an audio row
+    /// draws that is not otherwise in the model. Carried for the same reason
+    /// [`Self::flow_input_rate`] is: the fold-out's Volume row draws its
+    /// keyframe diamonds from it, and reading it per audio layer per document
+    /// revision is a sync crossing per row for a fact this walk has in hand.
+    pub volume_db: BridgeScalar,
+    /// Whether this layer's node graph has any wire in it at all (K-471).
+    ///
+    /// The Timeline's fold-out draws a *driven* mark where a wired parameter's
+    /// stopwatch would be, and finding out which parameters those are is a
+    /// `get_graph` per layer. Nearly every layer has never been wired, and this
+    /// says so for nothing: an unwired layer is not asked about.
+    pub wired: bool,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -1226,12 +1258,21 @@ pub struct BridgeLayerMarker {
 /// [`crate::api::composition::CompositionReference::get_model`] (K-184).
 #[frb(ignore)]
 pub(crate) fn read_layer_info(
+    project: Uuid,
     state: &LumitBridgeState,
     doc: &lumit_core::Document,
     comp: &lumit_core::model::Composition,
     layer: &Layer,
 ) -> BridgeLayerInfo {
     use lumit_core::model::LayerKind as K;
+    // The same match [`LayerReference::get_source_item`] makes, so a layer's
+    // source cannot read one way through the model and another through a call.
+    let source_item = match layer.kind {
+        K::Footage { item, .. } => Some(item),
+        K::Precomp { comp } => Some(comp),
+        K::Solid { def } => Some(def),
+        _ => None,
+    };
     let clip_frames = match &layer.kind {
         K::Sequence { clips } => clips
             .iter()
@@ -1359,6 +1400,44 @@ pub(crate) fn read_layer_info(
                 .collect(),
             _ => Vec::new(),
         },
+        source: source_item.and_then(|id| {
+            doc.item(id)
+                .map(|item| crate::api::project_item::item_reference(project, item))
+        }),
+        // A Precomp is the size of the comp inside it and a Solid is the size
+        // it was made at; both are in the document already. Footage is not — a
+        // file's dimensions are known only by opening it — so it stays None and
+        // the frontend's session-long probe cache answers for it.
+        source_size: match &layer.kind {
+            K::Precomp { comp: inner } => {
+                doc.comp(*inner)
+                    .map(|c| crate::api::composition::BridgeCompSize {
+                        width: c.width,
+                        height: c.height,
+                    })
+            }
+            K::Solid { def } => match doc.item(*def) {
+                Some(lumit_core::model::ProjectItem::Solid(solid)) => {
+                    Some(crate::api::composition::BridgeCompSize {
+                        width: solid.width,
+                        height: solid.height,
+                    })
+                }
+                _ => None,
+            },
+            _ => None,
+        },
+        // At *this* comp's rate, because that is the ruler the bar is drawn
+        // against: a 25 fps precomp on a 60 fps comp is as many frames long as
+        // this comp counts in its seconds, never as many as its own does.
+        source_frames: match &layer.kind {
+            K::Precomp { comp: inner } => doc
+                .comp(*inner)
+                .map(|c| comp.frame_rate.frame_at(CompTime(c.duration.0))),
+            _ => None,
+        },
+        volume_db: BridgeScalar::read_at(&layer.volume_db, layer.start_offset.0),
+        wired: !layer.graph.edges.is_empty(),
     }
 }
 
@@ -1756,7 +1835,7 @@ impl LayerReference {
             .iter()
             .find(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-        Ok(read_layer_info(&state, &doc, comp, layer))
+        Ok(read_layer_info(self.project_id, &state, &doc, comp, layer))
     }
 
     #[frb(sync)]

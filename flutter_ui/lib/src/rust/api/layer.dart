@@ -350,6 +350,43 @@ class BridgeLayerInfo {
   /// K-184 exists to remove. Edits still go through `set_text`.
   final List<BridgeTextAnimator> textAnimators;
 
+  /// The project item this layer is made of, or None for a kind with its
+  /// content in the document (Text, Shape, Null, Camera, Adjustment).
+  ///
+  /// Exactly what [`LayerReference::get_source_item`] answers, carried in the
+  /// read model because three separate panels asked it **per layer** the
+  /// moment any edit landed — the Viewer's footage list, the bounds cache,
+  /// the Timeline's bar bounds — which is 64 sync crossings on the owner's
+  /// project for a fact this walk already has in hand
+  /// (docs/impl/ui-performance.md §4.5).
+  final ItemReference? source;
+
+  /// How big that source is in its own pixels, where the *document* knows
+  /// without opening a file: a Precomp's comp size, a Solid's dimensions.
+  /// None for footage, whose size is a question about a file (probed
+  /// asynchronously and held for the session), and for the sourceless kinds.
+  final BridgeCompSize? sourceSize;
+
+  /// How long the source runs, **in this comp's frames** — a Precomp's own
+  /// length, which is what decides where its bar's source-end ghost falls.
+  /// None for every other kind; footage length arrives with the probe.
+  final PlatformInt64? sourceFrames;
+
+  /// The layer's volume in decibels (K-172), the one property an audio row
+  /// draws that is not otherwise in the model. Carried for the same reason
+  /// [`Self::flow_input_rate`] is: the fold-out's Volume row draws its
+  /// keyframe diamonds from it, and reading it per audio layer per document
+  /// revision is a sync crossing per row for a fact this walk has in hand.
+  final BridgeScalar volumeDb;
+
+  /// Whether this layer's node graph has any wire in it at all (K-471).
+  ///
+  /// The Timeline's fold-out draws a *driven* mark where a wired parameter's
+  /// stopwatch would be, and finding out which parameters those are is a
+  /// `get_graph` per layer. Nearly every layer has never been wired, and this
+  /// says so for nothing: an unwired layer is not asked about.
+  final bool wired;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -376,6 +413,11 @@ class BridgeLayerInfo {
     required this.flowInputRate,
     required this.trackCorrected,
     required this.textAnimators,
+    this.source,
+    this.sourceSize,
+    this.sourceFrames,
+    required this.volumeDb,
+    required this.wired,
   });
 
   @override
@@ -404,7 +446,12 @@ class BridgeLayerInfo {
       flow.hashCode ^
       flowInputRate.hashCode ^
       trackCorrected.hashCode ^
-      textAnimators.hashCode;
+      textAnimators.hashCode ^
+      source.hashCode ^
+      sourceSize.hashCode ^
+      sourceFrames.hashCode ^
+      volumeDb.hashCode ^
+      wired.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -435,7 +482,12 @@ class BridgeLayerInfo {
           flow == other.flow &&
           flowInputRate == other.flowInputRate &&
           trackCorrected == other.trackCorrected &&
-          textAnimators == other.textAnimators;
+          textAnimators == other.textAnimators &&
+          source == other.source &&
+          sourceSize == other.sourceSize &&
+          sourceFrames == other.sourceFrames &&
+          volumeDb == other.volumeDb &&
+          wired == other.wired;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its

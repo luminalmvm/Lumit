@@ -9,14 +9,17 @@ import '../lib.dart';
 import 'assets.dart';
 import 'effect.dart';
 import 'export.dart';
+import 'folder.dart';
 import 'footage.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
+import 'project_item.dart';
+import 'solid.dart';
 import 'state.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `runs_as_video`, `to_engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
 /// Every blend mode, in the order the Timeline's dropdown shows them. The index

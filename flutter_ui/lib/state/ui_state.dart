@@ -1340,10 +1340,13 @@ class LumitUiState extends ChangeNotifier {
       );
     }
     // The read model re-reads on every committed change — one bridge call —
-    // and every panel that draws layers repaints from it (K-184).
-    _changes = state.onChange.listen((_) {
-      clearCompTimeCache();
-      model.refresh();
+    // and every panel that draws layers repaints from it (K-184). **Once per
+    // revision** (K-680): the panel that committed the op has usually
+    // refreshed already, and a second wave for the same document is a rebuild
+    // of every panel that finds nothing new to draw.
+    _changes = state.onChange.listen((event) {
+      clearCompTimeCache(rate: event.items);
+      model.refreshIfMoved();
     });
     sub = state.onWorkerResponse.listen((msg) {
       // Any reply at all means the new project's worker is up and answering,

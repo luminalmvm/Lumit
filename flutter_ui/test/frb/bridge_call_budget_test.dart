@@ -29,6 +29,7 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
@@ -1507,6 +1508,98 @@ void main() {
         counter.total,
         lessThan(30),
         reason: 'a point drag asked the engine too often:\n'
+            '${counter.ranking()}',
+      );
+    });
+
+    /// **An edit's follow-on is one wave** (WP-5, ui-performance §4.5).
+    ///
+    /// A committed op moves the document revision, and every mounted panel
+    /// used to answer that by re-asking its own questions **one layer at a
+    /// time**: the Viewer walked every layer for its footage list, the
+    /// Timeline read every layer's graph, source and volume for its bar
+    /// bounds, and the comp-tab strip re-read the settings of every
+    /// composition in the project. On the owner's project one switch click
+    /// cost 306 crossings and 96 ms of engine time.
+    ///
+    /// What this pins is the shape rather than the number: one model read for
+    /// the revision, and **no per-layer walk from any mounted panel**. The
+    /// facts those walks went for ride in the read model now, so a walk
+    /// coming back is a count that should be zero and is not.
+    testWidgets('an edit refreshes the model once and walks no layer',
+        (tester) async {
+      final p = freshProject();
+      final inner = p.state.project!.newComposition(name: 'Inner');
+      inner.addSolidLayer();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      // A mixed stack, because each kind was a different walk: a solid asked
+      // for its definition, a precomp for its comp's size and its length, and
+      // any layer at all for its graph.
+      for (var i = 0; i < 5; i++) {
+        comp.addSolidLayer();
+        comp.addPrecompLayer(comp: inner);
+      }
+      final layers = comp.getLayers();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 900),
+        child: const Column(children: [
+          SizedBox(height: 420, child: ViewerPanelFrb()),
+          Expanded(child: TimelinePanelFrb()),
+        ]),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      counter
+        ..reset()
+        ..counting = true;
+      // Exactly what a click on a switch cell does: the op, the committing
+      // panel's own refresh, and — a turn later — the engine's own report of
+      // the same change, which is the second half of the wave.
+      layers.first.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+      p.uiState.model.refresh();
+      p.state.handleChange(ScopedChange(
+        project: p.state.project!,
+        item: ItemReference.composition(comp),
+        layer: layers.first,
+        items: false,
+      ));
+      await tester.pump();
+      await settleFrb(tester, minRounds: 4, maxRounds: 8);
+      counter.counting = false;
+
+      // ignore: avoid_print
+      print('EDIT FOLLOW-ON COST ${counter.total} calls\n${counter.ranking()}');
+      expect(
+        counter.calls['composition_reference_get_model'] ?? 0,
+        lessThanOrEqualTo(1),
+        reason: 'the read model was re-read twice for one revision:\n'
+            '${counter.ranking()}',
+      );
+      for (final walk in [
+        'layer_reference_get_source_item',
+        'layer_reference_get_graph',
+        'layer_reference_get_volume_db',
+      ]) {
+        expect(
+          counter.calls[walk] ?? 0,
+          0,
+          reason: '$walk was asked per layer behind one edit '
+              '(${layers.length} layers mounted):\n${counter.ranking()}',
+        );
+      }
+      // The Viewer asks its comp two questions when an edit lands — its
+      // settings and its pixel size — and nothing asks per *item*: the
+      // comp-tab strip's cached walk holds, because a layer edit cannot add,
+      // remove or rename a composition.
+      expect(
+        counter.calls['composition_reference_get_settings'] ?? 0,
+        lessThanOrEqualTo(2),
+        reason: 'the settings of every comp in the project were re-read:\n'
             '${counter.ranking()}',
       );
     });

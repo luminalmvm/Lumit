@@ -14,7 +14,7 @@ use crate::api::{
 };
 
 #[frb(non_opaque)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ItemReference {
     Footage(FootageReference),
     Solid(SolidReference),

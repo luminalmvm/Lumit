@@ -164,6 +164,7 @@ pub fn list_blend_modes() -> Vec<String> {
 
 /// A composition's pixel dimensions.
 #[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BridgeCompSize {
     pub width: u32,
     pub height: u32,
@@ -452,7 +453,13 @@ impl CompositionReference {
                 .iter()
                 .map(|layer| BridgeLayerEntry {
                     layer: LayerReference::new(self.project, self.id, layer.id),
-                    info: crate::api::layer::read_layer_info(&state, &doc, comp, layer),
+                    info: crate::api::layer::read_layer_info(
+                        self.project,
+                        &state,
+                        &doc,
+                        comp,
+                        layer,
+                    ),
                 })
                 .collect(),
         })

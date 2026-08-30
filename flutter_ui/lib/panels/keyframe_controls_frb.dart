@@ -553,10 +553,14 @@ class PathKeyframesFrb extends StatelessWidget {
 
   bool get _animated => keys.isNotEmpty;
 
-  /// The frames the shape is keyed on. Read once per build: the times come
-  /// across with the mask or the item itself, so this asks the engine nothing.
-  List<int> get _frames =>
-      [for (final k in keys) comp.frameAtTime(time: k.time)];
+  /// The frames the shape is keyed on.
+  ///
+  /// **Through the shared memory, not straight at the engine** (K-680). This
+  /// getter is read inside the build below, so what it cost was a bridge call
+  /// per key per rebuild — the traffic `bridge_call_budget_test` exists to
+  /// keep out of build paths, and the sibling control four methods up was
+  /// already going through the memo.
+  List<int> get _frames => [for (final k in keys) frameAtTime(comp, k.time)];
 
   int? _neighbour(int frame, {required bool before}) {
     int? best;

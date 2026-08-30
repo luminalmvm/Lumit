@@ -486,7 +486,45 @@ is worth recording because neither is the shape §3.4 assumed.
   the frame lands in. A scrub crosses the seam once per ~8 seconds of 60 fps footage
   instead of once per frame it has not visited.
 
-**What WP-4 did not remove, and why it is WP-5's**: the read model's revision check,
+**Both of §3.1's walks and three nobody had counted landed with WP-5** (K-680,
+2026-08-30), and the shape the answer took is one rule applied five times: *a fact the
+read model can state for nothing turns a per-layer question into no question at all.*
+`BridgeLayerInfo` grew the layer's `source` (the same `ItemReference` `get_source_item`
+answers with), `source_size`, `source_frames`, `volume_db` and `wired` — every one of
+them a match arm inside a walk the engine was already doing — and the five walks went:
+
+- the **Viewer's** footage list (`get_layers` + `get_source_item` × 64) reads the model;
+- the **bounds cache**'s per-layer measure (`get_source_item`, then `get_size` or
+  `get_definition`) reads `source_size`;
+- the **Timeline's** bar bounds (`get_source_item` + `get_settings` per precomp) read
+  `source_frames`, already at this comp's rate;
+- the **Timeline's** driven marks (`get_graph` per layer with effects — the dearest of
+  the five, 49 calls and 17 ms a click) are asked only of a layer that `wired` says has a
+  wire in it, which on this project is none of them;
+- the **Volume** row's `get_volume_db` per sounding layer reads the model, where the Flow
+  rate had been riding since K-160.
+
+Two more were not walks over layers but the same mistake over other things. The comp-tab
+strip's cached list of every comp and its name was dropped whenever a change *named a
+comp* — which a layer edit does — so the next build re-read `get_settings` for all
+forty-eight comps in the project; only the **item** scope can add, remove or rename one,
+and that is what it listens to now. And `clearCompTimeCache` emptied the frame↔time
+tables on every committed change, though the file's own header says a frame rate can only
+move with comp settings: the rows rebuilding behind an edit then re-asked the engine for
+every key's frame. It clears them on the item scope now, and the one caller that was
+converting keyframe times **inside a build** without going through the memo at all
+(`keyframe_controls_frb.dart`'s shape controls, whose sibling four methods up was already
+memoised) goes through it.
+
+Finally the wave itself is one wave. A panel that commits an op calls
+`CompModel.refresh()` at once — that is what puts the edit on screen — and the engine's
+report of the *same* revision arrived a turn later and set the whole thing off again, so
+every panel rebuilt twice per click and the second pass found nothing new. The stream
+calls `refreshIfMoved()` instead: it checks the revision, and says nothing when the model
+is already there. That also answers WP-4's reverted experiment below — the per-frame
+revision check stays, because it is the *duplicate wave* that was the cost, not the check.
+
+**What WP-4 did not remove, and why it was WP-5's**: the read model's revision check,
 one `document_revision` per frame of a zoom fly (96 calls over 96 frames, 4.7 ms — 0.049
 ms a frame, the whole per-frame bill of that gesture). `CompModel._freshen` can skip it
 while a frame is being built, on the argument that a frame cannot see the document move:
@@ -619,14 +657,51 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    path moves" (0 calls still, 30 selected-and-keyed, 0 keyed-but-unselected) and
    `time_of_frame` pinned at **0** on a scrub, including one whose memory was emptied
    first.
-5. **WP-5 — An edit's follow-on is one wave.** §4.5 for the document-change walks:
-   footage facts into the read model (or async refill), `LayerBounds` lazy/async, the
-   Project panel's per-comp `get_settings` per revision. *Gate (probe):* a switch
-   toggle on the Clips comp — sync bridge time in the following second **< 5 ms**
-   (was ~90 ms), no build frame > 17 ms, settled **< 250 ms** (was 0.7–0.9 s); the
-   work-area release frame **< 17 ms** (was ~100–121 ms). *Gate (CI):* bridge-budget
-   asserts a document-revision bump causes ≤ 1 model read and no per-item sync walk
-   from any mounted panel.
+5. **WP-5 — An edit's follow-on is one wave. Landed 2026-08-30 (K-680); its sync-call
+   gate is met and two of its frame gates are not, for a reason that is not the wave.**
+   §4.5 for the document-change walks. *Gate (probe):* a switch toggle on the Clips comp
+   — sync bridge time in the following second **< 5 ms** (was ~90 ms), no build frame
+   > 17 ms, settled **< 250 ms** (was 0.7–0.9 s); the work-area release frame **< 17 ms**
+   (was ~100–121 ms). **Measured after**, the owner's conditions, medians of six lock-switch
+   clicks:
+
+   | | Before | After |
+   |---|---|---|
+   | Sync calls behind one click | **306** | **15** |
+   | Sync bridge ms | **96.0** | 18.5 |
+   | — of which `set_switch`, the op itself | 14.9 | 15.0 |
+   | — **the follow-on** (everything else) | **81.1** | **3.5** |
+   | Acknowledgement (pointer down → next finished frame) | 173 ms | **94 ms** |
+   | `get_source_item` / `get_graph` / `get_settings` / `get_volume_db` / `frame_at_time` | 77 / 49 / 78 / 6 / 28 | **0 / 0 / 0 / 0 / 0** |
+   | `get_model` per revision | 2 | **1** |
+
+   And the same walk was most of the work-area drag: **481 calls and 99.8 ms over the
+   gesture → 169 and 23.7**, of which 13.0 is `set_work_area` and 3.4 the WP-4-exempt
+   pair, leaving **1.7 ms of document-touching sync work per second** of scrubbing. Its
+   release frame fell **107.7 → 35.5 ms** and its worst span 135.9 → 75.3.
+
+   **The follow-on gate is met with room; the whole-second gate is missed by one call.**
+   `set_switch` is ~15 ms *on its own*, and `set_work_area` is ~13 ms — two ops with
+   nothing in common costing the same, which is the signature of a fixed per-commit
+   price rather than of either op's work. It is `JournalFile::append`
+   (`crates/lumit-project/src/lib.rs`): every committed op opens the journal, writes a
+   line and calls **`sync_data`** — an fsync, on the UI thread, inside the sync call.
+   That is a durability choice (crash recovery, K-284's journal), not a fan-out, and
+   trading it is the owner's to make; it is named here rather than quietly changed.
+
+   **The settle and build-frame gates are not met, and the cause is not the edit.** A
+   click on a lock switch settles in ~650 ms with a worst build frame of ~37 ms — but a
+   plain **select** click on the same rows settles in **836 ms** with a **41.9 ms** build
+   frame while crossing the bridge nine times for **0.2 ms**. A tail that is the same
+   size with no edit under it is not the edit's wave: what is left is a post-click
+   rebuild class on the select path, which §4.2's matrix (WP-6) is the instrument for.
+   The probe now separates the two — `settled=` counts to the last frame the interface
+   *built* something in, where `quiet=` kept counting while the preview republished
+   behind the edit (docs/13 §4 lets the picture lag). *Gate (CI):* bridge-budget's "an
+   edit refreshes the model once and walks no layer" — one `get_model`, **zero**
+   `get_source_item`, `get_graph` and `get_volume_db`, and at most two `get_settings`,
+   with the Viewer and the Timeline both mounted over a mixed stack of solids and
+   precomps.
 6. **WP-6 — The matrix becomes gates.** §4.2 lands as paint-count assertions in
    `rebuild_budget_test.dart` per gesture, counted off `RenderRepaintBoundary`.
 

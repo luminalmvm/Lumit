@@ -412,7 +412,15 @@ class LumitState extends ChangeNotifier {
 
   void handleChange(ScopedChange event) {
     // The item tree changed shape: the cached comp list is stale.
-    if (event.items || event.item != null) _compsCache = null;
+    //
+    // **The item flag alone, not `item != null`** (K-680). This cache holds
+    // every comp and its *name*, and only the item scope can change either:
+    // `op_scope` sets it for adding, removing and renaming an item, and for
+    // comp settings, which carry the name. A layer op names its comp too — and
+    // that dropped the cache on every switch, every keyframe, every nudge, so
+    // the next build of the comp-tab strip re-read `get_settings` for all
+    // forty-eight comps in the project (docs/impl/ui-performance.md §4.5).
+    if (event.items) _compsCache = null;
 
     _onChange.add(event);
 

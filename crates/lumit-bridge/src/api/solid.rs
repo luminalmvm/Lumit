@@ -4,7 +4,7 @@ use flutter_rust_bridge::frb;
 
 use crate::api::{state::PROJECTS, BridgeError};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[frb]
 pub struct SolidReference {
     #[frb(name = "internalproject")]
