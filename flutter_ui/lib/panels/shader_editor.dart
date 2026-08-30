@@ -88,6 +88,14 @@ BridgeShaderStatus? shaderStatusFor({
 
 /// Open the editor on one Custom shader instance, and commit what it returns.
 ///
+/// **A shader built from its graph refuses the text editor, with one offer**
+/// (docs/impl/custom-shader.md §4.1): the graph is master, so a hand edit to
+/// the compiled text would be silently thrown away by the next box moved.
+/// Detach keeps the compiled text, drops the graph — one staged edit, one
+/// `SetLayerEffects`, one undo step — and the editor then opens on the text
+/// that stayed. It is not reversible by another button, which is the honest
+/// shape: the graph is gone because the user said so.
+///
 /// Answers whether anything was applied, so the caller can refresh the read
 /// model on the edit and not on a cancel.
 Future<bool> showShaderEditor({
@@ -96,13 +104,42 @@ Future<bool> showShaderEditor({
   required UuidValue effect,
 }) async {
   String? held;
+  var hasGraph = false;
   for (final instance in layer.getEffects()) {
     if (instance.id() != effect) continue;
     held = instance.shaderSource() ?? '';
+    hasGraph = instance.shaderGraph() != null;
     break;
   }
   if (held == null) return false;
-  final source = held;
+  if (hasGraph) {
+    final agreed = await showLumitModal<bool>(
+      context: context,
+      id: 'shader-detach',
+      builder: (close) => _DetachOffer(
+        onDetach: () => close(true),
+        onCancel: () => close(null),
+      ),
+    );
+    if (agreed != true || !context.mounted) return false;
+    final stack = layer.getEffects();
+    var found = false;
+    for (final instance in stack) {
+      if (instance.id() != effect) continue;
+      instance.detachShaderGraph();
+      held = instance.shaderSource() ?? '';
+      found = true;
+      break;
+    }
+    if (!found) return false;
+    try {
+      layer.setEffects(effects: stack);
+    } catch (_) {
+      // The stack changed under the offer; re-reading is the recovery.
+      return false;
+    }
+  }
+  final source = held ?? '';
 
   final applied = await showLumitModal<String>(
     context: context,
@@ -117,6 +154,53 @@ Future<bool> showShaderEditor({
   );
   if (applied == null) return false;
   return applyShaderSource(layer: layer, effect: effect, source: applied);
+}
+
+/// The §4.1 refusal, worn calmly: this shader is its graph's, and the one way
+/// into the text is to detach.
+class _DetachOffer extends StatelessWidget {
+  final VoidCallback onDetach;
+  final VoidCallback onCancel;
+
+  const _DetachOffer({required this.onDetach, required this.onCancel});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return DialogFrame(
+      width: 420,
+      children: [
+        dialogTitleBar(
+          t,
+          title: l10n.shaderDetachTitle,
+          onClose: onCancel,
+          keyPrefix: 'shader-detach',
+        ),
+        Padding(
+          padding: const EdgeInsets.all(dialogPadding),
+          child: Text(l10n.shaderDetachBody, style: t.small),
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'shader-detach',
+          actions: [
+            HouseButton(
+              key: const ValueKey<String>('shader-detach-cancel'),
+              onPressed: onCancel,
+              child: Text(l10n.cancel),
+            ),
+            HouseButton(
+              key: const ValueKey<String>('shader-detach-confirm'),
+              primary: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              onPressed: onDetach,
+              child: Text(l10n.shaderDetachAction),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class _ShaderEditor extends StatefulWidget {

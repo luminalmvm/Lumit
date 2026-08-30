@@ -10244,6 +10244,262 @@
   "@shaderCompiles": {
     "description": "Quiet line under the code box in the shader editor window, when the program the user has typed compiles. Replaced by the compiler's own message when it does not. A statement, not praise."
   },
+  "shaderNodePicture": "Picture",
+  "@shaderNodePicture": {
+    "description": "Name of the 'Picture' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the picture arriving at the effect. Also a row of the box search that adds one."
+  },
+  "shaderNodePicture2": "Second picture",
+  "@shaderNodePicture2": {
+    "description": "Name of the 'Second picture' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the effect's extra layer input. Also a row of the box search that adds one."
+  },
+  "shaderNodeMatte": "Matte",
+  "@shaderNodeMatte": {
+    "description": "Name of the 'Matte' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the effect's matte strength at each point. Also a row of the box search that adds one."
+  },
+  "shaderNodeUv": "UV",
+  "@shaderNodeUv": {
+    "description": "Name of the 'UV' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the position of the pixel being drawn, 0..1 across the frame. Also a row of the box search that adds one."
+  },
+  "shaderNodeTime": "Time",
+  "@shaderNodeTime": {
+    "description": "Name of the 'Time' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the layer time in seconds. Also a row of the box search that adds one."
+  },
+  "shaderNodeSeed": "Seed",
+  "@shaderNodeSeed": {
+    "description": "Name of the 'Seed' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the instance's fixed random seed. Also a row of the box search that adds one."
+  },
+  "shaderNodeParam": "Parameter",
+  "@shaderNodeParam": {
+    "description": "Name of the 'Parameter' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 declares one control row in the Effect controls panel. Also a row of the box search that adds one."
+  },
+  "shaderNodeAdd": "Add",
+  "@shaderNodeAdd": {
+    "description": "Name of the 'Add' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeSubtract": "Subtract",
+  "@shaderNodeSubtract": {
+    "description": "Name of the 'Subtract' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMultiply": "Multiply",
+  "@shaderNodeMultiply": {
+    "description": "Name of the 'Multiply' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeDivide": "Divide",
+  "@shaderNodeDivide": {
+    "description": "Name of the 'Divide' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeModulo": "Modulo",
+  "@shaderNodeModulo": {
+    "description": "Name of the 'Modulo' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMix": "Mix",
+  "@shaderNodeMix": {
+    "description": "Name of the 'Mix' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 blends two values by a third. Also a row of the box search that adds one."
+  },
+  "shaderNodeClamp": "Clamp",
+  "@shaderNodeClamp": {
+    "description": "Name of the 'Clamp' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 holds a value between a low and a high bound. Also a row of the box search that adds one."
+  },
+  "shaderNodeSaturate": "Saturate",
+  "@shaderNodeSaturate": {
+    "description": "Name of the 'Saturate' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 clamps a value to 0..1. Also a row of the box search that adds one."
+  },
+  "shaderNodePow": "Power",
+  "@shaderNodePow": {
+    "description": "Name of the 'Power' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 raises one value to another. Also a row of the box search that adds one."
+  },
+  "shaderNodeSqrt": "Square root",
+  "@shaderNodeSqrt": {
+    "description": "Name of the 'Square root' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeAbs": "Absolute",
+  "@shaderNodeAbs": {
+    "description": "Name of the 'Absolute' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 drops the sign. Also a row of the box search that adds one."
+  },
+  "shaderNodeSign": "Sign",
+  "@shaderNodeSign": {
+    "description": "Name of the 'Sign' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 -1, 0 or 1 by the sign of the input. Also a row of the box search that adds one."
+  },
+  "shaderNodeMin": "Minimum",
+  "@shaderNodeMin": {
+    "description": "Name of the 'Minimum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeMax": "Maximum",
+  "@shaderNodeMax": {
+    "description": "Name of the 'Maximum' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeFloor": "Floor",
+  "@shaderNodeFloor": {
+    "description": "Name of the 'Floor' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 rounds down. Also a row of the box search that adds one."
+  },
+  "shaderNodeCeil": "Ceiling",
+  "@shaderNodeCeil": {
+    "description": "Name of the 'Ceiling' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 rounds up. Also a row of the box search that adds one."
+  },
+  "shaderNodeFract": "Fraction",
+  "@shaderNodeFract": {
+    "description": "Name of the 'Fraction' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the part after the decimal point. Also a row of the box search that adds one."
+  },
+  "shaderNodeStep": "Step",
+  "@shaderNodeStep": {
+    "description": "Name of the 'Step' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 0 below an edge, 1 at or above it. Also a row of the box search that adds one."
+  },
+  "shaderNodeSmoothstep": "Smooth step",
+  "@shaderNodeSmoothstep": {
+    "description": "Name of the 'Smooth step' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 a smooth 0-to-1 ramp between two bounds. Also a row of the box search that adds one."
+  },
+  "shaderNodeSin": "Sine",
+  "@shaderNodeSin": {
+    "description": "Name of the 'Sine' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeCos": "Cosine",
+  "@shaderNodeCos": {
+    "description": "Name of the 'Cosine' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeAtan2": "Arctangent",
+  "@shaderNodeAtan2": {
+    "description": "Name of the 'Arctangent' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the angle of a vector from its y and x. Also a row of the box search that adds one."
+  },
+  "shaderNodeLength": "Length",
+  "@shaderNodeLength": {
+    "description": "Name of the 'Length' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 a vector's length. Also a row of the box search that adds one."
+  },
+  "shaderNodeDistance": "Distance",
+  "@shaderNodeDistance": {
+    "description": "Name of the 'Distance' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the distance between two points. Also a row of the box search that adds one."
+  },
+  "shaderNodeDot": "Dot product",
+  "@shaderNodeDot": {
+    "description": "Name of the 'Dot product' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeNormalize": "Normalise",
+  "@shaderNodeNormalize": {
+    "description": "Name of the 'Normalise' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 scales a vector to length one. Also a row of the box search that adds one."
+  },
+  "shaderNodeSplit": "Split",
+  "@shaderNodeSplit": {
+    "description": "Name of the 'Split' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 takes a vector apart into its numbers. Also a row of the box search that adds one."
+  },
+  "shaderNodeCombine2": "Combine 2",
+  "@shaderNodeCombine2": {
+    "description": "Name of the 'Combine 2' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 puts two numbers together as a pair. Also a row of the box search that adds one."
+  },
+  "shaderNodeCombine3": "Combine 3",
+  "@shaderNodeCombine3": {
+    "description": "Name of the 'Combine 3' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 puts three numbers together. Also a row of the box search that adds one."
+  },
+  "shaderNodeCombine4": "Combine 4",
+  "@shaderNodeCombine4": {
+    "description": "Name of the 'Combine 4' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 puts four numbers together, as a colour usually. Also a row of the box search that adds one."
+  },
+  "shaderNodeSwizzle": "Swizzle",
+  "@shaderNodeSwizzle": {
+    "description": "Name of the 'Swizzle' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 reorders a vector's parts by a pattern such as yx. Also a row of the box search that adds one."
+  },
+  "shaderNodeSample": "Sample",
+  "@shaderNodeSample": {
+    "description": "Name of the 'Sample' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 reads a picture at a position. Also a row of the box search that adds one."
+  },
+  "shaderNodeLuminance": "Luminance",
+  "@shaderNodeLuminance": {
+    "description": "Name of the 'Luminance' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 a colour's brightness as one number. Also a row of the box search that adds one."
+  },
+  "shaderNodePremultiply": "Premultiply",
+  "@shaderNodePremultiply": {
+    "description": "Name of the 'Premultiply' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 multiplies the colour by its alpha. Also a row of the box search that adds one."
+  },
+  "shaderNodeUnpremultiply": "Unpremultiply",
+  "@shaderNodeUnpremultiply": {
+    "description": "Name of the 'Unpremultiply' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 divides the colour by its alpha. Also a row of the box search that adds one."
+  },
+  "shaderNodeTint": "Tint",
+  "@shaderNodeTint": {
+    "description": "Name of the 'Tint' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 multiplies a colour by a tint colour. Also a row of the box search that adds one."
+  },
+  "shaderNodeBlend": "Blend",
+  "@shaderNodeBlend": {
+    "description": "Name of the 'Blend' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 blends two colours by a blend mode and an amount. Also a row of the box search that adds one."
+  },
+  "shaderNodeResult": "Result",
+  "@shaderNodeResult": {
+    "description": "Name of the 'Result' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the one box every graph ends at: the picture going out. Also a row of the box search that adds one."
+  },
+  "shaderPortColour": "colour",
+  "@shaderPortColour": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a colour value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortPicture": "picture",
+  "@shaderPortPicture": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a picture, readable only by the Sample box. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortStrength": "strength",
+  "@shaderPortStrength": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the matte's strength, one number. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortUv": "uv",
+  "@shaderPortUv": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a position across the frame. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortSeconds": "seconds",
+  "@shaderPortSeconds": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the time in seconds. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortSeed": "seed",
+  "@shaderPortSeed": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the fixed random seed. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortValue": "value",
+  "@shaderPortValue": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a plain value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortLo": "low",
+  "@shaderPortLo": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the lower bound. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortHi": "high",
+  "@shaderPortHi": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the upper bound. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortEdge": "edge",
+  "@shaderPortEdge": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the threshold a Step box compares against. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortVector": "vector",
+  "@shaderPortVector": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a vector value. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortBase": "base",
+  "@shaderPortBase": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the colour underneath, in a Blend box. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortBlend": "blend",
+  "@shaderPortBlend": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the colour on top, in a Blend box. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortAmount": "amount",
+  "@shaderPortAmount": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 how strongly the blend applies, 0..1. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderPortTint": "tint",
+  "@shaderPortTint": {
+    "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 the tint colour. Lower case: socket labels are quiet row text beside the wire dots."
+  },
+  "shaderGraphSearchHint": "Search boxes",
+  "@shaderGraphSearchHint": {
+    "description": "Placeholder in the small search field that adds a box to a Custom shader's inner node graph (opened with Tab, or by dropping a wire on empty canvas)."
+  },
+  "shaderDetachTitle": "Detach graph",
+  "@shaderDetachTitle": {
+    "description": "Title of the small window offered when the user opens the text editor on a Custom shader that is built from its node graph. The graph is the master copy, so the text cannot be edited until the graph is detached."
+  },
+  "shaderDetachBody": "This shader is built from its graph, so the text cannot be edited while the graph is in charge. Detaching keeps the compiled text and removes the graph. This cannot be reassembled afterwards.",
+  "@shaderDetachBody": {
+    "description": "Body of the detach-graph window: explains that editing the text of a graph-built Custom shader requires detaching the graph first, that the compiled text stays, and that the boxes do not come back (undo aside)."
+  },
+  "shaderDetachAction": "Detach",
+  "@shaderDetachAction": {
+    "description": "The confirming button of the detach-graph window. Removes the Custom shader\u2019s node graph and keeps its compiled text. One undo step."
+  },
   "menuRowTicked": "Ticked",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."

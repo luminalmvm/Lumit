@@ -57,6 +57,8 @@ import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'placeholder.dart';
+import 'shader_graph.dart' show ShaderGraphPanel;
+import 'timeline_extras_frb.dart' show DoubleTap;
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
 //
@@ -627,6 +629,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   _InFlight? _flight;
   _NodeDrag? _nodeDrag;
 
+  /// The double-click that enters a Custom shader's inner graph (K-642), and
+  /// which box the last press landed on so two clicks on two boxes are not one
+  /// double-click.
+  final DoubleTap _boxTaps = DoubleTap();
+  String? _boxTapKey;
+
   /// The wire the box being dragged is over and would drop into (N7), drawn
   /// picked while it is. Held so the highlight and the release agree.
   BridgeGraphEdge? _dropWire;
@@ -662,6 +670,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _ui = ui;
     ui.selectedLayer.addListener(_reload);
     ui.model.addListener(_reload);
+    // Entering (or leaving) a Custom shader's inner graph swaps this panel's
+    // whole face (K-642 §4.2), from either surface the double-click lives on.
+    ui.shaderGraphEntry.addListener(_onShaderEntry);
     // `Ctrl+A` here means every box on this canvas (K-522), which it can only
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
@@ -690,9 +701,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
   }
 
+  void _onShaderEntry() {
+    if (mounted) setState(() {});
+  }
+
   void _unbind() {
     _ui?.selectedLayer.removeListener(_reload);
     _ui?.model.removeListener(_reload);
+    _ui?.shaderGraphEntry.removeListener(_onShaderEntry);
     _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
     if (_ui?.deleteClaim == _deleteClaim) {
       _ui!.deleteClaim = _priorDeleteClaim;
@@ -1452,6 +1468,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final box = layout.boxAt(at);
     if (box != null) {
       final key = graphNodeKey(box.node.node);
+      // **Double-clicking a Custom shader box enters its inner graph** (K-642
+      // — "entering a shader node works like entering a precomp"). Counted
+      // with [DoubleTap] because the canvas reads raw pointers; the first
+      // press still picks the box, exactly as a precomp's first click selects.
+      final again = _boxTaps.tap(at: event.localPosition, slop: 6) &&
+          _boxTapKey == key;
+      _boxTapKey = key;
+      if (again && box.node.matchName == 'custom_shader') {
+        if ((_effectIdOf(box.node.node), _layer) case (final effect?, final layer?)) {
+          _ui?.enterShaderGraph(layer, effect,
+              effectName: box.node.customName ?? engineLabel(box.node.label));
+          return;
+        }
+      }
       final keys = HardwareKeyboard.instance;
       final toggle = keys.isControlPressed || keys.isMetaPressed;
       final add = keys.isShiftPressed;
@@ -1678,6 +1708,15 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Inside a Custom shader (K-642 §4.2): the panel's whole face is the
+    // inner graph, breadcrumb and all, until Escape or a crumb brings the
+    // layer's own graph back.
+    if (_ui?.shaderGraphEntry.value case final entry?) {
+      return ShaderGraphPanel(
+        entry: entry,
+        onExit: () => _ui?.exitShaderGraph(),
+      );
+    }
     final graph = _graph;
     if (graph == null) {
       return PlaceholderPanel(
@@ -1830,7 +1869,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                       child: RepaintBoundary(
                         child: CustomPaint(
                           key: const ValueKey('graph-ground'),
-                          painter: _GroundPainter(
+                          painter: GraphGroundPainter(
                             pan: _pan,
                             zoom: _zoom,
                             grid: t.surface2,
@@ -2046,7 +2085,7 @@ class _NodeCard extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: _NodeFrame(
+            child: GraphNodeFrame(
               // A bypassed box draws its border dashed, both drawings; the
               // selected one draws it in `animated` (K-473).
               colour: selected ? t.animated : t.hairline,
@@ -2297,12 +2336,15 @@ class _NodeCard extends StatelessWidget {
 
 /// A node's frame, drawn rather than decorated so that a bypassed one can be
 /// dashed — Flutter's `Border` has no dash.
-class _NodeFrame extends StatelessWidget {
+/// Public because the inner shader graph's cards wear the identical frame
+/// (K-642 §4.2 — the canvas is shared, the model is not).
+class GraphNodeFrame extends StatelessWidget {
   final Color colour;
   final Color fill;
   final bool dashed;
   final double radius;
-  const _NodeFrame({
+  const GraphNodeFrame({
+    super.key,
     required this.colour,
     required this.fill,
     required this.dashed,
@@ -2337,7 +2379,7 @@ class _FramePainter extends CustomPainter {
       canvas.drawRRect(rect, stroke);
       return;
     }
-    canvas.drawPath(_dash(Path()..addRRect(rect)), stroke);
+    canvas.drawPath(graphDashPath(Path()..addRRect(rect)), stroke);
   }
 
   @override
@@ -2348,8 +2390,10 @@ class _FramePainter extends CustomPainter {
       old.radius != radius;
 }
 
-/// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray.
-Path _dash(Path path) {
+/// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray. Public
+/// for the reason [GraphNodeFrame] is: the inner shader graph draws its wire
+/// in hand with the same stroke.
+Path graphDashPath(Path path) {
   final out = Path();
   for (final metric in path.computeMetrics()) {
     var at = 0.0;
@@ -2381,13 +2425,13 @@ Path _dash(Path path) {
 /// It is also its own painter behind its own [RepaintBoundary], because it
 /// answers to nothing but the pan, the zoom and the theme: hovering a node or
 /// dragging a wire redraws every wire above it and leaves the ground alone.
-class _GroundPainter extends CustomPainter {
+class GraphGroundPainter extends CustomPainter {
   final Offset pan;
   final double zoom;
   final Color grid;
   final Color ground;
 
-  const _GroundPainter({
+  const GraphGroundPainter({
     required this.pan,
     required this.zoom,
     required this.grid,
@@ -2429,7 +2473,7 @@ class _GroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GroundPainter old) =>
+  bool shouldRepaint(GraphGroundPainter old) =>
       old.pan != pan ||
       old.zoom != zoom ||
       old.grid != grid ||
@@ -2504,7 +2548,7 @@ class _GraphPainter extends CustomPainter {
       ..color = colour
       ..style = PaintingStyle.stroke
       ..strokeWidth = graphWireWidth * zoom * weight;
-    canvas.drawPath(dashes ? _dash(path) : path, paint);
+    canvas.drawPath(dashes ? graphDashPath(path) : path, paint);
   }
 
   @override

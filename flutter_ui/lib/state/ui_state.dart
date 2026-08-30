@@ -63,6 +63,17 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
   displays: [],
 );
 
+/// One entered inner shader graph (K-642, custom-shader.md §4.2): the handle
+/// the canvas edits through, and the words the breadcrumb reads — captured on
+/// the double-click so drawing them costs no call.
+typedef ShaderGraphEntry = ({
+  LayerReference layer,
+  UuidValue effect,
+  String compName,
+  String layerName,
+  String effectName,
+});
+
 class LumitUiState extends ChangeNotifier {
   /// Everything that outlives the session: the panel layout, the appearance,
   /// UI scale, tooltips, autosave and export defaults.
@@ -623,6 +634,54 @@ class LumitUiState extends ChangeNotifier {
   /// effect selection (K-300); this notifier is what carries the boxes that
   /// selection cannot name, the drivers among them.
   final ValueNotifier<BridgeNodeRef?> graphNode = ValueNotifier(null);
+
+  /// The Custom shader whose **inner graph** the Graph panel is showing
+  /// (K-642, docs/impl/custom-shader.md §4.2), or null when it shows the
+  /// layer's own graph.
+  ///
+  /// Shell-level for the reason [graphNode] is: it is set by a double-click in
+  /// one panel (the Graph panel's box, or the Effect controls heading — one
+  /// selection, K-300) and read by the Graph panel, and neither should have to
+  /// be mounted for the other to work. The names ride along so the breadcrumb
+  /// costs no call in a rebuild.
+  final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
+
+  /// Where each inner graph's canvas was left **this session**, by effect
+  /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
+  /// somewhere in a graph is a way of working on it, not an edit to it), and
+  /// they are never in the document.
+  ///
+  /// ponytail: session memory only; the trigger for persisting it in
+  /// `SavedSession` beside `compViews` is somebody missing their place across
+  /// a restart.
+  final Map<String, ({Offset pan, double zoom})> shaderGraphViews = {};
+
+  /// Enter one Custom shader's inner graph (K-642 — "entering a shader node
+  /// works like entering a precomp"). The one funnel both surfaces call, so
+  /// the names in the breadcrumb are captured the same way whichever
+  /// double-click it was.
+  void enterShaderGraph(LayerReference layer, UuidValue effect,
+      {required String effectName}) {
+    var compName = '';
+    var layerName = '';
+    try {
+      compName = _selectedComp?.getSettings().name ?? '';
+      layerName = layer.getInfo().name;
+    } catch (_) {
+      // The comp or layer has gone under the gesture; the crumbs read blank
+      // and the canvas's own reload decides whether there is anything to show.
+    }
+    shaderGraphEntry.value = (
+      layer: layer,
+      effect: effect,
+      compName: compName,
+      layerName: layerName,
+      effectName: effectName,
+    );
+  }
+
+  /// The breadcrumb's way back, and Escape's.
+  void exitShaderGraph() => shaderGraphEntry.value = null;
 
   /// What Copy put down, for Paste to pick up (K-275). One tray for the
   /// session, shared by the Edit menu and the panels.
@@ -1366,6 +1425,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayer.dispose();
     selectedLayers.dispose();
     graphNode.dispose();
+    shaderGraphEntry.dispose();
     atSelectedEffect.dispose();
     activePanel.dispose();
     paletteRequest.dispose();

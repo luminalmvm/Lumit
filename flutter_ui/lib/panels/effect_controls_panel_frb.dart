@@ -66,6 +66,7 @@ import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'shader_editor.dart';
 import 'fx_section.dart';
+import 'timeline_extras_frb.dart' show DoubleTap;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
 import '../state/file_dialogs.dart';
@@ -145,6 +146,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   /// The effect whose heading is an inline rename editor, or null (K-321).
   UuidValue? _renamingEffect;
+
+  /// A double-click counter per Custom shader heading (K-642 §4.2), so two
+  /// clicks on two different headings are not one double-click. Counted with
+  /// [DoubleTap] rather than `onDoubleTap`, which would make every single
+  /// click on a heading wait out the recogniser.
+  final Map<UuidValue, DoubleTap> _headingTaps = {};
 
   /// Read a `.wgsl` somebody sent and copy its text onto `effect`
   /// (docs/impl/custom-shader.md §1.1, §6).
@@ -757,11 +764,27 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                               setState(() => _renamingEffect = null),
                           onStartRename: () => setState(
                               () => _renamingEffect = info.effects[index].id),
-                          onSelect: () => ui.pickEffect(
-                            layer,
-                            info.effects[index].id,
-                            order: [for (final e in info.effects) e.id],
-                          ),
+                          onSelect: () {
+                            ui.pickEffect(
+                              layer,
+                              info.effects[index].id,
+                              order: [for (final e in info.effects) e.id],
+                            );
+                            // **Double-clicking a Custom shader's heading
+                            // enters its inner graph** (K-642 §4.2) — the
+                            // heading and the Graph panel's box are one
+                            // selection (K-300), so they are one door. The
+                            // first click still picks, exactly as it did.
+                            final fx = info.effects[index];
+                            if (fx.name == 'custom_shader' &&
+                                _headingTaps
+                                    .putIfAbsent(fx.id, DoubleTap.new)
+                                    .tap()) {
+                              ui.enterShaderGraph(layer, fx.id,
+                                  effectName:
+                                      fx.customName ?? effectLabelOf(fx.name));
+                            }
+                          },
                           stagedValue: _effects.stagedValue,
                           trackCorrected: info.trackCorrected,
                           index: index,

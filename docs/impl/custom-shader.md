@@ -26,8 +26,20 @@ graph beside the source cache. The frame key's `extra.shader` fold skips `graph.
 one presentation key inside the block. The blend box carries a linear-light subset of the
 layer modes (normal, add, multiply, screen, darken, lighten, difference, subtract, overlay)
 rather than the full `BlendMode::ALL` table — a recorded ceiling, upgraded when the node
-claims parity. CS4's bridge/panel half and CS5 (entry) follow. Four things K-650 settled
-where this note left a choice open, and which the rest of the note should be read against:
+claims parity. **CS4's bridge and panel halves and CS5 are built too** (2026-08-30): the
+staged `shader_graph`/`set_shader_graph`/`detach_shader_graph` seam and the pure
+`shader_graph_view`/`list_shader_nodes` questions (docs/17), and the entry as §4.2 asks —
+double-click the box on the Graph panel's canvas or the heading in Effect controls (one
+selection, one door), breadcrumb `comp › layer › shader` with click-back and Escape, the
+canvas machinery shared (ground, frame, wire cubic, card metrics), the pan and zoom held in
+the session (in memory this session, not yet in the `SavedSession` blob — the trigger for
+persisting is somebody missing their place across a restart), and every gesture one
+`SetLayerEffects`. The text editor on a graph-built shader refuses with the Detach offer.
+Two panel ceilings recorded: a Parameter box lands as a 0..1 slider and its five facts are
+not yet editable on the box (the §4.3 inspector is owed), and the inner selection is a
+plain click — no marquee, no modifier set — until the outer canvas's gestures are asked
+for. Four things K-650 settled where this note left a choice open, and which the rest of
+the note should be read against:
 
 - **The derived rows are `&'static [ParamSchema]`** from a session-lived parse cache keyed by
   the source hash, not owned records. §1.5's four rules are unchanged; what changed is that
