@@ -21765,3 +21765,63 @@ Pinned in `lumit-core`'s `a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_cu
 `lumit-render`'s `a_clip_join_is_two_opposed_equal_power_ramps` (the powers sum to one across
 the whole overlap) and `a_sequence_layers_clips_sound_and_a_join_crossfades`, and the
 bridge's `pan_the_master_fader_and_the_fade_commands_round_trip`.
+
+## K-696 — The audio broker is the OFX one re-armed: one process per module, the block's deadline is the caller's margin
+
+**Status: DECIDED (2026-08-30, AP2 — broker isolation).** Binding note:
+[impl/audio-plugins.md](impl/audio-plugins.md) §5; spec pointer:
+[12-PLUGINS.md](12-PLUGINS.md) §1, §2.3, §4a. Implements K-683; carries K-589, K-592 and
+K-594 across verbatim; reverses nothing.
+
+**The crates are `lumit-aplug`'s `ipc` module and `lumit-aplug-broker`**, mirroring
+`lumit-ofx`'s `ipc` and `lumit-ofx-broker` — **the architecture reused, the code not
+shared**. That is the decision, and it was taken against the obvious alternative of a
+common `lumit-broker` crate. The two protocols have nothing in common below the shape: one
+carries frames, clips, contexts and `getFramesNeeded` prefetch shipments; the other carries
+4 KB blocks, parameter events and a steady sample count. The ring differs in kind, not in
+size — the video one is budgeted at 512 MB and sized per comp from the frame size, this one
+is a constant 32 slots and 130 KB. A crate hoisted over the two would be an abstraction with
+one and a half users, and the half would be paying for the other's shape. The **rules**
+carry over verbatim, and they are the part that was expensive to learn: one broker per
+vendor module, a private duplex pipe that is never the child's stdout (plugins `printf`),
+the protocol version as the first word, length-prefixed bincode, a per-slot header with a
+hash, handles with magic and kind validated on every lookup, discovery inside the broker,
+and a quirks table from day one.
+
+**A block's deadline is the caller's remaining lookahead margin, not a number in the
+table.** This is the one place AP2 deliberately departs from the OFX broker. A render gets
+ten seconds there because a frame can honestly take ten; a block of sound is 10.67 ms long
+and is being prepared ahead of the playhead, so the only deadline that means anything is
+how much of that head start is left (§3). The chain worker passes it in per block; the
+quirks table supplies a **floor** (one block period, raisable per plugin) and nothing else.
+Control actions — describe, create, save — keep docs/12 §2.3's two seconds, because they
+happen when nothing is playing. A missed block is **failed**, never silence: the caller
+ships the block dry with the §3 ramp, which is why `AudioHost::process` grew
+`HostError::Failed` rather than a second return type.
+
+**Three strikes are struck against the module, not the plugin.** The recorded ceiling of
+one process per module (K-592): a `.clap` holding forty effects gets one broker, so a
+plugin that fails three times in a row takes its file-mates with it for the session. The
+exception mechanism exists and needs no code — a quirks entry, or in the worst case the
+user's own switched-off list. Splitting per plugin would mean forty processes for a suite,
+which is the cure that is worse.
+
+**The switched-off list is a shared set the host is handed, not a file this crate reads.**
+`DisableList = Arc<Mutex<BTreeSet<String>>>`, read in exactly two places: before describe,
+so a switched-off plugin is never created and its code never runs, and at the top of every
+block batch, so unticking one mid-session takes effect on the next batch. The list's owner
+is whoever reads `lumit_project::PluginPrefs` — the bridge — which is what keeps the plugin
+host free of a dependency on the project format, exactly as the OFX scan already is.
+
+**`scan_brokered` is the shipping scan**; `scan` (in-process) stays for the tests and for a
+module Lumit itself ships. Both answer with the same `ScanOutcome`, so nothing downstream
+can tell which ran — the difference is only *where the vendor's start-up code executed*.
+
+Pinned in `lumit-aplug-broker`'s `tests/broker.rs`: a crash mid-block costs exactly one
+failed block and the block after it plays through a process that did not exist a moment ago
+(the Gate-4 shape); a hang trips the deadline three times and the third disables the plugin,
+after which no further process is started; a plugin switched off mid-session is skipped on
+the next batch without a strike against it; a forged handle is refused rather than followed
+and the broker survives it; a block crosses the ring sample for sample and a slot nobody
+wrote reads as empty; and a broker announcing another protocol version is refused rather
+than believed.

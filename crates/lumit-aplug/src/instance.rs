@@ -102,6 +102,13 @@ pub enum HostError {
     /// A block was asked for before `start_processing`.
     #[error("the plugin is not processing")]
     NotProcessing,
+    /// The block did not come back at all: the plugin crashed, hung past its
+    /// deadline, or has been put away for the session. Only a brokered plugin
+    /// can answer this way, and the caller's answer to it is one **dry** block
+    /// with a ramp either side of the splice — never a stopped mix
+    /// (docs/impl/audio-plugins.md §3).
+    #[error("the block did not come back: {0}")]
+    Failed(String),
 }
 
 /// The three things a plugin can ask of the host from inside a callback.

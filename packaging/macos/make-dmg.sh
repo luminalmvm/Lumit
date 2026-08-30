@@ -69,13 +69,15 @@ app="$root/flutter_ui/build/macos/Build/Products/Release/Lumit.app"
 mkdir -p "$app/Contents/Resources/colour"
 cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colour/"
 
-# The OFX plugin broker: the second process third-party plugins live in
-# (docs/12 §2.3), which the host spawns from beside its own executable — so
-# Contents/MacOS, where executables do belong. Built here rather than by the
-# podspec, which knows how to build one static library and nothing else. Before
-# the signing loop below, so it is signed like everything else in the app.
-(cd "$root" && cargo build --release -p lumit-ofx-broker)
+# The plugin brokers: the second processes third-party plugins live in
+# (docs/12 §2.3) — one per OFX bundle, one per CLAP module (K-696) — which each
+# host spawns from beside its own executable, so Contents/MacOS, where
+# executables do belong. Built here rather than by the podspec, which knows how
+# to build one static library and nothing else. Before the signing loop below, so
+# they are signed like everything else in the app.
+(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker)
 cp "$root/target/release/lumit-ofx-broker" "$app/Contents/MacOS/"
+cp "$root/target/release/lumit-aplug-broker" "$app/Contents/MacOS/"
 
 # Every Mach-O in the app that still links a Homebrew path gets handed to
 # dylibbundler. The bridge dylib is the expected hit; the loop rather than a

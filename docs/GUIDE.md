@@ -13615,9 +13615,9 @@ so the same machine offers the same list in the same order every time.
 
 **Open it.** A `.clap` file is a library, and opening a library means running the code in
 it. There is no safe way to do that; the answer is not care but distance, and the distance
-(running plugins in a separate program of their own) is the next package. For now the
-plugin is loaded into Lumit, which is fine for tests and is honestly written down as not
-the shipping arrangement.
+is a separate program of its own — §44, which is where the shipping arrangement is
+described. Loading the plugin into Lumit is still what the tests do, because proving that
+a plugin becomes an effect needs no second process.
 
 **Ask what it is.** A plugin will not answer questions about its knobs until it has been
 *made*, so describing one means making one, asking, and throwing it away. Three answers get
@@ -13696,3 +13696,98 @@ whatever settings it was given, one writes down the automation it received, and 
 sound input so it gets turned away. The two dangerous ones are disarmed unless an
 environment variable arms them, because a plugin that hangs while being *described* would
 hang the scan that describes it.
+
+## 44. Keeping somebody else's audio plugin at arm's length, in plain terms
+
+The previous section ended on an honest admission: the plugin was being loaded into Lumit
+itself, which is fine for tests and is not how anything ships. This section is what
+replaced it, and the shape of it is not new — Lumit already does exactly this for video
+plugins (§31), and the whole point of doing it again rather than sharing the code is that
+the two carry completely different things down the wire.
+
+### Why a second program at all
+
+A plugin is somebody else's compiled code, and there is no amount of care that makes
+running it safe. It can crash. It can hang. It can quietly corrupt memory that was not
+its. If it is inside Lumit when it does any of that, the project goes with it.
+
+So it is not inside Lumit. Lumit starts a small separate program — **the broker** — one
+per plugin file, hands it the file and a private line to talk on, and never loads the
+plugin itself. When the plugin dies, the broker dies; Lumit notices, loses one short piece
+of sound, and starts another broker. The layer wears a calm badge and the mix carries on.
+
+### The two channels, and why sound gets its own
+
+There are two ways the two programs talk, because sentences and sound want different
+things.
+
+The **line** carries the sentences: describe yourself, make a copy of yourself, here are
+the knob positions, save what you remember. It is a private channel of its own, not the
+program's ordinary printed output, and that is deliberate: plugins print. One stray line
+of somebody else's debugging landing in the middle of a message would scramble the
+conversation permanently. The first thing said on it is a version number, so two programs
+that disagree about the shape of a message find out before either acts on the other's
+bytes.
+
+The **shared memory** carries the sound: a piece of memory that is *the same memory* in
+both programs, so a block of samples is written once and read where it lies, with no copy
+and no packing in between. It is cut into numbered slots and the line carries only the
+slot number. Each slot begins with a small header saying how many samples are in it and
+carrying a fingerprint of them, and the reader checks the fingerprint. Shared memory is the
+one place a wrong answer arrives *silently* — no error, just the previous block's sound —
+and the check is what turns that into something noticed.
+
+A block of sound is four kilobytes, so this ring is a modest thing: about a hundred and
+thirty kilobytes for the whole file. The video one has to hold whole 4K frames and is sized
+in hundreds of megabytes. That difference is most of why the two are separate pieces of
+code rather than one shared one.
+
+### The clock a block runs against
+
+The video host gives a plugin ten seconds to produce a frame, because a frame can honestly
+take ten seconds. Sound cannot work that way. A block is eleven milliseconds long, and it
+is being prepared slightly *ahead* of the playhead — Lumit keeps about eighty-five
+milliseconds of processed sound in hand. So the only deadline that means anything is: how
+much of that head start is left? That is the number the deadline is, and it is passed in by
+the part of Lumit that knows it, not chosen here. The floor under it is one block's own
+length, because giving a plugin less time than the sound it was handed would fail blocks
+that were never going to be late.
+
+Miss the deadline, or die, and that block comes back **failed**. Failed does not mean
+silence: the layer plays the block it would have played without the effect — the *dry*
+sound — with a very short fade either side of the join, because in a montage the music
+continuing slightly wrong beats a hole in it, and a click is worse than either.
+
+### Three strikes, and starting again
+
+A missed deadline and a dead process count as the same thing: a strike. One or two strikes
+cost that block and buy a fresh broker. The third gives up: the plugin is switched off for
+the rest of the session, every block from then on plays dry, and the layer says so on a
+badge. A block that works puts the count back to nought, because it is three *in a row*
+that means a plugin cannot do its job.
+
+Starting again is a replay rather than a rescue. Nothing valuable lives in the broker:
+Lumit holds every knob position and the plugin's last saved settings, so a new broker is
+simply told to describe the file again and to make each plugin again with what it should
+have. That is why "Lumit owns the values" is a rule and not a convenience.
+
+### Two more small honesties
+
+**The file is opened inside the broker, not before it.** Simply loading a plugin file runs
+code the vendor wrote — the file gets to start itself up before anyone has asked it
+anything. So even the *scan* that finds out what a machine has installed happens in a
+broker: a file that takes its process down at the moment it loads costs one line in a
+report and none of the other files in the folder.
+
+**The switched-off list is consulted twice.** Once before describing anything, so a plugin
+the user has unticked is never created at all and its code never runs; and again at the
+top of every batch of blocks, so unticking one while the mix is playing takes effect on the
+next batch rather than at the next restart.
+
+And one thing that is a table rather than code, from the first day: the **quirks file**.
+Every plugin standard is implemented slightly differently by every host, and every
+commercial plugin ships a list of workarounds for the hosts it knows. Lumit needs the
+mirror of that list, and it needs it to be data — a file keyed by the plugin's own
+identifier — rather than a growing thicket of "if this is that plugin, do this" scattered
+through the code. Today it is empty, which is exactly right: no plugin has yet earned an
+entry, and an empty file that parses is the shipping default.

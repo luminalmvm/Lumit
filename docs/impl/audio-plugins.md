@@ -1,4 +1,8 @@
-# Audio plugin hosting: CLAP and VST3 (K-683) — design only until built
+# Audio plugin hosting: CLAP and VST3 (K-683)
+
+**Built so far: AP1 (K-692) and AP2 (K-696).** §1–§5 and §7 plans 1, 2, 5, 6 and 7
+describe code that exists; §3's chain worker, §4's latency shift, §6 and AP3–AP5 are still
+design.
 
 [12-PLUGINS.md](../12-PLUGINS.md) §6 says Lumit hosts audio plugins; this note is the
 binding *how*: the two APIs, the isolation, where a plugin sits in the mix, the
@@ -253,8 +257,8 @@ not broken. Recorded in K-683 so nobody discovers the gap in a release note.
 
 | # | Package | Lands |
 |---|---|---|
-| AP1 | CLAP host core | `lumit-aplug`: discovery, module load, describe → `AudioEffectDef`, params/state/latency/process against `LocalHost`; test plugin; plans 1, 2, 6, 7 |
-| AP2 | Broker isolation | `lumit-aplug-broker`: pipe + block ring + watchdog + disable list; plan 5 |
+| AP1 | CLAP host core ✅ | `lumit-aplug`: discovery, module load, describe → `AudioEffectDef`, params/state/latency/process against `LocalHost`; test plugin; plans 1, 2, 6, 7 (K-692) |
+| AP2 | Broker isolation ✅ | `lumit-aplug-broker`: pipe + block ring + watchdog + disable list + quirks table + brokered scan; plan 5 (K-696) |
 | AP3 | Mix-graph seam | chain worker, processed ring, dry fallback, latency shift, param envelopes, `.lum` persistence, offline bake; plans 3, 4 |
 | AP4 | VST3 host | `vst3_c_api` bindings, component/controller wiring, bus arrangement, queues, two-blob state, through the same broker and seam; plan 8 both APIs |
 | AP5 | Panel surface | Effects & presets audio category, rows in Effect controls, badges, per-plugin disable UI, arb keys; GUI window recorded as the follow-on |

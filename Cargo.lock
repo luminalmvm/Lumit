@@ -1571,12 +1571,26 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 name = "lumit-aplug"
 version = "0.2.0"
 dependencies = [
+ "bincode",
  "clap-sys",
+ "interprocess",
  "libloading",
  "lumit-aplug-testplug",
  "lumit-core",
+ "memmap2",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "lumit-aplug-broker"
+version = "0.2.0"
+dependencies = [
+ "lumit-aplug",
+ "lumit-aplug-testplug",
+ "tempfile",
 ]
 
 [[package]]

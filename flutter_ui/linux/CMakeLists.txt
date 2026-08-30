@@ -127,10 +127,10 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
     COMPONENT Runtime)
 endif()
 
-# === The OFX plugin broker ===
-# The second process OFX plugins live in (docs/12 §2.3). It goes beside the
-# runner, which is where the host looks for it and what `install.sh` copies
-# wholesale.
+# === The plugin brokers ===
+# The second processes plugins live in (docs/12 §2.3): OFX ones per bundle, CLAP
+# ones per module (K-696). They go beside the runner, which is where each host
+# looks for its own and what `install.sh` copies wholesale.
 set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
   set(LUMIT_CARGO_DIR "debug")
@@ -139,12 +139,15 @@ else()
   set(LUMIT_CARGO_DIR "release")
   set(LUMIT_CARGO_RELEASE "--release")
 endif()
-add_custom_target(lumit_ofx_broker ALL
-  COMMAND cargo build -p lumit-ofx-broker ${LUMIT_CARGO_RELEASE}
+add_custom_target(lumit_brokers ALL
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker ${LUMIT_CARGO_RELEASE}
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
-  COMMENT "Building the OFX plugin broker")
-add_dependencies(${BINARY_NAME} lumit_ofx_broker)
+  COMMENT "Building the plugin brokers")
+add_dependencies(${BINARY_NAME} lumit_brokers)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-ofx-broker"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-aplug-broker"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

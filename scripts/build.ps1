@@ -22,9 +22,10 @@
     Build only crates/lumit-bridge (cargo package name `lumit_bridge`, with an
     underscore). This is the one flutter_ui/test/frb/ loads.
 
-    It is not the only thing the app needs: lumit-ofx-broker is a separate
-    executable that opens one OFX plugin bundle in a process of its own (K-592),
-    and a full --workspace build makes it. `flutter run` builds both itself.
+    It is not the only thing the app needs: lumit-ofx-broker and
+    lumit-aplug-broker are separate executables that open one OFX bundle, or one
+    CLAP module, in a process of their own (K-592, K-696), and a full --workspace
+    build makes them. `flutter run` builds all three itself.
 
 .EXAMPLE
     .\scripts\build.ps1

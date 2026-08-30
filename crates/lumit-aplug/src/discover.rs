@@ -22,18 +22,26 @@
 //!   people's start-up code. The scan is a plain blocking function; the caller
 //!   puts it on a worker.
 //!
-//! **Discovery here loads plugins into this process.** That is AP1's shape and
-//! it is not the shipping one: §5 says discovery enumerates *inside the
-//! broker*, because a `clap_entry.init` is already third-party code running.
-//! AP2 moves it there; the list this answers with does not change shape when it
-//! does.
+//! # Two scans, and which one ships
+//!
+//! [`scan`] opens every module **in this process**. It is the one the tests use
+//! and the one a bundle Lumit itself ships would take; it is not the one for
+//! third-party code, because a `clap_entry.init` is already somebody else's
+//! program running.
+//!
+//! [`scan_brokered`] is the shipping one (§5): the module is opened, started and
+//! enumerated inside a broker process, and what crosses back is descriptors. A
+//! file that kills the process at load costs a report line and nothing else.
+//! The two answer with the same [`ScanOutcome`], so nothing downstream can tell
+//! which one ran.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::def::AudioEffectDef;
-use crate::describe::describe_module;
+use crate::describe::{describe_module_except, PluginDescriptor, Refusal};
+use crate::ipc::broker::{Broker, BrokerConfig, DisableList};
 use crate::module::Module;
 use crate::schema::{schema_of, MATCH_PREFIX};
 
@@ -195,25 +203,70 @@ fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) 
 
     // Before describe, not after: a switched-off plugin is never created, so
     // its code never runs.
-    if module
-        .entries()
-        .iter()
-        .all(|entry| options.disabled.contains(&entry.id))
-    {
-        return;
-    }
+    let report = describe_module_except(&module, &options.disabled);
+    offer(binary, &report.described, &report.rejected, outcome);
+}
 
-    let report = describe_module(&module);
-    for refused in &report.rejected {
+/// Scan the named directories with every module opened **inside a broker
+/// process** — the shipping arrangement (docs/impl/audio-plugins.md §5).
+///
+/// One broker per `.clap` file, spawned, asked, and shut down again: the
+/// descriptors are cached here and a layer that later wants a live instance gets
+/// a broker of its own. A module that will not load, or that takes its process
+/// down while loading, is one line in the report and costs the rest of the
+/// folder nothing.
+///
+/// `exe` overrides where the broker executable is, for a test or a build tree.
+///
+/// Blocking, and not to be called from the interface's thread.
+#[must_use]
+pub fn scan_brokered(paths: &[PathBuf], disabled: &DisableList, exe: Option<&Path>) -> ScanOutcome {
+    let mut outcome = ScanOutcome::default();
+    for dir in paths {
+        for binary in scan_dir(dir) {
+            let mut config = BrokerConfig::new(&binary);
+            config.disabled = Arc::clone(disabled);
+            config.exe = exe.map(Path::to_path_buf);
+            // The shipped quirks are keyed by plugin id and a scan does not know
+            // one yet, so a describe runs on the defaults. The per-plugin entry
+            // is read where it matters — when a layer opens a live instance.
+            let mut broker = match Broker::spawn(config) {
+                Ok(broker) => broker,
+                Err(error) => {
+                    outcome.skipped.push(skip_line(&binary, &error.to_string()));
+                    continue;
+                }
+            };
+            if let Err(error) = broker.describe() {
+                outcome.skipped.push(skip_line(&binary, &error.to_string()));
+                continue;
+            }
+            let described = broker.descriptors().to_vec();
+            let rejected = broker.rejected().to_vec();
+            drop(broker);
+            offer(&binary, &described, &rejected, &mut outcome);
+        }
+    }
+    outcome
+}
+
+/// Turn one module's describe into catalogue entries and report lines.
+///
+/// Shared by both scans on purpose: the two differ in *where the plugin's code
+/// ran*, and in nothing else that anybody downstream can see.
+fn offer(
+    binary: &Path,
+    described: &[PluginDescriptor],
+    rejected: &[Refusal],
+    outcome: &mut ScanOutcome,
+) {
+    for refused in rejected {
         outcome.skipped.push(skip_line(
             binary,
             &format!("{}: {}", refused.id, refused.reason),
         ));
     }
-    for descriptor in &report.described {
-        if options.disabled.contains(&descriptor.id) {
-            continue;
-        }
+    for descriptor in described {
         let schema = match schema_of(descriptor) {
             Ok(schema) => Box::leak(Box::new(schema)),
             Err(error) => {

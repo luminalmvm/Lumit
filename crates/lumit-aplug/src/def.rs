@@ -36,11 +36,15 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use lumit_core::fx::{EffectDef, EffectSchema, ParamId};
+use serde::{Deserialize, Serialize};
 
 use crate::describe::PluginDescriptor;
 use crate::instance::{HostError, Instance};
+use crate::ipc::broker::{Broker, BrokerError};
+use crate::ipc::proto::{Bring, InstanceId};
 use crate::module::Module;
 use crate::process::{Block, ParamEvent, INTERLEAVED_LEN};
 use crate::schema::{value_routes, ValueRoute};
@@ -52,7 +56,7 @@ use crate::schema::{value_routes, ValueRoute};
 /// plugin's own memory of itself, then the parameters, because they are the
 /// project's — **properties win over stale state**
 /// (docs/impl/audio-plugins.md §4).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct InstanceSetup {
     /// Which plugin inside the module.
     pub plugin_id: String,
@@ -63,6 +67,19 @@ pub struct InstanceSetup {
     /// Whether this is an export. Offline means no deadline and the plugin may
     /// take its slower, better path (§3).
     pub offline: bool,
+}
+
+impl InstanceSetup {
+    /// The same four things, in the shape the pipe carries.
+    #[must_use]
+    pub fn to_bring(&self) -> Bring {
+        Bring {
+            plugin_id: self.plugin_id.clone(),
+            state: self.state.clone(),
+            params: self.params.clone(),
+            offline: self.offline,
+        }
+    }
 }
 
 /// Where an audio plugin's blocks actually come from.
@@ -242,6 +259,180 @@ impl AudioHost for LocalHost {
 
 /// The length of the interleaved buffers [`AudioHost::process`] takes.
 pub const BLOCK_SAMPLES: usize = INTERLEAVED_LEN;
+
+// ------------------------------------------------------------ the broker --
+
+/// The lookahead a full ring buys: eight blocks, about eighty-five milliseconds
+/// (docs/impl/audio-plugins.md §3).
+///
+/// The default margin for a block asked for through [`AudioHost::process`],
+/// which carries no margin of its own. A chain worker that knows how far ahead
+/// it actually is says so per block, through [`BlockJob::margin`].
+pub const LOOKAHEAD_MARGIN: Duration = Duration::from_nanos(8 * 10_666_667);
+
+/// One block, as a batch asks for it.
+pub struct BlockJob<'a> {
+    /// Lumit's interleaved stereo, [`INTERLEAVED_LEN`] samples.
+    pub input: &'a [f32],
+    /// The parameter values for this block. Need not be sorted.
+    pub events: &'a [ParamEvent],
+    /// The running frame count since the chain started.
+    pub steady: i64,
+    /// How much lookahead the caller has left when it asks. This **is** the
+    /// deadline, floored at one block period: a plugin gets exactly as long as
+    /// the caller can afford to wait and not a second more (§3).
+    pub margin: Duration,
+}
+
+impl<'a> BlockJob<'a> {
+    /// One block with the full ring's margin, which is what a chain worker that
+    /// has kept up has.
+    #[must_use]
+    pub fn new(input: &'a [f32], events: &'a [ParamEvent], steady: i64) -> Self {
+        Self {
+            input,
+            events,
+            steady,
+            margin: LOOKAHEAD_MARGIN,
+        }
+    }
+}
+
+/// A plugin hosted **in a broker process** — the shipping arrangement
+/// (docs/12 §1, docs/impl/audio-plugins.md §5).
+///
+/// One broker per `.clap` module, shared by every plugin in it and by every
+/// instance of every plugin in it, behind one lock: a module holding forty
+/// effects gets one process, not forty (K-592). The lock is short and
+/// uncontended by construction — one instance is driven by one chain worker,
+/// and parallelism is across layers — and **no FFI happens under it**, because
+/// all the FFI is in the other process. What happens under it is a pipe write
+/// and a bounded wait, which is what docs/14 §1 permits and what a deadline is
+/// for.
+pub struct BrokerHost {
+    broker: Arc<Mutex<Broker>>,
+    /// The plugin's own id, which is what the switched-off list names.
+    plugin_id: String,
+    instance: InstanceId,
+    latency: u32,
+    warning: Option<String>,
+}
+
+impl BrokerHost {
+    /// Bring one plugin up inside an already-spawned, already-described broker.
+    ///
+    /// # Errors
+    ///
+    /// [`BrokerError`] — the broker would not make the instance, or the plugin
+    /// has already been put away for the session.
+    pub fn open(broker: Arc<Mutex<Broker>>, setup: &InstanceSetup) -> Result<Self, BrokerError> {
+        let created = {
+            let mut held = broker.lock().unwrap_or_else(PoisonError::into_inner);
+            held.create_instance(setup.to_bring())?
+        };
+        Ok(Self {
+            broker,
+            plugin_id: setup.plugin_id.clone(),
+            instance: created.instance,
+            latency: created.latency,
+            warning: created.warning,
+        })
+    }
+
+    /// What went wrong bringing this plugin up that did not stop it coming up.
+    #[must_use]
+    pub fn warning(&self) -> Option<&str> {
+        self.warning.as_deref()
+    }
+
+    /// The broker this plugin lives in, so a second plugin of the same module
+    /// can be opened in the same process.
+    #[must_use]
+    pub fn broker(&self) -> &Arc<Mutex<Broker>> {
+        &self.broker
+    }
+
+    /// One batch of blocks, which is how the chain worker fills its lookahead
+    /// ring.
+    ///
+    /// `outputs` holds one whole block per job, back to back. Every job gets an
+    /// answer: `Ok` for a block that came back, and `Err` carrying the sentence
+    /// for one that did not — which the caller ships **dry**, with a ramp either
+    /// side of the splice. A batch never stops early, because the block after a
+    /// dead one is very often fine (the broker has already restarted by then).
+    ///
+    /// The **switched-off list is read once, here, at the top of the batch**
+    /// (K-594): a plugin the user turns off mid-session stops being asked on the
+    /// next batch, and none of its blocks reach a plugin at all.
+    pub fn process_batch(
+        &self,
+        jobs: &[BlockJob<'_>],
+        outputs: &mut [f32],
+    ) -> Vec<Result<(), HostError>> {
+        let mut broker = self.broker.lock().unwrap_or_else(PoisonError::into_inner);
+        if broker.is_switched_off(&self.plugin_id) {
+            outputs.fill(0.0);
+            return jobs
+                .iter()
+                .map(|_| Err(HostError::Failed("the plugin is switched off".to_owned())))
+                .collect();
+        }
+
+        let mut answers = Vec::with_capacity(jobs.len());
+        for (job, output) in jobs.iter().zip(outputs.chunks_mut(INTERLEAVED_LEN)) {
+            let answer = broker.process(
+                self.instance,
+                job.input,
+                output,
+                job.events,
+                job.steady,
+                job.margin,
+            );
+            answers.push(answer.map_err(HostError::Failed));
+        }
+        answers
+    }
+}
+
+impl AudioHost for BrokerHost {
+    fn process(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        events: &[ParamEvent],
+        steady: i64,
+    ) -> Result<(), HostError> {
+        let mut broker = self.broker.lock().unwrap_or_else(PoisonError::into_inner);
+        broker
+            .process(
+                self.instance,
+                input,
+                output,
+                events,
+                steady,
+                LOOKAHEAD_MARGIN,
+            )
+            .map_err(HostError::Failed)
+    }
+
+    fn latency(&self) -> u32 {
+        self.latency
+    }
+
+    fn save(&self) -> Result<Vec<u8>, HostError> {
+        let mut broker = self.broker.lock().unwrap_or_else(PoisonError::into_inner);
+        broker
+            .save(self.instance)
+            .map_err(|error| HostError::Failed(error.to_string()))
+    }
+}
+
+impl Drop for BrokerHost {
+    fn drop(&mut self) {
+        let mut broker = self.broker.lock().unwrap_or_else(PoisonError::into_inner);
+        broker.destroy(self.instance);
+    }
+}
 
 /// An audio plugin, as an entry in the effect catalogue (K-593).
 ///

@@ -31,18 +31,17 @@
 //! 5. [`def`] is the catalogue entry ([`AudioEffectDef`], which VST3 will fill
 //!    too) and the driver ([`AudioHost`], [`LocalHost`]).
 //! 6. [`instance`] and [`process`] are one live plugin and one block of sound.
+//! 7. [`ipc`] moves all of that into **another process**, which is the shipping
+//!    arrangement: [`LocalHost`] loads the plugin here and is for tests,
+//!    [`BrokerHost`] talks to a `lumit-aplug-broker` that has it at arm's
+//!    length. [`quirks`] is where a plugin's deviations live as data.
 //!
 //! # What this package is not, yet
 //!
-//! **The plugin runs in this process.** That is AP1's shape and not the
-//! shipping one: docs/12 §1's first non-negotiable is that a plugin must never
-//! take Lumit down, and only a separate process achieves that. AP2 puts one
-//! there; the [`AudioHost`] seam exists now precisely so nothing above it
-//! changes when it does.
-//!
 //! **Nothing is wired into the mix.** The chain worker, the lookahead ring, the
 //! dry-block fallback and the latency shift are AP3. What is here is provable
-//! on its own: the order of actions, the sound, the state, the events.
+//! on its own: the order of actions, the sound, the state, the events, and a
+//! plugin dying without taking anything with it.
 //!
 //! # Thread role and contract
 //!
@@ -57,25 +56,36 @@ pub mod def;
 pub mod describe;
 pub mod discover;
 pub mod instance;
+pub mod ipc;
 pub mod module;
 pub mod process;
+pub mod quirks;
 pub mod schema;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
-pub use def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost, BLOCK_SAMPLES};
-pub use describe::{
-    describe, describe_module, ParamDescription, PluginDescriptor, PortInfo, Ports, Refusal,
-    Rejection, ScanReport, STEREO,
+pub use def::{
+    AudioEffectDef, AudioHost, BlockJob, BrokerHost, InstanceSetup, LocalHost, BLOCK_SAMPLES,
+    LOOKAHEAD_MARGIN,
 };
-pub use discover::{scan, scan_dir, search_paths, DiscoveredPlugin, ScanOptions, ScanOutcome};
+pub use describe::{
+    describe, describe_module, describe_module_except, ParamDescription, PluginDescriptor,
+    PortInfo, Ports, Refusal, Rejection, ScanReport, STEREO,
+};
+pub use discover::{
+    scan, scan_brokered, scan_dir, search_paths, DiscoveredPlugin, ScanOptions, ScanOutcome,
+};
 pub use instance::{HostError, HostFlags, Instance};
+pub use ipc::broker::{
+    nothing_disabled, Broker, BrokerConfig, BrokerError, DisableList, STRIKES_BEFORE_DISABLED,
+};
 pub use module::{Module, ModuleEntry, ModuleError};
 pub use process::{
     Block, Denormals, ParamEvent, BLOCK_FRAMES, CHANNELS, INTERLEAVED_LEN, SAMPLE_RATE,
 };
+pub use quirks::{Quirks, QuirksTable, BLOCK_PERIOD};
 pub use schema::{row_id, schema_of, value_routes, ValueRoute, MATCH_PREFIX};
 
 /// Every call this host makes to a plugin, from the factory to the grave, in

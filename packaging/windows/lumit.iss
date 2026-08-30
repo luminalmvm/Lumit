@@ -45,8 +45,9 @@ SolidCompression=yes
 
 [Files]
 ; The whole runner directory, recursively — which is how `lumit-ofx-broker.exe`
-; ships without a rule of its own: the Windows CMake install step puts it beside
-; the runner (docs/12 §2.3), and everything beside the runner is copied here.
+; and `lumit-aplug-broker.exe` ship without rules of their own: the Windows CMake
+; install step puts them beside the runner (docs/12 §2.3, K-696), and everything
+; beside the runner is copied here.
 Source: "..\..\flutter_ui\build\windows\x64\runner\Release\*"; DestDir: "{app}"; \
   Flags: recursesubdirs ignoreversion
 Source: "..\..\assets\brand\lumit-project.ico"; DestDir: "{app}\icons"

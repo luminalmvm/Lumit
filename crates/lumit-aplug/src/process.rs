@@ -35,6 +35,8 @@ use clap_sys::events::{
     clap_event_header, clap_event_param_value, clap_input_events, clap_output_events,
     CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE,
 };
+use serde::{Deserialize, Serialize};
+
 /// Frames in one block. Fixed (docs/impl/audio-plugins.md §3): a block
 /// boundary is a fact about the layer, not about the playhead.
 pub const BLOCK_FRAMES: usize = 512;
@@ -53,7 +55,7 @@ pub const INTERLEAVED_LEN: usize = BLOCK_FRAMES * CHANNELS;
 /// `time` is the frame offset within the block, which is how CLAP places an
 /// event; a value baked at the block's start has `time` nought, which is what
 /// the envelope precedent (K-172) delivers.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ParamEvent {
     /// Frames from the start of the block.
     pub time: u32,

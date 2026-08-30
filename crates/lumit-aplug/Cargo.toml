@@ -21,6 +21,19 @@ clap-sys = "0.5"
 # `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
 libloading = "0.8"
 thiserror = "2"
+# The quirks table is data, not code (docs/impl/audio-plugins.md §5), so it is a
+# JSON file the crate embeds and parses. The same derives put the control
+# protocol's messages on the wire (`ipc::proto`).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The control plane: length-prefixed `bincode` over a duplex local socket — a
+# named pipe on Windows, a Unix socket elsewhere. Never the child's stdout:
+# plugins `printf`.
+bincode = "1"
+interprocess = "2"
+# The block plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
+# `MapViewOfFile` on Windows and `mmap` on Unix.
+memmap2 = "0.9"
 
 [dev-dependencies]
 # The minimal CLAP plugin the host is tested against. Declared here so a plain

@@ -25,12 +25,14 @@
 //! about. Each is one calm line in a report, exactly as the OFX scan's are
 //! (docs/12 §2.6), and the scan carries on to the next plugin in the file.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use clap_sys::ext::params::{
     CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_BYPASS, CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY,
     CLAP_PARAM_IS_STEPPED,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::instance::{HostError, Instance};
@@ -40,7 +42,7 @@ use crate::module::Module;
 pub const STEREO: u32 = 2;
 
 /// One audio port a plugin declared.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct PortInfo {
     /// The plugin's own id for the port.
     pub id: u32,
@@ -54,7 +56,7 @@ pub struct PortInfo {
 }
 
 /// A plugin's audio ports, both directions.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Ports {
     /// Inputs, in the plugin's own order.
     pub inputs: Vec<PortInfo>,
@@ -87,7 +89,7 @@ fn main_of(ports: &[PortInfo]) -> Option<&PortInfo> {
 }
 
 /// One parameter a plugin declared.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ParamDescription {
     /// The plugin's own **stable** id. The persistent key, never the index:
     /// plugins reorder and insert parameters across versions (§4).
@@ -152,7 +154,7 @@ impl ParamDescription {
 }
 
 /// Everything one plugin said about itself.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PluginDescriptor {
     /// The plugin's own stable identifier.
     pub id: String,
@@ -225,7 +227,7 @@ pub enum Rejection {
 }
 
 /// One plugin turned away, and why. A line in a report, never a dialogue.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Refusal {
     /// The plugin's own id.
     pub id: String,
@@ -248,8 +250,23 @@ pub struct ScanReport {
 /// somebody else's start-up code once per plugin in the file.
 #[must_use]
 pub fn describe_module(module: &Arc<Module>) -> ScanReport {
+    describe_module_except(module, &BTreeSet::new())
+}
+
+/// Describe every plugin in one module **except** the ones the user has
+/// switched off.
+///
+/// The list is consulted *before* describe rather than after, so a switched-off
+/// plugin is never created and its code never runs at all (K-594). That is the
+/// whole difference between a disable that means something and a filter on a
+/// list.
+#[must_use]
+pub fn describe_module_except(module: &Arc<Module>, disabled: &BTreeSet<String>) -> ScanReport {
     let mut report = ScanReport::default();
     for entry in module.entries() {
+        if disabled.contains(&entry.id) {
+            continue;
+        }
         match describe(module, &entry.id) {
             Ok(descriptor) => report.described.push(descriptor),
             Err(reason) => report.rejected.push(Refusal {
