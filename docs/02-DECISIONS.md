@@ -21325,3 +21325,194 @@ The work is ordered AP1–AP5 in the impl note: CLAP host core, broker isolation
 mix-graph seam, VST3 host, panel surface — each with its test plan, an in-tree CLAP
 test plugin, and a free dual-API conformance bench (Airwindows Consolidated, Surge XT
 Effects).
+
+## K-683 — The mix meters itself, one strip per row of the comp, on the callback that makes the sound
+
+**Status: DECIDED (2026-08-30).** Builds the engine half of the approved AudioWorkspace
+board's Mixer and its Levels section. Extends docs/09 §3.1; nothing is reversed.
+
+The board draws bars beside every fader and beside the master. A meter is not part of making
+the sound — it is how a person sees that a layer is too loud, or that a track everybody swore
+was playing is in fact silent — so the only question was where the numbers come from without
+touching the one thing in the engine that must never be touched: the realtime callback.
+
+**They come from the callback itself.** It already sums the covering clips per output frame
+(`MixPlan::frame_at`). `frame_metered` is the same arithmetic with each clip's own
+contribution folded into its strip's accumulator and the limited output into the master's —
+two compares and two multiply-adds per clip per frame, on the callback's own stack, published
+in one go when the buffer is done. No second mix to disagree with the first, and a frame of
+sound costs no atomic traffic at all.
+
+**The bank is overwritten, not drained.** `lumit_audio::meter::Meters` is a fixed array of
+plain atomics: the callback stores this buffer's peak and RMS over the last, and a reader
+loads whatever is there. A ring the panel had to drain would be a queue that can fill up and
+a reader that can fall behind — for a bar whose whole meaning is "what is happening now".
+Peak hold is left to the panel (it is a drawing decision, and keeping it here would mean the
+engine owning a stopwatch for a UI affordance); the clip flag is sticky until
+`reset_audio_clip`, because a light that cleared itself would only ever report an overload to
+somebody already looking.
+
+**A strip is a row of the comp being mixed**, which is why `AudioJob` now names a layer as
+well as an item. A footage layer is its own strip; every source arriving through one Precomp
+layer folds onto that layer's row, however many are inside it, because that is the row the
+desk draws and the fader that would move them together. Strips read **pre-master** — a bar
+says how loud that layer is, not how loud the fader left it — and the master reads what the
+device is handed, after the limiter.
+
+Bounded at 32 strips (`meter::MAX_STRIPS`): the callback cannot allocate, and past that the
+extras play unmetered rather than being dropped from the mix. Pinned in `lumit-audio`'s
+`metering_reads_each_strip_pre_sum_and_the_master_post_limiter` (metering never changes the
+sound), `the_clip_light_stays_on_until_it_is_put_out`, `lumit-render`'s
+`each_sounding_row_of_the_comp_is_one_mixer_strip`, and the bridge's
+`meter_slots_follow_the_mixer_strips_and_the_bank_is_bounded`.
+
+## K-684 — The three Reveal rows are one filter widening, run on the U machinery
+
+**Status: DECIDED (2026-08-30).** Animation ▸ **Reveal properties with keyframes**,
+**Reveal properties with animation** and **Reveal all modified properties** are live, and
+they are the `U` reveal (K-622) under the menu's own words rather than three commands of
+their own. One rule widening three times: **keyframed** is what a single `U` shows, the
+rows carrying diamonds; **animated** adds the rows that move without diamonds — an
+expression, or a wire from the node graph driving the parameter (K-471); **modified** adds
+everything a freshly made layer would not carry. Each is a superset of the one before, so
+a row the narrow rule shows the wide one shows too.
+
+**Rows, not groups — which is what separates the widest row from `UU`.** `UU` opens the
+*groups* that hold a modification, and a group opens whole, so it shows an untouched
+Position beside a rotation somebody typed. The menu row opens down to the rows that were
+actually changed, on the road K-622 built: the fold-out is built as though every twirl were
+down and then filtered ([`revealFoldRows`]), so the panel needs no second notion of what
+qualifies. The engine's `reveal_groups` stays exactly where it is, answering the `UU` half
+of the cycle.
+
+**What counts as modified**, and the half that is easy to miss. Some rows hold a number
+with a default — a transform axis, an effect parameter, the Volume — and are compared with
+it. The rest exist only because somebody made them: an effect applied, a mask drawn, a
+stroke painted, a Retime switched on, a shape, a text animator. A row like that **is** the
+modification whatever its numbers say, which is the call the engine already makes for the
+groups. So an effect left at its defaults shows its name and none of its parameters.
+Position is compared with the middle of the composition, where every add path seeds it;
+the Anchor is exempt, because its seeded value is the source's own half-size and the panel
+does not know that — the same exemption `reveal_groups` makes.
+
+**No cycle, and no new chords.** A menu row is chosen deliberately and names what it does,
+so it says it once: no tap counting, and no third press that shuts what the first two
+opened. The rows act on the selection, or on the whole composition when nothing is
+selected (K-203, K-523), exactly as `U` does; the first of them shows `U` in its shortcut
+column and the other two carry no chord, because there is no AE shortcut for them to
+match and inventing one would spend a letter on a menu row.
+
+Tests: `timeline_rows_test.dart` — one fold-out carrying a keyed Opacity, an
+expression-driven Rotation, a wire-driven effect parameter, a typed Scale and an unmoved
+Position, filtered by each of the three rules; `keymap_frb_test.dart` — the same three
+rules through the menu against the real engine, and the reveal covering every selected
+layer rather than the selection's primary.
+
+## K-686 — Trim comp to work area moves the timeline, and deletes nothing
+
+**Status: DECIDED (2026-08-30).** Composition ▸ **Trim comp to work area**
+(`Op::TrimCompToWorkArea`) makes a composition be its work area: the duration becomes the
+work area's length, and every layer and every comp marker slides back by the work area's
+start, so what was under the bar is now the whole comp. The work area itself is cleared,
+which is the same thing said again — a comp nobody has narrowed *is* its own work area
+(K-203).
+
+**Nothing is deleted, and that is AE's behaviour as well as ours.** A layer that fell
+outside the trimmed span keeps its content and its timing and simply hangs off the end,
+which docs/03 §5.1's K-153 invariant has always allowed: `in_point` may be negative,
+`out_point` may exceed the duration, and the engine renders only where the span meets the
+comp window. Dragging the layer back brings it in again. A command that deleted the layers
+it could not see would be the one edit in Lumit that loses work you can still point at.
+
+**The op carries only the comp id.** What it does is a pure function of the document,
+because the work area is in the document — so it replays identically on the recovery
+journal and cannot be committed with a span that has gone stale between the click and the
+commit. A comp with no work area has nothing to trim to, and the op does nothing rather
+than refusing: the menu row greys, and an engine call from anywhere else is a no-op rather
+than an error nobody handles.
+
+**It is built from the ops that already exist**, applied as one `Op::Batch`:
+`SetWorkArea` + `SetCompSettings` + one `SetLayerSpan` per layer + `SetCompMarkers`. So it
+is one undo step, its inverse is exact, and a failure part-way rolls back — all of it the
+batch's own machinery rather than a second way to mutate a document. The clear comes
+**first** deliberately: a batch's inverse is its members' inverses reversed, so clearing
+first means the old work area is restored *last* on undo, after the comp is long again,
+where `SetWorkArea`'s clamp cannot cut it down to the shortened comp.
+
+Layer markers need no move — they are in layer time (K-254) and travel with their layer.
+
+Tests: `store.rs` — `trimming_a_comp_to_its_work_area_round_trips` (duration, spans,
+markers, an outside layer kept, one undo restoring the document byte for byte) and
+`trimming_a_comp_with_no_work_area_changes_nothing`.
+
+## K-687 — Crop is to the region of interest, because the work area is time
+
+**Status: DECIDED (2026-08-30).** Composition ▸ **Crop comp to region of interest**
+(`Op::CropCompToRegion`) makes a composition's frame the rectangle swept on the Viewer:
+the width and height become the rectangle's, and every layer with no parent moves back by
+the rectangle's top-left corner, so the picture inside the rectangle does not budge.
+
+**The menu row is renamed.** It shipped as *Crop comp to work area* and could never have
+been built under that name: Lumit's work area is a stretch of **time** (docs/03 §4,
+`work_area: Option<(CompTime, CompTime)>`) and has no rectangle in it. AE's own command is
+*Crop Comp to Region of Interest*, the region of interest is exactly the rectangle Lumit
+already has (K-362), and so the row now says what it does. The arb key
+`menuCropCompToWorkArea` is replaced by `menuCropCompToRegion`.
+
+**The rectangle is carried, not read.** The region of interest is session state and never
+an edit (K-362) — it must not reach a file — so the frontend hands over the pixels the
+Viewer was showing and the engine converts once, at the seam.
+
+**Parented layers are left alone**: a child travels with its parent, and moving both would
+move it twice. A position driven by an **expression** is also left alone, because there is
+no number to move; rewriting somebody's expression is not a crop's business. Layers whose
+picture now falls outside the smaller frame are kept exactly as K-686 keeps the layers
+outside a trim — they are simply not composited, the way an off-screen layer never was.
+
+**The ceiling, said plainly.** The shift is the 2D re-placement AE performs. Every layer
+moves by the same amount, so the geometry between them is untouched, but the *centre of
+the frame* has moved — and a composition framed through a camera projects about that
+centre, so a 3D scene may want the camera re-aimed by the difference. The upgrade path is
+to fold that difference into the active camera's own position; it is not here because a
+half-right camera move is harder to notice and undo than none.
+
+Tests: `store.rs` — `cropping_a_comp_to_a_region_round_trips`: the new size, an unparented
+layer moved by the corner, a parented one untouched, the duration unchanged, and one undo
+restoring the document byte for byte.
+
+## K-688 — The History list is the journal, named at commit and jumped one op at a time
+
+**Status: DECIDED (2026-08-30).** Edit ▸ **History** opens the list the journal has always
+held: every step still applied, oldest first, then every step that has been undone, in the
+order redoing would put them back. Clicking one takes the document there.
+
+**Each op names itself** (`Op::name`): a short English phrase — "Add layer", "Edit
+transform", "Trim comp to work area" — in the same voice as the menu row that makes it.
+The engine names it because the engine is what knows; the phrase crosses as English and is
+translated on arrival like every other engine word (`engine_labels.dart`, K-303), rather
+than the frontend keeping a second table of op kinds in step by hand. **A batch is named
+after its first member, all the way down**: a batch is how one gesture that took several
+ops is recorded (an undo group, a separated axis, a pre-compose), and "Edit transform"
+tells the person scanning the list what the drag was where "several changes" tells them
+nothing.
+
+**The name is pinned when the step is committed**, and carried through every undo and redo
+of that step. Undoing re-derives the forward op by applying the inverse, and an op whose
+inverse is a batch — a trim, a solve link — comes back as that batch; a row that renamed
+itself the moment you undid it would be unreadable exactly when the list is in use.
+
+**A jump is undo and redo, in a loop.** `DocumentStore::jump_to(applied)` presses Ctrl-Z
+or Ctrl-Y until the document stands where asked, through the same two methods, so a jump
+can never reach a state a run of key presses could not — and each step publishes its
+snapshot and tells the observer, so the panels see the run of changes they would have seen
+from the keyboard. If a leap across hundreds of steps ever costs too much, the fix is to
+hold the notification back until the last step, not to stop going through undo/redo.
+
+The list is capped where the journal is capped (`MAX_UNDO_DEPTH`, 500): the oldest steps
+fall off, which is a shorter list and never a changed document. Crash recovery is
+unaffected — it replays the on-disk journal, which the cap does not touch, and a name is
+for the list on screen and is not serialised.
+
+Tests: `store.rs` — `the_history_list_names_the_ops_it_was_given`,
+`a_step_keeps_its_name_through_undo_and_redo`,
+`jumping_to_a_history_index_restores_that_state`; `history_frb_test.dart` for the panel.

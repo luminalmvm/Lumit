@@ -12,11 +12,24 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// One journal entry: the op as applied, and its exact inverse.
+/// One journal entry: the op as applied, its exact inverse, and what the step
+/// is called in the History list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JournalEntry {
     pub op: Op,
     pub inverse: Op,
+    /// [`Op::name`] of the op as it was committed, pinned at that moment and
+    /// carried through every undo and redo of this step (K-688).
+    ///
+    /// **Why it is stored rather than asked for.** Undoing re-derives the
+    /// forward op by applying the inverse, and an op whose inverse is a batch —
+    /// [`Op::TrimCompToWorkArea`], a solve link — comes back as that batch. The
+    /// edit is the same one, so its row must keep saying the same thing: a step
+    /// that renamed itself the moment you undid it would be unreadable exactly
+    /// when the list is being used. Not serialised: a recovery journal replays
+    /// ops, and a name is for the list on screen.
+    #[serde(skip)]
+    pub name: &'static str,
 }
 
 /// The most undo steps kept in memory (docs/14 §5 compaction story, below).
@@ -60,6 +73,15 @@ struct Journal {
     /// fold happens when this returns to zero, so a grouped gesture that calls
     /// a helper which groups on its own account still ends as one step.
     depth: usize,
+}
+
+/// One row of the **History** list (K-688): what the step is called, and
+/// whether it has been undone — a step that has been undone is still on the
+/// road, greyed, until a fresh commit clears the forward history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HistoryEntry {
+    pub name: &'static str,
+    pub undone: bool,
 }
 
 /// What an observer is told after the store publishes a new snapshot: the op
@@ -249,11 +271,15 @@ impl DocumentStore {
             _ => {
                 let mut inverses: Vec<Op> = held.iter().map(|e| e.inverse.clone()).collect();
                 inverses.reverse();
+                // The gesture is named after the first thing it did, which is
+                // what `Op::name` says of any batch.
+                let name = held.first().map_or("Several changes", |e| e.name);
                 JournalEntry {
                     op: Op::Batch {
                         ops: held.into_iter().map(|e| e.op).collect(),
                     },
                     inverse: Op::Batch { ops: inverses },
+                    name,
                 }
             }
         };
@@ -267,7 +293,8 @@ impl DocumentStore {
         let inverse = apply(&mut doc, &op)?;
 
         let observed = op.clone();
-        let entry = JournalEntry { op, inverse };
+        let name = op.name();
+        let entry = JournalEntry { op, inverse, name };
         // Inside a group the entry waits to be folded; outside one it is the
         // step. Redo is cleared either way — the document has moved, so the
         // forward history is gone whether or not a gesture is still running.
@@ -298,6 +325,7 @@ impl DocumentStore {
         journal.redo.push(JournalEntry {
             op,
             inverse: entry.inverse.clone(),
+            name: entry.name,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -322,6 +350,7 @@ impl DocumentStore {
         journal.undo.push(JournalEntry {
             op: entry.op,
             inverse,
+            name: entry.name,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -343,6 +372,72 @@ impl DocumentStore {
             .iter()
             .map(|e| e.op.clone())
             .collect()
+    }
+
+    /// The whole road, oldest first: every step that has been applied, then
+    /// every step that has been undone and is waiting to be redone (K-688).
+    ///
+    /// # In plain terms
+    ///
+    /// Undo and redo walk this list one step at a time; this is the list
+    /// itself, so the History panel can show it and jump to a point on it. The
+    /// steps still applied come first, in the order they happened; the ones
+    /// undone follow, in the order redoing would put them back. Where those two
+    /// halves meet is where the document currently stands, which is exactly
+    /// [`Self::applied_steps`].
+    ///
+    /// The redo stack is walked backwards because it is a stack: its last entry
+    /// is the one an immediate redo would take.
+    #[must_use]
+    pub fn history(&self) -> Vec<HistoryEntry> {
+        let journal = self.journal.lock();
+        journal
+            .undo
+            .iter()
+            .map(|e| HistoryEntry {
+                name: e.name,
+                undone: false,
+            })
+            .chain(journal.redo.iter().rev().map(|e| HistoryEntry {
+                name: e.name,
+                undone: true,
+            }))
+            .collect()
+    }
+
+    /// How many of [`Self::history`]'s steps are applied — where the document
+    /// stands on the road.
+    #[must_use]
+    pub fn applied_steps(&self) -> usize {
+        self.journal.lock().undo.len()
+    }
+
+    /// Move the document to the point on [`Self::history`] where exactly
+    /// `applied` steps have been applied: 0 is as far back as the history
+    /// reaches, and `history().len()` is everything redone (K-688).
+    ///
+    /// One press of Ctrl-Z at a time, in a loop — a jump *is* undoing or
+    /// redoing several times, and going through the same two methods means a
+    /// jump cannot reach a state a run of key presses could not. An `applied`
+    /// past either end simply stops at that end.
+    ///
+    /// Each step publishes its own snapshot and tells the observer, so a panel
+    /// watching the document sees the same run of changes it would have seen
+    /// from the keyboard. That is deliberate; if a leap across hundreds of
+    /// steps ever costs too much, the fix is to hold the notification back
+    /// until the last one rather than to stop going through undo/redo.
+    pub fn jump_to(&self, applied: usize) -> Result<(), OpError> {
+        while self.applied_steps() > applied {
+            if self.undo()?.is_none() {
+                break;
+            }
+        }
+        while self.applied_steps() < applied {
+            if self.redo()?.is_none() {
+                break;
+            }
+        }
+        Ok(())
     }
 
     pub fn can_undo(&self) -> bool {
@@ -3244,5 +3339,240 @@ mod tests {
             committed,
             "ordinary commits are unaffected"
         );
+    }
+
+    /// The History list is the ops that were committed, named and in order,
+    /// and an undone step stays on it greyed rather than vanishing (K-688).
+    #[test]
+    fn the_history_list_names_the_ops_it_was_given() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, _) = scripted_ops(&store.snapshot());
+        let expected: Vec<&'static str> = ops.iter().map(Op::name).collect();
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+
+        let listed: Vec<&'static str> = store.history().iter().map(|e| e.name).collect();
+        assert_eq!(listed, expected, "one named row per committed op, in order");
+        assert!(store.history().iter().all(|e| !e.undone));
+        assert_eq!(store.applied_steps(), expected.len());
+
+        store.undo().unwrap();
+        let after = store.history();
+        assert_eq!(
+            after.len(),
+            expected.len(),
+            "an undone step is still listed"
+        );
+        assert_eq!(after.last().map(|e| e.name), expected.last().copied());
+        assert!(after.last().is_some_and(|e| e.undone));
+        assert_eq!(store.applied_steps(), expected.len() - 1);
+
+        // A fresh commit replaces the forward history, so the row goes.
+        store
+            .commit(Op::SetAntiAliasing {
+                anti_aliasing: AntiAliasing::Off,
+            })
+            .unwrap();
+        let listed = store.history();
+        assert_eq!(listed.len(), expected.len());
+        assert_eq!(listed.last().map(|e| e.name), Some("Set anti-aliasing"));
+    }
+
+    /// A step keeps its name across an undo, even where undoing re-derives the
+    /// forward op as a batch — the whole reason the name is pinned at commit.
+    #[test]
+    fn a_step_keeps_its_name_through_undo_and_redo() {
+        let store = DocumentStore::new(Document::new());
+        let mut comp = test_comp();
+        comp.work_area = Some((t(1, 1), t(3, 1)));
+        let comp_id = comp.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        store
+            .commit(Op::TrimCompToWorkArea { comp: comp_id })
+            .unwrap();
+
+        let named = |s: &DocumentStore| s.history().last().map(|e| e.name);
+        assert_eq!(named(&store), Some("Trim comp to work area"));
+        store.undo().unwrap();
+        assert_eq!(named(&store), Some("Trim comp to work area"));
+        store.redo().unwrap();
+        assert_eq!(named(&store), Some("Trim comp to work area"));
+    }
+
+    /// Jumping lands on exactly the document that stood at that point on the
+    /// road, forwards and backwards, and going back and forth is lossless.
+    #[test]
+    fn jumping_to_a_history_index_restores_that_state() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, _) = scripted_ops(&store.snapshot());
+        let total = ops.len();
+        let mut states = vec![json(&store.snapshot())];
+        for op in ops {
+            store.commit(op).unwrap();
+            states.push(json(&store.snapshot()));
+        }
+
+        for target in [0, 3, total, 1] {
+            store.jump_to(target).unwrap();
+            assert_eq!(store.applied_steps(), target);
+            assert_eq!(
+                json(&store.snapshot()),
+                states[target],
+                "jumping to {target} steps applied restores that document"
+            );
+            assert_eq!(
+                store.history().iter().filter(|e| e.undone).count(),
+                total - target,
+                "the rows past the jump are the undone ones"
+            );
+        }
+
+        // Past either end simply stops there rather than failing.
+        store.jump_to(total + 50).unwrap();
+        assert_eq!(store.applied_steps(), total);
+    }
+
+    /// **Trim comp to work area** (K-686): the comp becomes the work area, and
+    /// everything on the timeline slides back with it. Nothing is deleted, and
+    /// one undo puts the whole comp back exactly — including the work area,
+    /// which is why the batch clears it first.
+    #[test]
+    fn trimming_a_comp_to_its_work_area_round_trips() {
+        let store = DocumentStore::new(Document::new());
+        let mut comp = test_comp();
+        let comp_id = comp.id;
+        let inside = test_layer(Uuid::now_v7());
+        let inside_id = inside.id;
+        let mut outside = test_layer(Uuid::now_v7());
+        outside.in_point = t(20, 1);
+        outside.out_point = t(25, 1);
+        let outside_id = outside.id;
+        comp.layers = vec![inside, outside];
+        comp.markers = vec![crate::markers::Marker::user(
+            Uuid::now_v7(),
+            Rational::new(4, 1).unwrap(),
+        )];
+        comp.work_area = Some((t(2, 1), t(12, 1)));
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        let before = json(&store.snapshot());
+
+        store
+            .commit(Op::TrimCompToWorkArea { comp: comp_id })
+            .unwrap();
+
+        let doc = store.snapshot();
+        let c = doc.comp(comp_id).unwrap();
+        assert_eq!(c.duration, Duration(Rational::new(10, 1).unwrap()));
+        assert_eq!(c.work_area, None, "the trimmed comp is its own work area");
+        let layer =
+            |c: &Composition, id: Uuid| c.layers.iter().find(|l| l.id == id).cloned().unwrap();
+        let moved = layer(c, inside_id);
+        assert_eq!(moved.in_point, t(-2, 1), "the layer slid back by the start");
+        assert_eq!(moved.out_point, t(8, 1));
+        assert_eq!(moved.start_offset, t(-2, 1), "so its keyframes came too");
+        assert_eq!(
+            layer(c, outside_id).in_point,
+            t(18, 1),
+            "a layer outside the work area is kept, not deleted (K-153)"
+        );
+        assert_eq!(
+            c.markers[0].time,
+            t(2, 1),
+            "markers travel with the picture"
+        );
+
+        store.undo().unwrap();
+        assert_eq!(json(&store.snapshot()), before, "one undo puts it all back");
+        store.redo().unwrap();
+        assert_eq!(
+            store.snapshot().comp(comp_id).unwrap().duration,
+            Duration(Rational::new(10, 1).unwrap())
+        );
+    }
+
+    /// A comp with no work area is already its own work area (K-203), so there
+    /// is nothing to trim to and nothing changes.
+    #[test]
+    fn trimming_a_comp_with_no_work_area_changes_nothing() {
+        let store = DocumentStore::new(Document::new());
+        let comp = test_comp();
+        let comp_id = comp.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        let before = json(&store.snapshot());
+        store
+            .commit(Op::TrimCompToWorkArea { comp: comp_id })
+            .unwrap();
+        assert_eq!(json(&store.snapshot()), before);
+    }
+
+    /// **Crop comp to the region of interest** (K-687): the frame becomes the
+    /// rectangle and every unparented layer moves back by its corner, so the
+    /// picture inside it does not budge. A parented layer travels with its
+    /// parent and must not be moved twice.
+    #[test]
+    fn cropping_a_comp_to_a_region_round_trips() {
+        let store = DocumentStore::new(Document::new());
+        let mut comp = test_comp();
+        let comp_id = comp.id;
+        let mut free = test_layer(Uuid::now_v7());
+        free.transform.position_x = crate::anim::Property::fixed(960.0);
+        free.transform.position_y = crate::anim::Property::fixed(540.0);
+        let free_id = free.id;
+        let mut child = test_layer(Uuid::now_v7());
+        child.parent = Some(free_id);
+        child.transform.position_x = crate::anim::Property::fixed(100.0);
+        let child_id = child.id;
+        comp.layers = vec![free, child];
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .unwrap();
+        let before = json(&store.snapshot());
+
+        store
+            .commit(Op::CropCompToRegion {
+                comp: comp_id,
+                x: 200.0,
+                y: 100.0,
+                width: 640,
+                height: 480,
+            })
+            .unwrap();
+
+        let doc = store.snapshot();
+        let c = doc.comp(comp_id).unwrap();
+        assert_eq!((c.width, c.height), (640, 480));
+        assert_eq!(c.duration, test_comp().duration, "cropping is not a trim");
+        let layer =
+            |c: &Composition, id: Uuid| c.layers.iter().find(|l| l.id == id).cloned().unwrap();
+        let free = layer(c, free_id);
+        assert_eq!(free.transform.position_x.value_at(0.0), 760.0);
+        assert_eq!(free.transform.position_y.value_at(0.0), 440.0);
+        assert_eq!(
+            layer(c, child_id).transform.position_x.value_at(0.0),
+            100.0,
+            "a parented layer moves with its parent, not on its own"
+        );
+
+        store.undo().unwrap();
+        assert_eq!(json(&store.snapshot()), before, "one undo puts it all back");
     }
 }

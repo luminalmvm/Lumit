@@ -227,6 +227,19 @@ struct Composition {
 Comp frame rate is presentational (it defines frame boundaries for snapping and export);
 evaluation is defined at arbitrary rational times so nested comps of differing rates stay exact.
 
+**Two commands reshape a whole composition**, each built from the ops above and applied as
+one `Op::Batch`, so each is one undo step with an exact inverse:
+
+- **Trim comp to work area** (`Op::TrimCompToWorkArea`, K-686) makes the comp as long as its
+  work area and slides every layer and comp marker back by the work area's start. It carries
+  only the comp id, because the work area is in the document. No layer is deleted: one that
+  falls outside hangs off the end, which §5.1's K-153 invariant already allows.
+- **Crop comp to region of interest** (`Op::CropCompToRegion`, K-687) makes the comp's frame
+  the Viewer's region (K-362) and moves every unparented layer back by its top-left corner,
+  so the picture inside it stays put. The rectangle is carried in comp pixels, because the
+  region is session state and never an edit. A parented layer travels with its parent, and a
+  position driven by an expression is left alone.
+
 ---
 
 ## 5. Layers
@@ -1145,6 +1158,16 @@ The **operation journal** is the undo/redo stack and the autosave crash-recovery
 ([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §autosave). The UI renders from immutable snapshots;
 workers render from the snapshot current when their job was scheduled
 ([05-ARCHITECTURE.md](05-ARCHITECTURE.md)).
+
+**The journal is also a list you can read and jump to (K-688).** `DocumentStore::history`
+returns one named row per step — those still applied, oldest first, then those undone in
+the order redoing would put them back — and `jump_to(applied)` walks to a point on it by
+pressing undo or redo in a loop, so a jump reaches only states the keyboard could. Every op
+names itself (`Op::name`): a short English phrase, translated on arrival like every other
+engine word (K-303), and a `Batch` takes the name of its first member so a folded gesture
+reads as what it did. The name is pinned when the step is committed and carried through
+every undo and redo of it, because undoing re-derives the forward op and an op whose
+inverse is a batch would otherwise rename itself. Edit ▸ History is the panel.
 
 ## 11. Markers
 

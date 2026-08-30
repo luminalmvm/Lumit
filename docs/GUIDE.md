@@ -6494,6 +6494,52 @@ a music track that has never shown anything. Each row now shows only the
 switches its layer can actually use. A control that does nothing when you click
 it is worse than no control, because you have to click it to find out.
 
+### The bouncing bars beside a fader (K-683)
+
+A mixing desk has a column of little bars next to every fader. They add nothing
+to the sound. What they do is answer, instantly and without you having to listen
+hard, two questions that are otherwise surprisingly difficult: *is this layer
+too loud*, and *is this layer making any sound at all*. A track that is muted
+somewhere upstream looks exactly like a track that is playing quietly, until you
+look at the bar and see that it is flat.
+
+Getting those numbers out of Lumit had one hard constraint, and everything about
+the design follows from it. The part of the engine that actually produces sound
+is a **realtime callback**: the sound card asks for the next few hundred samples
+on a schedule it will not negotiate, and if the answer is even slightly late you
+hear a click. That callback is therefore forbidden from doing any of the things
+that can take an unpredictable amount of time - claiming memory, waiting for a
+lock, opening a file.
+
+So the meters are computed *by* the callback, as a by-product of the summing it
+is doing anyway. It already walks every sounding clip for each output sample and
+adds them together. Now, as it goes, it also keeps a running "loudest so far"
+and "total energy so far" for each clip's own strip, in plain local variables on
+its own stack - no memory is claimed, nothing is shared, nothing can block. When
+the buffer is finished it writes those few numbers into a small fixed set of
+slots, and moves on.
+
+The panel reads those slots whenever it repaints. Notice what is deliberately
+*not* there: no queue. A queue would mean the panel had to keep up, and a panel
+that fell behind would start drawing a backlog of old levels - bars showing a
+moment that has already passed. Instead each buffer simply overwrites the last
+one. If the panel misses one it has missed about ten milliseconds of a bar that
+is already moving again, which is exactly the right thing to miss.
+
+Two small decisions round it off. The line that hangs above a bar for a few
+seconds after a loud moment - the **peak hold** - is drawn by the panel, not
+tracked by the engine; it is a decision about how to draw a number, and the
+engine keeping a stopwatch for it would be the engine doing the panel's job. And
+the **clip light**, which comes on when something reached the ceiling and the
+safety limiter had to hold it back, stays on until you clear it by hand. A light
+that switched itself off after a second would report an overload only to
+somebody who happened to be watching, which defeats the point of a light.
+
+One last piece of vocabulary: a **strip** is a row of the composition you are
+mixing. If a layer plays a sound file, that layer is a strip. If a layer is a
+precomp with five sounds inside it, that is still *one* strip - because one row
+is what the mixer draws, and one fader is what would move all five together.
+
 ### The half-second the lens picker used to cost
 
 The Lens flare effect simulates a real camera lens: the ghosts are traced through an actual
@@ -10465,6 +10511,63 @@ and reads worse. And the two calls have to be paired, so the Flutter side always
 one in a `finally` (`asOneUndoStep` in `flutter_ui/lib/panels/layer_fold_frb.dart`): a
 group left open would quietly stop recording history at all.
 
+### The History list — the same undo, written down
+
+Ctrl-Z walks backwards one step at a time, and after a dozen presses you are counting
+rather than looking. **Edit ▸ History** shows the steps themselves: one row per edit,
+oldest at the top, and clicking a row takes the project to how it stood after that edit.
+The rows below the one you land on are not thrown away — they go grey, exactly as a redo
+is still available after an undo, and they only disappear when you make a fresh edit from
+where you are standing (which is what redo has always done).
+
+Two things had to exist for the list to be readable. The first is that **each edit knows
+what it is called**. Every operation the engine has can say its own short phrase — "Add
+layer", "Edit transform", "Trim comp to work area" — and it is the engine that says it,
+because the engine is what knows which operation ran; the phrase travels to the interface
+as English and is translated on the way in, like the names of the effects. When several
+operations were bundled into one step (one drag that touched three layers), the bundle
+borrows the name of the first thing it did, because "several changes" would tell you
+nothing.
+
+The second is that **a jump is not a special manoeuvre**. Clicking a row eight steps back
+presses undo eight times, through the ordinary undo. Nothing can be reached from the list
+that could not be reached from the keyboard, which means there is no second way for the
+document to move and no second thing to get wrong. The name is decided once, when the edit
+is made, and carried with it for the rest of its life — otherwise a step could rename
+itself the moment you undid it, which is precisely when you are reading the list.
+
+The list is as long as the history is deep (500 steps); older steps fall off the top, and
+that shortens the list without changing anything about the project. Crash recovery does not
+read this list at all — it replays the journal on disk, which the limit never touches.
+
+### Making the composition be the bit you were working on
+
+Two commands in the **Composition** menu reshape a comp to what you had marked out, and
+neither one deletes anything.
+
+**Trim comp to work area.** The work area is the stretch of the timeline you marked as the
+part you care about. This makes the composition *be* that stretch: it becomes exactly that
+long, and every layer and every marker slides back so that the start of the work area is
+now the start of the comp. A layer that sat outside the marked stretch is not removed — it
+simply hangs off the end, which layers in Lumit have always been allowed to do, and sliding
+it back brings it into view again. This is what After Effects does, and it is the only
+version that cannot lose work.
+
+**Crop comp to region of interest.** The region of interest is the rectangle you can sweep
+on the Viewer to say "just work on this corner". This makes the composition that rectangle:
+the frame becomes the rectangle's size, and every layer moves back by the rectangle's
+top-left corner so that the picture inside it does not appear to move at all. Layers that
+are parented to another layer are not moved on their own — they travel with the parent, and
+moving both would move them twice.
+
+(The menu used to promise "crop comp to work area", which could not have worked: the work
+area is a stretch of *time*, and a crop needs a rectangle. The row now names the rectangle
+it actually uses.)
+
+Both commands are built out of the ordinary edits — change the comp settings, move each
+layer — bundled into a single step. So each is one Ctrl-Z, and if any part of it were to
+fail, none of it happens.
+
 ### Letting go of a drag half way: Escape
 
 Everything in the Timeline that you drag — a layer's bar, a keyframe, the handle at the
@@ -13285,3 +13388,46 @@ show you a stale row; it only avoids repeating work between one scroll frame and
 next. Slide frames went from 80 ms to 6. The scroll's remaining slowness is the other
 half of the frame, the part that turns the description into pixels, and that one is
 not ours to fix yet (K-677).
+
+## 42. “Show me only the properties that matter”, in plain terms
+
+A layer twirled open is a wall of numbers, and nearly all of them are numbers nobody
+touched. The classic answer is the `U` key: press it and the layer opens showing only the
+properties you have animated. Press it twice and it opens showing everything you have
+changed. Press it three times and the layer shuts again.
+
+The Animation menu now says the same thing in words, and in three sizes rather than two.
+Think of it as one sieve with a coarser mesh each time:
+
+- **Reveal properties with keyframes.** The rows with diamonds on them — the ones you
+  have actually animated. This is exactly what one press of `U` shows.
+- **Reveal properties with animation.** The same, plus the rows that move without
+  diamonds. A property can be driven by an expression (a line of arithmetic that works
+  out the value at every frame) or by a wire from the node graph. Neither leaves
+  diamonds, and both mean the number is not standing still — so a sieve that only looked
+  for diamonds would tell you nothing was animated on a layer that never stops moving.
+- **Reveal all modified properties.** Everything a brand-new layer would not have: a
+  value you typed and left, an effect you applied, a mask you drew, a Retime you switched
+  on.
+
+Two details are worth knowing because they are the parts that could surprise you.
+
+The first is what “modified” means for something that is not a number. A rotation of 45°
+is obviously modified — it started at 0. But a *mask* has no “starting value” to differ
+from: the mask exists because you drew it, so the mask itself is the modification, and its
+rows show whatever their numbers say. Same for an effect: applying one is a change, even
+if you never touched a single slider. So an untouched effect shows its **name** and none
+of its parameters, which reads as “this effect is on this layer” rather than as a page of
+defaults.
+
+The second is where a layer “starts”. Position is the odd one out: a fresh layer is put
+in the *middle of the composition*, not at zero — so “unmoved” is 960, 540 in an HD comp,
+and the panel has to know the comp’s size to tell a moved layer from a placed one. The
+Anchor point is odder still: it starts at the middle of the *source*, which the Timeline
+does not know, so the Anchor is left out of that comparison entirely and only counts when
+it is animated. That is the same exemption the engine makes when it answers the same
+question for `UU`.
+
+And unlike `U`, a menu row is not a cycle. You chose it deliberately and it says what it
+does, so choosing it twice does not shut what it just opened.
+

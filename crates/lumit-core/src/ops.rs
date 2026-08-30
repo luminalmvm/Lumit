@@ -529,6 +529,134 @@ pub enum Op {
         width: u32,
         height: u32,
     },
+    /// **Trim comp to work area** (K-686): the composition becomes as long as
+    /// its work area, and everything on the timeline slides back so the work
+    /// area's start is comp time zero.
+    ///
+    /// Carries only the comp: what it does is a pure function of the document
+    /// (the work area is in it), so it replays identically on the recovery
+    /// journal and cannot be committed with a span that has gone stale. A comp
+    /// with no work area — which *is* the whole comp (K-203) — has nothing to
+    /// trim to, and the op does nothing rather than refusing.
+    ///
+    /// **No layer is deleted, ever.** Layers keep their content and their
+    /// timing relative to one another; one that ends up outside the shorter
+    /// window simply hangs off the end, exactly as §5.1's K-153 invariant
+    /// already allows, and sliding it back brings it into the window again.
+    /// That is AE's behaviour and the only one that loses nothing.
+    TrimCompToWorkArea {
+        comp: Uuid,
+    },
+    /// **Crop comp to the region of interest** (K-687): the composition's frame
+    /// becomes the rectangle, and every unparented layer moves back by the
+    /// rectangle's origin so the picture stays where it was.
+    ///
+    /// The rectangle is in comp pixels from the top-left, and is carried rather
+    /// than read from the document because the region of interest is session
+    /// state and never an edit (K-362) — the frontend hands over what the
+    /// viewer was showing.
+    ///
+    /// **No layer is deleted here either.** A layer whose picture now falls
+    /// outside the smaller frame keeps everything it had and is simply not
+    /// composited, the same way an off-screen layer always was.
+    CropCompToRegion {
+        comp: Uuid,
+        x: f64,
+        y: f64,
+        width: u32,
+        height: u32,
+    },
+}
+
+impl Op {
+    /// What this op is called in the **History** list (K-688): a short English
+    /// phrase naming the edit, in the same voice as the menu row that makes it.
+    ///
+    /// English, from the engine, translated on arrival like every other word
+    /// the engine sends (`flutter_ui/lib/l10n/engine_labels.dart`) — the store
+    /// knows what happened and the frontend does not, so naming an edit belongs
+    /// here beside the op rather than in a table the UI keeps in step by hand.
+    ///
+    /// **A batch is named after its first member**, all the way down. A batch
+    /// is how one gesture that took several ops is recorded (an undo group, a
+    /// separated axis, a pre-compose), and "several changes" tells the person
+    /// scanning the list nothing, where "Edit transform" tells them what the
+    /// drag was. Only a batch with nothing in it has to fall back.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        // Descends one member per turn, so a batch of batches terminates.
+        let mut op = self;
+        while let Op::Batch { ops } = op {
+            match ops.first() {
+                Some(first) => op = first,
+                None => return "Several changes",
+            }
+        }
+        match op {
+            Op::AddItem { .. } => "Add item",
+            Op::RemoveItem { .. } => "Delete item",
+            Op::SetMediaRef { .. } => "Relink footage",
+            Op::SetItemProxy { .. } => "Set proxy",
+            Op::SetItemUseProxy { .. } => "Use proxy",
+            Op::SetUseProxies { .. } => "Use proxies",
+            Op::RenameItem { .. } => "Rename item",
+            Op::SetItemLabel { .. } => "Set item colour",
+            Op::AddLayer { .. } => "Add layer",
+            Op::RemoveLayer { .. } => "Delete layer",
+            Op::ReorderLayer { .. } => "Move layer",
+            Op::SetLayerSpan { .. } => "Trim layer",
+            Op::RenameLayer { .. } => "Rename layer",
+            Op::SetLayerMasks { .. } => "Edit masks",
+            Op::SetLayerPaint { .. } => "Paint",
+            Op::SetShapeContents { .. } => "Edit shape",
+            Op::SetLayerEffects { .. } => "Edit effects",
+            Op::SetLayerGraph { .. } => "Edit drivers",
+            Op::SetLayerFx { .. } => "Fx switch",
+            Op::SetLayerThreeD { .. } => "3D switch",
+            Op::SetSequenceClips { .. } => "Edit clips",
+            Op::SetLayerKind { .. } => "Change layer kind",
+            Op::SetLayerAdjustment { .. } => "Adjustment switch",
+            Op::SetLayerAudible { .. } => "Audible switch",
+            Op::SetLayerVisible { .. } => "Visible switch",
+            Op::SetLayerSolo { .. } => "Solo switch",
+            Op::SetLayerMotionBlur { .. } => "Motion blur switch",
+            Op::SetLayerAcceptsLights { .. } => "Accepts lights switch",
+            Op::SetLayerShy { .. } => "Shy switch",
+            Op::SetLayerGuide { .. } => "Guide switch",
+            Op::SetLayerLocked { .. } => "Lock switch",
+            Op::SetLayerLabel { .. } => "Set layer colour",
+            Op::SetLayerCollapse { .. } => "Collapse switch",
+            Op::SetCompMotionBlur { .. } => "Composition motion blur",
+            Op::SetCompBackground { .. } => "Composition background",
+            Op::SetTextDocument { .. } => "Edit text",
+            Op::SetWorkArea { .. } => "Set work area",
+            Op::SetCompMarkers { .. } => "Edit composition markers",
+            Op::SetLayerMarkers { .. } => "Edit layer markers",
+            Op::SetLayerBlend { .. } => "Set blend mode",
+            Op::SetLayerMatte { .. } => "Set matte",
+            Op::SetLayerParent { .. } => "Set parent",
+            Op::SetTransformProperty { .. } => "Edit transform",
+            Op::SetTransformAxisMode { .. } => "Set axis mode",
+            Op::SetCameraZoom { .. } => "Set camera zoom",
+            Op::SetCameraSolveLink { .. } => "Link camera to solve",
+            Op::SetLayerVolume { .. } => "Edit volume",
+            Op::SetRetimeProperty { .. } => "Edit Retime",
+            Op::SetLayerInterpolation { .. } => "Set interpolation",
+            Op::SetFolderChildren { .. } => "Move into folder",
+            Op::SetAutoFolder { .. } => "Set automatic folder",
+            Op::SetCacheLocation { .. } => "Set cache location",
+            Op::SetAntiAliasing { .. } => "Set anti-aliasing",
+            Op::SetProjectSwatches { .. } => "Edit swatches",
+            Op::SetColourConfig { .. } => "Set colour management",
+            Op::SetFootageColourSpace { .. } => "Set footage colour space",
+            Op::SetCompSettings { .. } => "Composition settings",
+            Op::SetSolidDef { .. } => "Edit solid",
+            Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
+            Op::CropCompToRegion { .. } => "Crop comp to region of interest",
+            // Unreachable: the loop above leaves no batch behind.
+            Op::Batch { .. } => "Several changes",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1585,6 +1713,25 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             };
             Ok(inverse)
         }
+        // The two composition commands are *built* out of the ops that already
+        // exist and applied as one batch (K-686, K-687). Nothing here mutates a
+        // document: the batch's inverse is exact and its all-or-nothing
+        // rollback is the one already written, so a command that reshapes a
+        // whole comp adds no new way for the document to go wrong.
+        Op::TrimCompToWorkArea { comp } => {
+            let batch = trim_comp_to_work_area(doc, *comp)?;
+            apply(doc, &batch)
+        }
+        Op::CropCompToRegion {
+            comp,
+            x,
+            y,
+            width,
+            height,
+        } => {
+            let batch = crop_comp_to_region(doc, *comp, *x, *y, *width, *height)?;
+            apply(doc, &batch)
+        }
         Op::SetSolidDef {
             def,
             name,
@@ -1619,6 +1766,143 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 name: previous,
             })
         }
+    }
+}
+
+/// The batch [`Op::TrimCompToWorkArea`] applies (K-686).
+///
+/// # In plain terms
+///
+/// You marked a stretch of the timeline as the bit you are working on. This
+/// makes the composition *be* that stretch: it becomes as long as the work
+/// area, and every layer and every marker slides back by however far the work
+/// area started in, so what was under the work area is now the whole comp.
+/// Nothing is thrown away — a layer that fell outside now hangs off the end and
+/// can be slid back in.
+///
+/// **The work area is cleared first, and that ordering matters.** A batch's
+/// inverse is its members' inverses in reverse, so clearing first means the old
+/// work area is put back *last* on undo — after the comp is long again, and so
+/// without [`Op::SetWorkArea`]'s clamp cutting it down to the shortened comp.
+fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
+    let c = doc.comp(comp).ok_or(OpError::UnknownComp)?;
+    // No work area is the whole comp (K-203), so there is nothing to trim to.
+    let Some((start, end)) = c.work_area else {
+        return Ok(Op::Batch { ops: vec![] });
+    };
+    let duration = end.delta(start).map_err(|_| OpError::InvalidSpan)?;
+    let back = Duration(start.0);
+    let shift = |t: CompTime| t.sub_dur(back).map_err(|_| OpError::InvalidSpan);
+
+    let mut ops = vec![
+        Op::SetWorkArea {
+            comp,
+            work_area: None,
+        },
+        Op::SetCompSettings {
+            comp,
+            name: c.name.clone(),
+            width: c.width,
+            height: c.height,
+            frame_rate: c.frame_rate,
+            duration,
+            background: c.background,
+        },
+    ];
+    for l in &c.layers {
+        ops.push(Op::SetLayerSpan {
+            comp,
+            layer: l.id,
+            in_point: shift(l.in_point)?,
+            out_point: shift(l.out_point)?,
+            start_offset: shift(l.start_offset)?,
+        });
+    }
+    // Comp markers are on the comp's own clock, so they travel with the
+    // picture. A layer's markers are in layer time (§11, K-254) and move with
+    // their layer for free.
+    if !c.markers.is_empty() {
+        let mut markers = c.markers.clone();
+        for m in &mut markers {
+            m.time = shift(m.time)?;
+        }
+        ops.push(Op::SetCompMarkers { comp, markers });
+    }
+    Ok(Op::Batch { ops })
+}
+
+/// The batch [`Op::CropCompToRegion`] applies (K-687).
+///
+/// # In plain terms
+///
+/// You swept a rectangle on the picture; this makes the composition that
+/// rectangle. The frame becomes the rectangle's size, and every layer that is
+/// not parented to another moves back by the rectangle's top-left corner, so
+/// the picture inside the rectangle stays exactly where it was. Parented layers
+/// need no move of their own — they travel with the parent they hang from.
+///
+/// **A position driven by an expression is left alone**, because there is no
+/// number to move: the expression decides where the layer goes on every frame,
+/// and rewriting its text is not this command's business.
+fn crop_comp_to_region(
+    doc: &Document,
+    comp: Uuid,
+    x: f64,
+    y: f64,
+    width: u32,
+    height: u32,
+) -> Result<Op, OpError> {
+    let c = doc.comp(comp).ok_or(OpError::UnknownComp)?;
+    if width == 0 || height == 0 {
+        return Err(OpError::InvalidSpan);
+    }
+    let mut ops = vec![Op::SetCompSettings {
+        comp,
+        name: c.name.clone(),
+        width,
+        height,
+        frame_rate: c.frame_rate,
+        duration: c.duration,
+        background: c.background,
+    }];
+    for l in &c.layers {
+        if l.parent.is_some() {
+            continue;
+        }
+        for (prop, animation, delta) in [
+            (TransformProp::PositionX, &l.transform.position_x, x),
+            (TransformProp::PositionY, &l.transform.position_y, y),
+        ] {
+            if let Some(moved) = shifted(&animation.animation, -delta) {
+                ops.push(Op::SetTransformProperty {
+                    comp,
+                    layer: l.id,
+                    prop,
+                    animation: moved,
+                });
+            }
+        }
+    }
+    Ok(Op::Batch { ops })
+}
+
+/// `animation` with every value moved by `delta`, or `None` when there is
+/// nothing to move — an expression, or a shift of nought.
+fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
+    if delta == 0.0 {
+        return None;
+    }
+    match animation {
+        Animation::Static(v) => Some(Animation::Static(v + delta)),
+        Animation::Keyframed(keys) => Some(Animation::Keyframed(
+            keys.iter()
+                .map(|k| crate::anim::Keyframe {
+                    value: k.value + delta,
+                    ..*k
+                })
+                .collect(),
+        )),
+        Animation::Expression(_) => None,
     }
 }
 
