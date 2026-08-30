@@ -1438,6 +1438,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            pan: crate::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -1453,6 +1454,7 @@ mod tests {
         };
         let layer_id = layer.id;
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 1920,
@@ -2228,6 +2230,7 @@ mod tests {
                 parent: None,
                 label: 0,
                 volume_db: crate::anim::Property::zero(),
+                pan: crate::anim::Property::zero(),
                 audio_only: false,
                 adjustment: false,
                 retime: None,
@@ -2246,6 +2249,7 @@ mod tests {
         let reader = layer("reader", Vec::new(), reader_graph(source_id));
         let reader_id = reader.id;
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 1920,

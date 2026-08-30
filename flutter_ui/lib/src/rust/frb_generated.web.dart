@@ -397,6 +397,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExportState dco_decode_bridge_export_state(dynamic raw);
 
   @protected
+  BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
+
+  @protected
   BridgeFileParam dco_decode_bridge_file_param(dynamic raw);
 
   @protected
@@ -419,6 +422,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeHistory dco_decode_bridge_history(dynamic raw);
+
+  @protected
+  BridgeHistoryEntry dco_decode_bridge_history_entry(dynamic raw);
 
   @protected
   BridgeImportArg dco_decode_bridge_import_arg(dynamic raw);
@@ -789,6 +795,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeGraphNode> dco_decode_list_bridge_graph_node(dynamic raw);
 
   @protected
+  List<BridgeHistoryEntry> dco_decode_list_bridge_history_entry(dynamic raw);
+
+  @protected
   List<BridgeImportArg> dco_decode_list_bridge_import_arg(dynamic raw);
 
   @protected
@@ -909,6 +918,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Float32List dco_decode_list_prim_f_32_strict(dynamic raw);
+
+  @protected
+  List<double> dco_decode_list_prim_f_64_loose(dynamic raw);
 
   @protected
   Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
@@ -1444,6 +1456,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeFadeShape sse_decode_bridge_fade_shape(SseDeserializer deserializer);
+
+  @protected
   BridgeFileParam sse_decode_bridge_file_param(SseDeserializer deserializer);
 
   @protected
@@ -1468,6 +1483,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeHistory sse_decode_bridge_history(SseDeserializer deserializer);
+
+  @protected
+  BridgeHistoryEntry sse_decode_bridge_history_entry(
+      SseDeserializer deserializer);
 
   @protected
   BridgeImportArg sse_decode_bridge_import_arg(SseDeserializer deserializer);
@@ -1888,6 +1907,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeHistoryEntry> sse_decode_list_bridge_history_entry(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeImportArg> sse_decode_list_bridge_import_arg(
       SseDeserializer deserializer);
 
@@ -2043,6 +2066,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Float32List sse_decode_list_prim_f_32_strict(SseDeserializer deserializer);
+
+  @protected
+  List<double> sse_decode_list_prim_f_64_loose(SseDeserializer deserializer);
 
   @protected
   Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
@@ -2615,6 +2641,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExportState self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_fade_shape(
+      BridgeFadeShape self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_file_param(
       BridgeFileParam self, SseSerializer serializer);
 
@@ -2644,6 +2674,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_history(BridgeHistory self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_history_entry(
+      BridgeHistoryEntry self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_import_arg(
@@ -3106,6 +3140,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeGraphNode> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_history_entry(
+      List<BridgeHistoryEntry> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_import_arg(
       List<BridgeImportArg> self, SseSerializer serializer);
 
@@ -3264,6 +3302,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_prim_f_32_strict(
       Float32List self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_f_64_loose(
+      List<double> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_f_64_strict(

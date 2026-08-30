@@ -418,6 +418,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         parent: None,
         label: 0,
         volume_db: crate::anim::Property::zero(),
+        pan: crate::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -4697,6 +4698,7 @@ fn marker_rig(
     use crate::time::{CompTime, Duration, FrameRate, Rational};
     let secs = |n, d| CompTime(Rational::new(n, d).unwrap());
     let comp = Composition {
+        master_volume_db: 0.0,
         id: uuid::Uuid::now_v7(),
         name: "c".into(),
         width: 1920,
@@ -4724,6 +4726,7 @@ fn marker_rig(
         parent: None,
         label: 0,
         volume_db: crate::anim::Property::zero(),
+        pan: crate::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -8644,6 +8647,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     use crate::time::{CompTime, Duration, FrameRate, Rational};
 
     let mut comp = Composition {
+        master_volume_db: 0.0,
         id: uuid::Uuid::now_v7(),
         name: "Scene".into(),
         width: 1920,
@@ -8683,6 +8687,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            pan: Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,

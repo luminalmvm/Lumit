@@ -1150,6 +1150,7 @@ mod tests {
 
     fn test_comp() -> Composition {
         Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -1180,6 +1181,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            pan: crate::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -1658,6 +1660,7 @@ mod tests {
                     parent: None,
                     label: 0,
                     volume_db: crate::anim::Property::zero(),
+                    pan: crate::anim::Property::zero(),
                     audio_only: false,
                     adjustment: false,
                     retime: None,
@@ -2003,6 +2006,7 @@ mod tests {
                     parent: None,
                     label: 0,
                     volume_db: crate::anim::Property::zero(),
+                    pan: crate::anim::Property::zero(),
                     audio_only: false,
                     adjustment: false,
                     retime: None,
@@ -2264,6 +2268,20 @@ mod tests {
         assert_eq!(vol(&store), -12.0);
         store.undo().unwrap();
         assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
+
+        // The master fader (docs/09 §3.1, K-691) is comp state and round-trips
+        // the same way — one op, one undo step, back to unity.
+        let master = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().master_volume_db;
+        assert_eq!(master(&store), 0.0, "a comp opens at unity master");
+        store
+            .commit(Op::SetMasterVolume {
+                comp: comp_id,
+                db: -4.5,
+            })
+            .unwrap();
+        assert_eq!(master(&store), -4.5);
+        store.undo().unwrap();
+        assert_eq!(master(&store), 0.0);
 
         store.undo().unwrap();
         store.undo().unwrap();

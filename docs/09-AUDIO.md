@@ -11,10 +11,11 @@ panel layout per [07-UI-SPEC.md](07-UI-SPEC.md).
 ## 1. Scope of v1
 
 In: import, sample-accurate playback, timeline waveforms, manual and automatic beat
-markers, beat snapping, volume keyframes, mute/solo, multiple audio layers per comp, audio
-from video footage, audio scrubbing, audio in export.
+markers, beat snapping, volume keyframes, **pan** (K-694), mute/solo, multiple audio layers
+per comp, audio from video footage, audio scrubbing, audio in export, **level meters and a
+master fader** (K-690, K-691), and **fade in / fade out and clip crossfades** (K-695).
 
-Out (explicitly, §7): audio effects, a mixing console, and audio retiming.
+Out (explicitly, §7): audio effects, mixer **buses and sends**, and audio retiming.
 
 The engine layer (`lumit-audio`, `lumit-bridge`) is built; the Flutter Audio panel is not.
 The sections below describe the intended design, and [TODO.md](TODO.md) is the one document
@@ -69,11 +70,23 @@ safe: no locks shared with the UI or render threads, no allocation; it reads fro
 pre-mixed ring buffer filled by a dedicated audio thread (K-017).
 
 Mixing model in v1: per-layer gain (volume keyframes, §6) → sum of all audible layers →
-master limiter (a hard safety clip at −0.3 dBFS; not user-adjustable in v1 — v1 clamps
-sample peaks to that ceiling, `lumit-audio::mix::MASTER_CEILING`; true inter-sample-peak
-limiting per ITU-R BS.1770 is future) →
-device. Sample-accurate means: layer in points, edit points, and volume keyframes are
-resolved to exact sample positions, not frame-quantised.
+**master fader** (K-691, amending this section: one gain stage on the sum,
+`Composition.master_volume_db`, 0 dB unity with the same −100 dB knee a layer's Volume has)
+→ master limiter (a hard safety clip at −0.3 dBFS; the *limiter* remains not
+user-adjustable — v1 clamps sample peaks to that ceiling,
+`lumit-audio::mix::MASTER_CEILING`; true inter-sample-peak limiting per ITU-R BS.1770 is
+future) → device.
+
+The fader is a **stage**, not a multiplier folded into each layer's gain. The samples would
+be the same either way — multiplication distributes over a sum — but only a stage puts the
+fader where the board draws it, ahead of the limiter, so pulling the master down is what
+stops the limiter working; and only a stage leaves each strip's meter reading its own
+layer's level while the master's reads what the device is handed. It is project data (it
+saves, undoes and exports), and a *nested* comp's own master rides on the Precomp layer as
+a carrier gain, exactly as that layer's Volume does.
+
+Sample-accurate means: layer in points, edit points, and volume keyframes are resolved to
+exact sample positions, not frame-quantised.
 
 ### 3.2 Drift correction
 
@@ -245,14 +258,30 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **An Audio layer is never in the picture's frame key**, so muting, hiding, soloing or
   shying one retires no rendered frame; soloing it silences other audio without blanking
   the picture (docs/03 §5.7).
-- Stereo is the v1 channel model; mono sources upmix centred. Pan is not in v1 (see §7).
+- **Pan** is an animatable property per audio-capable layer (K-694, **reversing** this
+  section's original "Pan is not in v1"): a **constant-power stereo balance**, −100 full
+  left, 0 centre, +100 full right — a percentage of the way to one side, so a value well
+  reads "L 50" without arithmetic. The law walks a quarter circle (`cos` left, `sin` right),
+  scaled so that centre is *unity* rather than −3 dB: this is a balance over a stereo source
+  that already sits where it belongs, not a pan placing a mono source in a field. The price
+  is +3 dB on the surviving side at the extremes, and the master limiter is directly
+  downstream. `Layer.pan` + `Op::SetLayerPan`; it lives in the layer's **Audio** group
+  beside Volume, keyframes and reads through the graph editor exactly as Volume does, and it
+  is **folded into the same gain stage** — by the time the mixer sees a clip, Volume and Pan
+  are one `[left, right]` pair, which is what makes a Precomp layer's balance compose with
+  the balances inside it (per-channel multiplication) and what keeps preview and export
+  reading the same numbers (K-031).
+- Stereo is the v1 channel model; mono sources upmix centred.
 
 ## 7. Out of scope for v1
 
 - **Audio effects** (EQ, reverb, compression) — none in v1. The effect stack accepts no
   audio effects until the Composer phase; the [12-PLUGINS.md](12-PLUGINS.md) LFX surface
   reserves an audio-effect extension so the ABI does not need breaking later.
-- **Mixing console** — no mixer panel; per-layer volume plus master limiter only.
+- **Mixing console** — *partly reversed by the Audio workspace board.* A **Mixer** panel of
+  layer strips plus a master strip ships (the board's four decisions, K-691); what stays out
+  is **buses and sends**, which have nowhere to go until audio effects exist. So: per-layer
+  volume and pan, a master fader, meters, and the limiter — no bus architecture.
 - **Audio retiming.** Retime is video-only in v1: a retimed Footage layer's own audio is
   intended to mute with a badge whenever its retime map differs from identity ("Retime mutes
   audio in this version") - the mute-on-retime detection and badge are **not yet wired**

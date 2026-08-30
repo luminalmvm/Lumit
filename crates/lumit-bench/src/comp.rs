@@ -160,6 +160,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
 
     let comp_id = id("Reference");
     doc.items.push(ProjectItem::Composition(Composition {
+        master_volume_db: 0.0,
         id: comp_id,
         name: "Reference".into(),
         width: 1920,
@@ -249,6 +250,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         label: 0,
         markers: Vec::new(),
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,

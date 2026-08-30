@@ -21570,6 +21570,57 @@ magnet engaging inside its slop and not outside it, the two axes deciding separa
 making/moving/deleting a guide by drag, and the session's JSON round trip;
 `viewer_panel_frb_test.dart` — the rulers insetting the picture and a guide dragged out of
 the strip riding the comp's session; `menu_rows_frb_test.dart` — the three View rows.
+
+## K-691 — The master fader is a gain stage ahead of the limiter, and the Mixer ships without buses
+
+**Status: DECIDED (2026-08-30).** Amends docs/09 §3.1's mixing model and reverses half of
+its §7 "no mixing console"; carries decisions 2 and 4 of the approved AudioWorkspace board's
+canvas note. Extends K-535's limiter; nothing it decided is undone.
+
+docs/09 §3.1 had one gain stage — per-layer Volume — summed straight into a fixed safety
+clip at −0.3 dBFS. The board draws a **Master strip** with its own fader above that clip's
+LIM chip, which is the missing stage: the only thing a person can currently do about a mix
+that is pinning the limiter is pull every layer down one at a time.
+
+**One stage, on the sum, ahead of the limiter.** `Composition.master_volume_db` (dB, 0
+unity, the same −100 knee a layer's Volume has) becomes a linear gain applied to the summed
+mix immediately before the clamp — `mix_stereo_at` for the baked mixer, `MixPlan.master_gain`
+for the live plan, one number each.
+
+**Why a stage rather than a multiplier folded into each layer's gain**, given that the two
+give the same samples (multiplication distributes over a sum):
+
+- **Where it sits is the point.** A fader ahead of a limiter is how you stop the limiter
+  working. Folded in, the arithmetic still works, but there is no longer anything in the
+  code that says "this is after the sum" — and the next person to add a stage has no place
+  to put it.
+- **The meters.** A strip's bar means *how loud is this layer*. Folded in, every strip's bar
+  would follow the master, and pulling the master down would move every bar on the desk
+  rather than the one it belongs to.
+- **An animated Volume shares its envelope.** A layer's gain is an `Arc<GainEnvelope>` when
+  the Volume is keyframed; folding a master into it would mean rebuilding those points on
+  every fader move, for a value that is not per-layer at all.
+
+**A nested comp's master is a carrier.** A master is a stage only for the comp being mixed;
+one comp down it is just another gain on what that comp contributes, so the audio-jobs walk
+pushes it onto the carrier chain beside the Precomp layer's own Volume. The Audio level
+driver's tap reads through it too — pulling the master down must dim a glow that follows the
+music, not only the sound (K-031: preview and export run the same function).
+
+**Beat detection mixes at unity.** `mixdown` keeps its old signature and `mixdown_at` is the
+one that takes a master, because onsets are relative and losing your beat grid to a fader
+move would be a fault, not a feature.
+
+**Buses stay out.** The board's decision 2: v1's mixer is layers plus master. Sends have
+nowhere to go until audio effects exist, and a bus architecture built before the thing it
+routes is an architecture nobody has tested against a real signal path. docs/09 §7's
+"mixing console" exclusion is narrowed to that, not deleted.
+
+Pinned in `lumit-audio`'s `the_master_fader_sits_ahead_of_the_limiter_in_both_mixers` (a sum
+held at the ceiling comes back under it when the master drops, the live plan and the baked
+mix agree sample for sample, and the strips' bars do not move), and `lumit-core`'s store
+round-trip.
+
 ## K-692 — A plugin parameter's row is named by the plugin's own id, and the CLAP host is a crate of its own
 
 **Status: DECIDED (2026-08-30, AP1 — the CLAP host core).** Binding note:
@@ -21613,3 +21664,92 @@ recording of every host call, compared against `HOST_ACTIONS` verbatim),
 `properties_win_over_a_stale_state`, `a_param_sweep_arrives_as_sorted_per_block_events`,
 `only_automatable_visible_parameters_become_rows` and
 `an_instrument_is_refused_with_a_reason`.
+
+## K-694 — Pan ships, as a constant-power balance folded into the one gain stage
+
+**Status: DECIDED (2026-08-30).** **Reverses** docs/09 §6's "Pan is not in v1" and its §7
+cross-reference; carries decision 4 of the approved AudioWorkspace board's canvas note ("Pan
+ships"). The board draws a pan pot on every mixer strip and a Pan row in the Audio panel's
+Selected layer group, and the drawing wins (K-450).
+
+**The property.** `Layer.pan`, an ordinary animatable `Property` in the layer's **Audio**
+group beside Volume: same stopwatch, same lane diamonds, same graph strip, same
+`Op::SetLayerPan` shape `SetLayerVolume` already has. **−100 full left, 0 centre, +100 full
+right** — a percentage of the way to one side rather than a −1…1 fraction, because the value
+well reads "L 50" straight off the number and nothing has to know a scale factor. It is
+animatable rather than a plain knob because a sweep across a hit is one of the exactly two
+things anybody does with a pan control; the other is setting it once, which a keyframable
+property also does.
+
+**The law is a constant-power balance, centre at unity.** The gains walk a quarter circle
+(`cos` left, `sin` right) so their squares always sum to the same thing — a sound turned
+across the field holds its apparent level instead of sagging in the middle, which is what a
+straight per-side attenuation does. Scaled by √2 so centre is unity rather than −3 dB: this
+is a **balance** over a stereo source that already sits where it belongs, not a **pan**
+placing a mono source in a field, and a layer left centred must not quietly lose 3 dB. The
+price is +3 dB on the surviving side at the extremes, with the master limiter directly
+downstream, which is what it is for.
+
+**One gain stage, not two.** By the time the mixer sees a clip, Volume and Pan are a single
+`[left, right]` pair — `PlacedAudio::gain`, `PlacedClip::gain` and `GainEnvelope::points` all
+became stereo, and `volume_bake` multiplies both in. Three reasons, in order of weight:
+
+- **A balance *is* a pair of per-channel gains.** A separate pan stage would be a second
+  envelope walked per frame in the realtime callback, for arithmetic that folds into the
+  first for free.
+- **It composes.** A Precomp layer's balance multiplies channel by channel with the balances
+  inside it, which is exactly how the carrier chain already handles Volume — so nesting
+  needed no new rule. (Hard left inside a hard-right precomp is silence. That is what
+  chaining two balances means, and it is the honest answer.)
+- **One clock.** A fade and a sweep on the same clip cannot land on different samples if
+  they are baked from the same walk.
+
+Pinned in `lumit-render`'s `volume_bake_static_gain_and_animated_envelope` (a hard-right
+layer silences its left and lifts its right by √2; a precomp's balance multiplies through; an
+animated pan forces the envelope and the channels then move apart) and
+`a_panned_and_faded_clip_mixes_the_same_in_both_paths` — the K-031 row: one bake, both
+mixers, sample for sample.
+
+## K-695 — Fades are keyframe pairs, a clip join is two opposed equal-power ramps, and a Sequence layer sounds
+
+**Status: DECIDED (2026-08-30).** Completes docs/09 §6's "the fade-in/fade-out commands that
+write eased keyframe pairs are still to come", and gives Sequence layers the audio §4 has
+always assumed they had (it describes clip waveforms). Extends K-172; nothing is reversed.
+
+**A fade command writes the keys a person would have written.** `fade_in` / `fade_out` on a
+layer put a pair of ordinary Volume keyframes between the −∞ knee and the level the layer
+already held, spanning the layer's in or out point. Not a fade *object*: the keys are on the
+row, draggable, reshapable in the graph, undoable, and visible in the rubber band the board
+draws. Running a command again over the same stretch reshapes that fade rather than stacking
+a second one on it, and keys outside the span are untouched, so a fade in and a fade out
+coexist without either knowing about the other.
+
+The three shapes are the board's chips, and all three are built from the **easing vocabulary
+that already exists** rather than a new kind of span: `Linear` (straight — and because
+Volume is in decibels, that is already the perceptually even fade, not the naive one),
+`Ease` (easy-ease both keys, the default), and `Exponential` (eased at the loud key, straight
+at the silent one, so the level hangs and then falls away).
+
+**A Sequence layer sounds through its clips.** A clip is a placed, trimmed span of a footage
+item — the shape `place_on_timeline` already mixes — so each sounding clip becomes an
+`AudioJob` of its own carrying the row's Volume and Pan. Two exclusions, both docs/09's: a
+**retimed** clip is silent (§7 — a clip's map is as much a retime as a layer's), and a clip
+over a *composition* is silent, that being the Sequence-of-comps case nothing yet asks for.
+
+**A join is a crossfade, and it is two envelopes rather than one object.** Where clips
+overlap on the row, the outgoing one takes a tail ramp exactly as long as the overlap and
+the incoming one a matching head — each on its own clip, so sliding a clip carries its ramp
+and a clip that ends up overlapping nothing simply has no ramp to leave behind. A butt cut
+gets no ramps at all, which is what a hard cut on the beat is for. The ramps are **equal
+power** (a quarter-sine): two opposed sine ramps have squares that sum to one, so two
+different shots neither dip nor swell across the join — a straight line would leave the 3 dB
+hole in the middle that every dissolve is accused of.
+
+The ramps are held in **comp time** (`ClipFade { start_s, head_s, end_s, tail_s }`) rather
+than as durations measured from the job's audible span, so trimming the layer over a clip
+clips the ramp where it already was instead of re-basing it.
+
+Pinned in `lumit-core`'s `a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone`,
+`lumit-render`'s `a_clip_join_is_two_opposed_equal_power_ramps` (the powers sum to one across
+the whole overlap) and `a_sequence_layers_clips_sound_and_a_join_crossfades`, and the
+bridge's `pan_the_master_fader_and_the_fade_commands_round_trip`.

@@ -659,6 +659,104 @@ impl Property {
         );
         true
     }
+
+    /// Write a **fade** across `[from, to]` in this property's own clock: a
+    /// pair of keys between `floor` and the level the property already holds
+    /// at the loud end, shaped by `shape` (docs/09 §6, K-695).
+    ///
+    /// `rising` is a fade *in* — silence at `from`, level at `to`; false is a
+    /// fade out. Any keys already inside the span are replaced, so running a
+    /// fade twice over the same stretch reshapes it rather than layering two
+    /// curves on top of each other; keys outside it are left exactly where
+    /// they are, which is what lets a fade-in and a fade-out live on one
+    /// property without knowing about each other.
+    ///
+    /// A no-op (returns `None`) when the span has no length, or when the
+    /// property is an expression — a fade would have to rewrite what somebody
+    /// typed, which is an edit of their work rather than a command.
+    #[must_use]
+    pub fn with_fade(
+        &self,
+        from: Rational,
+        to: Rational,
+        shape: FadeShape,
+        floor: f64,
+        rising: bool,
+    ) -> Option<Property> {
+        if to.to_f64() <= from.to_f64() || matches!(self.animation, Animation::Expression(_)) {
+            return None;
+        }
+        let loud_at = if rising { to } else { from };
+        let level = self.value_at(loud_at.to_f64());
+        let (loud_side, quiet_side) = shape.sides();
+        let key = |time: Rational, value: f64, side: SideInterp| Keyframe {
+            time,
+            value,
+            interp_in: side,
+            interp_out: side,
+        };
+        let pair = if rising {
+            [key(from, floor, quiet_side), key(to, level, loud_side)]
+        } else {
+            [key(from, level, loud_side), key(to, floor, quiet_side)]
+        };
+
+        let mut keys: Vec<Keyframe> = match &self.animation {
+            Animation::Keyframed(existing) => existing
+                .iter()
+                .filter(|k| k.time.to_f64() < from.to_f64() || k.time.to_f64() > to.to_f64())
+                .copied()
+                .collect(),
+            // A static property has one level everywhere; the pair is the
+            // whole animation, and the value outside the span still holds
+            // because a keyed property holds its end values.
+            _ => Vec::new(),
+        };
+        keys.extend(pair);
+        keys.sort_by(|a, b| {
+            a.time
+                .to_f64()
+                .partial_cmp(&b.time.to_f64())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Some(Property {
+            animation: Animation::Keyframed(keys),
+            extra: self.extra.clone(),
+        })
+    }
+}
+
+/// The curve a fade command writes (docs/09 §6, K-695) — the board's three
+/// chips, each built out of the easing vocabulary that already exists rather
+/// than a new kind of span.
+///
+/// **Volume is in decibels**, which is roughly how loudness is heard, so a
+/// straight line between silence and level is already the perceptually even
+/// fade — that is why `Linear` is a real option here and not the naive one.
+/// The other two bend it: `Ease` softens both ends, and `Exponential` holds
+/// the level and then lets it fall away, which is the shape that spends the
+/// most of a fade's length in the part you can actually hear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FadeShape {
+    /// Straight in dB: flat handles nowhere, an even ramp.
+    Linear,
+    /// Easy-ease at both ends — the default, and the one a fade under a
+    /// title wants.
+    Ease,
+    /// Eased at the loud end, straight at the silent one: the level hangs
+    /// where it was and then drops away.
+    Exponential,
+}
+
+impl FadeShape {
+    /// `(the loud key's sides, the silent key's sides)`.
+    fn sides(self) -> (SideInterp, SideInterp) {
+        match self {
+            FadeShape::Linear => (SideInterp::Linear, SideInterp::Linear),
+            FadeShape::Ease => (EASY_EASE, EASY_EASE),
+            FadeShape::Exponential => (EASY_EASE, SideInterp::Linear),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -678,6 +776,101 @@ mod tests {
             interp_in: side,
             interp_out: side,
         }
+    }
+
+    /// **A fade is a pair of ordinary keys** (docs/09 §6, K-695): between the
+    /// −∞ knee and the level the property already held, shaped from the
+    /// easing vocabulary that already exists, with everything outside the
+    /// span left alone.
+    #[test]
+    fn a_fade_is_an_eased_pair_that_leaves_the_rest_of_the_curve_alone() {
+        let floor = -100.0;
+        let level = Property::fixed(-3.0);
+
+        // Fade in: silence at the start of the span, the level at its end.
+        let faded = level
+            .with_fade(rat(0, 1), rat(1, 1), FadeShape::Ease, floor, true)
+            .expect("a fade in");
+        assert!((faded.value_at(0.0) - floor).abs() < 1e-9);
+        assert!((faded.value_at(1.0) - -3.0).abs() < 1e-9);
+        assert!(
+            faded.value_at(5.0) == -3.0,
+            "past the last key a property holds its level"
+        );
+        let Animation::Keyframed(keys) = &faded.animation else {
+            panic!("a fade is keyframed");
+        };
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].interp_out, EASY_EASE, "Ease eases both keys");
+        assert_eq!(keys[1].interp_in, EASY_EASE);
+
+        // Fade out: the level at the start of the span, silence at its end.
+        let out = level
+            .with_fade(rat(2, 1), rat(3, 1), FadeShape::Linear, floor, false)
+            .expect("a fade out");
+        assert!((out.value_at(2.0) - -3.0).abs() < 1e-9);
+        assert!((out.value_at(3.0) - floor).abs() < 1e-9);
+        let Animation::Keyframed(keys) = &out.animation else {
+            panic!("keyframed");
+        };
+        assert!(keys.iter().all(|k| k.interp_in == SideInterp::Linear));
+
+        // Exponential eases the loud key and leaves the silent one straight,
+        // so the level hangs where it was and then falls away.
+        let exp = level
+            .with_fade(rat(0, 1), rat(1, 1), FadeShape::Exponential, floor, false)
+            .expect("a fade out");
+        let Animation::Keyframed(keys) = &exp.animation else {
+            panic!("keyframed");
+        };
+        assert_eq!(keys[0].interp_out, EASY_EASE, "the loud key is eased");
+        assert_eq!(keys[1].interp_in, SideInterp::Linear);
+        assert!(
+            exp.value_at(0.25) > out.value_at(2.25),
+            "an exponential fade is still louder a quarter of the way down"
+        );
+
+        // The two halves coexist: fading a property that already has a fade
+        // in leaves those keys where they are.
+        let both = faded
+            .with_fade(rat(3, 1), rat(4, 1), FadeShape::Ease, floor, false)
+            .expect("a fade out over a fade in");
+        let Animation::Keyframed(keys) = &both.animation else {
+            panic!("keyframed");
+        };
+        assert_eq!(keys.len(), 4, "two keys each, in time order");
+        assert!(keys
+            .windows(2)
+            .all(|w| w[0].time.to_f64() < w[1].time.to_f64()));
+        assert!((both.value_at(0.0) - floor).abs() < 1e-9);
+        assert!((both.value_at(4.0) - floor).abs() < 1e-9);
+        assert!(
+            (both.value_at(2.0) - -3.0).abs() < 1e-9,
+            "full level between"
+        );
+
+        // Running one twice over the same span reshapes it rather than
+        // stacking a second curve on top.
+        let again = both
+            .with_fade(rat(3, 1), rat(4, 1), FadeShape::Linear, floor, false)
+            .expect("a reshape");
+        let Animation::Keyframed(keys) = &again.animation else {
+            panic!("keyframed");
+        };
+        assert_eq!(keys.len(), 4, "still four keys, not six");
+
+        // Refusals: no span, and an expression (a fade would rewrite what
+        // somebody typed).
+        assert!(level
+            .with_fade(rat(1, 1), rat(1, 1), FadeShape::Ease, floor, true)
+            .is_none());
+        let expression = Property {
+            animation: Animation::Expression("time".into()),
+            extra: serde_json::Map::new(),
+        };
+        assert!(expression
+            .with_fade(rat(0, 1), rat(1, 1), FadeShape::Ease, floor, true)
+            .is_none());
     }
 
     #[test]

@@ -511,6 +511,7 @@ fn reference_comp(config: Option<&std::path::Path>) -> (std::sync::Arc<Document>
         layers.push(layer);
     }
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Reference".into(),
         width: SIZE,
@@ -554,6 +555,7 @@ fn solid_layer(name: &str, def: Uuid) -> Layer {
         parent: None,
         label: 0,
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,

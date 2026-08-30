@@ -258,6 +258,25 @@ pub struct Composition {
     /// layers whose own `motion_blur` switch is set actually blur.
     #[serde(default)]
     pub motion_blur: MotionBlur,
+    /// **The master fader**, in dB (docs/09 §3.1, K-691): one gain stage on
+    /// the summed mix, ahead of the safety limiter. 0 is unity; −100 and
+    /// below is exact silence, the same −∞ knee a layer's Volume has.
+    ///
+    /// A *stage*, not a per-layer multiplier, and that distinction is the
+    /// whole reason it is here rather than folded into each layer's gain.
+    /// Folding would give the same samples — multiplication distributes over
+    /// the sum — but it would make every strip's meter read post-fader, and a
+    /// strip's bar means "how loud is this layer", not "how loud has the
+    /// master left it". Pulling the master down must move one bar.
+    ///
+    /// Project data, not a setting: it is part of what the composition
+    /// sounds like, so it saves, undoes, and exports. A plain number rather
+    /// than a [`Property`]: the board draws a fader and a value, and an
+    /// automated master is the Composer's problem, not v1's. A nested comp's
+    /// own master rides on the Precomp layer as a carrier, exactly as that
+    /// layer's Volume does.
+    #[serde(default)]
+    pub master_volume_db: f64,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -1834,6 +1853,19 @@ pub struct Layer {
     /// the frame cache key (sound, not pixels).
     #[serde(default = "Property::zero")]
     pub volume_db: Property,
+    /// Per-layer **Pan** — a constant-power stereo balance (docs/09 §6,
+    /// K-694, reversing that section's "Pan is not in v1"). −100 is full
+    /// left, 0 centre, +100 full right: a percentage of the way to one side,
+    /// so a value well reads "L 50" without doing arithmetic first.
+    ///
+    /// Animatable like any property — the same stopwatch, the same lane
+    /// diamonds, the same graph strip — because a sweep across a hit is one
+    /// of the two things anybody ever does with a pan control (the other is
+    /// setting it once and forgetting it). Only heard on layers whose source
+    /// carries an audio stream, and, like Volume, never part of the frame
+    /// cache key: it is sound, not pixels.
+    #[serde(default = "Property::zero")]
+    pub pan: Property,
     /// This layer is **sound and nothing else** — an Audio layer
     /// ([01-GLOSSARY.md] "Audio layer", docs/09-AUDIO.md §6, K-435).
     ///
@@ -2732,6 +2764,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            pan: Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: Some(map),
@@ -3255,6 +3288,7 @@ mod tests {
 
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "cam test".into(),
             width: 1920,
@@ -3289,6 +3323,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            pan: crate::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -3596,6 +3631,7 @@ mod tests {
     /// An empty composition of the given size, for the footage-reference walk.
     fn bare_comp(name: &str) -> Composition {
         Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: name.into(),
             width: 64,
@@ -3627,6 +3663,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            pan: crate::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,

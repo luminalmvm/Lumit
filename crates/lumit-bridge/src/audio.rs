@@ -166,21 +166,24 @@ fn lock() -> std::sync::MutexGuard<'static, AudioState> {
 /// with their placements and Volumes, plus the mix length. Any edit that
 /// changes what the comp sounds like changes this; an unchanged mix is a
 /// no-op. Session-only (a `DefaultHasher` is fine here — never persisted).
-pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64) -> u64 {
+pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     jobs.len().hash(&mut h);
     duration_s.to_bits().hash(&mut h);
+    master_db.to_bits().hash(&mut h);
     for j in jobs {
         j.path.hash(&mut h);
         j.in_s.to_bits().hash(&mut h);
         j.out_s.to_bits().hash(&mut h);
         j.offset_s.to_bits().hash(&mut h);
         hash_animation(&mut h, &j.volume.animation);
+        hash_animation(&mut h, &j.pan.animation);
         j.carriers.len().hash(&mut h);
-        for (prop, off) in &j.carriers {
-            off.to_bits().hash(&mut h);
-            hash_animation(&mut h, &prop.animation);
+        for c in &j.carriers {
+            c.offset_s.to_bits().hash(&mut h);
+            hash_animation(&mut h, &c.volume.animation);
+            hash_animation(&mut h, &c.pan.animation);
         }
     }
     h.finish()
@@ -218,6 +221,7 @@ pub(crate) fn build_plan(
     decoded: &HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
     rate: u32,
     duration_s: f64,
+    master_db: f64,
 ) -> (Arc<MixPlan>, Vec<Uuid>) {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
     // Meter slots in first-sounding order, one per strip (K-690): several
@@ -262,6 +266,7 @@ pub(crate) fn build_plan(
         Arc::new(MixPlan {
             clips,
             total_frames,
+            master_gain: lumit_audio::mix::db_to_gain(master_db),
         }),
         strips,
     )
@@ -458,6 +463,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         return;
     };
     let duration_s = c.duration.0.to_f64();
+    let master_db = c.master_volume_db;
 
     // The jobs walk probes files, so it runs with the builder taken OUT of the
     // state — the lock is never held across disk work. One worker at a time
@@ -484,7 +490,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         }
         return;
     }
-    let sig = jobs_signature(&jobs, duration_s);
+    let sig = jobs_signature(&jobs, duration_s, master_db);
     {
         let st = lock();
         if st.loaded_comp == Some(comp) && st.loaded_sig == Some(sig) {
@@ -527,7 +533,7 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         }
     }
 
-    let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s);
+    let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s, master_db);
 
     // Install: swap keeps the clock and play state (the instant-edit
     // contract); a fresh load applies the pending start and transport intent.
@@ -718,7 +724,9 @@ mod tests {
             out_s,
             offset_s,
             volume: Property::zero(),
+            pan: Property::zero(),
             carriers: Vec::new(),
+            fade: None,
         }
     }
 
@@ -729,19 +737,23 @@ mod tests {
     fn the_signature_tracks_everything_that_changes_the_sound() {
         let a = vec![job("a.mp4", 0.0, 5.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
         let same = vec![job("a.mp4", 0.0, 5.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
-        let sig = jobs_signature(&a, 10.0);
-        assert_eq!(sig, jobs_signature(&same, 10.0), "identical mixes agree");
+        let sig = jobs_signature(&a, 10.0, 0.0);
+        assert_eq!(
+            sig,
+            jobs_signature(&same, 10.0, 0.0),
+            "identical mixes agree"
+        );
 
         let moved = vec![job("a.mp4", 0.5, 5.5, 0.5), job("b.mp4", 1.0, 3.0, 1.0)];
-        assert_ne!(sig, jobs_signature(&moved, 10.0), "a move re-plans");
+        assert_ne!(sig, jobs_signature(&moved, 10.0, 0.0), "a move re-plans");
 
         let trimmed = vec![job("a.mp4", 0.0, 4.0, 0.0), job("b.mp4", 1.0, 3.0, 1.0)];
-        assert_ne!(sig, jobs_signature(&trimmed, 10.0), "a trim re-plans");
+        assert_ne!(sig, jobs_signature(&trimmed, 10.0, 0.0), "a trim re-plans");
 
         let removed = vec![job("a.mp4", 0.0, 5.0, 0.0)];
         assert_ne!(
             sig,
-            jobs_signature(&removed, 10.0),
+            jobs_signature(&removed, 10.0, 0.0),
             "a mute/delete re-plans"
         );
 
@@ -749,11 +761,15 @@ mod tests {
         louder[0].volume = Property::fixed(-6.0);
         assert_ne!(
             sig,
-            jobs_signature(&louder, 10.0),
+            jobs_signature(&louder, 10.0, 0.0),
             "a Volume nudge re-plans"
         );
 
-        assert_ne!(sig, jobs_signature(&a, 12.0), "a duration change re-plans");
+        assert_ne!(
+            sig,
+            jobs_signature(&a, 12.0, 0.0),
+            "a duration change re-plans"
+        );
     }
 
     /// Plan building is pure: placed clips land where `place_on_timeline`
@@ -772,7 +788,7 @@ mod tests {
                 samples: vec![0.25; 4 * rate as usize * 2], // 4 s of quiet tone
             }),
         );
-        let (plan, strips) = build_plan(&[placed.clone(), missing], &decoded, rate, 5.0);
+        let (plan, strips) = build_plan(&[placed.clone(), missing], &decoded, rate, 5.0, 0.0);
         assert_eq!(
             strips,
             vec![placed.layer],
@@ -805,7 +821,7 @@ mod tests {
                 samples: vec![0.5; 44_100 * 2],
             }),
         );
-        let (plan, strips) = build_plan(&[j], &decoded, rate, 1.0);
+        let (plan, strips) = build_plan(&[j], &decoded, rate, 1.0, 0.0);
         assert!(plan.clips.is_empty());
         assert!(strips.is_empty());
     }
@@ -831,7 +847,7 @@ mod tests {
         for j in [&a, &b, &c] {
             decoded.insert(j.item, tone());
         }
-        let (plan, strips) = build_plan(&[a.clone(), b, c.clone()], &decoded, rate, 1.0);
+        let (plan, strips) = build_plan(&[a.clone(), b, c.clone()], &decoded, rate, 1.0, 0.0);
         assert_eq!(strips, vec![a.layer, c.layer], "one slot per strip");
         assert_eq!(
             plan.clips.iter().map(|c| c.meter).collect::<Vec<_>>(),
@@ -848,7 +864,7 @@ mod tests {
         for j in &many {
             decoded.insert(j.item, tone());
         }
-        let (plan, strips) = build_plan(&many, &decoded, rate, 1.0);
+        let (plan, strips) = build_plan(&many, &decoded, rate, 1.0, 0.0);
         assert_eq!(plan.clips.len(), many.len(), "every source still sounds");
         assert_eq!(strips.len(), lumit_audio::meter::MAX_STRIPS);
         assert_eq!(

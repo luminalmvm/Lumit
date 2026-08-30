@@ -6540,6 +6540,106 @@ mixing. If a layer plays a sound file, that layer is a strip. If a layer is a
 precomp with five sounds inside it, that is still *one* strip - because one row
 is what the mixer draws, and one fader is what would move all five together.
 
+### The master fader, and why it is a stage (K-691)
+
+Every layer that makes a sound has a **Volume**. Above all of them there is now
+one more control - the **master fader** - which the mixer draws beside the
+output meters, and which acts on the finished mix.
+
+There is a subtlety here that looks like pedantry and is not. A master fader
+could be built two ways. You could multiply it into every layer's own volume as
+you go, or you could apply it once to the summed result. On paper these give
+identical numbers: multiplying a sum by a half is the same as halving each part
+first. In Lumit it is applied once, to the sum, and three things depend on that.
+
+The first is the **limiter**. Just after the fader there is a hard safety clip
+that stops the mix ever reaching full scale - it holds anything louder at a
+whisker below. If the fader lives ahead of it, pulling the fader down is exactly
+how you stop the limiter having to work. If the fader were folded into every
+layer, the arithmetic would still be right, but nothing in the code would say
+"this happens after the sum", and the next control that needs that position
+would have nowhere to go.
+
+The second is the **meters**. A layer's bar means *how loud is this layer*.
+Folded in, every bar on the desk would follow the master, and pulling it down
+would move all of them at once - which tells you nothing you did not already
+know. A stage leaves each bar reading its own layer.
+
+The third is a detail of how an animated volume is stored. When a layer's volume
+has keyframes, the mixer is handed a pre-computed curve, shared between every
+copy of the mix plan so that swapping the plan is cheap. Folding a master into
+that curve would mean rebuilding it every time the fader moved, for a value that
+is not the layer's at all.
+
+One more thing worth knowing: a **nested composition has its own master**, and
+when it appears inside another comp that master simply becomes another gain on
+what it contributes - it rides down the chain alongside the precomp layer's own
+volume. A master is only a *stage* for the composition you are actually mixing.
+
+### Pan, and the difference between a pan and a balance (K-694)
+
+**Pan** moves a layer's sound between the left and right speakers. It is an
+ordinary animatable property, sitting next to Volume, so you can key it and
+sweep a sound across the field on a hit.
+
+The interesting part is the curve it uses. The obvious way to turn a sound right
+is to turn the left speaker down as you go - at halfway, half of the left. Do
+that and the sound audibly *sags* in the middle of the sweep, because loudness
+is heard closer to power than to amplitude, and two half-amplitude speakers add
+up to less power than one full one. The fix is old and standard: instead of a
+straight line, walk a quarter of a circle. One side takes the cosine, the other
+the sine, and the squares of the two always add to the same number. The sound
+holds its level all the way across. This is called a **constant-power** law.
+
+There is a second choice on top of it, and it is the difference between two
+words that get used interchangeably. A **pan** takes a mono sound and places it
+somewhere in a stereo field; centre means "half to each side", which is 3 dB
+down on each. A **balance** takes a sound that is *already* stereo and leans it
+one way; centre must mean "leave it alone". Lumit's control is a balance -
+layers hold real stereo material - so the curve is scaled up so that centre is
+exactly unity. The cost is that hard left or hard right is 3 dB *louder* on the
+side that survives, and the safety limiter sitting downstream is precisely what
+that is for.
+
+Under the hood, pan and volume are not two separate steps. By the time the mixer
+sees a clip they have been multiplied together into a single pair of numbers -
+one for the left channel, one for the right. That is not a shortcut but the
+natural shape: a balance *is* a pair of per-channel gains. It also means a
+precomp's balance combines with the balances inside it for free, by multiplying
+side by side, and that a fade and a pan sweep on one clip are computed from the
+same pass and cannot land on different samples.
+
+### Fades, and what a crossfade actually is (K-695)
+
+**Fade in** and **fade out** are commands, but they do not create a fade object.
+They write the two volume keyframes you would have written by hand: silence at
+one end, the level the layer already had at the other. That is deliberate. A
+fade you can see on the row, drag, reshape in the graph editor and undo is worth
+more than a tidier thing you can only delete and redo. The three shapes on offer
+- straight, eased, and one that holds the level and then lets it drop - are all
+built from the tangent options keyframes already have, so nothing new had to be
+invented for them.
+
+(A small note on "straight". Volume is measured in decibels, and decibels are
+already roughly how loudness is heard, so a straight line between silence and
+level is the *even-sounding* fade, not the naive one. The naive fade is the one
+that is straight in raw amplitude, and it sounds like it finishes early.)
+
+A **crossfade** is what happens where two clips on a sequence row overlap. Lumit
+does not build a special object for the join either. The outgoing clip simply
+gets a fade-out exactly as long as the overlap, and the incoming clip gets a
+matching fade-in. Two envelopes, each belonging to its own clip - which is what
+makes sliding a clip carry its fade along, and what makes a clip that ends up
+overlapping nothing quietly have no fade at all. Butt two clips together with no
+overlap and you get a hard cut, which is usually the point.
+
+Those two ramps are quarter-circles again, and for the same reason. Two
+opposed straight lines would cross at half each in the middle of the join, and
+half plus half is less power than one - which is the audible dip in the middle
+of a dissolve that everyone has heard and nobody can quite name. Two opposed
+quarter-sines have squares that add to one at every instant, so the join holds
+its level.
+
 ### The half-second the lens picker used to cost
 
 The Lens flare effect simulates a real camera lens: the ghosts are traced through an actual

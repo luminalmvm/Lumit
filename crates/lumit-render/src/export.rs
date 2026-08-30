@@ -85,31 +85,114 @@ pub struct AudioJob {
     /// The layer's Volume property (dB, docs/09 §6): static values become a
     /// constant gain; keyframed ones bake to a control-rate envelope.
     pub volume: lumit_core::anim::Property,
-    /// Enclosing Precomp layers' Volumes (outermost first), each with the
-    /// outer-comp time where its layer time 0 sits — a precomp's Volume
-    /// scales everything inside it, so the gains multiply through the chain.
-    pub carriers: Vec<(lumit_core::anim::Property, f64)>,
+    /// The layer's Pan property (−100..+100, docs/09 §6, K-694): a
+    /// constant-power stereo balance, folded into the same gain stage the
+    /// Volume rides.
+    pub pan: lumit_core::anim::Property,
+    /// Enclosing Precomp layers, outermost first — a precomp's Volume and
+    /// Pan act on everything inside it, so both multiply through the chain.
+    pub carriers: Vec<Carrier>,
+    /// The head and tail ramps of a **Sequence clip** (K-695). `None` for a
+    /// whole-layer job, which has no join to fade across.
+    pub fade: Option<ClipFade>,
 }
 
-/// Bake one job's Volume — its own dB property times every carrier's — for
-/// its placed span: `(constant gain, envelope)`. All-static chains are
-/// exactly their constant product (envelope None); any animated link bakes
-/// the whole chain to a ~10 ms control-rate curve, each property sampled in
-/// its own layer time (`lt = comp time − its offset`).
+/// A Sequence clip's own fade ramps, in **comp time** (K-695).
+///
+/// Absolute times rather than durations measured from the job's audible span,
+/// because a clip's span can be trimmed by the layer's in and out points
+/// while its ramps stay where the join put them. Anchored to the clip, the
+/// arithmetic survives every trim without re-basing.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct ClipFade {
+    /// Comp time the clip starts, and how long it takes to come up.
+    pub start_s: f64,
+    pub head_s: f64,
+    /// Comp time the clip ends, and how long it takes to go away.
+    pub end_s: f64,
+    pub tail_s: f64,
+}
+
+impl ClipFade {
+    /// The ramp's gain at comp time `t` — 1.0 anywhere the clip is at full
+    /// level.
+    ///
+    /// **Equal power** (a quarter-sine, not a straight line), which is what
+    /// makes a crossfade hold its level across the join: two opposed sine
+    /// ramps have squares that sum to one, so uncorrelated material — two
+    /// different shots, the usual case — neither dips nor swells in the
+    /// middle. A straight line would dip by 3 dB there, which is the classic
+    /// hole in the middle of a dissolve.
+    #[must_use]
+    pub fn gain_at(&self, t: f64) -> f32 {
+        let ramp = |x: f64| (x.clamp(0.0, 1.0) * std::f64::consts::FRAC_PI_2).sin();
+        let mut g = 1.0f64;
+        if self.head_s > 0.0 {
+            g *= ramp((t - self.start_s) / self.head_s);
+        }
+        if self.tail_s > 0.0 {
+            g *= ramp((self.end_s - t) / self.tail_s);
+        }
+        g as f32
+    }
+
+    /// Whether either ramp actually does anything.
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.head_s > 0.0 || self.tail_s > 0.0
+    }
+}
+
+/// One enclosing Precomp layer's contribution to a job's gain: its Volume,
+/// its Pan, and the outer-comp time where its layer time 0 sits (each
+/// property is sampled in its own layer time).
+#[derive(Clone, PartialEq)]
+pub struct Carrier {
+    pub volume: lumit_core::anim::Property,
+    pub pan: lumit_core::anim::Property,
+    pub offset_s: f64,
+}
+
+/// Bake one job's **Volume and Pan** — its own properties times every
+/// carrier's — for its placed span: `([left, right] constant gain,
+/// envelope)`. All-static chains are exactly their constant product
+/// (envelope None); any animated link bakes the whole chain to a ~10 ms
+/// control-rate curve, each property sampled in its own layer time
+/// (`lt = comp time − its offset`).
+///
+/// **One stage for both** (K-694). A balance is a pair of per-channel gains,
+/// so it multiplies into the Volume's gain rather than needing a stage of its
+/// own — which is also what makes a Precomp layer's balance compose with the
+/// balances inside it, channel by channel.
 pub fn volume_bake(
     job: &AudioJob,
     start_frame: i64,
     len: usize,
     rate: u32,
-) -> (f32, Option<lumit_audio::mix::GainEnvelope>) {
+) -> ([f32; 2], Option<lumit_audio::mix::GainEnvelope>) {
     let gain_at = |t: f64| {
         let mut g = lumit_audio::mix::db_to_gain(job.volume.value_at(t - job.offset_s));
-        for (prop, off) in &job.carriers {
-            g *= lumit_audio::mix::db_to_gain(prop.value_at(t - off));
+        let mut lr = lumit_audio::mix::pan_gains(job.pan.value_at(t - job.offset_s));
+        for c in &job.carriers {
+            g *= lumit_audio::mix::db_to_gain(c.volume.value_at(t - c.offset_s));
+            let cp = lumit_audio::mix::pan_gains(c.pan.value_at(t - c.offset_s));
+            lr[0] *= cp[0];
+            lr[1] *= cp[1];
         }
-        g
+        // A clip's own crossfade ramps multiply in last: they are the join's,
+        // not the layer's, and they ride on whatever the Volume is doing.
+        if let Some(fade) = &job.fade {
+            g *= fade.gain_at(t);
+        }
+        [lr[0] * g, lr[1] * g]
     };
-    let animated = job.volume.is_animated() || job.carriers.iter().any(|(p, _)| p.is_animated());
+    let animated = job.volume.is_animated()
+        || job.pan.is_animated()
+        || job.fade.is_some_and(|f| f.is_active())
+        || job
+            .carriers
+            .iter()
+            .any(|c| c.volume.is_animated() || c.pan.is_animated());
     if !animated {
         return (gain_at(0.0), None);
     }
@@ -121,7 +204,10 @@ pub fn volume_bake(
             gain_at(t)
         })
         .collect();
-    (1.0, Some(lumit_audio::mix::GainEnvelope { stride, points }))
+    (
+        [1.0, 1.0],
+        Some(lumit_audio::mix::GainEnvelope { stride, points }),
+    )
 }
 
 /// Delivery presets (docs/06-RENDER-PIPELINE.md §7.5): frame, codec, and
@@ -1674,6 +1760,15 @@ pub fn start(
 /// through: preview playback, beat detection, and export, so they cannot
 /// disagree about what the comp sounds like.
 pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
+    mixdown_at(jobs, rate, duration_s, 1.0)
+}
+
+/// As [`mixdown`], through a composition's **master fader** (linear gain,
+/// K-691) — what the export writes and what playback hears. `mixdown` itself
+/// stays at unity for the reader that wants the mix *before* the desk: beat
+/// detection, whose onsets are relative, and which must not lose its beats
+/// because somebody pulled the master down.
+pub fn mixdown_at(jobs: &[AudioJob], rate: u32, duration_s: f64, master_gain: f32) -> Vec<f32> {
     let decoded: Vec<(lumit_media::AudioBuffer, &AudioJob)> = jobs
         .iter()
         .filter_map(|job| {
@@ -1684,7 +1779,7 @@ pub fn mixdown(jobs: &[AudioJob], rate: u32, duration_s: f64) -> Vec<f32> {
         .collect();
     let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
         decoded.iter().map(|(b, j)| (b, *j)).collect();
-    mix_decoded(&borrowed, rate, duration_s)
+    mix_decoded(&borrowed, rate, duration_s, master_gain)
 }
 
 /// As [`mixdown`], but over already-decoded buffers — the preview path's
@@ -1694,10 +1789,11 @@ pub fn mixdown_prepared(
     decoded: &[(std::sync::Arc<lumit_media::AudioBuffer>, AudioJob)],
     rate: u32,
     duration_s: f64,
+    master_gain: f32,
 ) -> Vec<f32> {
     let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
         decoded.iter().map(|(b, j)| (b.as_ref(), j)).collect();
-    mix_decoded(&borrowed, rate, duration_s)
+    mix_decoded(&borrowed, rate, duration_s, master_gain)
 }
 
 /// The shared placement + sum over decoded buffers (each already at `rate`).
@@ -1705,6 +1801,7 @@ fn mix_decoded(
     decoded: &[(&lumit_media::AudioBuffer, &AudioJob)],
     rate: u32,
     duration_s: f64,
+    master_gain: f32,
 ) -> Vec<f32> {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
     let placements: Vec<lumit_audio::mix::PlacedAudio> = decoded
@@ -1726,7 +1823,7 @@ fn mix_decoded(
             })
         })
         .collect();
-    lumit_audio::mix::mix_stereo(&placements, total_frames)
+    lumit_audio::mix::mix_stereo_at(&placements, total_frames, master_gain)
 }
 
 /// How many audio samples (per channel) belong before the end of video
@@ -1795,7 +1892,12 @@ fn run(
     // a video export of a silent comp carries no audio stream at all rather
     // than a mute one.
     let audio_mix: Option<Vec<f32>> = if wants_audio && (!audio_jobs.is_empty() || !caps.video) {
-        let full = mixdown(audio_jobs, rate, comp.duration.0.to_f64());
+        let full = mixdown_at(
+            audio_jobs,
+            rate,
+            comp.duration.0.to_f64(),
+            lumit_audio::mix::db_to_gain(comp.master_volume_db),
+        );
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }
@@ -2230,6 +2332,7 @@ mod tests {
         }));
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: w,
@@ -2252,6 +2355,7 @@ mod tests {
                 parent: None,
                 label: 0,
                 volume_db: lumit_core::anim::Property::zero(),
+                pan: lumit_core::anim::Property::zero(),
                 audio_only: false,
                 adjustment: false,
                 retime: None,
@@ -2423,11 +2527,14 @@ mod tests {
             out_s: 10.0,
             offset_s,
             volume,
+            pan: Property::zero(),
             carriers: Vec::new(),
+            fade: None,
         };
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
-        assert!((g - 0.501_19).abs() < 1e-3);
+        assert!((g[0] - 0.501_19).abs() < 1e-3);
+        assert!((g[1] - g[0]).abs() < 1e-9, "centred: both channels alike");
 
         // A 1 s fade 0 dB → −inf, on a layer whose time 0 sits at comp 1 s.
         let key = |t: i64, v: f64| Keyframe {
@@ -2442,30 +2549,234 @@ mod tests {
         };
         // Placed at comp 1 s (start_frame 48000), offset 1 s: layer time 0..1.
         let (g, env) = volume_bake(&job(fade.clone(), 1.0), 48_000, 48_000, 48_000);
-        assert_eq!(g, 1.0);
+        assert_eq!(g, [1.0, 1.0]);
         let env = env.unwrap();
-        assert!((env.gain_at(0) - 1.0).abs() < 1e-6, "fade starts at unity");
         assert!(
-            env.gain_at(0) > env.gain_at(24_000) && env.gain_at(24_000) > env.gain_at(47_500),
+            (env.gain_at(0)[0] - 1.0).abs() < 1e-6,
+            "fade starts at unity"
+        );
+        assert!(
+            env.gain_at(0)[0] > env.gain_at(24_000)[0]
+                && env.gain_at(24_000)[0] > env.gain_at(47_500)[0],
             "the fade descends"
         );
-        assert_eq!(env.gain_at(48_000), 0.0, "the −inf knee lands at silence");
+        assert_eq!(
+            env.gain_at(48_000),
+            [0.0, 0.0],
+            "the −inf knee lands at silence"
+        );
 
         // Carrier chain (precomp audio): the precomp layer's −6 dB multiplies
         // the inner layer's −6 dB — two static links stay a constant product.
         let mut carried = job(Property::fixed(-6.0), 0.0);
-        carried.carriers = vec![(Property::fixed(-6.0), 0.0)];
+        carried.carriers = vec![Carrier {
+            volume: Property::fixed(-6.0),
+            pan: Property::zero(),
+            offset_s: 0.0,
+        }];
         let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
         assert!(env.is_none());
         assert!(
-            (g - 0.251_19).abs() < 1e-3,
+            (g[0] - 0.251_19).abs() < 1e-3,
             "gains multiply through the chain"
         );
         // An animated carrier envelopes the whole chain.
         let mut fading_carrier = job(Property::fixed(0.0), 0.0);
-        fading_carrier.carriers = vec![(fade, 0.0)];
+        fading_carrier.carriers = vec![Carrier {
+            volume: fade,
+            pan: Property::zero(),
+            offset_s: 0.0,
+        }];
         let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
         assert!(env.is_some(), "an animated carrier forces the envelope");
+
+        // **Pan is the same stage** (K-694): a hard-right balance silences the
+        // left channel and lifts the right by the constant-power √2, and a
+        // Precomp layer's own balance multiplies channel by channel.
+        let mut right = job(Property::fixed(0.0), 0.0);
+        right.pan = Property::fixed(lumit_audio::mix::PAN_FULL);
+        let (g, env) = volume_bake(&right, 0, 48_000, 48_000);
+        assert!(env.is_none(), "a static pan needs no envelope either");
+        assert!(g[0].abs() < 1e-6, "nothing left of a hard-right layer");
+        assert!((g[1] - std::f32::consts::SQRT_2).abs() < 1e-5);
+
+        let mut opposed = job(Property::fixed(0.0), 0.0);
+        opposed.pan = Property::fixed(-lumit_audio::mix::PAN_FULL);
+        opposed.carriers = vec![Carrier {
+            volume: Property::zero(),
+            pan: Property::fixed(lumit_audio::mix::PAN_FULL),
+            offset_s: 0.0,
+        }];
+        let (g, _) = volume_bake(&opposed, 0, 48_000, 48_000);
+        assert!(
+            g[0].abs() < 1e-6 && g[1].abs() < 1e-6,
+            "hard left inside a hard-right precomp leaves nothing on either side"
+        );
+
+        // An animated pan forces the envelope even with a static Volume, and
+        // the two channels then move independently.
+        let mut sweeping = job(Property::fixed(0.0), 0.0);
+        sweeping.pan = Property {
+            animation: Animation::Keyframed(vec![key(0, -100.0), key(1, 100.0)]),
+            extra: serde_json::Map::new(),
+        };
+        let (_, env) = volume_bake(&sweeping, 0, 48_000, 48_000);
+        let env = env.expect("an animated pan forces the envelope");
+        assert!(env.gain_at(0)[0] > env.gain_at(0)[1], "starts on the left");
+        assert!(
+            env.gain_at(47_000)[1] > env.gain_at(47_000)[0],
+            "and ends on the right"
+        );
+    }
+
+    /// A **clip crossfade** is two opposed equal-power ramps (K-695): each
+    /// clip's own envelope, so sliding one moves its ramp with it, and the
+    /// pair holds level across the join rather than dipping in the middle the
+    /// way a straight line would.
+    #[test]
+    fn a_clip_join_is_two_opposed_equal_power_ramps() {
+        // Clip A runs 0..2 and fades out over its last second; clip B runs
+        // 1..3 and fades in over its first.
+        let out = ClipFade {
+            start_s: 0.0,
+            head_s: 0.0,
+            end_s: 2.0,
+            tail_s: 1.0,
+        };
+        let into = ClipFade {
+            start_s: 1.0,
+            head_s: 1.0,
+            end_s: 3.0,
+            tail_s: 0.0,
+        };
+        assert!(out.is_active() && into.is_active());
+        assert!((out.gain_at(0.5) - 1.0).abs() < 1e-6, "before the join");
+        assert!((into.gain_at(2.5) - 1.0).abs() < 1e-6, "after it");
+        assert!(out.gain_at(2.0).abs() < 1e-6, "A is gone by its end");
+        assert!(into.gain_at(1.0).abs() < 1e-6, "B starts from nothing");
+
+        // Across the overlap the two powers sum to one at every point, which
+        // is what "equal power" buys: no dip in the middle of the dissolve.
+        for n in 0..=10 {
+            let t = 1.0 + f64::from(n) / 10.0;
+            let (a, b) = (out.gain_at(t), into.gain_at(t));
+            assert!(
+                (a * a + b * b - 1.0).abs() < 1e-5,
+                "t={t}: {a}² + {b}² is not one"
+            );
+        }
+        // A clip with no neighbour has no ramp and costs nothing.
+        assert!(!ClipFade::default().is_active());
+        assert_eq!(ClipFade::default().gain_at(5.0), 1.0);
+    }
+
+    /// **Preview and export hear the same mix** (K-031), with a pan sweep and
+    /// a clip crossfade ramp on it — the two things K-694 and K-695 added to
+    /// the gain stage.
+    ///
+    /// One job, one bake, and then the two mixers that exist: the exporter's
+    /// `mix_stereo_at` over a `PlacedAudio`, and playback's `MixPlan` over the
+    /// `PlacedClip` the bridge builds from the same bake. They are different
+    /// loops — one writes a whole buffer, one answers a frame at a time from
+    /// the realtime callback — so "they agree" is a claim that has to be
+    /// checked rather than assumed.
+    #[test]
+    fn a_panned_and_faded_clip_mixes_the_same_in_both_paths() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::Rational;
+        use std::sync::Arc;
+
+        let rate = 48_000u32;
+        let frames = rate as usize; // one second
+                                    // A source that is not symmetrical, so a pan that swapped the channels
+                                    // would be caught rather than looking identical.
+        let samples: Vec<f32> = (0..frames)
+            .flat_map(|n| {
+                let t = n as f32 / frames as f32;
+                [0.6 * (t * 9.0).sin(), 0.4 * (t * 5.0).cos()]
+            })
+            .collect();
+
+        let key = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).expect("time"),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let job = AudioJob {
+            item: uuid::Uuid::nil(),
+            layer: uuid::Uuid::nil(),
+            path: PathBuf::new(),
+            in_s: 0.0,
+            out_s: 1.0,
+            offset_s: 0.0,
+            volume: Property::fixed(-3.0),
+            // Sweeping hard left to hard right across the second.
+            pan: Property {
+                animation: Animation::Keyframed(vec![key(0, -100.0), key(1, 100.0)]),
+                extra: serde_json::Map::new(),
+            },
+            carriers: Vec::new(),
+            // And rising out of a join over its first quarter second.
+            fade: Some(ClipFade {
+                start_s: 0.0,
+                head_s: 0.25,
+                end_s: 1.0,
+                tail_s: 0.0,
+            }),
+        };
+
+        let (gain, envelope) = volume_bake(&job, 0, frames, rate);
+        let envelope = envelope.expect("a sweep and a ramp both force the envelope");
+        let baked = lumit_audio::mix::mix_stereo_at(
+            &[lumit_audio::mix::PlacedAudio {
+                start_frame: 0,
+                samples: &samples,
+                gain,
+                envelope: Some(envelope.clone()),
+            }],
+            frames,
+            1.0,
+        );
+        let plan = lumit_audio::mix::MixPlan {
+            clips: vec![lumit_audio::mix::PlacedClip {
+                buffer: Arc::new(lumit_media::AudioBuffer {
+                    rate,
+                    samples: samples.clone(),
+                }),
+                start_frame: 0,
+                src_start: 0,
+                len: frames,
+                gain,
+                envelope: Some(Arc::new(envelope)),
+                meter: 0,
+            }],
+            total_frames: frames,
+            master_gain: 1.0,
+        };
+        for i in (0..frames).step_by(97) {
+            let (l, r) = plan.frame_at(i);
+            assert!(
+                (l - baked[i * 2]).abs() < 1e-6 && (r - baked[i * 2 + 1]).abs() < 1e-6,
+                "frame {i}: playback ({l}, {r}) vs export ({}, {})",
+                baked[i * 2],
+                baked[i * 2 + 1]
+            );
+        }
+
+        // And the mix really is doing both things, so the agreement above is
+        // not two paths agreeing on having ignored them.
+        assert!(
+            baked[0].abs() < 1e-4 && baked[1].abs() < 1e-4,
+            "the head ramp starts from silence"
+        );
+        let quarter = frames / 4;
+        let (l0, r0) = plan.frame_at(quarter);
+        let (l1, r1) = plan.frame_at(frames - 2);
+        assert!(
+            l0.abs() > r0.abs() && r1.abs() > l1.abs(),
+            "the sweep starts on the left and ends on the right"
+        );
     }
 
     /// The delivery-preset table is spec (docs/06 §7.5): frame, codec, and
@@ -3209,6 +3520,7 @@ mod tests {
         guide.switches.guide = true;
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: outer_id,
             name: "Outer".into(),
             width: 32,
@@ -3335,6 +3647,7 @@ mod tests {
         precomp.kind = LayerKind::Precomp { comp: inner_id };
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: outer_id,
             name: "Outer".into(),
             width: 32,
@@ -3460,6 +3773,7 @@ mod tests {
         layer.switches = Switches::default();
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: 32,

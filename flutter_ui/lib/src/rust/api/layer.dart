@@ -18,8 +18,8 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -242,6 +242,23 @@ class BridgeClip {
           reachEndFrame == other.reachEndFrame;
 }
 
+/// The curve a fade command writes (docs/09 §6, K-693) — the Audio panel's
+/// three chips. Each is built from the easing vocabulary that already exists,
+/// so a fade's keys can be dragged and reshaped like any others afterwards.
+enum BridgeFadeShape {
+  /// A straight ramp. Volume is in decibels, so this is already the
+  /// perceptually even fade rather than the naive one.
+  linear,
+
+  /// Easy-ease at both ends — the default.
+  ease,
+
+  /// Eased at the loud end, straight at the silent one: the level hangs
+  /// where it was and then falls away.
+  exponential,
+  ;
+}
+
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
 /// layer, in one crossing (K-183). Read one getter at a time this cost
 /// seven-plus bridge calls per row per rebuild — each cloning the composition
@@ -379,6 +396,12 @@ class BridgeLayerInfo {
   /// revision is a sync crossing per row for a fact this walk has in hand.
   final BridgeScalar volumeDb;
 
+  /// The layer's Pan (−100 full left … +100 full right, K-692), carried
+  /// beside the Volume and for the same reason: the fold-out's Pan row
+  /// draws its own keyframe diamonds, and asking per audio row per
+  /// revision would be a sync crossing for a fact this walk already holds.
+  final BridgeScalar pan;
+
   /// Whether this layer's node graph has any wire in it at all (K-471).
   ///
   /// The Timeline's fold-out draws a *driven* mark where a wired parameter's
@@ -417,6 +440,7 @@ class BridgeLayerInfo {
     this.sourceSize,
     this.sourceFrames,
     required this.volumeDb,
+    required this.pan,
     required this.wired,
   });
 
@@ -451,6 +475,7 @@ class BridgeLayerInfo {
       sourceSize.hashCode ^
       sourceFrames.hashCode ^
       volumeDb.hashCode ^
+      pan.hashCode ^
       wired.hashCode;
 
   @override
@@ -487,6 +512,7 @@ class BridgeLayerInfo {
           sourceSize == other.sourceSize &&
           sourceFrames == other.sourceFrames &&
           volumeDb == other.volumeDb &&
+          pan == other.pan &&
           wired == other.wired;
 }
 
@@ -1729,6 +1755,29 @@ class LayerReference {
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 
+  /// **Fade the layer's sound up from silence** over `seconds` from its in
+  /// point (docs/09 §6, K-693).
+  ///
+  /// Ordinary Volume keyframes — a pair, between the −∞ knee and whatever
+  /// level the layer already holds — so the fade is visible on the row, can
+  /// be dragged, reshaped in the graph, and undone like any other key. That
+  /// is the whole of the command: it writes the keys a person would have
+  /// written, in one step, with the right shape.
+  ///
+  /// Running it again over the same stretch reshapes that fade rather than
+  /// laying a second one on top; keys outside it are untouched, so a fade in
+  /// and a fade out coexist without either knowing about the other.
+  void fadeIn({required double seconds, required BridgeFadeShape shape}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFadeIn(
+          that: this, seconds: seconds, shape: shape);
+
+  /// **Fade the layer's sound away to silence** over `seconds` ending at its
+  /// out point — the other half of [`Self::fade_in`], same keys, same
+  /// shapes, same undo step.
+  void fadeOut({required double seconds, required BridgeFadeShape shape}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFadeOut(
+          that: this, seconds: seconds, shape: shape);
+
   /// **Insert a freeze at the playhead** (docs/04 §7.3,
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
   /// one second, everything after it is pushed that far later, and the map is
@@ -1905,6 +1954,13 @@ class LayerReference {
   /// This layer's paint strokes, oldest first (K-227).
   List<BridgeStroke> getPaint() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetPaint(
+        that: this,
+      );
+
+  /// This layer's **Pan** (docs/09 §6, K-692): −100 is full left, 0 centre,
+  /// +100 full right — a percentage of the way to one side.
+  BridgeScalar getPan() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetPan(
         that: this,
       );
 
@@ -2384,6 +2440,11 @@ class LayerReference {
   /// set a matte and delete its target without the document becoming invalid.
   void setMatte({BridgeMatte? matte}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetMatte(that: this, matte: matte);
+
+  /// Set the Pan, as one undoable step — the same shape as the Volume, and
+  /// animatable in exactly the same way.
+  void setPan({required BridgeScalar value}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetPan(that: this, value: value);
 
   /// Parent this layer to another, or clear it with `None`.
   ///

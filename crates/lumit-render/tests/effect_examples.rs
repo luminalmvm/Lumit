@@ -355,6 +355,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         label: 0,
         markers: Vec::new(),
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -673,6 +674,7 @@ fn example_doc(
 
     let comp_id = id("Example");
     doc.items.push(ProjectItem::Composition(Composition {
+        master_volume_db: 0.0,
         id: comp_id,
         name: "Example".into(),
         width: W,

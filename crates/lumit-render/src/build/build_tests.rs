@@ -36,6 +36,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -49,6 +50,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 1920,
@@ -127,6 +129,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -140,6 +143,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         extra: serde_json::Map::new(),
     };
     let nested = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Nested".into(),
         width: 640,
@@ -163,6 +167,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     pre_layer.transform.position_x = lumit_core::anim::Property::fixed(100.0);
     pre_layer.transform.scale_x = lumit_core::anim::Property::fixed(200.0);
     let parent = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Parent".into(),
         width: 1920,
@@ -296,6 +301,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -309,6 +315,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         extra: serde_json::Map::new(),
     };
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 1920,
@@ -375,6 +382,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -407,6 +415,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         },
     ));
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 1920,
@@ -488,6 +497,7 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -529,6 +539,7 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
     by_flag.adjustment = true;
 
     let comp_of = |top: Layer| Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 1920,
@@ -608,6 +619,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -648,6 +660,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
     };
 
     let comp_of = |layers: Vec<Layer>| Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 64,
@@ -751,6 +764,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -769,6 +783,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
     layer.paint.push(stroke);
 
     let painted = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 40,
@@ -865,6 +880,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -899,6 +915,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
     ];
 
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 64,
@@ -995,6 +1012,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -1027,6 +1045,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
     }
 
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 64,
@@ -1112,6 +1131,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -1131,6 +1151,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
     };
     let sizes = |path: Option<Uuid>| {
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "C".into(),
             width: 1920,
@@ -1204,6 +1225,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -1226,6 +1248,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
     });
 
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: 640,

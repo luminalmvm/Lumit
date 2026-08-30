@@ -2453,7 +2453,7 @@ impl AudioJobsBuilder {
         comp: &Composition,
         base_s: f64,
         window: (f64, f64),
-        carriers: &[(lumit_core::anim::Property, f64)],
+        carriers: &[crate::export::Carrier],
         // The mixer strip everything found down this branch belongs to — the
         // outermost layer of the comp being mixed (`None` at the top, where
         // each layer is its own strip). See `AudioJob::layer`.
@@ -2489,7 +2489,9 @@ impl AudioJobsBuilder {
                         out_s,
                         offset_s,
                         volume: layer.volume_db.clone(),
+                        pan: layer.pan.clone(),
                         carriers: carriers.to_vec(),
+                        fade: None,
                     });
                 }
                 LayerKind::Precomp { comp: nested_id } => {
@@ -2500,7 +2502,23 @@ impl AudioJobsBuilder {
                         continue;
                     };
                     let mut inner = carriers.to_vec();
-                    inner.push((layer.volume_db.clone(), offset_s));
+                    inner.push(crate::export::Carrier {
+                        volume: layer.volume_db.clone(),
+                        pan: layer.pan.clone(),
+                        offset_s,
+                    });
+                    // The nested comp's own **master fader** rides down with
+                    // the Precomp layer's Volume (K-691). A master is a stage
+                    // only for the comp being mixed; one comp deep it is just
+                    // another gain on what that comp contributes, which is
+                    // exactly what a carrier is.
+                    if nested.master_volume_db != 0.0 {
+                        inner.push(crate::export::Carrier {
+                            volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
+                            pan: lumit_core::anim::Property::zero(),
+                            offset_s,
+                        });
+                    }
                     visited.push(*nested_id);
                     self.walk(
                         doc,
@@ -2514,8 +2532,119 @@ impl AudioJobsBuilder {
                     );
                     visited.pop();
                 }
+                LayerKind::Sequence { clips } => self.sequence_jobs(
+                    doc, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
+                ),
                 _ => {}
             }
+        }
+    }
+
+    /// The audio of one **Sequence layer**'s clips (K-695).
+    ///
+    /// A clip is a placed, trimmed span of a footage item — exactly the shape
+    /// `place_on_timeline` already mixes — so each sounding clip becomes a job
+    /// of its own, and the layer's Volume and Pan ride on all of them as the
+    /// row's own controls.
+    ///
+    /// **A join is a crossfade.** Where two clips overlap on the row, the
+    /// outgoing one gets a tail ramp exactly as long as the overlap and the
+    /// incoming one a head ramp to match — two opposed equal-power envelopes
+    /// rather than one shared object, because a fade belongs to the clip it is
+    /// on: slide one and its ramp goes with it, and a clip that ends up
+    /// overlapping nothing simply has no ramp. A butt cut (no overlap) gets no
+    /// ramps at all, which is what a hard cut on the beat is for.
+    ///
+    /// Two exclusions, both docs/09's: a **retimed** clip is silent (§7 —
+    /// retime mutes audio in v1, and a clip's map is as much a retime as a
+    /// layer's), and a clip whose source is a **composition** is silent, since
+    /// mixing a nested comp through a clip's trim is the Sequence-of-comps
+    /// case nothing yet asks for.
+    #[allow(clippy::too_many_arguments)]
+    fn sequence_jobs(
+        &mut self,
+        doc: &Document,
+        layer: &lumit_core::model::Layer,
+        clips: &[lumit_core::sequence::Clip],
+        strip: Uuid,
+        in_s: f64,
+        out_s: f64,
+        offset_s: f64,
+        carriers: &[crate::export::Carrier],
+        jobs: &mut Vec<AudioJob>,
+    ) {
+        // The row read left to right, so "the clip before" and "the clip
+        // after" mean what they look like. Clips are stored in no required
+        // order.
+        let mut order: Vec<usize> = (0..clips.len()).collect();
+        order.sort_by(|a, b| {
+            clips[*a]
+                .place_start
+                .partial_cmp(&clips[*b].place_start)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for (n, &i) in order.iter().enumerate() {
+            let clip = &clips[i];
+            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            if clip.retime.is_some() {
+                continue; // docs/09 §7: a retimed clip is silent in v1
+            }
+            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                continue;
+            };
+            if !self.item_has_audio(item, &footage_path(f)) {
+                continue;
+            }
+            let (start_s, end_s) = (
+                offset_s + clip.place_start.to_f64(),
+                offset_s + clip.place_end().to_f64(),
+            );
+            // What the layer's own in/out points leave of it.
+            let (clip_in, clip_out) = (start_s.max(in_s), end_s.min(out_s));
+            if clip_out <= clip_in {
+                continue;
+            }
+            // The overlap with the neighbour on each side is the ramp there,
+            // never longer than the clip itself.
+            let span = (end_s - start_s).max(0.0);
+            let overlap = |other: Option<&usize>, head: bool| -> f64 {
+                let Some(&o) = other else { return 0.0 };
+                let o = &clips[o];
+                let (o_start, o_end) = (
+                    offset_s + o.place_start.to_f64(),
+                    offset_s + o.place_end().to_f64(),
+                );
+                let by = if head {
+                    o_end - start_s
+                } else {
+                    end_s - o_start
+                };
+                by.clamp(0.0, span)
+            };
+            let fade = crate::export::ClipFade {
+                start_s,
+                head_s: overlap(n.checked_sub(1).and_then(|p| order.get(p)), true),
+                end_s,
+                tail_s: overlap(order.get(n + 1), false),
+            };
+
+            jobs.push(AudioJob {
+                item,
+                layer: strip,
+                path: footage_path(f),
+                in_s: clip_in,
+                out_s: clip_out,
+                // Where the clip's source sample 0 sits on the comp timeline:
+                // the clip's own start, less how far it is trimmed in.
+                offset_s: start_s - clip.source_in.to_f64(),
+                volume: layer.volume_db.clone(),
+                pan: layer.pan.clone(),
+                carriers: carriers.to_vec(),
+                fade: fade.is_active().then_some(fade),
+            });
         }
     }
 
@@ -2572,9 +2701,26 @@ impl AudioJobsBuilder {
                 visited.pop();
                 has
             }
-            // Every other kind is silent, including a Sequence layer: `walk`
-            // does not mix one either, and a switch that did nothing would be
-            // worse than no switch at all.
+            // A Sequence layer sounds through its clips (K-695), so the row
+            // wears a mute switch as soon as one of them carries audio.
+            LayerKind::Sequence { clips } => {
+                let mut has = false;
+                for clip in clips {
+                    let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+                        continue;
+                    };
+                    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                        continue;
+                    };
+                    if self.item_has_audio(item, &footage_path(f)) {
+                        has = true;
+                        break;
+                    }
+                }
+                has
+            }
+            // Every other kind is silent, and a switch that did nothing would
+            // be worse than no switch at all.
             _ => false,
         }
     }
@@ -2988,6 +3134,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -3001,6 +3148,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: w,
@@ -3103,6 +3251,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -3124,6 +3273,7 @@ mod tests {
     fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id,
             name: name.into(),
             width: w,
@@ -3204,6 +3354,7 @@ mod tests {
                 parent: None,
                 label: 0,
                 volume_db: Property::zero(),
+                pan: Property::zero(),
                 audio_only: false,
                 retime: None,
                 interpolation: Default::default(),
@@ -3216,6 +3367,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             };
             doc.items.push(ProjectItem::Composition(Composition {
+                master_volume_db: 0.0,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 32,
@@ -3815,6 +3967,7 @@ mod tests {
                 parent: None,
                 label: 0,
                 volume_db: Property::zero(),
+                pan: Property::zero(),
                 audio_only: false,
                 adjustment: false,
                 retime: None,
@@ -3895,7 +4048,7 @@ mod tests {
             1,
             "the Precomp layer's Volume rides on the job"
         );
-        assert!((job.carriers[0].0.value_at(0.0) - -6.0).abs() < 1e-9);
+        assert!((job.carriers[0].volume.value_at(0.0) - -6.0).abs() < 1e-9);
         assert_eq!(
             job.layer, comp.layers[0].id,
             "the mixer strip is B's own Precomp row, not the footage layer \
@@ -3936,6 +4089,94 @@ mod tests {
         );
         let strips: std::collections::BTreeSet<Uuid> = jobs.iter().map(|j| j.layer).collect();
         assert_eq!(strips.len(), 2, "two rows, two strips");
+    }
+
+    /// **A Sequence layer sounds through its clips, and a join is a
+    /// crossfade** (K-695).
+    ///
+    /// Three clips on one row: two butted end to end (a hard cut, no ramps at
+    /// all) and a third laid over the second by half a second, which gives the
+    /// outgoing clip a half-second tail and the incoming one a matching head.
+    /// Each ramp belongs to its own clip, so sliding one would move its ramp
+    /// with it.
+    #[test]
+    fn a_sequence_layers_clips_sound_and_a_join_crossfades() {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
+        let mut doc = Document::new();
+        let shot = push_footage_item(&mut doc, "shot.mp4");
+        let comp = push_comp(&mut doc, "cut", 32, 32);
+        // 0..1, 1..2 (butt cut), 1.5..2.5 (overlaps the second by 0.5).
+        let clip = |start: Rational, dur: Rational, src_in: Rational| Clip {
+            id: Uuid::now_v7(),
+            source: ClipSource::Footage(shot),
+            source_in: src_in,
+            source_out: src_in.checked_add(dur).expect("out"),
+            place_start: start,
+            place_duration: dur,
+            retime: None,
+            interpolation: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        push_layer(
+            &mut doc,
+            comp,
+            LayerKind::Sequence {
+                clips: vec![
+                    clip(r(0, 1), r(1, 1), r(0, 1)),
+                    clip(r(1, 1), r(1, 1), r(2, 1)),
+                    clip(r(3, 2), r(1, 1), r(4, 1)),
+                ],
+            },
+        );
+
+        let mut builder = AudioJobsBuilder::new();
+        seed_has_audio(shot);
+        let c = doc.comp(comp).expect("comp").clone();
+        assert!(
+            builder.layer_has_audio(&doc, &c.layers[0]),
+            "a Sequence row whose clips carry sound wears a mute switch"
+        );
+        let jobs = builder.audio_jobs(&doc, &c);
+        assert_eq!(jobs.len(), 3, "every sounding clip is its own job");
+
+        // Each clip's source sample 0 sits at its own start less its trim, so
+        // the moment the picture shows is the moment that is heard.
+        let offsets: Vec<f64> = jobs.iter().map(|j| j.offset_s).collect();
+        assert!((offsets[0] - 0.0).abs() < 1e-9);
+        assert!((offsets[1] - -1.0).abs() < 1e-9, "1 s start, 2 s trim in");
+        assert!((offsets[2] - -2.5).abs() < 1e-9);
+
+        // The butt cut between the first two gets no ramps at all — a hard cut
+        // on the beat is a hard cut.
+        assert_eq!(jobs[0].fade, None, "no neighbour overlap, no ramp");
+        // The join between the second and third is half a second of opposed
+        // ramps: a tail on the outgoing clip, a head on the incoming one.
+        let out = jobs[1].fade.expect("the outgoing clip fades out");
+        assert!((out.tail_s - 0.5).abs() < 1e-9);
+        assert_eq!(out.head_s, 0.0, "its own head butts the first clip");
+        let into = jobs[2].fade.expect("the incoming clip fades in");
+        assert!((into.head_s - 0.5).abs() < 1e-9);
+        assert_eq!(into.tail_s, 0.0);
+        // And across the overlap they hold level between them.
+        for n in 0..=5 {
+            let t = 1.5 + f64::from(n) / 10.0;
+            let (a, b) = (out.gain_at(t), into.gain_at(t));
+            assert!((a * a + b * b - 1.0).abs() < 1e-5, "t={t}: not equal power");
+        }
+
+        // docs/09 §7: a retimed clip is silent, like a retimed layer.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
+            if let LayerKind::Sequence { clips } = &mut c.layers[0].kind {
+                clips[0].retime = Some(lumit_core::anim::Property::fixed(0.0));
+            }
+        }
+        let c = doc.comp(comp).expect("comp").clone();
+        assert_eq!(
+            builder.audio_jobs(&doc, &c).len(),
+            2,
+            "the retimed clip drops out of the mix"
+        );
     }
 
     /// **A Precomp layer over a comp that has sound in it says it has sound**
@@ -5141,6 +5382,7 @@ surfaces:
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            pan: Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -5619,6 +5861,7 @@ surfaces:
             }
             adjust.effects = vec![mb];
             doc.items.push(ProjectItem::Composition(Composition {
+                master_volume_db: 0.0,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 320,
@@ -5736,6 +5979,7 @@ surfaces:
                 layers.push(matrix_layer("Under", LayerKind::Footage { item }, 320, 240));
             }
             doc.items.push(ProjectItem::Composition(Composition {
+                master_volume_db: 0.0,
                 id: comp_id,
                 name: "Scene".into(),
                 width: 320,
@@ -5804,6 +6048,7 @@ surfaces:
         }));
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: w,
@@ -6875,6 +7120,7 @@ surfaces:
         });
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: w,

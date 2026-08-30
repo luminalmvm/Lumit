@@ -2088,6 +2088,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            pan: Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -2136,6 +2137,7 @@ mod tests {
             *correction_base = base.map(Box::new);
         }
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "main".into(),
             width: W as u32,
@@ -3024,6 +3026,7 @@ mod tests {
             .push(lumit_core::fx::instantiate("fractal_noise").expect("the effect is registered"));
 
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: nested_id,
             name: "nested".into(),
             width: cw,
@@ -3461,6 +3464,7 @@ mod tests {
         let target = layer("screen", LayerKind::Null, span);
         let (tracked_id, target_id) = (shot.id, target.id);
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "main".into(),
             width: W as u32,

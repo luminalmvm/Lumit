@@ -52,11 +52,12 @@ fn plan_of(buffer: Arc<AudioBuffer>) -> Arc<mix::MixPlan> {
             start_frame: 0,
             src_start: 0,
             len: frames,
-            gain: 1.0,
+            gain: [1.0, 1.0],
             envelope: None,
             meter: 0,
         }],
         total_frames: frames,
+        master_gain: 1.0,
     })
 }
 
@@ -513,6 +514,7 @@ mod tests {
         *shared.plan.write() = Some(Arc::new(mix::MixPlan {
             clips: Vec::new(),
             total_frames: 1000,
+            master_gain: 1.0,
         }));
         fill(&shared, &mut out, 2);
         assert_eq!(

@@ -59,6 +59,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         parent: None,
         label: 0,
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -72,6 +73,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         extra: serde_json::Map::new(),
     };
     doc.items.push(ProjectItem::Composition(Composition {
+        master_volume_db: 0.0,
         id: comp_id,
         name: "Repro".into(),
         width: w,

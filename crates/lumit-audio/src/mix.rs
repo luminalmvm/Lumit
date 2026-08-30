@@ -37,31 +37,74 @@ pub fn db_to_gain(db: f64) -> f32 {
     }
 }
 
-/// An animated volume, baked to control-rate gain points across a placed
-/// clip: `points[p]` is the gain at placed frame `p × stride`, and frames in
-/// between interpolate linearly — a ~10 ms control rate, plenty for fades,
-/// cheap enough for the audio callback. Baked by the host (which owns the
-/// keyframes); this crate only ever reads it.
+/// Full left / full right on the Pan property (docs/09 §6, K-694): a
+/// percentage of the way to one side, so a value well reads "L 50" or "R 20"
+/// without arithmetic. 0 is centre.
+pub const PAN_FULL: f64 = 100.0;
+
+/// Pan → the pair of channel gains a **constant-power stereo balance** puts
+/// on a source (K-694). `pan` is in [`PAN_FULL`] units and is clamped.
+///
+/// In plain terms: turning a sound to one side has to take it off the other,
+/// and the ear hears loudness closer to *power* than to amplitude, so simply
+/// scaling one side down by how far you turned leaves the sound sagging in the
+/// middle of the sweep. The constant-power law walks a quarter circle instead
+/// — `cos` on the left, `sin` on the right — so the two gains squared always
+/// sum to the same thing and the sound holds its apparent level all the way
+/// across.
+///
+/// Scaled by √2 so that **centre is unity** rather than −3 dB, which is what
+/// makes this a *balance* (a control over a stereo source that starts out
+/// where it belongs) rather than a *pan* (a control that places a mono source
+/// in a field). The price is +3 dB on the surviving side at the extremes; the
+/// master limiter is directly downstream and that is what it is for.
+///
+/// It composes by multiplication — a per-channel gain is all this is — which
+/// is how a Precomp layer's balance rides on top of the balances inside it.
+#[must_use]
+pub fn pan_gains(pan: f64) -> [f32; 2] {
+    let p = (pan / PAN_FULL).clamp(-1.0, 1.0);
+    // 0 at full left, π/4 at centre, π/2 at full right.
+    let theta = (p + 1.0) * std::f64::consts::FRAC_PI_4;
+    [
+        (std::f64::consts::SQRT_2 * theta.cos()) as f32,
+        (std::f64::consts::SQRT_2 * theta.sin()) as f32,
+    ]
+}
+
+/// An animated volume and pan, baked to control-rate gain points across a
+/// placed clip: `points[p]` is the `[left, right]` gain at placed frame
+/// `p × stride`, and frames in between interpolate linearly — a ~10 ms
+/// control rate, plenty for fades, cheap enough for the audio callback.
+/// Baked by the host (which owns the keyframes); this crate only ever reads
+/// it.
+///
+/// **One stage carries both** (K-694). Volume and pan are a single pair of
+/// channel gains by the time the mixer sees them: a second envelope would be
+/// a second walk of the same clip per frame, and two ways for a fade and a
+/// sweep to disagree about which sample they landed on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GainEnvelope {
     /// Frames per control point (≥ 1).
     pub stride: u32,
-    /// Gains at control points 0, stride, 2×stride, …; never empty.
-    pub points: Vec<f32>,
+    /// `[left, right]` gains at control points 0, stride, 2×stride, …;
+    /// never empty.
+    pub points: Vec<[f32; 2]>,
 }
 
 impl GainEnvelope {
-    /// The interpolated gain at placed frame `idx` (clamped at the ends).
+    /// The interpolated `[left, right]` gain at placed frame `idx` (clamped
+    /// at the ends).
     #[must_use]
-    pub fn gain_at(&self, idx: usize) -> f32 {
+    pub fn gain_at(&self, idx: usize) -> [f32; 2] {
         let stride = self.stride.max(1) as usize;
         let p = idx / stride;
         let Some(&a) = self.points.get(p) else {
-            return self.points.last().copied().unwrap_or(1.0);
+            return self.points.last().copied().unwrap_or([1.0, 1.0]);
         };
         let b = self.points.get(p + 1).copied().unwrap_or(a);
         let frac = (idx % stride) as f32 / stride as f32;
-        a + (b - a) * frac
+        [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]
     }
 }
 
@@ -73,22 +116,37 @@ pub struct PlacedAudio<'a> {
     pub start_frame: i64,
     /// Interleaved stereo samples (L R L R …); length is `frames × 2`.
     pub samples: &'a [f32],
-    /// Linear gain (1.0 = unity). Used when `envelope` is None (a static
-    /// Volume); an animated Volume rides the envelope instead.
-    pub gain: f32,
-    /// Control-rate gain curve for an animated Volume, indexed on placed
-    /// frames (0 = this source's first audible frame).
+    /// `[left, right]` linear gain — Volume and Pan already multiplied
+    /// together (`[1.0, 1.0]` is unity, centred). Used when `envelope` is
+    /// None (both static); an animated one rides the envelope instead.
+    pub gain: [f32; 2],
+    /// Control-rate gain curve for an animated Volume or Pan, indexed on
+    /// placed frames (0 = this source's first audible frame).
     pub envelope: Option<GainEnvelope>,
+}
+
+/// Sum `sources` into a fresh `total_frames`-long interleaved stereo buffer,
+/// at unity master — [`mix_stereo_at`] with a master gain of 1.0.
+pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
+    mix_stereo_at(sources, total_frames, 1.0)
 }
 
 /// Sum `sources` into a fresh `total_frames`-long interleaved stereo buffer.
 /// Overlaps add; anything falling outside `[0, total_frames)` is clipped; the
-/// final mix is clamped to ±[`MASTER_CEILING`] (−0.3 dBFS, docs/09 §3.1) so a
-/// hot sum can't wrap, blow the DAC, or reach the encoder at full scale.
-pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
+/// sum passes the **master fader** (`master_gain`, linear) and is then clamped
+/// to ±[`MASTER_CEILING`] (−0.3 dBFS, docs/09 §3.1) so a hot mix can't wrap,
+/// blow the DAC, or reach the encoder at full scale.
+///
+/// The fader is a stage on the sum rather than a multiplier folded into each
+/// source's gain (K-691). The samples would be the same either way —
+/// multiplication distributes over the sum — but only a stage lets a strip's
+/// meter read the layer's own level while the master reads what the device is
+/// handed, and only a stage sits where the board draws it: **ahead of** the
+/// limiter, so pulling the master down is what stops the limiter working.
+pub fn mix_stereo_at(sources: &[PlacedAudio], total_frames: usize, master_gain: f32) -> Vec<f32> {
     let mut out = vec![0.0f32; total_frames * 2];
     for src in sources {
-        if (src.gain == 0.0 && src.envelope.is_none()) || src.samples.is_empty() {
+        if (src.gain == [0.0, 0.0] && src.envelope.is_none()) || src.samples.is_empty() {
             continue;
         }
         let src_frames = src.samples.len() / 2;
@@ -103,12 +161,12 @@ pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
             let src_f = (out_f - src.start_frame) as usize;
             let g = src.envelope.as_ref().map_or(src.gain, |e| e.gain_at(src_f));
             let o = out_f as usize * 2;
-            out[o] += src.samples[src_f * 2] * g;
-            out[o + 1] += src.samples[src_f * 2 + 1] * g;
+            out[o] += src.samples[src_f * 2] * g[0];
+            out[o + 1] += src.samples[src_f * 2 + 1] * g[1];
         }
     }
     for s in &mut out {
-        *s = s.clamp(-MASTER_CEILING, MASTER_CEILING);
+        *s = (*s * master_gain).clamp(-MASTER_CEILING, MASTER_CEILING);
     }
     out
 }
@@ -176,12 +234,13 @@ pub struct PlacedClip {
     pub start_frame: i64,
     pub src_start: usize,
     pub len: usize,
-    /// Linear gain (1.0 = unity). Used when `envelope` is None (a static
-    /// Volume); an animated Volume rides the envelope instead.
-    pub gain: f32,
-    /// Control-rate gain curve for an animated Volume, indexed on placed
-    /// frames (0 = this clip's first audible frame). Shared so plan clones
-    /// stay cheap; callback-safe (read-only, allocation-free).
+    /// `[left, right]` linear gain — Volume and Pan already multiplied
+    /// together. Used when `envelope` is None (both static); an animated one
+    /// rides the envelope instead.
+    pub gain: [f32; 2],
+    /// Control-rate gain curve for an animated Volume or Pan, indexed on
+    /// placed frames (0 = this clip's first audible frame). Shared so plan
+    /// clones stay cheap; callback-safe (read-only, allocation-free).
     pub envelope: Option<std::sync::Arc<GainEnvelope>>,
     /// Which mixer strip this clip's level is metered into
     /// ([`crate::meter`]), or [`NO_METER`] for a clip with no bar of its own.
@@ -202,16 +261,32 @@ pub const NO_METER: u8 = u8::MAX;
 /// callback, instead of a whole-comp re-bake. This is the live half of the
 /// docs/09 §2 lazy-decode direction; decoded buffers are shared `Arc`s from
 /// the byte-budgeted cache.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct MixPlan {
     pub clips: Vec<PlacedClip>,
     pub total_frames: usize,
+    /// The comp's **master fader** as a linear gain, applied to the sum and
+    /// ahead of the ceiling (K-691). 1.0 is unity — which is why this type
+    /// spells its own `Default` out rather than deriving one: a derived
+    /// zero here would be a silent mix that looked like an empty field.
+    pub master_gain: f32,
+}
+
+impl Default for MixPlan {
+    fn default() -> Self {
+        Self {
+            clips: Vec::new(),
+            total_frames: 0,
+            master_gain: 1.0,
+        }
+    }
 }
 
 impl MixPlan {
     /// The `(left, right)` of output frame `i`: every covering clip summed,
-    /// clamped to ±[`MASTER_CEILING`] like the baked mix. Allocation-free and
-    /// lock-free — callback-safe. O(clips) per frame, fine at layer counts.
+    /// through the master fader, clamped to ±[`MASTER_CEILING`] like the baked
+    /// mix. Allocation-free and lock-free — callback-safe. O(clips) per frame,
+    /// fine at layer counts.
     #[must_use]
     pub fn frame_at(&self, i: usize) -> (f32, f32) {
         let (mut l, mut r) = (0.0f32, 0.0f32);
@@ -227,13 +302,13 @@ impl MixPlan {
                 (clip.buffer.samples.get(s), clip.buffer.samples.get(s + 1))
             {
                 let g = clip.envelope.as_ref().map_or(clip.gain, |e| e.gain_at(idx));
-                l += sl * g;
-                r += sr * g;
+                l += sl * g[0];
+                r += sr * g[1];
             }
         }
         (
-            l.clamp(-MASTER_CEILING, MASTER_CEILING),
-            r.clamp(-MASTER_CEILING, MASTER_CEILING),
+            (l * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
+            (r * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
         )
     }
 
@@ -264,7 +339,7 @@ impl MixPlan {
                 (clip.buffer.samples.get(s), clip.buffer.samples.get(s + 1))
             {
                 let g = clip.envelope.as_ref().map_or(clip.gain, |e| e.gain_at(idx));
-                let (cl, cr) = (sl * g, sr * g);
+                let (cl, cr) = (sl * g[0], sr * g[1]);
                 if let Some(strip) = acc.get_mut(clip.meter as usize) {
                     strip.add(cl, cr, MASTER_CEILING);
                 }
@@ -273,8 +348,8 @@ impl MixPlan {
             }
         }
         let (l, r) = (
-            l.clamp(-MASTER_CEILING, MASTER_CEILING),
-            r.clamp(-MASTER_CEILING, MASTER_CEILING),
+            (l * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
+            (r * self.master_gain).clamp(-MASTER_CEILING, MASTER_CEILING),
         );
         acc[meter::MASTER].add(l, r, MASTER_CEILING);
         (l, r)
@@ -404,7 +479,7 @@ mod tests {
         let placed = PlacedAudio {
             start_frame: out_start,
             samples: &src[src_start * 2..(src_start + len) * 2],
-            gain: 1.0,
+            gain: [1.0, 1.0],
             envelope: None,
         };
         let out = mix_stereo(&[placed], 3 * rate as usize);
@@ -450,7 +525,7 @@ mod tests {
         let placed = PlacedAudio {
             start_frame: out_start,
             samples: &src[src_start * 2..(src_start + len) * 2],
-            gain: 1.0,
+            gain: [1.0, 1.0],
             envelope: None,
         };
         let out = mix_stereo(&[placed], 2 * rate as usize);
@@ -481,12 +556,24 @@ mod tests {
     fn envelope_interpolates_between_control_points_and_clamps() {
         let e = GainEnvelope {
             stride: 4,
-            points: vec![0.0, 1.0],
+            points: vec![[0.0, 0.0], [1.0, 1.0]],
         };
-        assert_eq!(e.gain_at(0), 0.0);
-        assert!((e.gain_at(2) - 0.5).abs() < 1e-6);
-        assert_eq!(e.gain_at(4), 1.0);
-        assert_eq!(e.gain_at(100), 1.0, "holds the last point past the end");
+        assert_eq!(e.gain_at(0), [0.0, 0.0]);
+        assert!((e.gain_at(2)[0] - 0.5).abs() < 1e-6);
+        assert_eq!(e.gain_at(4), [1.0, 1.0]);
+        assert_eq!(
+            e.gain_at(100),
+            [1.0, 1.0],
+            "holds the last point past the end"
+        );
+
+        // The two channels are independent, which is what lets one envelope
+        // carry a fade and a pan sweep at once (K-694).
+        let swept = GainEnvelope {
+            stride: 2,
+            points: vec![[1.0, 0.0], [0.0, 1.0]],
+        };
+        assert_eq!(swept.gain_at(1), [0.5, 0.5]);
     }
 
     /// A volume fade must sound identical through the baked mixer and the
@@ -496,14 +583,14 @@ mod tests {
         use std::sync::Arc;
         let env = GainEnvelope {
             stride: 2,
-            points: vec![0.0, 0.5, 1.0],
+            points: vec![[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]],
         };
         let src = tone(4, 0.8);
         let baked = mix_stereo(
             &[PlacedAudio {
                 start_frame: 0,
                 samples: &src,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: Some(env.clone()),
             }],
             4,
@@ -525,11 +612,12 @@ mod tests {
                 start_frame: 0,
                 src_start: 0,
                 len: 4,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: Some(Arc::new(env)),
                 meter: 0,
             }],
             total_frames: 4,
+            master_gain: 1.0,
         };
         for i in 0..4 {
             let (l, r) = plan.frame_at(i);
@@ -547,7 +635,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: 1,
                 samples: &s,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
             }],
             4,
@@ -565,13 +653,13 @@ mod tests {
                 PlacedAudio {
                     start_frame: 0,
                     samples: &a,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
                 PlacedAudio {
                     start_frame: 0,
                     samples: &b,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
             ],
@@ -587,7 +675,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: 0,
                 samples: &s,
-                gain: 0.5,
+                gain: [0.5, 0.5],
                 envelope: None,
             }],
             2,
@@ -606,7 +694,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: -2,
                 samples: &s,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
             }],
             4,
@@ -622,7 +710,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: 2,
                 samples: &s,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
             }],
             4,
@@ -641,13 +729,13 @@ mod tests {
                 PlacedAudio {
                     start_frame: 0,
                     samples: &a,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
                 PlacedAudio {
                     start_frame: 0,
                     samples: &b,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
             ],
@@ -677,13 +765,13 @@ mod tests {
                 PlacedAudio {
                     start_frame: 0,
                     samples: &a.samples,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
                 PlacedAudio {
                     start_frame: 4,
                     samples: &b.samples,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                 },
             ],
@@ -696,7 +784,7 @@ mod tests {
                     start_frame: 0,
                     src_start: 0,
                     len: 6,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                     meter: 0,
                 },
@@ -705,12 +793,13 @@ mod tests {
                     start_frame: 4,
                     src_start: 0,
                     len: 4,
-                    gain: 1.0,
+                    gain: [1.0, 1.0],
                     envelope: None,
                     meter: 0,
                 },
             ],
             total_frames: 10,
+            master_gain: 1.0,
         };
         for i in 0..10 {
             let (l, r) = plan.frame_at(i);
@@ -734,11 +823,12 @@ mod tests {
                 start_frame: 0,
                 src_start: 3,
                 len: 2,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
                 meter: 0,
             }],
             total_frames: 4,
+            master_gain: 1.0,
         };
         assert!((trimmed.frame_at(0).0 - 0.3).abs() < 1e-6);
         assert!((trimmed.frame_at(1).0 - 0.4).abs() < 1e-6);
@@ -768,7 +858,7 @@ mod tests {
             start_frame: 0,
             src_start: 0,
             len: 4,
-            gain: 1.0,
+            gain: [1.0, 1.0],
             envelope: None,
             meter: strip,
         };
@@ -777,6 +867,7 @@ mod tests {
         let plan = MixPlan {
             clips: vec![clip(0.8, 0), clip(0.5, 1)],
             total_frames: 4,
+            master_gain: 1.0,
         };
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
         for i in 0..4 {
@@ -806,6 +897,7 @@ mod tests {
         let unmetered = MixPlan {
             clips: vec![clip(0.6, NO_METER)],
             total_frames: 4,
+            master_gain: 1.0,
         };
         let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
         let (l, _) = unmetered.frame_metered(0, &mut acc);
@@ -814,6 +906,97 @@ mod tests {
         meters.publish(&acc);
         assert_eq!(meters.read(0), meter::MeterReading::default());
         assert!((meters.read(meter::MASTER).peak[0] - 0.6).abs() < 1e-6);
+    }
+
+    /// The master fader is a **stage ahead of the limiter** (K-691), not a
+    /// per-source multiplier: a sum hot enough to be held at the ceiling
+    /// comes back under it when the master is pulled down — which is the
+    /// whole point of a fader in front of a limiter. It reads the same
+    /// through the baked mixer and the live plan, and it leaves the strips'
+    /// own bars alone.
+    #[test]
+    fn the_master_fader_sits_ahead_of_the_limiter_in_both_mixers() {
+        use std::sync::Arc;
+        let src = tone(4, 0.8);
+        let placed = || PlacedAudio {
+            start_frame: 0,
+            samples: &src,
+            gain: [1.0, 1.0],
+            envelope: None,
+        };
+        // Two of these sum to 1.6 — over the ceiling at unity master.
+        let hot = mix_stereo_at(&[placed(), placed()], 4, 1.0);
+        assert!(
+            (hot[0] - MASTER_CEILING).abs() < 1e-6,
+            "held at the ceiling"
+        );
+
+        // −6 dB on the master: 1.6 × 0.5012 = 0.802, under the ceiling. A
+        // fader folded into each source would give the same number here —
+        // what makes it a stage is that it happens after the sum and before
+        // the clamp, which is what the next assertion is really about.
+        let half = db_to_gain(-6.0);
+        let faded = mix_stereo_at(&[placed(), placed()], 4, half);
+        assert!(
+            (faded[0] - 1.6 * half).abs() < 1e-5,
+            "pulling the master down is what stops the limiter working, got {}",
+            faded[0]
+        );
+
+        // The live plan agrees sample for sample, and its strip meters still
+        // read the layer's own level rather than the fader's.
+        let plan = MixPlan {
+            clips: vec![
+                PlacedClip {
+                    buffer: Arc::new(lumit_media::AudioBuffer {
+                        rate: 48_000,
+                        samples: src.clone(),
+                    }),
+                    start_frame: 0,
+                    src_start: 0,
+                    len: 4,
+                    gain: [1.0, 1.0],
+                    envelope: None,
+                    meter: 0,
+                },
+                PlacedClip {
+                    buffer: Arc::new(lumit_media::AudioBuffer {
+                        rate: 48_000,
+                        samples: src.clone(),
+                    }),
+                    start_frame: 0,
+                    src_start: 0,
+                    len: 4,
+                    gain: [1.0, 1.0],
+                    envelope: None,
+                    meter: 1,
+                },
+            ],
+            total_frames: 4,
+            master_gain: half,
+        };
+        let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
+        for i in 0..4 {
+            let (l, r) = plan.frame_metered(i, &mut acc);
+            assert!(
+                (l - faded[i * 2]).abs() < 1e-6 && (r - faded[i * 2 + 1]).abs() < 1e-6,
+                "frame {i}: the live plan and the baked mix disagree about the master"
+            );
+        }
+        let meters = meter::Meters::default();
+        meters.publish(&acc);
+        assert!(
+            (meters.read(0).peak[0] - 0.8).abs() < 1e-6,
+            "a strip's bar is the layer's own level, whatever the master does"
+        );
+        assert!(
+            (meters.read(meter::MASTER).peak[0] - 1.6 * half).abs() < 1e-5,
+            "the master's bar is what the device is handed"
+        );
+
+        // And a plan built by hand with no master named plays at unity, not
+        // at silence — the reason `MixPlan` spells its own Default out.
+        assert_eq!(MixPlan::default().master_gain, 1.0);
     }
 
     #[test]
@@ -826,7 +1009,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: 0,
                 samples: &hot_pos,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
             }],
             2,
@@ -835,7 +1018,7 @@ mod tests {
             &[PlacedAudio {
                 start_frame: 0,
                 samples: &hot_neg,
-                gain: 1.0,
+                gain: [1.0, 1.0],
                 envelope: None,
             }],
             2,

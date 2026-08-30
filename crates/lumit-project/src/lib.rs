@@ -2571,6 +2571,7 @@ mod tests {
             ..Marker::user(Uuid::now_v7(), rat(2, 1))
         };
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -2735,6 +2736,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
             width: 1920,
@@ -2765,6 +2767,7 @@ mod tests {
             label: 0,
             markers: Vec::new(),
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,

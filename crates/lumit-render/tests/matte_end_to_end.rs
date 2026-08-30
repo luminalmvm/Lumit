@@ -87,6 +87,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         parent: None,
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -103,6 +104,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
 
 fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
     Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: name.into(),
         width: COMP,

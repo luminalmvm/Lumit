@@ -28,6 +28,7 @@ void main() {
       ),
       info: BridgeLayerInfo(
         volumeDb: const BridgeScalar.static_(0),
+        pan: const BridgeScalar.static_(0),
         wired: false,
         textAnimators: const [],
         name: name,

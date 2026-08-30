@@ -222,6 +222,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: Property::zero(),
+            pan: Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -254,6 +255,7 @@ mod tests {
         let top = layer(LayerKind::Solid { def: solid(64, 64) }, 64, 64);
         let under = layer(LayerKind::Solid { def: solid(16, 16) }, 16, 16);
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 64,

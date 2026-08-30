@@ -415,6 +415,25 @@ pub enum Op {
         layer: Uuid,
         animation: Animation,
     },
+    /// Replace a layer's **Pan** animation — the constant-power stereo
+    /// balance (docs/09 §6, K-694). Same coarse-grained shape as
+    /// `SetLayerVolume`, and valid on any layer for the same reason: only
+    /// heard where the source has an audio stream.
+    SetLayerPan {
+        comp: Uuid,
+        layer: Uuid,
+        animation: Animation,
+    },
+    /// Move a composition's **master fader** — one gain stage on the summed
+    /// mix, ahead of the safety limiter (docs/09 §3.1, K-691). dB; 0 is
+    /// unity, −100 and below is exact silence.
+    ///
+    /// A comp setting rather than a layer one, so it names no layer to lock:
+    /// the master is the desk's, not any row's.
+    SetMasterVolume {
+        comp: Uuid,
+        db: f64,
+    },
     /// Replace a layer's Retime property — local time → source time, in
     /// seconds (K-197). `None` removes it, which is "not retimed" rather than
     /// "retimed to exactly 1×": only the first skips the map. Same
@@ -640,6 +659,8 @@ impl Op {
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
+            Op::SetLayerPan { .. } => "Edit pan",
+            Op::SetMasterVolume { .. } => "Move master fader",
             Op::SetRetimeProperty { .. } => "Edit Retime",
             Op::SetLayerInterpolation { .. } => "Set interpolation",
             Op::SetFolderChildren { .. } => "Move into folder",
@@ -716,6 +737,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
+        | Op::SetLayerPan { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
 
@@ -1579,6 +1601,32 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetLayerPan {
+            comp,
+            layer,
+            animation,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.pan.animation, animation.clone());
+            Ok(Op::SetLayerPan {
+                comp: *comp,
+                layer: *layer,
+                animation: previous,
+            })
+        }
+        Op::SetMasterVolume { comp, db } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.master_volume_db, *db);
+            Ok(Op::SetMasterVolume {
+                comp: *comp,
+                db: previous,
             })
         }
         Op::SetRetimeProperty {

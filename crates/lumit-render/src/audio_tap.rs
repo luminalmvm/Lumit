@@ -278,7 +278,14 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             return None;
         }
         out.extend(lumit_audio::mix::downmix_to_mono(
-            &lumit_audio::mix::mix_stereo(&placed, window),
+            &lumit_audio::mix::mix_stereo_at(
+                &placed,
+                window,
+                // Through the comp's master fader, because a driver reads
+                // what a listener hears (K-691): pulling the master down
+                // must dim a glow that follows the music, not only the sound.
+                lumit_audio::mix::db_to_gain(self.comp.master_volume_db),
+            ),
         ));
         Some(rate)
     }
@@ -325,6 +332,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: true,
             adjustment: false,
             retime: None,
@@ -340,6 +348,7 @@ mod tests {
         let layer_id = layer.id;
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
             id: comp_id,
             name: "Scene".into(),
             width: 32,

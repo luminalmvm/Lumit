@@ -493,6 +493,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
     use lumit_core::time::{Duration, FrameRate, Rational};
 
     let comp = lumit_core::model::Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: name.into(),
         width: 1920,
@@ -2302,6 +2303,62 @@ fn volume_round_trips_and_a_solid_reports_no_audio() {
         !layer.has_audio().expect("asked"),
         "a solid has no sound to set, so it is offered no Audio group"
     );
+}
+
+/// **Pan and the master fader round-trip like every other value** (K-691,
+/// K-694), and the fade commands write real keys on the Volume (K-695).
+#[test]
+fn pan_the_master_fader_and_the_fade_commands_round_trip() {
+    use crate::api::effect::BridgeScalar;
+    use crate::api::layer::BridgeFadeShape;
+
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+    let layer = comp.add_solid_layer().expect("layer");
+
+    // Pan: centre to start with, one op, one undo step.
+    assert!(matches!(
+        layer.get_pan().expect("pan"), BridgeScalar::Static(p) if p == 0.0
+    ));
+    layer.set_pan(BridgeScalar::Static(-50.0)).expect("applied");
+    assert!(matches!(
+        layer.get_pan().expect("pan"), BridgeScalar::Static(p) if p == -50.0
+    ));
+    project.undo().expect("undo");
+    assert!(matches!(
+        layer.get_pan().expect("pan"), BridgeScalar::Static(p) if p == 0.0
+    ));
+
+    // The master fader is the comp's, and starts at unity.
+    assert_eq!(comp.master_volume_db().expect("master"), 0.0);
+    comp.set_master_volume_db(-4.0).expect("applied");
+    assert_eq!(comp.master_volume_db().expect("master"), -4.0);
+    project.undo().expect("undo");
+    assert_eq!(comp.master_volume_db().expect("master"), 0.0);
+
+    // A fade in writes a keyframed Volume — the level at its own moment, and
+    // silence at the layer's in point.
+    layer.fade_in(0.5, BridgeFadeShape::Ease).expect("faded in");
+    assert!(
+        matches!(
+            layer.get_volume_db().expect("volume"),
+            BridgeScalar::Keyframed(_)
+        ),
+        "a fade is keyframes, not a value"
+    );
+    // Fading out as well leaves both, and one undo per command.
+    layer
+        .fade_out(0.5, BridgeFadeShape::Linear)
+        .expect("faded out");
+    project.undo().expect("undo");
+    project.undo().expect("undo");
+    assert!(matches!(
+        layer.get_volume_db().expect("volume"), BridgeScalar::Static(db) if db == 0.0
+    ));
+
+    // A fade with no length is refused rather than writing two keys at once.
+    assert!(layer.fade_in(0.0, BridgeFadeShape::Ease).is_err());
+    assert!(layer.fade_out(f64::NAN, BridgeFadeShape::Ease).is_err());
 }
 
 /// **A converted precomp holding sound wears a mute switch** (owner, desk

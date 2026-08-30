@@ -151,7 +151,7 @@ class BridgeAudioDevices {
           fellBack == other.fellBack;
 }
 
-/// One mixer strip's bars, or the master's (docs/09 §3.1, K-683).
+/// One mixer strip's bars, or the master's (docs/09 §3.1, K-690).
 ///
 /// **Linear sample amplitudes, not decibels.** The mix works in amplitudes;
 /// a bar that wants dB converts where it is drawn, once, rather than the

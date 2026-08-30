@@ -2374,6 +2374,7 @@ mod parent_placement_tests {
             parent,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -2406,6 +2407,7 @@ mod parent_placement_tests {
 
     fn comp(layers: Vec<Layer>) -> Composition {
         Composition {
+            master_volume_db: 0.0,
             id: uuid::Uuid::now_v7(),
             name: "c".into(),
             width: 100,
@@ -2672,6 +2674,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -2698,6 +2701,7 @@ mod render_below_at_tests {
             document.expression = Some("time * 100000".into());
         }
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -2780,6 +2784,7 @@ mod render_below_at_tests {
         light.transform.position_z = Property::fixed(-200.0);
 
         let comp_with = |layers: Vec<Layer>| Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -2872,6 +2877,7 @@ mod render_below_at_tests {
             flow: None,
         };
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -2984,6 +2990,7 @@ mod render_below_at_tests {
             flow: None,
         };
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -3100,6 +3107,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -3118,6 +3126,7 @@ mod render_below_at_tests {
         let mut text = text_layer(0.0);
         text.transform.position_x = ramp(0.0, 100.0); // x = 100·t
         Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -3189,6 +3198,7 @@ mod render_below_at_tests {
         }
         text.effects = vec![blur];
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -3267,6 +3277,7 @@ mod render_below_at_tests {
         }
         text.effects = vec![blur, post];
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,
@@ -3422,6 +3433,7 @@ mod render_below_at_tests {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,
@@ -3438,6 +3450,7 @@ mod render_below_at_tests {
 
     fn comp_with(fps: u32, layers: Vec<Layer>) -> Composition {
         Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 320,

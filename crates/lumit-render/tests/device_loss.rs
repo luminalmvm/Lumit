@@ -52,6 +52,7 @@ fn project() -> (Arc<Document>, Uuid) {
         extra: serde_json::Map::new(),
     }));
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp".into(),
         width: COMP,
@@ -74,6 +75,7 @@ fn project() -> (Arc<Document>, Uuid) {
             parent: None,
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,

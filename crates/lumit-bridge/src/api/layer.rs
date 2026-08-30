@@ -1235,6 +1235,11 @@ pub struct BridgeLayerInfo {
     /// keyframe diamonds from it, and reading it per audio layer per document
     /// revision is a sync crossing per row for a fact this walk has in hand.
     pub volume_db: BridgeScalar,
+    /// The layer's Pan (−100 full left … +100 full right, K-694), carried
+    /// beside the Volume and for the same reason: the fold-out's Pan row
+    /// draws its own keyframe diamonds, and asking per audio row per
+    /// revision would be a sync crossing for a fact this walk already holds.
+    pub pan: BridgeScalar,
     /// Whether this layer's node graph has any wire in it at all (K-471).
     ///
     /// The Timeline's fold-out draws a *driven* mark where a wired parameter's
@@ -1437,6 +1442,7 @@ pub(crate) fn read_layer_info(
             _ => None,
         },
         volume_db: BridgeScalar::read_at(&layer.volume_db, layer.start_offset.0),
+        pan: BridgeScalar::read_at(&layer.pan, layer.start_offset.0),
         wired: !layer.graph.edges.is_empty(),
     }
 }
@@ -4566,6 +4572,106 @@ impl LayerReference {
         Ok(())
     }
 
+    /// **Fade the layer's sound up from silence** over `seconds` from its in
+    /// point (docs/09 §6, K-695).
+    ///
+    /// Ordinary Volume keyframes — a pair, between the −∞ knee and whatever
+    /// level the layer already holds — so the fade is visible on the row, can
+    /// be dragged, reshaped in the graph, and undone like any other key. That
+    /// is the whole of the command: it writes the keys a person would have
+    /// written, in one step, with the right shape.
+    ///
+    /// Running it again over the same stretch reshapes that fade rather than
+    /// laying a second one on top; keys outside it are untouched, so a fade in
+    /// and a fade out coexist without either knowing about the other.
+    #[frb(sync)]
+    pub fn fade_in(&self, seconds: f64, shape: BridgeFadeShape) -> Result<(), BridgeError> {
+        self.write_fade(seconds, shape, true)
+    }
+
+    /// **Fade the layer's sound away to silence** over `seconds` ending at its
+    /// out point — the other half of [`Self::fade_in`], same keys, same
+    /// shapes, same undo step.
+    #[frb(sync)]
+    pub fn fade_out(&self, seconds: f64, shape: BridgeFadeShape) -> Result<(), BridgeError> {
+        self.write_fade(seconds, shape, false)
+    }
+
+    /// The shared half of the two fade commands. `rising` is a fade in.
+    #[frb(ignore)]
+    fn write_fade(
+        &self,
+        seconds: f64,
+        shape: BridgeFadeShape,
+        rising: bool,
+    ) -> Result<(), BridgeError> {
+        if !(seconds.is_finite() && seconds > 0.0) {
+            return Err(BridgeError::InvalidTime);
+        }
+        let layer = self.item()?;
+        // The Volume property's clock is layer time: comp time less the
+        // layer's start offset, which is exactly what the mixer subtracts.
+        let base = layer.start_offset.0.to_f64();
+        let (edge, span) = if rising {
+            (layer.in_point.0.to_f64() - base, seconds)
+        } else {
+            (layer.out_point.0.to_f64() - base - seconds, seconds)
+        };
+        // On the millisecond grid, which is finer than any fade a person
+        // drags and exact enough that the two keys land where the well says.
+        let rational = |t: f64| {
+            lumit_core::time::Rational::from_f64_on_grid(t, 1000)
+                .map_err(|_| BridgeError::InvalidTime)
+        };
+        let faded = layer
+            .volume_db
+            .with_fade(
+                rational(edge)?,
+                rational(edge + span)?,
+                shape.into(),
+                lumit_audio::mix::VOLUME_FLOOR_DB,
+                rising,
+            )
+            .ok_or(BridgeError::InvalidTime)?;
+
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetLayerVolume {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                animation: faded.animation,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// This layer's **Pan** (docs/09 §6, K-694): −100 is full left, 0 centre,
+    /// +100 full right — a percentage of the way to one side.
+    #[frb(sync)]
+    pub fn get_pan(&self) -> Result<BridgeScalar, BridgeError> {
+        let layer = self.item()?;
+        Ok(BridgeScalar::read_at(&layer.pan, layer.start_offset.0))
+    }
+
+    /// Set the Pan, as one undoable step — the same shape as the Volume, and
+    /// animatable in exactly the same way.
+    #[frb(sync)]
+    pub fn set_pan(&self, value: BridgeScalar) -> Result<(), BridgeError> {
+        let animation = value.animation_at(self.item()?.start_offset.0)?;
+
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetLayerPan {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                animation,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// Replace several transform properties at once, as one undoable step.
     ///
     /// For a control that acts on a whole row: Position's stopwatch has to key
@@ -5099,11 +5205,17 @@ impl LayerReference {
             .map(|fx| fx.id.to_string())
             .collect();
 
-        let volume_default = lumit_core::anim::Property::fixed(0.0);
+        // Volume and Pan share the Audio group, so the group opens for either
+        // of them (K-694): a layer swept across the field with its Volume left
+        // alone is exactly as modified as one that was faded.
+        let unity = lumit_core::anim::Property::fixed(0.0);
         let audio = match kind {
-            BridgeRevealKind::Animated => animated(&layer.volume_db),
+            BridgeRevealKind::Animated => animated(&layer.volume_db) || animated(&layer.pan),
             BridgeRevealKind::Modified => {
-                animated(&layer.volume_db) || layer.volume_db.animation != volume_default.animation
+                animated(&layer.volume_db)
+                    || animated(&layer.pan)
+                    || layer.volume_db.animation != unity.animation
+                    || layer.pan.animation != unity.animation
             }
         };
 
@@ -5123,6 +5235,32 @@ impl LayerReference {
             any: transform || audio || retime || !effects.is_empty(),
             effects,
         })
+    }
+}
+
+/// The curve a fade command writes (docs/09 §6, K-695) — the Audio panel's
+/// three chips. Each is built from the easing vocabulary that already exists,
+/// so a fade's keys can be dragged and reshaped like any others afterwards.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeFadeShape {
+    /// A straight ramp. Volume is in decibels, so this is already the
+    /// perceptually even fade rather than the naive one.
+    Linear,
+    /// Easy-ease at both ends — the default.
+    Ease,
+    /// Eased at the loud end, straight at the silent one: the level hangs
+    /// where it was and then falls away.
+    Exponential,
+}
+
+impl From<BridgeFadeShape> for lumit_core::anim::FadeShape {
+    fn from(shape: BridgeFadeShape) -> Self {
+        match shape {
+            BridgeFadeShape::Linear => lumit_core::anim::FadeShape::Linear,
+            BridgeFadeShape::Ease => lumit_core::anim::FadeShape::Ease,
+            BridgeFadeShape::Exponential => lumit_core::anim::FadeShape::Exponential,
+        }
     }
 }
 

@@ -58,6 +58,7 @@ fn solid_layer(def: Uuid) -> Layer {
         parent: None,
         label: 2,
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -94,6 +95,7 @@ fn project(effects: Vec<lumit_core::model::EffectInstance>) -> (Arc<Document>, U
     layer.effects = effects;
 
     let comp = Composition {
+        master_volume_db: 0.0,
         id: Uuid::now_v7(),
         name: "Comp 1".into(),
         width: W,

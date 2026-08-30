@@ -150,6 +150,7 @@ pub(crate) fn map_layer(
         label: u8::try_from(ae.label.unwrap_or(0)).unwrap_or(0),
         markers: markers(conv, &ae.markers),
         volume_db: volume(conv, &path, props),
+        pan: lumit_core::anim::Property::zero(),
         audio_only: false,
         adjustment: false,
         retime,

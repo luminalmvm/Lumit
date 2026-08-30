@@ -418,6 +418,7 @@ mod tests {
         use crate::time::{Duration, FrameRate, Rational};
 
         let comp = Composition {
+            master_volume_db: 0.0,
             id: Uuid::now_v7(),
             name: "c".into(),
             width: 1920,
@@ -462,6 +463,7 @@ mod tests {
             parent: None,
             label: 0,
             volume_db: crate::anim::Property::zero(),
+            pan: crate::anim::Property::zero(),
             audio_only: false,
             adjustment: false,
             retime: None,

@@ -20,7 +20,7 @@ import 'solid.dart';
 import 'state.dart';
 
 // These functions are ignored because they are not marked as `pub`: `next_comp_name_in`, `of`, `to_model`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
 /// Whether undo and redo have anything to do, for greying the menu items.
@@ -43,6 +43,33 @@ class BridgeHistory {
           runtimeType == other.runtimeType &&
           canUndo == other.canUndo &&
           canRedo == other.canRedo;
+}
+
+/// One row of the History list (K-688): what the step is called, and whether it
+/// has been undone.
+///
+/// The name is the engine's English (`Op::name`), translated on arrival like
+/// every other engine word (K-303) — an undone row is still on the list, greyed,
+/// until a fresh commit clears the forward history.
+class BridgeHistoryEntry {
+  final String name;
+  final bool undone;
+
+  const BridgeHistoryEntry({
+    required this.name,
+    required this.undone,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ undone.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeHistoryEntry &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          undone == other.undone;
 }
 
 /// One colour on the project's shelf (K-448): four 0–1 channels and an
@@ -110,6 +137,13 @@ class ProjectReference {
   /// (docs/15-DESIGN.md), and the project keeps the value its author chose.
   int antiAliasingInUse() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceAntiAliasingInUse(
+        that: this,
+      );
+
+  /// How many of [`Self::history_entries`]'s rows are applied — the point the
+  /// document stands at on the list.
+  int appliedSteps() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceAppliedSteps(
         that: this,
       );
 
@@ -222,6 +256,14 @@ class ProjectReference {
         that: this,
       );
 
+  /// The History list (K-688): every step still applied, oldest first, then
+  /// every step that has been undone, in the order redoing would put them
+  /// back. [`Self::applied_steps`] says where the two halves meet.
+  List<BridgeHistoryEntry> historyEntries() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceHistoryEntries(
+        that: this,
+      );
+
   /// Record `path` as a footage item, as one undo step.
   ///
   /// Importing only *records* the file — it does not decode it or read its size.
@@ -257,6 +299,14 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceIsDirty(
         that: this,
       );
+
+  /// Take the document to the point where exactly `applied` steps have been
+  /// applied — what clicking a row of the History list does (K-688).
+  ///
+  /// Undo and redo in a loop, so a jump reaches only states the keyboard
+  /// could; a number past either end stops at that end rather than failing.
+  void jumpHistory({required int applied}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
 
   /// Add a composition, filed into the Compositions auto-folder, as one undo
   /// step. A blank name gets the next "Comp N".

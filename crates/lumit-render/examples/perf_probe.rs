@@ -40,6 +40,7 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         parent: None,
         label: 0,
         volume_db: Property::zero(),
+        pan: Property::zero(),
         audio_only: false,
         adjustment: false,
         retime: None,
@@ -61,6 +62,7 @@ fn doc_with(kind: LayerKind, extra_item: Option<ProjectItem>) -> (std::sync::Arc
     }
     let comp_id = Uuid::now_v7();
     doc.items.push(ProjectItem::Composition(Composition {
+        master_volume_db: 0.0,
         id: comp_id,
         name: "Probe".into(),
         width: W,

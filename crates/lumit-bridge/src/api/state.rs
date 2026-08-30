@@ -504,7 +504,11 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetSolidDef { .. } => (None, None, true),
 
         // Comp settings carry the comp's name, so the panel row changes too.
-        Op::SetCompSettings { comp, .. } => (Some(*comp), None, true),
+        // Trimming and cropping are comp settings plus the layers they move
+        // (K-686, K-687), so they report the widest scope the settings do.
+        Op::SetCompSettings { comp, .. }
+        | Op::TrimCompToWorkArea { comp }
+        | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
 
         // The comp, but no one layer.
         Op::AddLayer { comp, .. }
@@ -512,6 +516,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
         | Op::SetCompBackground { comp, .. }
+        | Op::SetMasterVolume { comp, .. }
         | Op::SetWorkArea { comp, .. }
         | Op::SetCompMarkers { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
@@ -551,6 +556,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
+        | Op::SetLayerPan { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 

@@ -566,6 +566,19 @@ class CompositionReference {
         that: this,
       );
 
+  /// **Crop comp to region of interest** (K-687): the comp's frame becomes
+  /// `region`, and every unparented layer moves back by its corner so the
+  /// picture inside it stays put.
+  ///
+  /// `region` is the Viewer's own `[u0, v0, u1, v1]` in comp fractions
+  /// (K-362), which is what the session holds; the conversion to pixels
+  /// happens here, once, rather than in each caller. A region that is not
+  /// four numbers, is not finite, or comes to less than a pixel either way is
+  /// refused — there is no composition in it.
+  void cropToRegion({required List<double> region}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceCropToRegion(
+          that: this, region: region);
+
   /// Detect beats and replace this comp's beat markers.
   ///
   /// `sensitivity_percent` runs 0..100, where 50 is the standard setting and
@@ -673,6 +686,13 @@ class CompositionReference {
   /// writes — or `None` for the whole comp.
   BridgeSpan? getWorkArea() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetWorkArea(
+        that: this,
+      );
+
+  /// This comp's **master fader**, in dB (docs/09 §3.1, K-691). 0 is unity;
+  /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
+  double masterVolumeDb() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceMasterVolumeDb(
         that: this,
       );
 
@@ -1080,6 +1100,17 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetMarkers(
           that: this, markers: markers);
 
+  /// Move the master fader, as one undoable step.
+  ///
+  /// One gain stage on the summed mix, ahead of the safety limiter — so
+  /// pulling it down is what stops the limiter working, and every strip's
+  /// own bar goes on reading that layer's level while the master's follows
+  /// the fader. Heard on the next audio callback once the comp is
+  /// re-prepared, and written identically by the export.
+  void setMasterVolumeDb({required double db}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceSetMasterVolumeDb(
+          that: this, db: db);
+
   /// Turn the comp's master motion-blur shutter on or off (K-120), keeping
   /// the shutter's angle, phase and sample count as they are. One op, one
   /// undo step — the Timeline's master button.
@@ -1223,6 +1254,18 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceTimesOfFrames(
               that: this, first: first, count: count);
+
+  /// **Trim comp to work area** (K-686): the comp becomes as long as its work
+  /// area, and everything on the timeline slides back with it.
+  ///
+  /// Takes nothing — the work area is in the document, so the engine reads
+  /// what it is trimming to rather than being told a span that could have
+  /// gone stale between the click and the commit. A comp with no work area is
+  /// already its own work area (K-203) and nothing happens.
+  void trimToWorkArea() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceTrimToWorkArea(
+        that: this,
+      );
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;
