@@ -482,7 +482,10 @@ split is the design:
 - **Derived, read only.** `LayerReference::get_graph()` answers a `BridgeLayerGraph`
     whole: every box the canvas draws — the Source, one per effect **in stack order**, the
     Layer out, then the drivers — each with the sockets it draws, its English label and its
-    bypass state. None of it is stored anywhere; it is worked out from the layer on each
+    bypass state. The Layer out carries one *writable* property socket, **Volume** (K-697):
+    a Number wire onto `Param { node: Out, port: "volume" }` — the Audio panel's *Duck
+    under…* — overrides the layer's Volume keyframes in the mix, and every other derived
+    socket still refuses a wire. None of it is stored anywhere; it is worked out from the layer on each
     ask, so there is nothing to write back and nothing to keep in step. Filtering `nodes`
     to its `Effect` boxes *is* the effect stack, which is why the stack view can never be
     made to lie: the graph has no second opinion to disagree with.
@@ -1007,9 +1010,13 @@ that read-back is gone.
 - **Beat detection** runs on its own worker inside `lumit-bridge::beats`, in the
     same shape: one analysis at a time, jobs carrying the generation they were
     made in so closing a project drops them, and the caller analysing inline
-    when there is no worker to hand it to. `detect_beats` waits for its own
-    answer and still returns the count, so the surface is unchanged; what moved
-    is where the seconds are spent. It matters because the pool
+    when there is no worker to hand it to. `detect_beats` takes the Audio
+    panel's whole Beats face as one `BridgeBeatOptions` block — source strip or
+    the comp mix, sensitivity, work-area range, the minimum-spacing floor, a
+    BPM override and the phase nudge, with `standard()` being the one-click
+    detection every menu entry runs — waits for its own answer, and returns
+    the count beside the tempo the grid used (`BridgeBeatsResult`), for the
+    panel's BPM well. It matters because the pool
     flutter_rust_bridge runs asynchronous calls on is *shared* — thumbnails,
     `has_audio`, `media_info` — and a couple of detections could hold the lot.
     The analysis answers times and confidences; the marker ids are minted by

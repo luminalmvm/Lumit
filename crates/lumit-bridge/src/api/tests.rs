@@ -8532,6 +8532,8 @@ fn a_layer_nobody_has_wired_reports_the_bare_chain() {
             // §7: drawn, unfilled, honest — audio comes only from a footage
             // layer's own stream, so nothing may be wired here in this phase.
             ("audio", BridgePortType::Audio, false),
+            // The one writable property socket (K-697): Duck under's landing.
+            ("volume", BridgePortType::Number, false),
         ],
     );
 }
