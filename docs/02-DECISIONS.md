@@ -20966,3 +20966,33 @@ board can gain the tint on its next pass; the ruling is recorded here first.
 Regression tests: `a Custom shader box wears the viz tint on its header`
 (graph_panel_metrics_test); `an inner box's header wears the shader tint`
 (shader_graph_frb_test).
+
+## K-676 — The interface answers at 60 fps minimum and is budgeted for 120: a product requirement, measured in the owner's own conditions
+
+**Status: DECIDED (2026-08-30, owner).** The founding mandate, recorded as a decision so
+it gates work the way one does. The owner's words: "the GUI must NEVER drop below 60fps,
+or at least interacting with a component must visually respond within the time of 1
+frame (the preview excluded). Ideally the ui can be even faster, up to 120fps ideally,
+and we can cap it there to reduce energy usage." In numbers, now docs/13 §2's 60/120
+rule beside B1/B2: input acknowledgement on the next frame, 16.6 ms a frame as the floor
+whose breach is a defect, 8.3 ms as the budget every interaction is designed against,
+and the budgets holding **on the owner's real documents**, not only the reference comp.
+The 120 fps energy cap is the ideal half: Flutter exposes no desktop frame-rate cap
+today, so the enforceable halves are "draw nothing at rest" and the 8.3 ms budget, and
+the cap is taken the day the framework offers one.
+
+**Measured in the owner's conditions, because the difference was the finding.** The
+owner's observation — "part of the reason you don't see the same issues when testing is
+because you don't fullscreen the window (and also the preview never shows anything)" —
+is treated as method, not anecdote: the binding note's numbers are taken with the window
+maximised on the 2560×1440 monitor and the preview showing the real edit's frames, the
+small-window/empty-preview delta is measured explicitly, and a bare copy of a `.lum`
+into scratch is now a *known way to measure the wrong thing* (media references are
+relative to the project file, K-173, so the copy's preview is silently empty — the
+probe prints which condition it is actually in).
+
+[docs/impl/ui-performance.md](impl/ui-performance.md) is the binding note: the gesture
+table, where each millisecond sits, the architecture (listenable selection, the repaint
+matrix, incremental scroll, per-revision engine questions, the rendering-backend pin),
+and the ordered work packages whose gates are re-measurements by the same parked probe.
+docs/13 §2 carries the rule; §7.3 names the probe the manual instrument for B1/B2.

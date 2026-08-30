@@ -82,6 +82,26 @@ These sit above everything else: they are what the editor feels like in the hand
 
 ---
 
+## Now - the interface answers at 60/120 (K-676, docs/impl/ui-performance.md)
+
+The owner's interface mandate is measured and has an answer. The note is binding: the
+gesture table taken in the owner's own conditions (window maximised, live preview —
+the small-window empty-preview test trap flatters by 4×), the architecture, and six
+ordered work packages, each gated by a probe re-run in those conditions:
+
+- **WP-1 — the backend pin**: ship the Windows runner on Skia (Impeller GLES rasters
+    30–49 ms a maximised frame; Skia 5 ms — 20 fps against 125), with its own K entry,
+    the re-test knob and the upstream issue.
+- **WP-2 — the select click**: layer selection becomes listenable row state; a
+    first-visit click's worst build < 8.3 ms (was 39–67 ms).
+- **WP-3 — incremental scroll**: `LazyBlocks` reuses identical children across window
+    slides + a per-block `RepaintBoundary` (scroll is 8–12 fps in every condition).
+- **WP-4 — zero per-frame document calls during drags**: `animated_mask_paths_at` and
+    `time_of_frame` off the scrub path (~1.3 ms a frame today).
+- **WP-5 — the edit storm becomes one wave**: the per-revision walks stop being
+    per-item sync calls (a switch click today: ~228 calls, 0.7–0.9 s to settled).
+- **WP-6 — the repaint matrix becomes CI gates** in `rebuild_budget_test.dart`.
+
 ## Now - the effect registry (K-381, docs/impl/effect-registry.md §6)
 
 The migration is done. All 35 built-ins declare themselves in

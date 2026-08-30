@@ -13188,3 +13188,40 @@ band below its label. So the strip is put above *both* halves, and simply leaves
 the part over the names blank. It looks like a strip over the time area, because
 that is what it is; it is laid out as a strip over everything, because that is
 what keeps the table a table.
+
+## 41. The 60/120 rule, and the robot hand that checks it, in plain terms
+
+Lumit's founding promise is that the interface never slows down, however big the
+composition. That promise now has numbers (K-676, docs/13): pressing anything is
+acknowledged on the very next frame of the screen; the interface never drops below
+60 frames a second while you interact with it; and every frame of chrome is budgeted
+at 8.3 milliseconds — the pace of a 120 Hz screen — so a fast monitor is actually
+fed rather than merely tolerated. The preview picture is the one deliberate
+exception: it may take its time or degrade (that is what the degradation ladder is
+for), but the controls around it may not. There is no policing thread and no clever
+governor behind this — it is a *promise about how the drawing is arranged*, held by
+measurements.
+
+Two things make that promise breakable in practice, and both were caught by
+measuring rather than reasoning. The first: a frame has two workers. One thread
+decides what everything looks like (build), a second turns that into pixels
+(raster), and either can be the slow one. Making the widget code cheaper does
+nothing when the raster half is what is late — which is exactly what the
+measurements showed on the big monitor, and why one work package is about *which
+rendering engine* Flutter uses rather than about Lumit's own code. The second:
+speed problems hide in conditions. A small window over an empty preview runs
+several times faster than a maximised window over a live edit, so a test run in the
+small window honestly reports a speed the user never sees. The rule that follows:
+performance is only ever measured the way the owner actually runs it — window
+maximised, a real project open, the preview showing real frames.
+
+The instrument is `flutter_ui/lib/probe/perf_probe.dart` — in plain terms, a robot
+hand. Given a special build flag, it opens a named project, moves a synthetic mouse
+through the real gestures (clicking layers, scrolling, zooming, dragging the
+playhead and the work area), and writes down what every frame cost and every
+question the interface asked the engine along the way. It prints the conditions it
+ran under — window size, and whether the preview was live — because those decide
+what the numbers mean. In an ordinary build the flag is absent and the compiler
+removes the probe entirely; it ships in nothing. The full story — the measured
+table, where each millisecond went, and the ordered work that closes the gap — is
+docs/impl/ui-performance.md.

@@ -99,6 +99,21 @@ Notes:
 - B1 is the UI thread alone: layout, paint, input. It holds regardless of engine load because
   the UI thread never evaluates, never blocks on a render, and reads results from lock-free
   mailboxes only. Any UI-thread stall > 16 ms is a bug regardless of budget.
+- **B1 and B2 are also the owner's recorded mandate** (K-676, 2026-08-30), restated as the
+  60/120 rule: interacting with anything answers on the **next frame** (the preview picture
+  excluded — it may degrade, §4), the interface **never drops below 60 fps** during an
+  interaction (16.6 ms a frame is the floor and any breach a defect), and every interaction
+  frame is budgeted at **8.3 ms** so a high-refresh display (120–165 Hz) is actually fed.
+  The rule holds on the owner's real documents **in the owner's own conditions** — window
+  maximised, the preview showing real frames — because the measured difference between those
+  conditions and a small test window over an empty preview is a factor of four in frame
+  rate. An explicit 120 fps energy cap is
+  the ideal; Flutter exposes no frame-rate cap on Windows today, so the enforceable halves
+  are "draw nothing at rest" (an idle editor schedules zero frames — measured, and a
+  regression is a defect) and the 8.3 ms budget itself.
+  [impl/ui-performance.md](impl/ui-performance.md) is the binding note: the measured
+  gesture table, the paint-layer architecture, and the work packages whose gates enforce
+  this panel by panel.
 - B9¹ **has a mechanism now, not a number** (K-585): loss is noticed, the renderer is rebuilt
   and the picture republished — see §4's "what is built today". The five seconds still cannot
   be *measured* without a real device to lose, so B9 stays on the manual list below with B1,
@@ -443,8 +458,10 @@ application depends on, run by the CI job **`performance gates (ratio vs baselin
   split, and setting that variable on a pinned machine is the whole of switching this
   paragraph back to the original design.
 - **Five budgets are out of a headless harness's reach** and stay manual or real-window
-  checks ([TODO.md](TODO.md) keeps them): B1 and B2 need the UI thread and a real window, B8
-  needs the encoder, B9 is device loss, B10 is A/V drift.
+  checks ([TODO.md](TODO.md) keeps them): B1 and B2 need the UI thread and a real window —
+  the parked probe of [impl/ui-performance.md](impl/ui-performance.md) §6 is their named
+  manual instrument until a real-window harness exists — B8 needs the encoder, B9 is device
+  loss, B10 is A/V drift.
 
 **Still owed.** A stress comp (4K, 20 layers, heavy effects) beside the reference one. A
 reference-desktop-class runner, on which the 10%-against-baseline rule replaces the interim

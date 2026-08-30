@@ -12,6 +12,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgePluginScan, rescanPlugins;
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
+import 'package:lumit_flutter/probe/perf_probe.dart';
 import 'package:lumit_flutter/shell/app_shell.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/bridge_trace.dart';
@@ -36,7 +37,12 @@ Future<void> main(List<String> args) async {
 
   // The call tracer takes StackTrace.current on every bridge call, which is
   // debugging money a release build must not spend.
-  await BridgeLib.init(handler: kDebugMode ? CustomHandler() : null);
+  // The parked measurement probe (docs/impl/ui-performance.md §6): when a
+  // build is given LUMIT_PROBE_PROJECT, bridge calls are counted per gesture.
+  final probeBridge =
+      probeProjectPath.isEmpty ? null : CountingBridgeHandler();
+  await BridgeLib.init(
+      handler: kDebugMode ? CustomHandler() : probeBridge);
   await ExpressionsMetadata.load();
   await ExpressionTextEditingController.initSyntaxHighlighting();
   final state = LumitState();
@@ -49,7 +55,8 @@ Future<void> main(List<String> args) async {
   // A document on the command line opens over the empty project. On failure
   // openProject posts its notice and the empty project stands — the same
   // degraded-but-alive behaviour as a failed File → Open.
-  final fromArgs = projectPathFromArgs(args);
+  final fromArgs = projectPathFromArgs(args) ??
+      (probeProjectPath.isEmpty ? null : probeProjectPath);
   if (fromArgs != null) state.openProject(fromArgs);
   // The one start-up plugin scan (docs/12 §2.6, K-594). Not awaited: opening
   // other people's bundles and spawning a broker apiece takes as long as it
@@ -63,5 +70,9 @@ Future<void> main(List<String> args) async {
       )));
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them (K-464).
-  runApp(LumitAppNew(state, LumitUiState(state), welcome: fromArgs == null));
+  final ui = LumitUiState(state);
+  runApp(LumitAppNew(state, ui, welcome: fromArgs == null));
+  // The probe drives the measured gestures and writes its table, only when
+  // asked for by the define — an ordinary build compiles all of it out of reach.
+  if (probeProjectPath.isNotEmpty) startPerfProbe(state, ui, probeBridge);
 }
