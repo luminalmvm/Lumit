@@ -60,7 +60,7 @@ Future<void> main() async {
   final wiggle = layer.newDriver(name: 'wiggle');
   layer.setGraph(
     drivers: [wiggle],
-    wiring: const BridgeGraphWiring(edges: [], layout: [], exposed: []),
+    wiring: const BridgeGraphWiring(edges: [], layout: [], exposed: [], groups: []),
   );
   final g = layer.getGraph();
   final driverNode = g.nodes.firstWhere((n) => n.node is BridgeNodeRef_Driver);
@@ -72,6 +72,7 @@ Future<void> main() async {
   layer.setGraph(
     drivers: layer.getGraphDrivers(),
     wiring: BridgeGraphWiring(
+      groups: const [],
       edges: [
         BridgeGraphEdge(
           from: BridgeOutputRef.driver(

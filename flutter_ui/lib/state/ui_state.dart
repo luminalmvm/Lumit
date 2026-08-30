@@ -1950,8 +1950,9 @@ class LumitUiState extends ChangeNotifier {
       setSelectedComp(front);
       // Unless there is no comp left to be in: no comp remembers the frame,
       // but the frame the user was on is still the frame.
-      if (front == null)
+      if (front == null) {
         playheadFrame.value = session.frame < 0 ? 0 : session.frame;
+      }
 
       final wanted = session.selectedLayer;
       if (front == null || wanted == null) return;

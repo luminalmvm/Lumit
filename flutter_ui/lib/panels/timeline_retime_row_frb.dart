@@ -19,7 +19,6 @@ import '../widgets/time_readout.dart';
 import 'graph_editor_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'keyframe_controls_frb.dart';
-import 'timeline_metrics_frb.dart';
 
 /// The layer's Retime (K-197): which moment of the source, in seconds, the
 /// layer shows at this point on its own timeline.
