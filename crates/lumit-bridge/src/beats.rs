@@ -48,7 +48,7 @@ use std::sync::{
 
 use uuid::Uuid;
 
-use crate::api::BridgeError;
+use crate::api::{beats::BridgeBeatOptions, BridgeError};
 
 /// One detected beat: when it lands, and how sure the analysis is.
 ///
@@ -59,6 +59,14 @@ use crate::api::BridgeError;
 pub(crate) struct Beat {
     pub time_seconds: f64,
     pub confidence: f32,
+}
+
+/// What one analysis found: the beats after every option has had its say, and
+/// the tempo the grid used — the estimate, or the caller's override.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Detected {
+    pub beats: Vec<Beat>,
+    pub bpm: f64,
 }
 
 /// The rate everything is mixed down and analysed at (docs/impl/beat-detection.md
@@ -75,9 +83,9 @@ struct Job {
     document: Arc<lumit_core::Document>,
     comp: Uuid,
     duration_seconds: f64,
-    sensitivity_percent: u32,
+    options: BridgeBeatOptions,
     generation: u64,
-    reply: Sender<Result<Vec<Beat>, BridgeError>>,
+    reply: Sender<Result<Detected, BridgeError>>,
 }
 
 /// The generation queued work belongs to. [`clear`] bumps it and the worker
@@ -113,12 +121,7 @@ fn jobs() -> Option<&'static Sender<Job>> {
 fn run(rx: &Receiver<Job>) {
     while let Ok(job) = rx.recv() {
         let answer = if job.generation == generation().load(Ordering::Relaxed) {
-            analyse(
-                &job.document,
-                job.comp,
-                job.duration_seconds,
-                job.sensitivity_percent,
-            )
+            analyse(&job.document, job.comp, job.duration_seconds, &job.options)
         } else {
             // The project this was asked for has closed. Nothing is analysed,
             // and the caller — if one is still waiting — is told why.
@@ -146,32 +149,91 @@ fn analyse(
     document: &Arc<lumit_core::Document>,
     comp: Uuid,
     duration_seconds: f64,
-    sensitivity_percent: u32,
-) -> Result<Vec<Beat>, BridgeError> {
+    options: &BridgeBeatOptions,
+) -> Result<Detected, BridgeError> {
     let inputs =
         crate::render::with_export_inputs(document, comp).ok_or(BridgeError::NoAudioPipeline)?;
-    if inputs.audio.is_empty() {
+
+    // The Source dropdown (docs/09 §5): the comp's mix, or one strip of it —
+    // the same "one layer's row" identity the mixer meters by, so a Precomp's
+    // beats are found in everything it carries.
+    let jobs: Vec<_> = match uuid::Uuid::parse_str(&options.source_layer) {
+        Ok(layer) => inputs
+            .audio
+            .iter()
+            .filter(|j| j.layer == layer)
+            .cloned()
+            .collect(),
+        Err(_) => inputs.audio,
+    };
+    if jobs.is_empty() {
         return Err(BridgeError::NoAudio);
     }
 
-    let samples = lumit_render::export::mixdown(&inputs.audio, RATE, duration_seconds);
-    let delta = lumit_audio::beat::delta_from_sensitivity(sensitivity_percent.clamp(0, 100) as u8);
+    let samples = lumit_render::export::mixdown(&jobs, RATE, duration_seconds);
+    let delta =
+        lumit_audio::beat::delta_from_sensitivity(options.sensitivity_percent.clamp(0, 100) as u8);
     let analysis = lumit_audio::beat::analyse_stereo(&samples, RATE, delta);
+
+    // The grid: the estimate, unless the BPM well (or Tap) handed one in.
+    let bpm = if options.bpm_override > 0.0 {
+        options.bpm_override
+    } else {
+        analysis.bpm
+    };
 
     // Snapping pulls onsets that are nearly on the tempo grid onto it, so a
     // performance that drifts by a few milliseconds still cuts cleanly. The
     // 45 ms window is the egui frontend's, kept identical on purpose.
     let times: Vec<f64> = analysis.onsets.iter().map(|o| o.time).collect();
-    let snapped = lumit_audio::beat::snap_to_grid(&times, analysis.bpm, 0.045);
+    let snapped = lumit_audio::beat::snap_to_grid(&times, bpm, 0.045);
 
-    Ok(snapped
+    let mut beats: Vec<Beat> = snapped
         .iter()
         .zip(&analysis.onsets)
         .map(|(time, onset)| Beat {
-            time_seconds: *time,
+            // The phase chips: the whole set nudged together, for a grid that
+            // is right but early or late against the cut.
+            time_seconds: *time + options.phase_ms / 1000.0,
             confidence: onset.confidence,
         })
-        .collect())
+        .collect();
+
+    beats = spaced(beats, options.min_spacing_ms);
+
+    // Range: the work area keeps only the beats inside it. The whole comp is
+    // still analysed — a grid estimated from eight bars is a worse grid.
+    if options.work_area_only {
+        if let Some((from, to)) = document.comp(comp).and_then(|c| c.work_area) {
+            let (from, to) = (from.0.to_f64(), to.0.to_f64());
+            beats.retain(|b| b.time_seconds >= from && b.time_seconds <= to);
+        }
+    }
+
+    Ok(Detected { beats, bpm })
+}
+
+/// The Min spacing floor (docs/09 §5, the board's control): of two beats
+/// closer than `min_spacing_ms`, the more confident one stands. A greedy
+/// left-to-right walk over the sorted list — deterministic, and the loser is
+/// always the quieter of the pair being compared. Zero keeps everything.
+fn spaced(mut beats: Vec<Beat>, min_spacing_ms: u32) -> Vec<Beat> {
+    if min_spacing_ms == 0 {
+        return beats;
+    }
+    let spacing = f64::from(min_spacing_ms) / 1000.0;
+    let mut kept: Vec<Beat> = Vec::with_capacity(beats.len());
+    for beat in beats.drain(..) {
+        match kept.last_mut() {
+            Some(last) if beat.time_seconds - last.time_seconds < spacing => {
+                if beat.confidence > last.confidence {
+                    *last = beat;
+                }
+            }
+            _ => kept.push(beat),
+        }
+    }
+    kept
 }
 
 /// Detect `comp`'s beats, on the worker where there is one to use.
@@ -185,11 +247,11 @@ pub(crate) fn detect(
     document: Arc<lumit_core::Document>,
     comp: Uuid,
     duration_seconds: f64,
-    sensitivity_percent: u32,
-) -> Result<Vec<Beat>, BridgeError> {
+    options: BridgeBeatOptions,
+) -> Result<Detected, BridgeError> {
     let queued = {
         let Ok(mut held) = depth().lock() else {
-            return analyse(&document, comp, duration_seconds, sensitivity_percent);
+            return analyse(&document, comp, duration_seconds, &options);
         };
         if *held >= MAX_QUEUED {
             None
@@ -199,7 +261,7 @@ pub(crate) fn detect(
         }
     };
     if queued.is_none() {
-        return analyse(&document, comp, duration_seconds, sensitivity_percent);
+        return analyse(&document, comp, duration_seconds, &options);
     }
 
     let (reply, answer) = channel();
@@ -207,7 +269,7 @@ pub(crate) fn detect(
         document: Arc::clone(&document),
         comp,
         duration_seconds,
-        sensitivity_percent,
+        options: options.clone(),
         generation: generation().load(Ordering::Relaxed),
         reply,
     };
@@ -220,14 +282,14 @@ pub(crate) fn detect(
         if let Ok(mut held) = depth().lock() {
             *held = held.saturating_sub(1);
         }
-        return analyse(&document, comp, duration_seconds, sensitivity_percent);
+        return analyse(&document, comp, duration_seconds, &options);
     }
 
     // A worker that died mid-job drops the sender; the caller then does the
     // work itself rather than reporting a failure it could still avoid.
     match answer.recv() {
         Ok(result) => result,
-        Err(_) => analyse(&document, comp, duration_seconds, sensitivity_percent),
+        Err(_) => analyse(&document, comp, duration_seconds, &options),
     }
 }
 
@@ -264,7 +326,7 @@ mod tests {
     fn a_silent_comp_is_answered_by_the_worker() {
         let _serial = serially();
         let document = Arc::new(lumit_core::Document::new());
-        let answer = detect(document, Uuid::now_v7(), 1.0, 50);
+        let answer = detect(document, Uuid::now_v7(), 1.0, BridgeBeatOptions::standard());
         assert!(
             matches!(
                 answer,
@@ -283,8 +345,13 @@ mod tests {
         let _serial = serially();
         let document = Arc::new(lumit_core::Document::new());
         let comp = Uuid::now_v7();
-        let first = detect(Arc::clone(&document), comp, 1.0, 50);
-        let second = detect(document, comp, 1.0, 50);
+        let first = detect(
+            Arc::clone(&document),
+            comp,
+            1.0,
+            BridgeBeatOptions::standard(),
+        );
+        let second = detect(document, comp, 1.0, BridgeBeatOptions::standard());
         assert_eq!(
             first.is_ok(),
             second.is_ok(),
@@ -303,8 +370,13 @@ mod tests {
         let _serial = serially();
         let document = Arc::new(lumit_core::Document::new());
         let comp = Uuid::now_v7();
-        let through_worker = detect(Arc::clone(&document), comp, 1.0, 50);
-        let inline = analyse(&document, comp, 1.0, 50);
+        let through_worker = detect(
+            Arc::clone(&document),
+            comp,
+            1.0,
+            BridgeBeatOptions::standard(),
+        );
+        let inline = analyse(&document, comp, 1.0, &BridgeBeatOptions::standard());
         assert_eq!(through_worker.is_ok(), inline.is_ok());
         assert_eq!(
             format!("{through_worker:?}"),
@@ -324,7 +396,7 @@ mod tests {
             document: Arc::new(lumit_core::Document::new()),
             comp: Uuid::now_v7(),
             duration_seconds: 1.0,
-            sensitivity_percent: 50,
+            options: BridgeBeatOptions::standard(),
             // One behind whatever the current generation is: exactly what a
             // job queued before a `clear` looks like to the worker.
             generation: generation().load(Ordering::Relaxed).wrapping_sub(1),
@@ -342,6 +414,29 @@ mod tests {
             Ok(Err(BridgeError::InvalidProject))
         ));
         assert_eq!(queue_depth(), 0);
+    }
+
+    /// The spacing floor keeps the louder of a crowded pair and leaves an
+    /// already-sparse set alone — the board's Min spacing well, pinned.
+    #[test]
+    fn min_spacing_keeps_the_more_confident_of_a_crowded_pair() {
+        let beat = |t: f64, c: f32| Beat {
+            time_seconds: t,
+            confidence: c,
+        };
+        let crowded = vec![
+            beat(0.00, 0.9),
+            beat(0.05, 0.4),  // inside 120 ms of the first, quieter: dropped
+            beat(0.10, 0.95), // inside again, louder: replaces the first
+            beat(0.50, 0.2),
+        ];
+        assert_eq!(
+            spaced(crowded.clone(), 120),
+            vec![beat(0.10, 0.95), beat(0.50, 0.2)]
+        );
+        assert_eq!(spaced(crowded.clone(), 0), crowded, "zero is off");
+        let sparse = vec![beat(0.0, 0.5), beat(1.0, 0.5)];
+        assert_eq!(spaced(sparse.clone(), 120), sparse);
     }
 
     /// `clear` moves the generation on, which is the whole of what cancelling

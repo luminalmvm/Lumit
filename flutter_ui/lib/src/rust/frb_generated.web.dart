@@ -9,6 +9,7 @@
 import 'api.dart';
 import 'api/assets.dart';
 import 'api/audio.dart';
+import 'api/beats.dart';
 import 'api/cache.dart';
 import 'api/colour.dart';
 import 'api/composition.dart';
@@ -136,6 +137,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAutoSide dco_decode_box_autoadd_bridge_auto_side(dynamic raw);
+
+  @protected
+  BridgeBeatOptions dco_decode_box_autoadd_bridge_beat_options(dynamic raw);
 
   @protected
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw);
@@ -308,6 +312,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes dco_decode_bridge_axis_modes(dynamic raw);
+
+  @protected
+  BridgeBeatOptions dco_decode_bridge_beat_options(dynamic raw);
+
+  @protected
+  BridgeBeatsResult dco_decode_bridge_beats_result(dynamic raw);
 
   @protected
   BridgeBezierSide dco_decode_bridge_bezier_side(dynamic raw);
@@ -1145,6 +1155,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeBeatOptions sse_decode_box_autoadd_bridge_beat_options(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
       SseDeserializer deserializer);
 
@@ -1351,6 +1365,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAxisModes sse_decode_bridge_axis_modes(SseDeserializer deserializer);
+
+  @protected
+  BridgeBeatOptions sse_decode_bridge_beat_options(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBeatsResult sse_decode_bridge_beats_result(
+      SseDeserializer deserializer);
 
   @protected
   BridgeBezierSide sse_decode_bridge_bezier_side(SseDeserializer deserializer);
@@ -2309,6 +2331,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAutoSide self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_beat_options(
+      BridgeBeatOptions self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
 
@@ -2526,6 +2552,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_axis_modes(
       BridgeAxisModes self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_beat_options(
+      BridgeBeatOptions self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_beats_result(
+      BridgeBeatsResult self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_bezier_side(

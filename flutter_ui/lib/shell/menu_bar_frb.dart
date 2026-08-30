@@ -32,6 +32,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:provider/provider.dart';
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -888,7 +889,7 @@ List<MenuSection> lumitMenus(
         MenuEntry(
             l10n.menuDetectBeats,
             onComp((c) => c
-                .detectBeats(sensitivityPercent: 50)
+                .detectBeats(options: BridgeBeatOptions.standard())
                 .then((_) {}, onError: (_) {}))),
         MenuEntry(
             l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),

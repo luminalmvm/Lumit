@@ -6481,7 +6481,7 @@ fn detecting_beats_in_a_silent_composition_says_so() {
     // On a machine with no GPU the pipeline itself is unavailable, which is a
     // different — and equally calm — answer.
     assert!(matches!(
-        comp.detect_beats(50),
+        comp.detect_beats(crate::api::beats::BridgeBeatOptions::standard()),
         Err(BridgeError::NoAudio) | Err(BridgeError::NoAudioPipeline)
     ));
 }

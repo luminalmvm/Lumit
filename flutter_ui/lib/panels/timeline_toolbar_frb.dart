@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
@@ -400,7 +401,7 @@ Future<void> _showMoreMenu(
         context.read<LumitState>().busy,
         l10n.detectingBeats,
         comp
-            .detectBeats(sensitivityPercent: 50)
+            .detectBeats(options: BridgeBeatOptions.standard())
             .then<void>((_) => onChanged(), onError: (_) {}),
       );
     case _:

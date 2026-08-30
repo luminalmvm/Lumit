@@ -7,6 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
+import 'beats.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'folder.dart';
@@ -581,15 +582,14 @@ class CompositionReference {
 
   /// Detect beats and replace this comp's beat markers.
   ///
-  /// `sensitivity_percent` runs 0..100, where 50 is the standard setting and
-  /// higher finds more. Returns how many markers were placed — zero is a
-  /// legitimate answer for quiet or arrhythmic audio, and worth showing as
-  /// such rather than as a failure. Seconds-long on a long comp, which is why
-  /// the analysis itself happens on the beat worker ([`crate::beats`]) and
-  /// this call waits for it.
-  Future<int> detectBeats({required int sensitivityPercent}) =>
+  /// Returns how many markers were placed and the tempo used — zero placed
+  /// is a legitimate answer for quiet or arrhythmic audio, and worth showing
+  /// as such rather than as a failure. Seconds-long on a long comp, which is
+  /// why the analysis itself happens on the beat worker ([`crate::beats`])
+  /// and this call waits for it.
+  Future<BridgeBeatsResult> detectBeats({required BridgeBeatOptions options}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceDetectBeats(
-          that: this, sensitivityPercent: sensitivityPercent);
+          that: this, options: options);
 
   /// The document's revision number: bumped once per committed change, undo,
   /// redo or recovery. The Dart read model compares it per rebuild — one

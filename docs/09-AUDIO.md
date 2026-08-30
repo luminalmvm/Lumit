@@ -212,6 +212,12 @@ same decoded ring, so it is warm wherever the cache bar is warm.
     grid beats where detection missed one. The grid is assistive; markers remain
     individually editable.
   - **Tap tempo**: tap a key in time with playback to seed the BPM estimate.
+  - **Source, range, spacing, phase** (the AudioWorkspace board's Beats section): detection
+    can listen to one layer's strip instead of the comp mix, keep only the beats inside the
+    work area (the whole comp is still analysed — a grid estimated from eight bars is a
+    worse grid), enforce a minimum spacing (the more confident of a crowded pair stands),
+    and nudge the whole generated set by a phase offset. One options block over the bridge
+    (`BridgeBeatOptions`), whose defaults are the one-click detection every menu entry runs.
 - Beat markers are ordinary markers with a `beat` label: deletable, draggable, and stored
   in the project file. Re-running detection offers replace or merge.
 - **While it runs**: detection is seconds-long on a long composition, so the shell puts up

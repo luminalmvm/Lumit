@@ -242,7 +242,7 @@ class BridgeClip {
           reachEndFrame == other.reachEndFrame;
 }
 
-/// The curve a fade command writes (docs/09 §6, K-693) — the Audio panel's
+/// The curve a fade command writes (docs/09 §6, K-695) — the Audio panel's
 /// three chips. Each is built from the easing vocabulary that already exists,
 /// so a fade's keys can be dragged and reshaped like any others afterwards.
 enum BridgeFadeShape {
@@ -396,7 +396,7 @@ class BridgeLayerInfo {
   /// revision is a sync crossing per row for a fact this walk has in hand.
   final BridgeScalar volumeDb;
 
-  /// The layer's Pan (−100 full left … +100 full right, K-692), carried
+  /// The layer's Pan (−100 full left … +100 full right, K-694), carried
   /// beside the Volume and for the same reason: the fold-out's Pan row
   /// draws its own keyframe diamonds, and asking per audio row per
   /// revision would be a sync crossing for a fact this walk already holds.
@@ -1756,7 +1756,7 @@ class LayerReference {
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 
   /// **Fade the layer's sound up from silence** over `seconds` from its in
-  /// point (docs/09 §6, K-693).
+  /// point (docs/09 §6, K-695).
   ///
   /// Ordinary Volume keyframes — a pair, between the −∞ knee and whatever
   /// level the layer already holds — so the fade is visible on the row, can
@@ -1957,7 +1957,7 @@ class LayerReference {
         that: this,
       );
 
-  /// This layer's **Pan** (docs/09 §6, K-692): −100 is full left, 0 centre,
+  /// This layer's **Pan** (docs/09 §6, K-694): −100 is full left, 0 centre,
   /// +100 full right — a percentage of the way to one side.
   BridgeScalar getPan() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetPan(
