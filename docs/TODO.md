@@ -89,9 +89,11 @@ gesture table taken in the owner's own conditions (window maximised, live previe
 the small-window empty-preview test trap flatters by 4×), the architecture, and six
 ordered work packages, each gated by a probe re-run in those conditions:
 
-- **WP-1 — the backend pin**: ship the Windows runner on Skia (Impeller GLES rasters
-    30–49 ms a maximised frame; Skia 5 ms — 20 fps against 125), with its own K entry,
-    the re-test knob and the upstream issue.
+- **WP-1 - LANDED as K-677 (supersedes this row's Skia pin)**: the owner ruled
+    Impeller ships, no Skia; the unmet gap is the Windows embedder's own (4x MSAA
+    whole-window resolve, no partial repaint - ~8 ms/megapixel) and WP-7 in the note
+    pursues it (per-upgrade re-measure, the drafted upstream issue, the local-engine
+    MSAA test).
 - **WP-2 — the select click**: layer selection becomes listenable row state; a
     first-visit click's worst build < 8.3 ms (was 39–67 ms).
 - **WP-3 — incremental scroll**: `LazyBlocks` reuses identical children across window
