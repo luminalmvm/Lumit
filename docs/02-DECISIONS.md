@@ -20020,3 +20020,33 @@ composition's rate and is the wrong place to be deciding policy.
 
 Regression test: `parked past the work area previews the tail instead of snapping back`
 (`playback_loop_test`).
+
+## K-643 — A layer reference in a `.aep` is a layer **id**, and the capture reports an index
+
+**Status: DECIDED (2026-08-30).** Pins the `tdpi` arm of `crates/lumit-import/src/aep/props.rs`
+against the vocabulary [11-AE-IMPORT.md](11-AE-IMPORT.md) §2.2 already fixed.
+
+**What was wrong.** An effect parameter that points at another layer — Set matte's row,
+Displacement map's, Texturize's Texture, Light wrap's Background — is stored in the file as
+a `tdpi` chunk holding the target's **layer id**. The scripting DOM reports the target's
+**stacking index**, and the capture's vocabulary is the DOM's, because the bundle route (the
+ExtendScript walker) is what the capture schema was written from. The `.aep` route wrote the
+id through unchanged, so the mapping layer — which reads the number as an index, through
+`Conv::layer_ids` — resolved a real reference to no layer at all and imported the effect as
+its documented no-op.
+
+That is the worst shape a bug can take here: the result is indistinguishable from a row the
+user never filled in. Nothing crashed and no report row appeared, because the value was
+never *wrong*, only in the wrong units. It surfaced from the owner's own project, whose ten
+Set Channels instances name layers 90, 167, 229, 463 and 704 in compositions of nine and
+eighteen layers.
+
+**The rule now.** The id becomes an index where the map is known — in `read_layer`, which
+already holds the whole stack's `indices` for the parent and matte references, and now
+passes it down through `props::Ctx::layers`. Zero is After Effects' "None" and stays zero,
+and **an id no layer in that composition claims also stays zero** rather than becoming
+somebody else's index: a reference that cannot be resolved is None, never a guess.
+
+Regression test: `a_layer_reference_is_reported_as_a_stacking_index_not_a_layer_id`
+(`aep::props`).
+

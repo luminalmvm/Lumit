@@ -626,6 +626,7 @@ fn read_comp(
                     has_source: false,
                     start: 0.0,
                     in_effect: false,
+                    layers: None,
                 },
             )
         })
@@ -849,6 +850,7 @@ fn read_layer(
         has_source: source.is_some(),
         start: start_time,
         in_effect: false,
+        layers: Some(indices),
     };
     let (mut properties, markers, mut rows) = match inside.iter().find(|c| c.is_list(b"tdgp")) {
         Some(group) => {

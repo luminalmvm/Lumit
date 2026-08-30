@@ -128,6 +128,12 @@ pub(crate) struct Ctx<'a> {
     /// Whether the group being read sits inside an effect, which changes how a
     /// two-dimensional value is read.
     pub in_effect: bool,
+    /// The comp's layer ids to stacking indices. A property that points at
+    /// another layer stores that layer's **id**, and the capture's vocabulary
+    /// is the *index* scripting reports — so the one is turned into the other
+    /// here, where the map is known, rather than left for a reader that has
+    /// no way to tell the two apart.
+    pub layers: Option<&'a std::collections::HashMap<u32, u32>>,
 }
 
 /// Everything one property subtree produced.
@@ -655,8 +661,17 @@ fn read_leaf(
         return node;
     }
     if let Some(reference) = inside.iter().find(|chunk| chunk.id == *b"tdpi") {
+        // Stored as the target's layer id; reported as its stacking index. A
+        // zero is After Effects' "None", and an id no layer in this comp
+        // claims stays zero rather than becoming somebody else's index.
+        let id = u32_at(reference.body, 0).unwrap_or_default();
+        let index = match (id, ctx.layers) {
+            (0, _) => 0,
+            (id, Some(map)) => map.get(&id).copied().unwrap_or_default(),
+            (id, None) => id,
+        };
         node.value_type = Some("layer".to_string());
-        node.value = Some(json!(i32_at(reference.body, 0).unwrap_or_default()));
+        node.value = Some(json!(index));
         return node;
     }
 
@@ -1390,6 +1405,7 @@ mod tests {
             has_source: true,
             start: 0.0,
             in_effect: false,
+            layers: None,
         }
     }
 
@@ -1400,6 +1416,65 @@ mod tests {
             .next()
             .expect("the synthetic group parses");
         read_group(&chunk, ctx())
+    }
+
+    /// **A layer reference is stored as an id and reported as an index.**
+    ///
+    /// A silent one before this was fixed, and the worst shape of silent: the
+    /// number the file holds in a `tdpi` is the target's **layer id**, which for
+    /// a real project is in the hundreds, while the whole mapping layer — Set
+    /// matte's row, Displacement map's, Texturize's, Set channels' — reads it as
+    /// a **stacking index**. Every one of those resolved to no layer at all and
+    /// imported as the effect's documented no-op, which looks exactly like a row
+    /// the user never filled in. Reading the owner's own project found it: ten
+    /// Set Channels instances naming layers 90, 167, 229, 463 and 704 in
+    /// compositions of nine and eighteen layers.
+    ///
+    /// An id no layer in this composition claims stays zero — After Effects'
+    /// "None" — rather than becoming somebody else's index.
+    #[test]
+    fn a_layer_reference_is_reported_as_a_stacking_index_not_a_layer_id() {
+        let ids: std::collections::HashMap<u32, u32> =
+            [(167_u32, 2_u32), (704, 3)].into_iter().collect();
+        let mut runs = leaf(
+            "ADBE Set Channels-0001",
+            tdb4_record(1, false, false),
+            chunk(b"tdpi", &167_u32.to_be_bytes()),
+        );
+        runs.extend(leaf(
+            "ADBE Set Channels-0003",
+            tdb4_record(1, false, false),
+            chunk(b"tdpi", &9999_u32.to_be_bytes()),
+        ));
+        runs.extend(leaf(
+            "ADBE Set Channels-0005",
+            tdb4_record(1, false, false),
+            chunk(b"tdpi", &0_u32.to_be_bytes()),
+        ));
+        let bytes = group(runs);
+        let chunk = Chunks::new(&bytes)
+            .ok()
+            .next()
+            .expect("the synthetic group parses");
+        let read = read_group(
+            &chunk,
+            Ctx {
+                layers: Some(&ids),
+                ..ctx()
+            },
+        );
+
+        assert_eq!(read.properties.len(), 3);
+        for p in &read.properties {
+            assert_eq!(p.value_type.as_deref(), Some("layer"));
+        }
+        assert_eq!(read.properties[0].value, Some(json!(2)));
+        assert_eq!(
+            read.properties[1].value,
+            Some(json!(0)),
+            "an id no layer here claims is None, never another layer's index"
+        );
+        assert_eq!(read.properties[2].value, Some(json!(0)), "None stays None");
     }
 
     /// **A percentage is a fraction on disk, and a colour is A,R,G,B in
