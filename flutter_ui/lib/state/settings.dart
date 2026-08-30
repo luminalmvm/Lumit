@@ -57,7 +57,12 @@ class PerformanceSettings {
   String? diskCacheFolder;
 
   PerformanceSettings({
-    this.playback = PlaybackMode.adaptive,
+    // **Every frame is the shipped default** (K-670). Adaptive keeps time by
+    // dropping resolution, which is the right answer for a rough timing pass
+    // and the wrong one for the first thing anybody does with a new install —
+    // look at the picture. A preview that quietly softens itself reads as the
+    // work being soft.
+    this.playback = PlaybackMode.everyFrame,
     this.cacheBudgetBytes,
     this.vramBudgetBytes,
     this.diskBudgetBytes,
@@ -76,11 +81,11 @@ class PerformanceSettings {
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
       PerformanceSettings(
-        // An unknown name (an older or newer build) falls back to adaptive,
-        // which is the mode that always plays.
+        // An unknown name (an older or newer build) falls back to the shipped
+        // default rather than to whichever mode this line was written under.
         playback: PlaybackMode.values.firstWhere(
           (m) => m.name == j['playback'],
-          orElse: () => PlaybackMode.adaptive,
+          orElse: () => PerformanceSettings().playback,
         ),
         // A value written by a build that stored something else entirely, or a
         // hand-edited file, must not stop the settings loading: anything that

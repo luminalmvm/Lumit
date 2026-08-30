@@ -676,7 +676,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ));
       case SettingsPage.previewAndCache:
         _perfEdit(() {
-          workspace.performance.playback = PlaybackMode.adaptive;
+          // The shipped default, read from the one place it is written down,
+          // so Reset cannot drift from what a fresh install gets.
+          workspace.performance.playback = PerformanceSettings().playback;
           workspace.settingsChanged();
           resetRealtime();
         });

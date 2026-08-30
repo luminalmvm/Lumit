@@ -2400,8 +2400,12 @@ A second, narrower command surface, and deliberately not a duplicate of §12: th
 every command by name, the console is **effects, fast**. Modelled on Video Copilot's FX
 Console, which is what After Effects users install first. The radial ring the console once
 raised, and the scrim under it, are gone by the owner's ruling (K-658, superseding the
-radial half of K-325/K-326/K-327): the console is **one search popover**, and the graph
-canvas's `Tab` opens the very same surface (K-645).
+radial half of K-325/K-326/K-327): the console is **one search popover**, and it is the
+graph's one add surface too (K-645, K-673). Opened with the Graph panel focused — or
+summoned by a wire let go over empty canvas — the same popover wears the canvas's own
+list: effects (which join the stack, and so the chain), drivers, saved groups; inside a
+Custom shader's inner graph, the shader vocabulary, Parameter box included. The graph's
+own `Tab` door went with K-673: one surface, one key.
 
 **Where it opens.** The popover MUST open **on the pointer** — its search row under the
 hand, anywhere in the window, pulled in just enough that the whole popover stays on
@@ -2420,9 +2424,8 @@ every kicker in its category strip whole, capped at 720px, past which the strip 
 sideways rather than truncating, K-672):
 
 - The **search row**: the magnifier, the query, and a kicker at the right naming the key
-  that opened it ("Ctrl+Space" from the shell, "Tab" from the graph canvas) — one surface,
-  and the kicker is what says which door was used. The snapshot button sits at the row's
-  end.
+  that opened it — "Ctrl+Space" wherever a key did; a console a wire-drop summoned wears
+  none (K-673). The snapshot button sits at the row's end.
 - The **category strip**: `All`, then every grouping the results carry (the browse
   groupings, drivers filed under Controls per K-645). Choosing one narrows the list to
   that group; `All` lets everything back in. A result with no grouping (a composition)

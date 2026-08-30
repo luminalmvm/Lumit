@@ -18,7 +18,9 @@ String _scratchStore(String name) =>
 void main() {
   test('performance defaults are the shipped ones', () {
     final p = PerformanceSettings();
-    expect(p.playback, PlaybackMode.adaptive);
+    // Every frame, not adaptive (K-670): a fresh install shows the picture it
+    // was asked for rather than a softened one.
+    expect(p.playback, PlaybackMode.everyFrame);
   });
 
   test('interface defaults are a no-op for existing installs', () {
@@ -382,9 +384,13 @@ void main() {
     Workspace.storeOverride = null;
   });
 
-  test('an unknown playback name falls back to adaptive', () {
+  test('an unknown playback name falls back to the shipped default', () {
     final p = PerformanceSettings.fromJson(const {'playback': 'warp-speed'});
-    expect(p.playback, PlaybackMode.adaptive);
+    expect(p.playback, PerformanceSettings().playback);
+    // A stored name this build *does* know is untouched by the default change.
+    expect(
+        PerformanceSettings.fromJson(const {'playback': 'adaptive'}).playback,
+        PlaybackMode.adaptive);
   });
 
   // The bug: the budgets were live engine state with nothing behind them, so

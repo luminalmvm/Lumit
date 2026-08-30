@@ -958,16 +958,16 @@ void main() {
               'resolution→scale arithmetic itself is pinned in '
               'menu_bar_frb_test.dart');
 
-      expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive,
-          reason: 'adaptive is the mode that always plays, so it is default');
-      await pickHeaderRow(
-          tester, 'viewer-resolution', 'viewer-playback-everyFrame');
       expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame,
+          reason: 'every frame is the shipped default (K-670)');
+      await pickHeaderRow(
+          tester, 'viewer-resolution', 'viewer-playback-adaptive');
+      expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive,
           reason: 'and the choice is remembered, not just drawn');
 
       await pickHeaderRow(
-          tester, 'viewer-resolution', 'viewer-playback-adaptive');
-      expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive);
+          tester, 'viewer-resolution', 'viewer-playback-everyFrame');
+      expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame);
     });
 
     /// **Auto and Full are not the same tier** (K-357). Auto renders what the
@@ -982,14 +982,14 @@ void main() {
 
       // The panel is smaller than the comp, so the two must differ.
       p.uiState.reportViewerScale(0.25);
-      expect(p.uiState.previewResolution, PreviewResolution.auto,
-          reason: 'Auto is the default');
-      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
-          reason: 'Auto renders only what the panel can show');
-
-      p.uiState.setPreviewResolution(PreviewResolution.full);
+      expect(p.uiState.previewResolution, PreviewResolution.full,
+          reason: 'Full is the default (K-670)');
       expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
           reason: 'Full is comp resolution whatever the panel shows');
+
+      p.uiState.setPreviewResolution(PreviewResolution.auto);
+      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9),
+          reason: 'Auto renders only what the panel can show');
 
       p.uiState.setPreviewResolution(PreviewResolution.third);
       expect(p.uiState.viewerScale, closeTo(1.0 / 3.0, 1e-9),
@@ -1008,8 +1008,15 @@ void main() {
       expect(p.uiState.previewResolution, PreviewResolution.quarter);
 
       p.uiState.setSelectedComp(other);
-      expect(p.uiState.previewResolution, PreviewResolution.auto,
-          reason: 'a comp never set is at the default');
+      expect(p.uiState.previewResolution, PreviewResolution.full,
+          reason: 'a comp never set is at the default (K-670)');
+
+      // And Auto is a choice like any other now that it is not the default:
+      // stored, remembered per comp, and not mistaken for "never chosen".
+      p.uiState.setPreviewResolution(PreviewResolution.auto);
+      expect(
+          p.uiState.session().previewResolutions[other.internalid.toString()],
+          'auto');
 
       p.uiState.setSelectedComp(p.comp);
       expect(p.uiState.previewResolution, PreviewResolution.quarter,
@@ -1677,6 +1684,10 @@ void main() {
     }) async {
       final p = withLayer();
       p.uiState.tools.select(ToolMode.zoom);
+      // These read the magnification through `viewerScale`, which only tracks
+      // it on Auto — a fixed tier is the tier you asked for whatever the panel
+      // is showing (K-357), and Full is now the default (K-670).
+      p.uiState.setPreviewResolution(PreviewResolution.auto);
       await tester.pumpWidget(hostPanel(
         child: const ViewerPanelFrb(),
         state: p.state,
@@ -3259,6 +3270,9 @@ void main() {
     /// through the picker showing a true percentage between its steps.
     testWidgets('the wheel zooms the picture about the cursor', (tester) async {
       final p = withLayer();
+      // Auto, because this reads the magnification through the preview scale
+      // and only Auto follows the panel (K-357); Full is the default (K-670).
+      p.uiState.setPreviewResolution(PreviewResolution.auto);
       await mount(tester, p);
 
       final before = p.uiState.viewerScale;

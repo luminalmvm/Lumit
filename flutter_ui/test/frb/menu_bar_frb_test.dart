@@ -733,13 +733,15 @@ void main() {
       final p = await mount(tester);
       // The tier is per composition since K-357, so there has to be one.
       await makeComp(tester);
-      expect(p.uiState.previewResolution, PreviewResolution.auto,
-          reason: 'Auto is the default — it renders what the panel can show');
+      expect(p.uiState.previewResolution, PreviewResolution.full,
+          reason: 'Full is the default (K-670) — comp resolution whatever the '
+              'panel happens to be showing');
 
       // A panel showing a quarter of the comp: Auto follows it, and the fixed
       // tiers do not. That difference is the point of having both.
       p.uiState.reportViewerScale(0.25);
-      expect(p.uiState.viewerScale, closeTo(0.25, 1e-9));
+      expect(p.uiState.viewerScale, closeTo(1.0, 1e-9),
+          reason: 'the default does not follow the panel down');
 
       await choose(tester, 'View', 'Half', under: 'Resolution');
       expect(p.uiState.previewResolution, PreviewResolution.half);

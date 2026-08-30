@@ -11,7 +11,6 @@
 // A value that disagrees with the drawing is a defect, so each expectation
 // carries the drawing's own number in its reason.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
@@ -20,6 +19,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
@@ -325,24 +325,28 @@ void main() {
       expect(find.text('Types'), findsOneWidget);
     });
 
-    /// 8. **Tab opens the console** (K-645), wearing the canvas's own words:
-    /// the key that opened it in the head's kicker, and a foot line saying what
-    /// picking a row will do. The popover's own shape is the console's now, so
-    /// its numbers are asserted where it lives rather than here.
-    testWidgets('the Tab search is the console, in the canvas\'s words',
+    /// 8. **Ctrl+Space opens the console over the graph** (K-645, K-673),
+    /// wearing the canvas's own words: the one key in the head's kicker, and a
+    /// foot line saying what picking a row will do. The popover's own shape is
+    /// the console's now, so its numbers are asserted where it lives rather
+    /// than here.
+    testWidgets('the graph\'s add surface is the console, in its own words',
         (tester) async {
       final p = withBlur();
       await mount(tester, p);
 
       await tester.tapAt(const Offset(600, 400));
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      p.uiState.activePanel.value = Panel.graph;
+      expect(p.uiState.consoleClaim!(), isTrue,
+          reason: 'the graph claims Ctrl+Space while it is the focused panel');
       await tester.pump();
 
       expect(
           find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-      expect(find.text('Tab'), findsOneWidget);
-      expect(find.text('Adds a driver node'), findsOneWidget,
+      expect(find.text('Ctrl+Space'), findsOneWidget,
+          reason: 'one surface, one key — the Tab door went (K-673)');
+      expect(find.text('Adds a box to the graph'), findsOneWidget,
           reason: 'no wire in hand, so the foot says what a pick will do');
       expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
           findsOneWidget,

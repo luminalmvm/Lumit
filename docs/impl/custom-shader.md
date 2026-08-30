@@ -562,8 +562,8 @@ rather than the model.** The layer's graph has an image chain that *is* the effe
 (node-graph.md §1.1) and drivers hanging off it; the inner graph has no stack, no picture
 chain and no drivers — it is a pure-function DAG whose wires carry numbers and vectors. What
 is shared is the drawing: the dot grid, the node card with its shared header (a tick, a twirl and a
-name — the same one an Effect controls heading wears), type-coloured wires and sockets, Tab
-search, frame-all, the selected border.
+name — the same one an Effect controls heading wears), type-coloured wires and sockets, the
+Ctrl+Space console as the add surface (K-673), frame-all, the selected border.
 Sharing the widget and not the document type is what keeps §1.1's honesty guarantee from
 being quietly weakened by a second meaning for `Edge`.
 

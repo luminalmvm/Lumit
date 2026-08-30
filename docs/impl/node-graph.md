@@ -44,6 +44,14 @@ existing whole-stack `SetLayerEffects` commit:
 - deleting a node with Heal on = remove at that index — the list heals by construction;
 - rewiring the chain = reorder.
 
+**Built 2026-08-30 (K-674).** A chain input's wire is picked up by its far end exactly as
+a stored wire is: dropped on another chain input it re-routes (the fed box moves to sit
+right after the wire's source — one `reorder` op; dropped on the Layer out, the source
+moves to the end), and dropped on empty canvas the connection goes the only honest way a
+derived wire can — the box it fed leaves the list (`remove`), neighbours joining by
+construction. Each answer is one op and one undo step, and a press that never travelled
+does nothing: a chain discard costs an effect, so a slip must never be one.
+
 An effect's main **Input** port accepts exactly one wire and it is, by construction, the
 previous stack entry's Output. The panel never offers a gesture that would branch or skip
 the image chain (dropping an Output on an occupied Input re-routes; it never fans out).
@@ -401,7 +409,7 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
   `LayerReference::add_effect` is where that fork lives so no caller has to know.
   **Built 2026-08-24**: an entry carries the ports it
   declares (`BridgeEffectInfo::inputs` / `outputs`, `wired` always false), which is what
-  lets the panel fold the auto-wire into the add's own commit and filter the Tab search to
+  lets the panel fold the auto-wire into the add's own commit and filter the console to
   the entries a dragged wire could land on. Without it the auto-wire had to be a second op,
   because a driver's outputs only existed once `get_graph` could derive them.
 - **Live drag on a driver**: `CompositionReference::render_frame_with_driver_preview(
@@ -579,8 +587,9 @@ Node panel still costs no call in a rebuild.
 
 The panel to the approved **NodeGraph** drawing: dot-grid canvas, node anatomy (header
 kick, port rows, sockets), type-coloured wires and the legend, Auto-wire and Heal
-toggles (`HouseToggle`, on in `animated` per K-465), frame-all and zoom readout, the Tab
-search popover with type-filtered results when a wire is dragged onto empty canvas,
+toggles (`HouseToggle`, on in `animated` per K-465), frame-all and zoom readout, the
+console (Ctrl+Space over the canvas, or a wire dragged onto empty ground — K-673) with
+type-filtered results while a wire is in hand,
 drag-to-wire and disconnect, `E` exposure, dashed bypass, the selected border in
 `animated` (K-473). Image-chain gestures lower to `set_effects`; everything else to
 `set_layer_graph`; one gesture, one undo step. The Effect-controls rows gain the *driven*

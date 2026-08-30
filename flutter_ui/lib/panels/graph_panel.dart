@@ -138,8 +138,8 @@ Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
 /// row glyphs' 16 (K-456: the manifest's number, not a preference).
 const double graphIconSize = 13;
 
-// The Tab search is the Ctrl+Space console (K-645): one search surface, opened
-// by two keys. `shell/fx_console_frb.dart` owns its shape.
+// The graph adds through the Ctrl+Space console (K-645, K-673): one search
+// surface, one key. `shell/fx_console_frb.dart` owns its shape.
 
 /// A group's wash: the air it leaves round its members, and the band its name
 /// sits in above them (K-651, the NodeGraph drawing's own numbers).
@@ -656,7 +656,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Offset? _marqueeTo;
   bool _marqueeAdds = false;
 
-  /// Whether the search console is up, so Tab cannot open a second one.
+  /// Whether the search console is up, so a second ask cannot stack another.
   bool _searching = false;
 
   final FocusNode _canvasFocus = FocusNode(debugLabel: 'graph canvas');
@@ -676,6 +676,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // `Ctrl+A` here means every box on this canvas (K-522), which it can only
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
+    // **Ctrl+Space with this panel focused adds to the graph** (K-673). The
+    // shell's console applies to the selected layers; the same key over this
+    // canvas opens the same popover wearing the canvas's own list. Chained the
+    // way the Delete claim is, because there is one claim and the inner shader
+    // graph wants it too when it is the panel's face.
+    if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
+    ui.consoleClaim = _consoleClaim;
     // **Delete means the picked boxes while this panel is the focused one**
     // (K-234's mechanism). Claimed rather than left to the canvas's own focus
     // handler: the shell answers Delete on the hardware keyboard, which runs
@@ -701,6 +708,27 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
   }
 
+  /// The claim this panel had to displace to take Ctrl+Space.
+  bool Function()? _priorConsoleClaim;
+
+  /// Ctrl+Space, answered while this panel is the focused one and showing the
+  /// layer's own graph (a Custom shader's inner graph holds a claim of its own
+  /// above this one). The chosen box lands mid-canvas; a wire drag has its own
+  /// door into [_openSearch] and never comes through here.
+  bool _consoleClaim() {
+    final ui = _ui;
+    if (!mounted ||
+        ui == null ||
+        ui.activePanel.value != Panel.graph ||
+        ui.shaderGraphEntry.value != null ||
+        _graph == null ||
+        _searching) {
+      return _priorConsoleClaim?.call() ?? false;
+    }
+    _openSearch(_toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)));
+    return true;
+  }
+
   void _onShaderEntry() {
     if (mounted) setState(() {});
   }
@@ -712,6 +740,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
     if (_ui?.deleteClaim == _deleteClaim) {
       _ui!.deleteClaim = _priorDeleteClaim;
+    }
+    if (_ui?.consoleClaim == _consoleClaim) {
+      _ui!.consoleClaim = _priorConsoleClaim;
     }
   }
 
@@ -849,6 +880,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         if (e != edge) e,
     ]));
   }
+
 
   /// The stored wire landing on [socket], if one does.
   BridgeGraphEdge? _edgeInto(_Socket socket) {
@@ -1172,28 +1204,34 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     return _sourceKey(edge) == key || _destKey(edge) == key;
   }
 
-  // --- The Tab search -----------------------------------------------------
+  // --- The console --------------------------------------------------------
 
-  /// Tab, and a wire let go over empty canvas, open **the console** (K-645) —
-  /// the same popover Ctrl+Space opens, with a foot line saying what a row
-  /// will do. One search surface, two doors: what the canvas contributes is
-  /// the list (the drivers a dragged wire could land on), the spot the box
-  /// lands on, and the sentence.
+  /// Ctrl+Space, and a wire let go over empty canvas, open **the console**
+  /// (K-645, K-673) — the same popover the shell opens, with a foot line
+  /// saying what a row will do. One search surface, two doors: what the
+  /// canvas contributes is the list, the spot the box lands on, and the
+  /// sentence.
   Future<void> _openSearch(Offset at, {_Socket? wire}) async {
     if (_searching) return;
     setState(() => _searching = true);
     final all = (widget.driversLister ?? listDrivers)();
+    // `listEffects` carries the drivers too (K-645); here they come from the
+    // drivers listing instead, because the canvas's own add places the box on
+    // the drop spot and rides the wire in one commit.
+    final driverNames = {for (final driver in all) driver.name};
     try {
       await showFxConsoleFrb(
         context: context,
         anchor: lastKnownPointerPosition,
         model: FxConsoleModel(
-          keyHint: l10n.graphSearchKey,
-          footer: wire == null ? l10n.graphSearchAdds : l10n.graphSearchWires,
+          // A wire summoned this by a drop, not by a key, so it wears none.
+          keyHint: wire == null ? l10n.fxConsoleKey : null,
+          footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
           entries: [
-            // With a wire in hand the list is the entries that wire could
-            // actually land on, which is what makes the foot's sentence true:
-            // pick one and it is connected.
+            // The drivers first — the graph's own family. With a wire in hand
+            // the list is the entries that wire could actually land on, which
+            // is what makes the foot's sentence true: pick one and it is
+            // connected.
             for (final driver in all)
               if (wire == null || _fitsWire(driver, wire))
                 FxConsoleEntry(
@@ -1202,6 +1240,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   group: engineLabel(driver.categoryLabel),
                   run: () => _addDriver(driver, at, wire),
                 ),
+            // Then every effect (K-673): chosen, it joins the layer's stack,
+            // and the stack is the chain — so the box appears wired into the
+            // picture's own path, K-445's auto-wire by construction. Only
+            // with no wire in hand: a dragged wire is a value looking for a
+            // socket, and the chain's sockets take no wire.
+            if (wire == null)
+              for (final effect in listEffects())
+                if (!driverNames.contains(effect.name))
+                  FxConsoleEntry(
+                    label: engineLabel(effect.label),
+                    kind: FxConsoleKind.effect,
+                    group: engineLabel(effect.categoryLabel),
+                    run: () => _addEffect(effect),
+                  ),
             // The saved groups, beside the drivers they are made of (K-651).
             // Only with no wire in hand: a group is a rig, not a socket, so
             // there is nothing for the wire to land on.
@@ -1219,6 +1271,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     } finally {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  /// The stack's own add, which is the graph's add for an effect: the chain
+  /// *is* the list, so the new box appears at the chain's end with the
+  /// picture's wires already on it, and the op is the one the Effect menu
+  /// commits.
+  void _addEffect(BridgeEffectInfo info) {
+    final layer = _layer;
+    if (layer == null) return;
+    try {
+      layer.addEffect(name: info.name);
+    } catch (_) {
+      return;
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   // --- Named groups (K-651) -----------------------------------------------
@@ -1832,10 +1900,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.tab && !_searching) {
-          _openSearch(_toCanvas(Offset(size.width / 2, size.height / 2)));
-          return KeyEventResult.handled;
-        }
+        // No Tab door (K-673): Ctrl+Space is the console's one key, answered
+        // through [_consoleClaim] so it works with focus anywhere in the app.
         if (event.logicalKey == LogicalKeyboardKey.delete ||
             event.logicalKey == LogicalKeyboardKey.backspace) {
           _deleteSelected();

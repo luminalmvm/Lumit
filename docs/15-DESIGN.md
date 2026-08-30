@@ -1598,11 +1598,16 @@ carries the model and the work packages. Binding rules beyond the drawings thems
   the zoom would crowd them closer than the 20px they are drawn at, so it thins as the
   canvas shrinks instead of multiplying (K-626). Nodes are
   `surface_1` cards with `surface_2` header strips and kicker-cased names — panel
-  grammar, not a foreign look.
+  grammar, not a foreign look. The one exception is the **Custom shader** box (K-675):
+  its header wears the viz family's lead (`curve[0]`) washed over the ordinary ground,
+  in the outer graph and on every box of its inner graph alike, so the one box with an
+  inside reads at a glance without a third colour system beside the port legend and the
+  label palette.
 - **Auto-wire and Heal are `HouseToggle`s** in the panel header (on in `animated`,
   K-465), beside frame-all and the zoom readout.
-- The **Tab search popover** filters by the dragged wire's type and says so in its
-  footer; category suffixes are kickers.
+- The **console over the canvas** (Ctrl+Space, or a wire dropped on empty ground —
+  K-673) filters by the dragged wire's type and says so in its footer; category
+  suffixes are kickers.
 - The Nodes workspace keeps the **whole viewer bar on the small viewer** and the ordinary
   Timeline, shorter, beneath the graph — shared widgets, never forks.
 

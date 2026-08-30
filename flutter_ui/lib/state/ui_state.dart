@@ -240,6 +240,17 @@ class LumitUiState extends ChangeNotifier {
   /// chord simply by handling it.
   bool Function()? deleteClaim;
 
+  /// The graph's claim on `Ctrl+Space` (K-673), set by the Graph panel while
+  /// it is mounted and — when a Custom shader's inner graph is the panel's
+  /// face — by that graph over it, chained exactly as [deleteClaim] is.
+  ///
+  /// The console is one surface with two answers: over the work it applies an
+  /// effect to the selected layers, over the graph it **adds a box to the
+  /// canvas**. The shell asks this first and stands down when it returns true,
+  /// so the same key opens the same popover wearing whichever list the focused
+  /// surface contributes.
+  bool Function()? consoleClaim;
+
   /// The same claim, for Copy and Paste (K-300). The Timeline sets these while
   /// it is mounted: with keyframes selected, `Mod+C` means those keyframes, and
   /// `Mod+V` puts them back — the layer clipboard is what the chord falls
@@ -1104,11 +1115,15 @@ class LumitUiState extends ChangeNotifier {
 
   /// How many pixels the engine is asked for, for the fronted comp.
   ///
-  /// Auto until something says otherwise: it renders what the panel can show,
-  /// which is what the Viewer has always in fact done.
+  /// **Full until something says otherwise** (K-670). Auto renders only what
+  /// the panel can show, which is cheap and was the old default — but it means
+  /// a picture whose sharpness depends on how wide the panel happens to be,
+  /// and a first look at a shot that is soft for a reason nobody can see. A
+  /// comp that has been given a tier keeps it; only "never chosen" reads
+  /// differently now.
   PreviewResolution get previewResolution =>
       previewResolutions[_selectedComp?.internalid.toString()] ??
-      PreviewResolution.auto;
+      PreviewResolution.full;
 
   /// Choose the preview resolution for the fronted comp, and ask for the frame
   /// again — the setting changes what the *next* frame is made of, so without
@@ -1116,11 +1131,9 @@ class LumitUiState extends ChangeNotifier {
   void setPreviewResolution(PreviewResolution resolution) {
     final id = _selectedComp?.internalid.toString();
     if (id == null || previewResolution == resolution) return;
-    if (resolution == PreviewResolution.auto) {
-      previewResolutions.remove(id);
-    } else {
-      previewResolutions[id] = resolution;
-    }
+    // Every tier is stored, Auto included: with Full the default, an absent
+    // entry means "never chosen" and Auto is a choice like any other.
+    previewResolutions[id] = resolution;
     // The View menu ticks the one in force, so the bar has to be rebuilt.
     notifyListeners();
     rememberSession();
@@ -1970,14 +1983,12 @@ class LumitUiState extends ChangeNotifier {
         session.viewerLooks.entries.where((e) => known.containsKey(e.key)),
       );
       // Same rule for the per-comp resolutions, plus: a name this build does
-      // not have (a project written by a newer one) simply reads as Auto
-      // rather than stopping the project from opening.
+      // not have (a project written by a newer one) simply reads as the
+      // default rather than stopping the project from opening.
       for (final e in session.previewResolutions.entries) {
         if (!known.containsKey(e.key)) continue;
         for (final r in PreviewResolution.values) {
-          if (r.name == e.value && r != PreviewResolution.auto) {
-            previewResolutions[e.key] = r;
-          }
+          if (r.name == e.value) previewResolutions[e.key] = r;
         }
       }
       // The regions, checked against the comps that actually loaded — the

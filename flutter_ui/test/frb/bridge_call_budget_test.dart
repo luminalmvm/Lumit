@@ -34,6 +34,7 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
+import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:uuid/uuid.dart';
 
@@ -928,6 +929,10 @@ void main() {
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addSolidLayer();
       p.uiState.setSelectedComp(comp);
+      // Auto is the tier that follows the panel, so it is the one a resize can
+      // change the render scale of at all (K-430); Full is the default since
+      // K-670, and on a fixed tier a resize correctly asks for nothing.
+      p.uiState.setPreviewResolution(PreviewResolution.auto);
 
       final width = ValueNotifier<double>(400);
       addTearDown(width.dispose);

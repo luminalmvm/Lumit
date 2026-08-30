@@ -51,9 +51,12 @@ enum ViewerZoomCommand {
 /// Auto renders only the pixels the current magnification can actually
 /// display — a Viewer in a small panel decodes and composites small — while
 /// Full means composition resolution whatever the panel is showing, which is
-/// what you want when judging detail at 100 %. Auto is the default because it
-/// is what the Viewer has always in fact done; before K-357 the tier called
+/// what you want when judging detail at 100 %. Before K-357 the tier called
 /// "Full" was silently Auto, and there was no way to ask for the real thing.
+///
+/// **Full is the default** (K-670): what the picture is made of should not
+/// depend on how wide the panel happens to be, and a soft first look at a shot
+/// is soft for a reason the user cannot see. Auto is one dropdown away.
 enum PreviewResolution {
   auto,
   full,
