@@ -303,7 +303,21 @@ class ViewerStage extends StatelessWidget {
       // Panning the picture, not the layer: the overlay's own handle takes
       // the gesture first when it is hit, so this only fires on empty space.
       onPanUpdate: picking ? null : (d) => onPan(d.delta),
-      child: Container(
+      // **Nothing the stage draws may leave the stage.** Every mark over the
+      // picture — the wireframes, the handles, the mask outlines, the tool
+      // layers — is a [CustomPaint] filling the stack, and a painter is free
+      // to draw outside the box it was given: a layer parked off the edge of
+      // the comp, or a picture zoomed past the panel, puts its box beyond the
+      // panel's own rectangle. A [Stack] does not stop it, because the clip it
+      // carries is only applied when a *positioned child* is measured
+      // overflowing, which a `Positioned.fill` painter never is. So the marks
+      // landed on whatever sat next to the Viewer — the node graph, during a
+      // split drag, which is where this was reported. The panel's rounded-tile
+      // wrapper happened to clip them under one theme shape and not the other,
+      // which is exactly the kind of coincidence a guarantee should not rest
+      // on. Here it holds whatever the shape, the zoom or the layout is doing.
+      child: ClipRect(
+          child: Container(
         color: viewerSurroundFor(
           t,
           themed: uiState.workspace.themedViewerSurround,
@@ -599,7 +613,7 @@ class ViewerStage extends StatelessWidget {
             ViewerPrefixChip(uiState: uiState),
           ],
         ),
-      ),
+      )),
     );
   }
 
