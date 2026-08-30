@@ -9,15 +9,35 @@
   "@addAtPlayhead": {
     "description": "Button that puts a marker where the playhead is."
   },
-  "addEffect": "Add effect",
+  "addEffect": "Додати ефект",
   "@addEffect": {
     "description": "Button that opens the list of built-in effects."
+  },
+  "aeFilterAll": "Усі",
+  "@aeFilterAll": {
+    "description": "Import report window — the filter button that shows rows of every outcome."
+  },
+  "aeOutcomeAdjusted": "Скориговано",
+  "@aeOutcomeAdjusted": {
+    "description": "Import report window — an outcome grade: mapped, with a difference the row explains."
+  },
+  "aeOutcomeImported": "Імпортовано",
+  "@aeOutcomeImported": {
+    "description": "Import report window — an outcome grade: this came across whole."
+  },
+  "aeOutcomeSkipped": "Пропущено",
+  "@aeOutcomeSkipped": {
+    "description": "Import report window — an outcome grade: could not be represented, and is named here rather than lost."
+  },
+  "aeReportTitle": "Звіт про імпорт",
+  "@aeReportTitle": {
+    "description": "Title of the window shown after an After Effects import, listing what did and did not come across."
   },
   "animated": "animated",
   "@animated": {
     "description": "Shown in place of a number when the value is animated rather than fixed. Lower case on purpose — it sits where a value would."
   },
-  "apply": "Apply",
+  "apply": "Застосувати",
   "@apply": {
     "description": "Button that commits a picked value."
   },
@@ -25,23 +45,53 @@
   "@armRazor": {
     "description": "Menu item: pick up the blade that cuts a layer where you click."
   },
+  "audioMono": "моно",
+  "@audioMono": {
+    "description": "A one-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
+  },
+  "audioStereo": "стерео",
+  "@audioStereo": {
+    "description": "A two-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
+  },
+  "badgePluginDisabled": "Цей плагін вимкнено",
+  "@badgePluginDisabled": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the user has switched the OFX plugin off in the Effects & presets panel. The effect renders as if it were not there."
+  },
+  "badgePluginMissing": "Цей плагін не встановлено на цьому комп'ютері",
+  "@badgePluginMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an OFX plugin effect in the project that this machine has no plugin for. The effect is kept exactly as it was saved and is not lost."
+  },
+  "badgeShaderFailed": "Цей шейдер не скомпілювався",
+  "@badgeShaderFailed": {
+    "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
+  },
   "bringForward": "Bring forward",
   "@bringForward": {
     "description": "Context-menu item: move a layer one place up the stack."
   },
-  "cache": "Cache",
+  "brushShapeRound": "Кругла",
+  "@brushShapeRound": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
+  },
+  "brushShapeSquare": "Квадратна",
+  "@brushShapeSquare": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a square brush tip."
+  },
+  "cache": "Кеш",
   "@cache": {
     "description": "Bottom strip: heading over the three cache meters."
   },
-  "cacheDeleteTitle": "Delete the frames parked on disk?",
+  "cacheDeleteTitle": "Видалити кадри, збережені на диску?",
   "@cacheDeleteTitle": {
     "description": "Asked before emptying the disk cache, which deletes real files."
   },
-  "cacheKeepThem": "Keep them",
+  "cacheKeepThem": "Залишити",
   "@cacheKeepThem": {
     "description": "Button that declines to delete the parked frames."
   },
-  "cacheLocationBesideProject": "Beside the project",
+  "cacheLocationBesideProject": "Поруч із проєктом",
   "@cacheLocationBesideProject": {
     "description": "Choice of where parked frames live: in a folder next to the project file."
   },
@@ -53,11 +103,11 @@
   "@cacheLocationWithLumit": {
     "description": "Choice of where parked frames live: in Lumit's own application data folder."
   },
-  "cancel": "Cancel",
+  "cancel": "Скасувати",
   "@cancel": {
     "description": "Button that abandons a dialogue or a running job."
   },
-  "channelAlpha": "Alpha",
+  "channelAlpha": "Альфа",
   "@channelAlpha": {
     "description": "A viewing channel: transparency on its own. A technical term — keep it recognisable."
   },
@@ -70,17 +120,21 @@
       }
     }
   },
-  "chooseConfirm": "Choose",
+  "chooseConfirm": "Вибрати",
   "@chooseConfirm": {
     "description": "The confirm button in the system's folder-picking dialogue."
   },
-  "chooseEllipsis": "Choose…",
+  "chooseEllipsis": "Вибрати…",
   "@chooseEllipsis": {
     "description": "Button that opens a file dialogue when nothing has been chosen yet."
   },
-  "clear": "Clear",
+  "clear": "Очистити",
   "@clear": {
     "description": "Tooltip on the button that empties a value."
+  },
+  "clearProxy": "Очистити проксі",
+  "@clearProxy": {
+    "description": "Project panel row menu, on a footage row that has a proxy: forget it. The file on disk is left alone."
   },
   "clipCopyRowShape": "Copy the whole row's shape",
   "@clipCopyRowShape": {
@@ -90,7 +144,7 @@
   "@clipCopyShape": {
     "description": "Context-menu item on a clip in a Sequence layer: copy its speed curve."
   },
-  "clipDelete": "Delete clip",
+  "clipDelete": "Видалити кліп",
   "@clipDelete": {
     "description": "Context-menu item: remove a clip from a Sequence layer."
   },
@@ -102,11 +156,15 @@
   "@clipRamp": {
     "description": "Shown on a Sequence clip in place of a speed percentage when the speed changes over the clip. Lower case on purpose — it sits where a number would."
   },
-  "clipResetSpeed": "Reset speed",
+  "clipResetSpeed": "Скинути швидкість",
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
   },
-  "clipboardValueColumn": "Value",
+  "clipSpeedTitle": "Швидкість кліпу",
+  "@clipSpeedTitle": {
+    "description": "Title of the small dialogue that asks for a Sequence clip's playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "clipboardValueColumn": "Значення",
   "@clipboardValueColumn": {
     "description": "Column heading in the keyframe data copied to the clipboard."
   },
@@ -114,27 +172,35 @@
   "@cloneSourceFirst": {
     "description": "Notice when the clone stamp is used before a source is chosen. Alt is a key name."
   },
-  "cloneSourceSet": "Clone source set",
+  "cloneSourceSet": "Джерело клонування задано",
   "@cloneSourceSet": {
     "description": "Notice after alt-clicking with the clone stamp."
   },
-  "close": "Close",
+  "close": "Закрити",
   "@close": {
     "description": "Button that shuts a window."
+  },
+  "closePanel": "Закрити панель",
+  "@closePanel": {
+    "description": "The right-click menu on a panel's tab: the row that takes the panel out of the arrangement. The same thing as un-ticking the panel in the Window menu."
   },
   "colourOutsideRange": "Outside 0–1: the swatch and hex are clipped",
   "@colourOutsideRange": {
     "description": "Note in the colour picker when a value is brighter or darker than a screen can show."
   },
+  "colourSpace": "Колірний простір",
+  "@colourSpace": {
+    "description": "The Project panel's item menu: a submenu on a footage row, for saying which colour space that footage arrived in."
+  },
   "columnBlend": "Blend",
   "@columnBlend": {
     "description": "Timeline column heading."
   },
-  "columnCompose": "Matte · Blend · Parent",
+  "columnCompose": "Компонування",
   "@columnCompose": {
     "description": "Timeline column heading, over the three composing columns. The middle dot is a separator."
   },
-  "columnLayer": "Layer",
+  "columnLayer": "Шар",
   "@columnLayer": {
     "description": "Timeline column heading, over the layer names."
   },
@@ -142,23 +208,39 @@
   "@columnMatte": {
     "description": "Timeline column heading."
   },
+  "columnModes": "Режими",
+  "@columnModes": {
+    "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
+  },
+  "columnNumber": "№",
+  "@columnNumber": {
+    "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
+  },
   "columnParent": "Parent",
   "@columnParent": {
     "description": "Timeline column heading."
   },
-  "columnSwitches": "Switches",
+  "columnSwitches": "Перемикачі",
   "@columnSwitches": {
     "description": "Timeline column heading, over the per-layer on/off controls."
   },
-  "compositionSettings": "Composition settings",
+  "compGroupFrame": "Кадр",
+  "@compGroupFrame": {
+    "description": "New composition / Composition settings dialog: the section naming the size, rate, length and background."
+  },
+  "compShutterAngle": "Кут затвора",
+  "@compShutterAngle": {
+    "description": "New composition / Composition settings dialog: row label: how much of a frame the shutter is open for, in degrees."
+  },
+  "compositionSettings": "Налаштування композиції",
   "@compositionSettings": {
     "description": "Title of the dialogue that edits an existing composition."
   },
-  "compositionSettingsEllipsis": "Composition settings…",
+  "compositionSettingsEllipsis": "Налаштування композиції…",
   "@compositionSettingsEllipsis": {
     "description": "Context-menu item; the ellipsis means a dialogue opens."
   },
-  "copyEffect": "Copy effect",
+  "copyEffect": "Копіювати ефект",
   "@copyEffect": {
     "description": "Context-menu item on an effect heading: put the effect on the clipboard."
   },
@@ -166,11 +248,11 @@
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
   },
-  "cornersRound": "Round",
+  "cornersRound": "Округлі",
   "@cornersRound": {
     "description": "Settings window: the rounded choice for the Corners setting."
   },
-  "cornersSharp": "Sharp",
+  "cornersSharp": "Гострі",
   "@cornersSharp": {
     "description": "Settings window: the square-cornered choice for the Corners setting."
   },
@@ -178,7 +260,7 @@
   "@couldNotAddShapeLayer": {
     "description": "Notice when making a shape layer failed."
   },
-  "couldNotAddTextLayer": "Could not add a text layer",
+  "couldNotAddTextLayer": "Не вдалося додати текстовий шар",
   "@couldNotAddTextLayer": {
     "description": "Notice when making a text layer failed."
   },
@@ -191,7 +273,7 @@
       }
     }
   },
-  "couldNotOpen": "Could not open {path}",
+  "couldNotOpen": "Не вдалося відкрити {path}",
   "@couldNotOpen": {
     "description": "Bottom-strip notice when a file would not open. {path} is a file path.",
     "placeholders": {
@@ -200,7 +282,7 @@
       }
     }
   },
-  "couldNotOpenLink": "Could not open {url}",
+  "couldNotOpenLink": "Не вдалося відкрити {url}",
   "@couldNotOpenLink": {
     "description": "Bottom-strip notice when a Help menu link could not be handed to the machine's browser. {url} is a web address and is not translated.",
     "placeholders": {
@@ -209,13 +291,25 @@
       }
     }
   },
-  "couldNotSaveProject": "Could not save the project",
+  "couldNotSaveProject": "Не вдалося зберегти проєкт",
   "@couldNotSaveProject": {
     "description": "Bottom-strip notice when a save failed."
   },
-  "create": "Create",
+  "create": "Створити",
   "@create": {
     "description": "Button that confirms a dialogue by making something new."
+  },
+  "curveGraphSizeLarge": "Великий",
+  "@curveGraphSizeLarge": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its largest. One word."
+  },
+  "curveGraphSizeMedium": "Середній",
+  "@curveGraphSizeMedium": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its middle size. One word."
+  },
+  "curveGraphSizeSmall": "Малий",
+  "@curveGraphSizeSmall": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its smallest. One word."
   },
   "custom": "Custom",
   "@custom": {
@@ -225,27 +319,27 @@
   "@customiseEllipsis": {
     "description": "Button that opens the theme editor."
   },
-  "delete": "Delete",
+  "delete": "Видалити",
   "@delete": {
     "description": "Context-menu item."
   },
-  "deleteAllMarkers": "Delete all markers",
+  "deleteAllMarkers": "Видалити всі маркери",
   "@deleteAllMarkers": {
     "description": "Context-menu item."
   },
-  "deleteKey": "Delete key",
+  "deleteKey": "Видалити ключовий кадр",
   "@deleteKey": {
     "description": "Menu item: remove this keyframe."
   },
-  "deleteMarker": "Delete marker",
+  "deleteMarker": "Видалити маркер",
   "@deleteMarker": {
     "description": "Context-menu item."
   },
-  "deleteMask": "Delete mask",
+  "deleteMask": "Видалити маску",
   "@deleteMask": {
     "description": "Context-menu item."
   },
-  "deleteShape": "Delete shape",
+  "deleteShape": "Видалити фігуру",
   "@deleteShape": {
     "description": "Context-menu item."
   },
@@ -261,11 +355,11 @@
   "@discard": {
     "description": "Button that throws away unsaved changes."
   },
-  "diskTier": "Disk",
+  "diskTier": "Диск",
   "@diskTier": {
     "description": "Bottom strip: the name of the disk cache tier, beside RAM and VRAM."
   },
-  "done": "Done",
+  "done": "Готово",
   "@done": {
     "description": "Button that closes a window when there is nothing to confirm."
   },
@@ -273,7 +367,7 @@
   "@dropperComposite": {
     "description": "What the eyedropper is sampling when it reads the finished picture rather than one layer."
   },
-  "dropperReading": "Reading…",
+  "dropperReading": "Читання…",
   "@dropperReading": {
     "description": "Shown while the eyedropper is taking its sample."
   },
@@ -281,7 +375,7 @@
   "@dropperThatLayer": {
     "description": "Shown where a layer's name would be, when the eyedropper is sampling a layer that has none."
   },
-  "duration": "Duration",
+  "duration": "Тривалість",
   "@duration": {
     "description": "Field label: how long a composition runs."
   },
@@ -341,7 +435,11 @@
   "@editMarkerEllipsis": {
     "description": "Context-menu item; the ellipsis means a dialogue opens."
   },
-  "effectControls": "Effect controls",
+  "effectBuiltIn": "Вбудований",
+  "@effectBuiltIn": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect ships with Lumit."
+  },
+  "effectControls": "Керування ефектами",
   "@effectControls": {
     "description": "Name of the panel that edits the effects on a layer."
   },
@@ -353,31 +451,127 @@
   "@effectControlsNoLayer": {
     "description": "Empty-state line in the Effect controls panel when no layer is selected."
   },
-  "exportAction": "Export",
+  "effectsPlugins": "Плагіни",
+  "@effectsPlugins": {
+    "description": "Heading in the Effects & presets panel over installed OFX plugins that declare no menu grouping of their own. Plugins that do declare one are headed by that instead."
+  },
+  "exportAction": "Експорт",
   "@exportAction": {
     "description": "Button that starts the export."
+  },
+  "exportAddToQueue": "Додати в чергу",
+  "@exportAddToQueue": {
+    "description": "Export dialog: button that puts the export on the queue without starting it."
+  },
+  "exportAlpha": "Альфа",
+  "@exportAlpha": {
+    "description": "Export dialog, Picture group: how the colour channels relate to the alpha channel in the written file."
+  },
+  "exportAudio16Bit": "16 біт",
+  "@exportAudio16Bit": {
+    "description": "Export dialog, Audio row: the bit depth every export is mixed at. Disabled — there is nothing to choose."
+  },
+  "exportAudio24Bit": "24 біт",
+  "@exportAudio24Bit": {
+    "description": "Export dialog, Audio section, sample-width list: twenty-four bits a sample, offered only by the uncompressed formats. Beside exportAudio16Bit."
+  },
+  "exportAudioAuto": "Авто",
+  "@exportAudioAuto": {
+    "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
   },
   "exportAudioBitRate": "Audio bit rate",
   "@exportAudioBitRate": {
     "description": "Export dialogue: how many bits per second the sound is given."
   },
-  "exportBitRate": "Bit rate",
+  "exportAudioMono": "Моно",
+  "@exportAudioMono": {
+    "description": "Export dialog, Audio section, channel-layout list: one channel, the composition's stereo mix folded down. Beside exportAudioStereo."
+  },
+  "exportAudioOff": "Вимкнено",
+  "@exportAudioOff": {
+    "description": "Export dialog: audio: no sound is written."
+  },
+  "exportAudioOn": "Увімкнено",
+  "@exportAudioOn": {
+    "description": "Export dialog: audio: sound is written with the picture."
+  },
+  "exportAudioStereo": "Стерео",
+  "@exportAudioStereo": {
+    "description": "Export dialog, Audio row: the channel layout every export is mixed to. Disabled — there is nothing to choose."
+  },
+  "exportBitRate": "Бітрейт",
   "@exportBitRate": {
     "description": "Export dialogue: how many bits per second the video is given."
   },
-  "exportCancel": "Cancel export",
+  "exportBitRateAuto": "Авто",
+  "@exportBitRateAuto": {
+    "description": "Export dialog, Bit rate row: a tick that works a delivery-quality rate out from the frame and the rate. Unticked, the number beside it is used."
+  },
+  "exportBrowse": "Огляд",
+  "@exportBrowse": {
+    "description": "Export dialog: button that opens the system file picker to choose where to write."
+  },
+  "exportCancel": "Скасувати експорт",
   "@exportCancel": {
     "description": "Button that stops an export that is running."
   },
-  "exportCancelled": "Export cancelled",
+  "exportCancelled": "Експорт скасовано",
   "@exportCancelled": {
     "description": "Bottom strip, when the user stopped an export."
   },
-  "exportComposition": "Export composition",
+  "exportChannels": "Канали",
+  "@exportChannels": {
+    "description": "Export dialog, Picture group: whether the file carries the composite's own coverage as an alpha channel."
+  },
+  "exportColourDepth": "Глибина кольору",
+  "@exportColourDepth": {
+    "description": "Export dialog, Composition group: how many bits each colour channel of the written file carries. The same setting as the Picture group's Depth row."
+  },
+  "exportColourSpace": "Колірний простір",
+  "@exportColourSpace": {
+    "description": "Export dialog, Colour section: the space the file is written in — the export's final transform."
+  },
+  "exportComposition": "Експорт композиції",
   "@exportComposition": {
     "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
   },
-  "exportFailed": "Export failed: {error}",
+  "exportCrop": "Обрізка",
+  "@exportCrop": {
+    "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
+  },
+  "exportCropBottom": "Н",
+  "@exportCropBottom": {
+    "description": "Export dialog, Crop row: the mark before the bottom inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropLeft": "Л",
+  "@exportCropLeft": {
+    "description": "Export dialog, Crop row: the mark before the left inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropRight": "П",
+  "@exportCropRight": {
+    "description": "Export dialog, Crop row: the mark before the right inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropTop": "В",
+  "@exportCropTop": {
+    "description": "Export dialog, Crop row: the mark before the top inset's value box. One letter — the row holds four of these."
+  },
+  "exportDepth": "Глибина",
+  "@exportDepth": {
+    "description": "Export dialog, Picture group: how many bits each colour channel of the written file carries."
+  },
+  "exportDepth16": "16 біт",
+  "@exportDepth16": {
+    "description": "Export dialog, Depth list: sixteen bits a channel, which only the still-image sequences can hold."
+  },
+  "exportDepth8": "8 біт",
+  "@exportDepth8": {
+    "description": "Export dialog, Depth list: eight bits a channel — what every video codec Lumit writes carries."
+  },
+  "exportEffects": "Ефекти",
+  "@exportEffects": {
+    "description": "Export dialog, Composition group: whether each layer's effect stack runs for this export."
+  },
+  "exportFailed": "Помилка експорту: {error}",
   "@exportFailed": {
     "description": "Bottom strip, when an export could not finish. {error} comes from the engine.",
     "placeholders": {
@@ -386,7 +580,7 @@
       }
     }
   },
-  "exportFormat": "Format",
+  "exportFormat": "Формат",
   "@exportFormat": {
     "description": "Export dialogue: the container and codec to write."
   },
@@ -405,9 +599,29 @@
       }
     }
   },
-  "exportFromFrame": "From frame",
+  "exportFromFrame": "Від кадру",
   "@exportFromFrame": {
     "description": "Export dialogue: the first frame to write."
+  },
+  "exportGroupColour": "Колір",
+  "@exportGroupColour": {
+    "description": "Export dialog: the Colour section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportGroupComposition": "Композиція",
+  "@exportGroupComposition": {
+    "description": "Export dialog: the group of settings the composition is rendered with."
+  },
+  "exportGroupMetadata": "Метадані",
+  "@exportGroupMetadata": {
+    "description": "Export dialog: the Metadata section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportGroupPicture": "Зображення",
+  "@exportGroupPicture": {
+    "description": "Export dialog: the group naming the size and quality of the picture."
+  },
+  "exportGroupTime": "Час",
+  "@exportGroupTime": {
+    "description": "Export dialog: the group naming how much is written and at what rate."
   },
   "exportImageSequenceNote": "One numbered {extension} per frame, beside the chosen name.",
   "@exportImageSequenceNote": {
@@ -422,7 +636,15 @@
   "@exportIncludeAudio": {
     "description": "Export dialogue: whether sound is written alongside the picture."
   },
-  "exportNotChosen": "Not chosen",
+  "exportMetadataAdd": "Додати поле",
+  "@exportMetadataAdd": {
+    "description": "Export dialog, Metadata section: appends an empty row for a field of one's own, under the five classic ones."
+  },
+  "exportMetadataRemove": "Видалити",
+  "@exportMetadataRemove": {
+    "description": "Export dialog, Metadata section: takes one field's row off the list. The button at the end of every row."
+  },
+  "exportNotChosen": "Не вибрано",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
   },
@@ -439,9 +661,61 @@
   "@exportPreset": {
     "description": "Export dialogue: a saved set of encoder options."
   },
-  "exportToFrame": "To frame",
+  "exportQuality": "Якість",
+  "@exportQuality": {
+    "description": "Export dialog, Composition group: the resolution the export renders at, as opposed to the size of the file it writes."
+  },
+  "exportQueueDone": "Готово",
+  "@exportQueueDone": {
+    "description": "Export queue window: an item’s state once its file has been written."
+  },
+  "exportQueueEmpty": "Черга порожня",
+  "@exportQueueEmpty": {
+    "description": "Export queue window: shown in place of the list when no export is waiting."
+  },
+  "exportQueueRemove": "Видалити",
+  "@exportQueueRemove": {
+    "description": "Export queue window: tooltip on the mark that takes a finished item off the list."
+  },
+  "exportQueueStart": "Почати",
+  "@exportQueueStart": {
+    "description": "Export queue window: the filled action: let the queue run."
+  },
+  "exportQueueTitle": "Черга експорту",
+  "@exportQueueTitle": {
+    "description": "Export queue window: the window’s title."
+  },
+  "exportQueueWaiting": "Очікує",
+  "@exportQueueWaiting": {
+    "description": "Export queue window: an item’s state before it starts."
+  },
+  "exportResolution": "Роздільна здатність",
+  "@exportResolution": {
+    "description": "Export dialog: row label: what fraction of the composition size is rendered."
+  },
+  "exportSpanFrames": "Кадри",
+  "@exportSpanFrames": {
+    "description": "Export dialog: row label for the two frame numbers of a span of one’s own."
+  },
+  "exportSpanWholeComp": "Уся композиція",
+  "@exportSpanWholeComp": {
+    "description": "Export dialog: span: every frame of the composition."
+  },
+  "exportToFrame": "До кадру",
   "@exportToFrame": {
     "description": "Export dialogue: the last frame to write."
+  },
+  "exportType": "Тип",
+  "@exportType": {
+    "description": "Export dialog: row label: what kind of thing is written — a video, or one image per frame."
+  },
+  "exportTypeImageSequence": "Послідовність зображень",
+  "@exportTypeImageSequence": {
+    "description": "Export dialog: output type: one numbered still image per frame."
+  },
+  "exportTypeVideo": "Відео",
+  "@exportTypeVideo": {
+    "description": "Export dialog: output type: a single video file."
   },
   "exportWriteTo": "Write to",
   "@exportWriteTo": {
@@ -456,7 +730,7 @@
       }
     }
   },
-  "exportedTo": "Exported to {path}",
+  "exportedTo": "Експортовано до {path}",
   "@exportedTo": {
     "description": "Bottom strip, when an export has finished. {path} is a file path.",
     "placeholders": {
@@ -480,6 +754,10 @@
       }
     }
   },
+  "fileTypeAeProject": "Проєкт After Effects",
+  "@fileTypeAeProject": {
+    "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
+  },
   "fileTypeFootage": "Footage",
   "@fileTypeFootage": {
     "description": "A file type in the system's Import dialogue: video, images and sound."
@@ -492,17 +770,25 @@
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
-  "fileTypeProject": "Lumit project",
+  "fileTypeProject": "Проєкт Lumit",
   "@fileTypeProject": {
     "description": "A file type in the system's Open dialogue: Lumit's own .lum project files."
   },
-  "fileTypeTheme": "Lumit theme",
+  "fileTypeShader": "Шейдер WGSL",
+  "@fileTypeShader": {
+    "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
+  },
+  "fileTypeTheme": "Тема Lumit",
   "@fileTypeTheme": {
     "description": "A file type in the system’s file dialogues: a .lumtheme colour scheme."
   },
   "findMissingFootage": "Find missing footage",
   "@findMissingFootage": {
     "description": "Context-menu item: search a folder for files that have moved."
+  },
+  "firstMask": "Перша маска",
+  "@firstMask": {
+    "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
   "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows which moment of the source is on screen.",
   "@firstRunAfterEffects": {
@@ -516,7 +802,7 @@
   "@firstRunBlurb": {
     "description": "The sentence under the first-run question."
   },
-  "firstRunTitle": "How do you edit?",
+  "firstRunTitle": "Як ви монтуєте?",
   "@firstRunTitle": {
     "description": "Title of the one screen shown the first time Lumit opens."
   },
@@ -580,7 +866,7 @@
   "@flowOcclusionVisibleOnly": {
     "description": "A choice of the Flow group's Occlusion option: use only what both frames can see."
   },
-  "flowPresetAuto": "Auto",
+  "flowPresetAuto": "Авто",
   "@flowPresetAuto": {
     "description": "Input rate preset: use the footage's own frame rate."
   },
@@ -633,11 +919,11 @@
   "@flowVectorDetail": {
     "description": "Flow group: the name of the option saying how finely motion is estimated."
   },
-  "foldContents": "Contents",
+  "foldContents": "Вміст",
   "@foldContents": {
     "description": "Heading in a layer's fold-out, over what a shape layer is made of."
   },
-  "foldMasks": "Masks",
+  "foldMasks": "Маски",
   "@foldMasks": {
     "description": "Heading in a layer's fold-out, over its masks."
   },
@@ -677,15 +963,19 @@
   "@formatTiffSequence": {
     "description": "Export format: one numbered TIFF per frame. TIFF stays as it is."
   },
-  "frameRate": "Frame rate",
+  "frameRate": "Частота кадрів",
   "@frameRate": {
     "description": "Field label: frames per second."
   },
-  "fxAdd": "Add",
+  "fxAdd": "Додавання",
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxAlpha": "Alpha",
+  "fxAllEdges": "Усі краї",
+  "@fxAllEdges": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxAlpha": "Альфа",
   "@fxAlpha": {
     "description": "Effect controls — a depth-channel option on Depth of field."
   },
@@ -697,9 +987,13 @@
   "@fxAmount": {
     "description": "Effect controls — a control on Radial blur."
   },
-  "fxAmplitude": "Amplitude",
+  "fxAmplitude": "Амплітуда",
   "@fxAmplitude": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxAnalyse": "Аналізувати",
+  "@fxAnalyse": {
+    "description": "Effect controls — the button that starts the camera solve on Camera track."
   },
   "fxAnamorphicSqueeze": "Anamorphic squeeze",
   "@fxAnamorphicSqueeze": {
@@ -713,21 +1007,45 @@
   "@fxAnchorY": {
     "description": "Effect controls — a control on Transform."
   },
-  "fxAngle": "Angle",
+  "fxAngle": "Кут",
   "@fxAngle": {
     "description": "Effect controls — a control on Directional blur."
   },
-  "fxAperture": "Aperture",
+  "fxAnticlockwise": "Проти годинникової стрілки",
+  "@fxAnticlockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
+  },
+  "fxAperture": "Діафрагма",
   "@fxAperture": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxAspectRatio": "Aspect ratio",
+  "fxArc": "Дуга",
+  "@fxArc": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxArch": "Арка",
+  "@fxArch": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxAspectRatio": "Співвідношення сторін",
   "@fxAspectRatio": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxBackwards": "Назад",
+  "@fxBackwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
   },
   "fxBehind": "Behind",
   "@fxBehind": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxBend": "Вигин",
+  "@fxBend": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxBlackAndWhite": "Чорно-біле",
+  "@fxBlackAndWhite": {
+    "description": "Effect name in the Add effect menu — six weights, one grey."
   },
   "fxBlades": "Blades",
   "@fxBlades": {
@@ -741,7 +1059,7 @@
   "@fxBlockGlitch": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxBlockSize": "Block size",
+  "fxBlockSize": "Розмір блока",
   "@fxBlockSize": {
     "description": "Effect controls — a control on Block glitch."
   },
@@ -749,25 +1067,69 @@
   "@fxBloom": {
     "description": "Effect controls — a control on Datamosh."
   },
-  "fxBlue": "Blue",
+  "fxBlue": "Синій",
   "@fxBlue": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxBlues": "Сині",
+  "@fxBlues": {
+    "description": "Effect controls — a colour range on Hue and saturation."
   },
   "fxBlurAndSharpen": "Blur & sharpen",
   "@fxBlurAndSharpen": {
     "description": "Add-effect menu category heading."
   },
-  "fxCentreX": "Centre X",
+  "fxBottomEdge": "Нижній край",
+  "@fxBottomEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxBottomToTop": "Знизу вгору",
+  "@fxBottomToTop": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxBrightness": "Яскравість",
+  "@fxBrightness": {
+    "description": "Effect controls — the name of an effect, and its own first control."
+  },
+  "fxBrushHardness": "Жорсткість пензля",
+  "@fxBrushHardness": {
+    "description": "Effect controls — a control on Stroke: how crisp the brush’s edge is."
+  },
+  "fxBrushSize": "Розмір пензля",
+  "@fxBrushSize": {
+    "description": "Effect controls — a control on Stroke: how wide the brush is."
+  },
+  "fxCancel": "Скасувати",
+  "@fxCancel": {
+    "description": "Effect controls — the button that stops a running camera solve on Camera track."
+  },
+  "fxCentre": "Центр",
+  "@fxCentre": {
+    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured."
+  },
+  "fxCentreX": "Центр X",
   "@fxCentreX": {
     "description": "Effect controls — a control on Radial blur."
   },
-  "fxCentreY": "Centre Y",
+  "fxCentreY": "Центр Y",
   "@fxCentreY": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxChannel": "Канал",
+  "@fxChannel": {
+    "description": "Effect controls — a control on Set matte: which channel of the matte layer becomes the alpha."
+  },
+  "fxChannelBlur": "Розмиття каналів",
+  "@fxChannelBlur": {
+    "description": "Effect name in the Add effect menu — blurs each colour channel by its own amount."
   },
   "fxChannelOffset": "Channel offset",
   "@fxChannelOffset": {
     "description": "Effect controls — a control on Block glitch."
+  },
+  "fxCheckbox": "Прапорець",
+  "@fxCheckbox": {
+    "description": "Effect controls — the one control on Checkbox control: the switch it holds."
   },
   "fxChromaticAberration": "Chromatic aberration",
   "@fxChromaticAberration": {
@@ -785,29 +1147,41 @@
   "@fxClipWhite": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxClockwise": "За годинниковою стрілкою",
+  "@fxClockwise": {
+    "description": "Effect controls — a Wipe option on Radial wipe."
+  },
   "fxCoating": "Coating",
   "@fxCoating": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxColour": "Colour",
+  "fxColour": "Колір",
   "@fxColour": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxColour1": "Colour 1",
+  "fxColour1": "Колір 1",
   "@fxColour1": {
     "description": "Effect controls — a control on RGB split."
   },
-  "fxColour2": "Colour 2",
+  "fxColour2": "Колір 2",
   "@fxColour2": {
     "description": "Effect controls — a control on RGB split."
   },
-  "fxColour3": "Colour 3",
+  "fxColour3": "Колір 3",
   "@fxColour3": {
     "description": "Effect controls — a control on RGB split."
   },
-  "fxColourBalance": "Colour balance",
+  "fxColourBalance": "Баланс кольору",
   "@fxColourBalance": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxColumns": "Стовпці",
+  "@fxColumns": {
+    "description": "Effect controls — a control on Card wipe: how many cards across the frame."
+  },
+  "fxComplexity": "Складність",
+  "@fxComplexity": {
+    "description": "Effect controls — a control on Fractal noise."
   },
   "fxConfidence": "Confidence",
   "@fxConfidence": {
@@ -841,13 +1215,33 @@
   "@fxConsoleNothingSelected": {
     "description": "Shown in the middle of the FX console’s radial menu when nothing is selected."
   },
-  "fxConsoleSnapshotTip": "Save a snapshot of this frame",
+  "fxConsoleSnapshotTip": "Зберегти знімок",
   "@fxConsoleSnapshotTip": {
     "description": "Tooltip on the FX console’s snapshot button."
   },
-  "fxContrast": "Contrast",
+  "fxContrast": "Контрастність",
   "@fxContrast": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxCount": "Кількість",
+  "@fxCount": {
+    "description": "Graph panel — an output socket on the Points sample driver: how many particles are alive this frame."
+  },
+  "fxCurves": "Криві",
+  "@fxCurves": {
+    "description": "Effect controls — the name of an effect."
+  },
+  "fxCustomShader": "Власний шейдер",
+  "@fxCustomShader": {
+    "description": "Effect controls — the name of the effect that runs a shader the user wrote."
+  },
+  "fxCyan": "Блакитний",
+  "@fxCyan": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxCyans": "Блакитні",
+  "@fxCyans": {
+    "description": "Effect controls — a colour range on Hue and saturation."
   },
   "fxDarken": "Darken",
   "@fxDarken": {
@@ -860,6 +1254,30 @@
   "fxDecay": "Decay",
   "@fxDecay": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxDeepBlue": "Насичений синій",
+  "@fxDeepBlue": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepEmerald": "Насичений смарагдовий",
+  "@fxDeepEmerald": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepRed": "Насичений червоний",
+  "@fxDeepRed": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDeepYellow": "Насичений жовтий",
+  "@fxDeepYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxDensity": "Щільність",
+  "@fxDensity": {
+    "description": "Effect controls — a control on Photo filter (how strong the coloured glass is) and on Scatter (how many points are thrown at each hundred-pixel square of the composition)."
+  },
+  "fxDepth": "Глибина",
+  "@fxDepth": {
+    "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it."
   },
   "fxDepthChannel": "Depth channel",
   "@fxDepthChannel": {
@@ -877,7 +1295,7 @@
   "@fxDepthMap": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxDepthOfField": "Depth of field",
+  "fxDepthOfField": "Глибина різкості",
   "@fxDepthOfField": {
     "description": "Effect controls — the name of an effect."
   },
@@ -901,9 +1319,17 @@
   "@fxDifference": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxDirection": "Напрямок",
+  "@fxDirection": {
+    "description": "Effect controls — a control on Drop shadow: which way the light comes from."
+  },
   "fxDirectionalBlur": "Directional blur",
   "@fxDirectionalBlur": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxDisc": "Диск",
+  "@fxDisc": {
+    "description": "Effect controls — one option in the Mode menu on Particulate: each particle is drawn as a soft round dot."
   },
   "fxDispersion": "Dispersion",
   "@fxDispersion": {
@@ -917,19 +1343,27 @@
   "@fxDisplay": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxDistortion": "Distortion",
+  "fxDistance": "Відстань",
+  "@fxDistance": {
+    "description": "Effect controls — a control on Drop shadow: how far the shadow is offset."
+  },
+  "fxDistortion": "Спотворення",
   "@fxDistortion": {
     "description": "Add-effect menu category heading."
   },
-  "fxDivide": "Divide",
+  "fxDivide": "Ділення",
   "@fxDivide": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxDots": "Крапки",
+  "@fxDots": {
+    "description": "Effect controls — a Style option on Trail: the tail is drawn as one dab per remembered place, rather than as a joined-up ribbon."
   },
   "fxDraft": "Draft",
   "@fxDraft": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxDuration": "Duration",
+  "fxDuration": "Тривалість",
   "@fxDuration": {
     "description": "Effect controls — a control on Flash."
   },
@@ -941,19 +1375,67 @@
   "@fxEchoes": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxEdges": "Edges",
+  "fxEdgeColour": "Колір краю",
+  "@fxEdgeColour": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxEdgeSharpness": "Різкість краю",
+  "@fxEdgeSharpness": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxEdgeType": "Тип краю",
+  "@fxEdgeType": {
+    "description": "Effect controls — a control on Roughen edges."
+  },
+  "fxEdges": "Краї",
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxEditShader": "Редагувати шейдер…",
+  "@fxEditShader": {
+    "description": "Effect controls — the Custom shader row that opens the shader's source for editing."
+  },
+  "fxEllipse": "Еліпс",
+  "@fxEllipse": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
+  },
+  "fxEllipseOutline": "Контур еліпса",
+  "@fxEllipseOutline": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of an ellipse rather than anywhere inside it."
+  },
+  "fxEmboss": "Тиснення",
+  "@fxEmboss": {
+    "description": "Effect name in the Add effect menu — the picture as grey relief lit from one direction."
+  },
+  "fxEnd": "Кінець",
+  "@fxEnd": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing stops, as a per cent of its length."
+  },
+  "fxEndColour": "Кінцевий колір",
+  "@fxEndColour": {
+    "description": "Effect controls — a control on Gradient and on Particulate: the colour a particle dies at."
+  },
+  "fxEndX": "Кінець x",
+  "@fxEndX": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxEndY": "Кінець y",
+  "@fxEndY": {
+    "description": "Effect controls — a control on Gradient."
   },
   "fxEveryNthBeat": "Every Nth beat",
   "@fxEveryNthBeat": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxEvolution": "Еволюція",
+  "@fxEvolution": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
   "fxExclusion": "Exclusion",
   "@fxExclusion": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxExposure": "Exposure",
+  "fxExposure": "Експозиція",
   "@fxExposure": {
     "description": "Effect controls — the name of an effect."
   },
@@ -973,13 +1455,33 @@
   "@fxFastMotionBlur": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxFieldOfView": "Поле зору",
+  "@fxFieldOfView": {
+    "description": "Effect controls — a control on Lens distort."
+  },
   "fxFile": "File",
   "@fxFile": {
     "description": "Effect controls — a control on LUT."
   },
+  "fxFilter": "Фільтр",
+  "@fxFilter": {
+    "description": "Effect controls — a control on Photo filter: which coloured glass."
+  },
   "fxFinalResult": "Final result",
   "@fxFinalResult": {
     "description": "Effect controls — a control on Matte key."
+  },
+  "fxFish": "Риба",
+  "@fxFish": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxFisheye": "Риб'яче око",
+  "@fxFisheye": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxFlag": "Прапор",
+  "@fxFlag": {
+    "description": "Effect controls — a Style option on Warp."
   },
   "fxFlareOptions": "Flare options",
   "@fxFlareOptions": {
@@ -1017,11 +1519,19 @@
   "@fxForceOnAllLayers": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxForces": "Сили",
+  "@fxForces": {
+    "description": "Effect controls — a group heading on Particulate, over the controls that carry particles about once they are born."
+  },
+  "fxForwards": "Вперед",
+  "@fxForwards": {
+    "description": "Effect controls — a Flip direction option on Card wipe."
+  },
   "fxFrameRate": "Frame rate",
   "@fxFrameRate": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxFrequency": "Frequency",
+  "fxFrequency": "Частота",
   "@fxFrequency": {
     "description": "Effect controls — a control on Shake."
   },
@@ -1029,11 +1539,11 @@
   "@fxGain": {
     "description": "Effect controls — a control on Colour balance."
   },
-  "fxGamma": "Gamma",
+  "fxGamma": "Гамма",
   "@fxGamma": {
     "description": "Effect controls — a control on Colour balance."
   },
-  "fxGaussianBlur": "Gaussian blur",
+  "fxGaussianBlur": "Розмиття за Гаусом",
   "@fxGaussianBlur": {
     "description": "Effect controls — the name of an effect."
   },
@@ -1049,9 +1559,21 @@
   "@fxGlow": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxGreen": "Green",
+  "fxGravity": "Гравітація",
+  "@fxGravity": {
+    "description": "Effect controls — a control on Particulate: a steady downward pull on every particle."
+  },
+  "fxGreen": "Зелений",
   "@fxGreen": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxGreens": "Зелені",
+  "@fxGreens": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxGrid": "Сітка",
+  "@fxGrid": {
+    "description": "Effect controls — the name of the Grid effect, which makes a lattice of points, and the heading of its first group of controls."
   },
   "fxHard": "Hard",
   "@fxHard": {
@@ -1064,6 +1586,14 @@
   "fxHardLight": "Hard light",
   "@fxHardLight": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxHardness": "Жорсткість",
+  "@fxHardness": {
+    "description": "Effect controls — a control on Vegas: how crisp the stroke's edges are."
+  },
+  "fxHeight": "Висота",
+  "@fxHeight": {
+    "description": "Effect controls — a control on Particulate: how tall the shape particles are born inside is."
   },
   "fxHigh": "High",
   "@fxHigh": {
@@ -1081,15 +1611,51 @@
   "@fxHighlights": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
+  "fxHorizontalAxis": "Горизонтальна вісь",
+  "@fxHorizontalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
+  },
+  "fxHorizontalBlocks": "Горизонтальні блоки",
+  "@fxHorizontalBlocks": {
+    "description": "Effect controls — a control on Mosaic: how many blocks span the frame's width."
+  },
+  "fxHorizontalDistortion": "Горизонтальне спотворення",
+  "@fxHorizontalDistortion": {
+    "description": "Effect controls — a control on Warp."
+  },
+  "fxHueAndSaturation": "Відтінок і насиченість",
+  "@fxHueAndSaturation": {
+    "description": "Effect controls — the name of an effect."
+  },
   "fxHueShift": "Hue shift",
   "@fxHueShift": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxImage": "Зображення",
+  "@fxImage": {
+    "description": "Graph panel — the name of a socket that carries a picture."
   },
   "fxInFront": "In front",
   "@fxInFront": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxIntensity": "Intensity",
+  "fxInitialSpeed": "Початкова швидкість",
+  "@fxInitialSpeed": {
+    "description": "Effect controls — a control on Particulate: how fast a particle is travelling the moment it is born."
+  },
+  "fxInput": "Вхід",
+  "@fxInput": {
+    "description": "Graph panel — the name of the socket a box takes its picture in by."
+  },
+  "fxInputBlack": "Вхідний чорний",
+  "@fxInputBlack": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxInputWhite": "Вхідний білий",
+  "@fxInputWhite": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxIntensity": "Інтенсивність",
   "@fxIntensity": {
     "description": "Effect controls — a control on Flash."
   },
@@ -1097,7 +1663,7 @@
   "@fxInterlaceOffset": {
     "description": "Effect controls — a control on Scanlines."
   },
-  "fxInvert": "Invert",
+  "fxInvert": "Інверсія",
   "@fxInvert": {
     "description": "Effect controls — the name of an effect."
   },
@@ -1105,13 +1671,25 @@
   "@fxIris": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
-  "fxLength": "Length",
+  "fxLeftEdge": "Лівий край",
+  "@fxLeftEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxLeftToRight": "Зліва направо",
+  "@fxLeftToRight": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxLength": "Довжина",
   "@fxLength": {
     "description": "Effect controls — a control on Directional blur."
   },
   "fxLens": "Lens",
   "@fxLens": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLensDistort": "Дисторсія об'єктива",
+  "@fxLensDistort": {
+    "description": "Effect name in the Add effect menu — barrel and pincushion lens distortion."
   },
   "fxLensFile": "Lens file",
   "@fxLensFile": {
@@ -1125,19 +1703,39 @@
   "@fxLensOptions": {
     "description": "Effect controls — a control on Tint."
   },
+  "fxLevel": "Рівень",
+  "@fxLevel": {
+    "description": "Effect controls — a control on Threshold: where the cut between black and white sits."
+  },
+  "fxLevels": "Рівні",
+  "@fxLevels": {
+    "description": "Effect controls — the name of an effect, and a control on Posterize: how many steps the tone range keeps."
+  },
+  "fxLife": "Час життя",
+  "@fxLife": {
+    "description": "Effect controls — a control on Particulate: how long a particle lasts before it is gone."
+  },
+  "fxLifespan": "Тривалість життя",
+  "@fxLifespan": {
+    "description": "Effect controls — a control on Radio waves: how long a wave lives."
+  },
   "fxLift": "Lift",
   "@fxLift": {
     "description": "Effect controls — a control on Colour balance."
+  },
+  "fxLightDirection": "Напрямок світла",
+  "@fxLightDirection": {
+    "description": "Effect controls — a control on Texturize: which way the light falls across the texture's relief."
   },
   "fxLightTint": "Light tint",
   "@fxLightTint": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxLightX": "Light x",
+  "fxLightX": "Світло x",
   "@fxLightX": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxLightY": "Light y",
+  "fxLightY": "Світло y",
   "@fxLightY": {
     "description": "Effect controls — a control on Lens flare."
   },
@@ -1149,9 +1747,37 @@
   "@fxLights": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxLine": "Лінія",
+  "@fxLine": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along a straight line."
+  },
   "fxLinePeriod": "Line period",
   "@fxLinePeriod": {
     "description": "Effect controls — a control on Scanlines."
+  },
+  "fxLinear": "Лінійний",
+  "@fxLinear": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
+  "fxLoadFromFile": "Завантажити з файлу…",
+  "@fxLoadFromFile": {
+    "description": "Effect controls — the Custom shader row that loads shader source from a file on disk."
+  },
+  "fxLowerLeftX": "Нижній лівий x",
+  "@fxLowerLeftX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerLeftY": "Нижній лівий y",
+  "@fxLowerLeftY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerRightX": "Нижній правий x",
+  "@fxLowerRightX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxLowerRightY": "Нижній правий y",
+  "@fxLowerRightY": {
+    "description": "Effect controls — a control on Corner pin."
   },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
@@ -1164,6 +1790,14 @@
   "fxLut": "LUT",
   "@fxLut": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxMagenta": "Пурпуровий",
+  "@fxMagenta": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxMagentas": "Пурпурові",
+  "@fxMagentas": {
+    "description": "Effect controls — a colour range on Hue and saturation."
   },
   "fxManual": "Manual",
   "@fxManual": {
@@ -1181,6 +1815,10 @@
   "@fxMapWhiteTo": {
     "description": "Effect controls — a control on Tint."
   },
+  "fxMath": "Математика",
+  "@fxMath": {
+    "description": "Driver name in the Graph panel — two numbers and one arithmetic sign."
+  },
   "fxMatte": "Matte",
   "@fxMatte": {
     "description": "Effect controls — a control on Lens flare."
@@ -1197,6 +1835,18 @@
   "@fxMaxGhosts": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxMaximum": "Максимум",
+  "@fxMaximum": {
+    "description": "Effect controls — a Math driver operation: the larger of the two numbers."
+  },
+  "fxMedian": "Медіана",
+  "@fxMedian": {
+    "description": "Effect name in the Add effect menu — replaces each pixel with the middle value of its neighbours."
+  },
+  "fxMinimum": "Мінімум",
+  "@fxMinimum": {
+    "description": "Effect controls — a Math driver operation: the smaller of the two numbers."
+  },
   "fxMirror": "Mirror",
   "@fxMirror": {
     "description": "Effect controls — a control on an effect."
@@ -1205,9 +1855,17 @@
   "@fxMix": {
     "description": "Effect controls — a control on an effect."
   },
-  "fxMode": "Mode",
+  "fxMode": "Режим",
   "@fxMode": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxMoreOptions": "Більше параметрів",
+  "@fxMoreOptions": {
+    "description": "Effect controls — a collapsible group heading on Shadow highlight."
+  },
+  "fxMosaic": "Мозаїка",
+  "@fxMosaic": {
+    "description": "Effect name in the Add effect menu — the frame in flat rectangular blocks."
   },
   "fxMotionBlur": "Motion blur",
   "@fxMotionBlur": {
@@ -1217,13 +1875,17 @@
   "@fxMotionVectors": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxMultiply": "Multiply",
+  "fxMultiply": "Множення",
   "@fxMultiply": {
     "description": "Effect controls — a control on Echo."
   },
   "fxNearBlur": "Near blur",
   "@fxNearBlur": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxNoise": "Шум",
+  "@fxNoise": {
+    "description": "Effect controls — the name of an effect."
   },
   "fxNone": "None",
   "@fxNone": {
@@ -1233,51 +1895,139 @@
   "@fxNormal": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxOpacityPct": "Opacity %",
+  "fxOffset": "Зсув",
+  "@fxOffset": {
+    "description": "Effect name in the Add effect menu — slides the frame, wrapping round."
+  },
+  "fxOffsetX": "Зсув x",
+  "@fxOffsetX": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxOffsetY": "Зсув y",
+  "@fxOffsetY": {
+    "description": "Effect controls — a control on Fractal noise."
+  },
+  "fxOpacity": "Непрозорість",
+  "@fxOpacity": {
+    "description": "Effect controls — a control on Drop shadow: how dark the shadow is."
+  },
+  "fxOpacityPct": "Непрозорість %",
   "@fxOpacityPct": {
     "description": "Effect controls — a control on Transform."
+  },
+  "fxOperation": "Операція",
+  "@fxOperation": {
+    "description": "Effect controls — which arithmetic the Math driver does."
+  },
+  "fxOrange": "Помаранчевий",
+  "@fxOrange": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxOrientation": "Орієнтація",
+  "@fxOrientation": {
+    "description": "Effect controls — a control on Lens distort."
+  },
+  "fxOutput": "Вихід",
+  "@fxOutput": {
+    "description": "Graph panel — the name of the socket a box hands its picture on by."
+  },
+  "fxOutputBlack": "Вихідний чорний",
+  "@fxOutputBlack": {
+    "description": "Effect controls — a control on Levels."
+  },
+  "fxOutputWhite": "Вихідний білий",
+  "@fxOutputWhite": {
+    "description": "Effect controls — a control on Levels."
   },
   "fxOverlay": "Overlay",
   "@fxOverlay": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxParticle": "Частинка",
+  "@fxParticle": {
+    "description": "Effect controls — a group heading on Particulate, over the controls saying what one particle looks like."
+  },
   "fxPerAxisWobble": "Per-axis wobble",
   "@fxPerAxisWobble": {
     "description": "Effect controls — a control on an effect."
   },
-  "fxPhase": "Phase",
+  "fxPhase": "Фаза",
   "@fxPhase": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxPhaseOffset": "Phase offset",
+  "fxPhaseOffset": "Зсув фази",
   "@fxPhaseOffset": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxPositionX": "Position x",
+  "fxPhotoFilter": "Фотофільтр",
+  "@fxPhotoFilter": {
+    "description": "Effect name in the Add effect menu — a coloured glass held in front of the lens."
+  },
+  "fxPlacement": "Розміщення",
+  "@fxPlacement": {
+    "description": "Effect controls — a control on Texturize: what happens outside one copy of the texture."
+  },
+  "fxPlanes": "Площини",
+  "@fxPlanes": {
+    "description": "Effect controls — a control on Grid: how many copies of the lattice recede into the distance."
+  },
+  "fxPoint": "Точка",
+  "@fxPoint": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: every particle is born at the same spot."
+  },
+  "fxPointX": "Точка x",
+  "@fxPointX": {
+    "description": "Effect controls — the across half of the point Point control holds."
+  },
+  "fxPointY": "Точка y",
+  "@fxPointY": {
+    "description": "Effect controls — the down half of the point Point control holds."
+  },
+  "fxPoints": "Точки",
+  "@fxPoints": {
+    "description": "Graph panel — the socket Particulate hands its particles out on, for another node to read."
+  },
+  "fxPositionX": "Позиція x",
   "@fxPositionX": {
     "description": "Effect controls — a control on Transform."
   },
-  "fxPositionY": "Position y",
+  "fxPositionY": "Позиція y",
   "@fxPositionY": {
     "description": "Effect controls — a control on Transform."
+  },
+  "fxPositionZ": "Позиція z",
+  "@fxPositionZ": {
+    "description": "Effect controls — a control on Particulate: how far in front of or behind the layer's own plane the emitter sits."
+  },
+  "fxPosterize": "Постеризація",
+  "@fxPosterize": {
+    "description": "Effect name in the Add effect menu — the tone range cut into flat steps."
   },
   "fxPosterizeTime": "Posterize time",
   "@fxPosterizeTime": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxPower": "Степінь",
+  "@fxPower": {
+    "description": "Effect controls — a Math driver operation: the first number raised to the second."
+  },
   "fxPreserveLuminance": "Preserve luminance",
   "@fxPreserveLuminance": {
     "description": "Effect controls — a control on Hue shift."
   },
-  "fxQuality": "Quality",
+  "fxQuality": "Якість",
   "@fxQuality": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxRadialBlur": "Radial blur",
+  "fxRadial": "Радіальний",
+  "@fxRadial": {
+    "description": "Effect controls — a Shape option on Gradient."
+  },
+  "fxRadialBlur": "Радіальне розмиття",
   "@fxRadialBlur": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxRadius": "Radius",
+  "fxRadius": "Радіус",
   "@fxRadius": {
     "description": "Effect controls — a control on Gaussian blur."
   },
@@ -1285,9 +2035,29 @@
   "@fxRamp": {
     "description": "Effect controls — a control on Vignette."
   },
-  "fxRed": "Red",
+  "fxRectangle": "Прямокутник",
+  "@fxRectangle": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside a rectangle."
+  },
+  "fxRectangleOutline": "Контур прямокутника",
+  "@fxRectangleOutline": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along the edge of a rectangle rather than anywhere inside it."
+  },
+  "fxRed": "Червоний",
   "@fxRed": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxReds": "Червоні",
+  "@fxReds": {
+    "description": "Effect controls — a colour range on Hue and saturation."
+  },
+  "fxRelief": "Рельєф",
+  "@fxRelief": {
+    "description": "Effect controls — a control on Emboss and on Texturize: how thick the raised surface reads."
+  },
+  "fxRemainder": "Остача",
+  "@fxRemainder": {
+    "description": "Effect controls — a Math driver operation: what is left after dividing."
   },
   "fxRemoveEdgeLeak": "Remove edge leak",
   "@fxRemoveEdgeLeak": {
@@ -1297,11 +2067,11 @@
   "@fxRendered": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxRepeat": "Repeat",
+  "fxRepeat": "Повтор",
   "@fxRepeat": {
     "description": "Effect controls — a control on an effect."
   },
-  "fxRepeatEdgePixels": "Repeat edge pixels",
+  "fxRepeatEdgePixels": "Повторювати крайові пікселі",
   "@fxRepeatEdgePixels": {
     "description": "Effect controls — a control on Depth of field."
   },
@@ -1321,6 +2091,14 @@
   "@fxRgbSplit": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxRightEdge": "Правий край",
+  "@fxRightEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp."
+  },
+  "fxRightToLeft": "Справа наліво",
+  "@fxRightToLeft": {
+    "description": "Effect controls — a Flip order option on Card wipe."
+  },
   "fxRimBrightness": "Rim brightness",
   "@fxRimBrightness": {
     "description": "Effect controls — a control on Depth of field."
@@ -1329,7 +2107,7 @@
   "@fxRollSpeed": {
     "description": "Effect controls — a control on Scanlines."
   },
-  "fxRotation": "Rotation",
+  "fxRotation": "Обертання",
   "@fxRotation": {
     "description": "Effect controls — a control on Lens flare."
   },
@@ -1337,13 +2115,17 @@
   "@fxRotationAmount": {
     "description": "Effect controls — a control on Shake."
   },
-  "fxRotationDeg": "Rotation °",
+  "fxRotationDeg": "Обертання °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."
   },
   "fxRoundness": "Roundness",
   "@fxRoundness": {
     "description": "Effect controls — a control on Vignette."
+  },
+  "fxRows": "Рядки",
+  "@fxRows": {
+    "description": "Effect controls — a control on Card wipe: how many cards down the frame."
   },
   "fxRowsColumnsJitter": "Rows/columns jitter",
   "@fxRowsColumnsJitter": {
@@ -1353,25 +2135,33 @@
   "@fxSamples": {
     "description": "Effect controls — a control on RGB split."
   },
-  "fxSaturation": "Saturation",
+  "fxSaturation": "Насиченість",
   "@fxSaturation": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxScale": "Scale",
+  "fxSawtooth": "Пилкоподібна",
+  "@fxSawtooth": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxScale": "Масштаб",
   "@fxScale": {
     "description": "Effect controls — a control on Lens flare."
   },
-  "fxScaleXPct": "Scale x %",
+  "fxScaleXPct": "Масштаб x %",
   "@fxScaleXPct": {
     "description": "Effect controls — a control on Transform."
   },
-  "fxScaleYPct": "Scale y %",
+  "fxScaleYPct": "Масштаб y %",
   "@fxScaleYPct": {
     "description": "Effect controls — a control on Transform."
   },
   "fxScanlines": "Scanlines",
   "@fxScanlines": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxScatter": "Розсіювання",
+  "@fxScatter": {
+    "description": "Effect controls — a control on Gradient, and the name of the Scatter effect, which throws points at the picture and keeps the ones that land on something."
   },
   "fxScreen": "Screen",
   "@fxScreen": {
@@ -1393,9 +2183,25 @@
   "@fxScreenMatte": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxSecondInput": "Другий вхід",
+  "@fxSecondInput": {
+    "description": "Effect controls — the Custom shader's optional extra picture layer."
+  },
   "fxSeed": "Seed",
   "@fxSeed": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxSegments": "Сегменти",
+  "@fxSegments": {
+    "description": "Effect controls — a Style option on Trail: the tail is drawn as a joined-up ribbon through the remembered places, rather than as separate dabs."
+  },
+  "fxSepia": "Сепія",
+  "@fxSepia": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxShadowColour": "Колір тіні",
+  "@fxShadowColour": {
+    "description": "Effect controls — a control on Drop shadow."
   },
   "fxShake": "Shake",
   "@fxShake": {
@@ -1405,9 +2211,17 @@
   "@fxShape": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxSharpen": "Sharpen",
+  "fxSharpen": "Різкість",
   "@fxSharpen": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxShiftX": "Зсув x",
+  "@fxShiftX": {
+    "description": "Effect controls — a control on Offset."
+  },
+  "fxShiftY": "Зсув y",
+  "@fxShiftY": {
+    "description": "Effect controls — a control on Offset."
   },
   "fxShutter": "Shutter",
   "@fxShutter": {
@@ -1421,9 +2235,21 @@
   "@fxShutterPhase": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxSine": "Синусоїдна",
+  "@fxSine": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSize": "Розмір",
+  "@fxSize": {
+    "description": "Effect controls — a control on Turbulent displace."
+  },
   "fxSliceRepeat": "Slice repeat",
   "@fxSliceRepeat": {
     "description": "Effect controls — a control on Block glitch."
+  },
+  "fxSlider": "Повзунок",
+  "@fxSlider": {
+    "description": "Effect controls — the one control on Slider control: the number it holds."
   },
   "fxSoftColour": "Soft colour",
   "@fxSoftColour": {
@@ -1433,21 +2259,65 @@
   "@fxSoftLight": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxSoftness": "Softness",
+  "fxSoftness": "М'якість",
   "@fxSoftness": {
     "description": "Effect controls — a control on Vignette."
   },
-  "fxSource": "Source",
+  "fxSource": "Джерело",
   "@fxSource": {
     "description": "Effect controls — a control on Matte key."
+  },
+  "fxSpacing": "Інтервал",
+  "@fxSpacing": {
+    "description": "Effect controls — a control on Scribble and Stroke: how far apart the strokes or the brush stamps are laid."
+  },
+  "fxSpacingX": "Інтервал x",
+  "@fxSpacingX": {
+    "description": "Effect controls — a control on Grid: the gap between columns of the lattice."
+  },
+  "fxSpacingY": "Інтервал y",
+  "@fxSpacingY": {
+    "description": "Effect controls — a control on Grid: the gap between rows of the lattice."
+  },
+  "fxSpacingZ": "Інтервал z",
+  "@fxSpacingZ": {
+    "description": "Effect controls — a control on Grid: the gap between the lattice's planes, one behind another."
   },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxSquare": "Прямокутна",
+  "@fxSquare": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxStandard": "Стандарт",
+  "@fxStandard": {
+    "description": "Effect controls — a control on Broadcast safe: which television system's signal is being measured."
+  },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxStart": "Початок",
+  "@fxStart": {
+    "description": "Effect controls — a control on Scribble and Stroke: where the drawing begins, as a per cent of its length."
+  },
+  "fxStartAngle": "Початковий кут",
+  "@fxStartAngle": {
+    "description": "Effect controls — a control on Radial wipe: where the sweep begins."
+  },
+  "fxStartColour": "Початковий колір",
+  "@fxStartColour": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxStartX": "Початок x",
+  "@fxStartX": {
+    "description": "Effect controls — a control on Gradient."
+  },
+  "fxStartY": "Початок y",
+  "@fxStartY": {
+    "description": "Effect controls — a control on Gradient."
   },
   "fxStatus": "Status",
   "@fxStatus": {
@@ -1461,15 +2331,23 @@
   "@fxStrobe": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxStrokeWidth": "Ширина обведення",
+  "@fxStrokeWidth": {
+    "description": "Effect controls — a control on Radio waves: how thick each wave's outline is."
+  },
+  "fxStyle": "Стиль",
+  "@fxStyle": {
+    "description": "Effect controls — a control on Warp."
+  },
   "fxStylise": "Stylise",
   "@fxStylise": {
     "description": "Add-effect menu category heading."
   },
-  "fxSubtract": "Subtract",
+  "fxSubtract": "Віднімання",
   "@fxSubtract": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxTemperature": "Temperature",
+  "fxTemperature": "Температура",
   "@fxTemperature": {
     "description": "Effect controls — the name of an effect."
   },
@@ -1477,7 +2355,15 @@
   "@fxTemporal": {
     "description": "Add-effect menu category heading."
   },
-  "fxThreshold": "Threshold",
+  "fxTexture": "Текстура",
+  "@fxTexture": {
+    "description": "Effect controls — a control on Texturize: the layer pressed into this one as relief."
+  },
+  "fxTextureContrast": "Контрастність текстури",
+  "@fxTextureContrast": {
+    "description": "Effect controls — a control on Texturize: how strongly the texture's relief shows."
+  },
+  "fxThreshold": "Поріг",
   "@fxThreshold": {
     "description": "Effect controls — a control on Unsharp mask."
   },
@@ -1485,9 +2371,25 @@
   "@fxThresholdSoftness": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxTime": "Час",
+  "@fxTime": {
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock."
+  },
   "fxTint": "Tint",
   "@fxTint": {
     "description": "Effect controls — a control on Glow."
+  },
+  "fxTopAndBottom": "Верх і низ",
+  "@fxTopAndBottom": {
+    "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxTopEdge": "Верхній край",
+  "@fxTopEdge": {
+    "description": "Effect controls — a Pinning option on Wave warp, and a group heading on Bezier warp."
+  },
+  "fxTopToBottom": "Згори вниз",
+  "@fxTopToBottom": {
+    "description": "Effect controls — a Flip order option on Card wipe."
   },
   "fxTransform": "Transform",
   "@fxTransform": {
@@ -1497,11 +2399,15 @@
   "@fxTransparent": {
     "description": "Effect controls — a control on an effect."
   },
+  "fxTriangle": "Трикутна",
+  "@fxTriangle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
   "fxTrigger": "Trigger",
   "@fxTrigger": {
     "description": "Effect controls — a control on Flash."
   },
-  "fxType": "Type",
+  "fxType": "Тип",
   "@fxType": {
     "description": "Effect controls — a control on Radial blur."
   },
@@ -1509,9 +2415,29 @@
   "@fxUltra": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxUnderwater": "Під водою",
+  "@fxUnderwater": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
   "fxUnsharpMask": "Unsharp mask",
   "@fxUnsharpMask": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxUpperLeftX": "Верхній лівий x",
+  "@fxUpperLeftX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperLeftY": "Верхній лівий y",
+  "@fxUpperLeftY": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightX": "Верхній правий x",
+  "@fxUpperRightX": {
+    "description": "Effect controls — a control on Corner pin."
+  },
+  "fxUpperRightY": "Верхній правий y",
+  "@fxUpperRightY": {
+    "description": "Effect controls — a control on Corner pin."
   },
   "fxUseFocusPoint": "Use focus point",
   "@fxUseFocusPoint": {
@@ -1525,6 +2451,18 @@
   "@fxUtility": {
     "description": "Add-effect menu category heading."
   },
+  "fxVerticalAxis": "Вертикальна вісь",
+  "@fxVerticalAxis": {
+    "description": "Effect controls — a Flip axis option on Card wipe."
+  },
+  "fxVerticalBlocks": "Вертикальні блоки",
+  "@fxVerticalBlocks": {
+    "description": "Effect controls — a control on Mosaic: how many blocks span the frame's height."
+  },
+  "fxVerticalDistortion": "Вертикальне спотворення",
+  "@fxVerticalDistortion": {
+    "description": "Effect controls — a control on Warp."
+  },
   "fxVibrancy": "Vibrancy",
   "@fxVibrancy": {
     "description": "Effect controls — the name of an effect."
@@ -1537,9 +2475,45 @@
   "@fxVignette": {
     "description": "Effect controls — the name of an effect."
   },
-  "fxWavelength": "Wavelength",
+  "fxViolet": "Фіолетовий",
+  "@fxViolet": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxWave": "Хвиля",
+  "@fxWave": {
+    "description": "Effect controls — a Style option on Warp."
+  },
+  "fxWaveHeight": "Висота хвилі",
+  "@fxWaveHeight": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
+  "fxWaveType": "Тип хвилі",
+  "@fxWaveType": {
+    "description": "Effect controls — a control on Wave warp."
+  },
+  "fxWaveWidth": "Ширина хвилі",
+  "@fxWaveWidth": {
+    "description": "Effect controls — a control on Ripple and on Wave warp."
+  },
+  "fxWavelength": "Довжина хвилі",
   "@fxWavelength": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxWidth": "Ширина",
+  "@fxWidth": {
+    "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
+  },
+  "fxWindX": "Вітер x",
+  "@fxWindX": {
+    "description": "Effect controls — a control on Particulate: the air's own sideways speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindY": "Вітер y",
+  "@fxWindY": {
+    "description": "Effect controls — a control on Particulate: the air's own up-and-down speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindZ": "Вітер z",
+  "@fxWindZ": {
+    "description": "Effect controls — a control on Particulate: the air's own speed through the layer's plane, towards or away from the camera, which moves particles only while Drag is above zero."
   },
   "fxXAmount": "X amount",
   "@fxXAmount": {
@@ -1556,6 +2530,14 @@
   "fxYFrequency": "Y frequency",
   "@fxYFrequency": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxYellow": "Жовтий",
+  "@fxYellow": {
+    "description": "Effect controls — a Filter option on Photo filter."
+  },
+  "fxYellows": "Жовті",
+  "@fxYellows": {
+    "description": "Effect controls — a colour range on Hue and saturation."
   },
   "fxZAmount": "Z amount",
   "@fxZAmount": {
@@ -1577,11 +2559,27 @@
   "@graphEditorEmpty": {
     "description": "Empty state in the graph editor. Ctrl and Shift are key names and stay as they are."
   },
-  "graphSpeed": "Speed",
+  "graphKeyFrameField": "Кадр",
+  "@graphKeyFrameField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact frame, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphKeyValueField": "Значення",
+  "@graphKeyValueField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact value, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphSpeed": "Швидкість",
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
   },
-  "hierarchyEmpty": "This composition has no layers yet",
+  "graphTangentAuto": "Авто",
+  "@graphTangentAuto": {
+    "description": "Timeline, Graph mode: a small button on the strip along the bottom of the graph, in a run of three labelled Auto, Clamp and Free. It makes the selected keyframes' tangents automatic — the curve's shape through a key is worked out from its neighbours instead of being held where it was put."
+  },
+  "graphTangentFree": "Вільні",
+  "@graphTangentFree": {
+    "description": "Timeline, Graph mode: the third of the three tangent buttons on the strip along the bottom of the graph. It hands the selected keyframes' tangents back to the user, at the shape they were last given by hand."
+  },
+  "hierarchyEmpty": "У цій композиції ще немає шарів",
   "@hierarchyEmpty": {
     "description": "Empty-state line in the Hierarchy panel."
   },
@@ -1613,11 +2611,11 @@
   "@keyAnchorPointTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyAnywhere": "Anywhere",
+  "keyAnywhere": "Будь-де",
   "@keyAnywhere": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyBackTenFrames": "Back ten frames",
+  "keyBackTenFrames": "Назад на десять кадрів",
   "@keyBackTenFrames": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1629,27 +2627,27 @@
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCompositionSettings": "Composition settings",
+  "keyCompositionSettings": "Налаштування композиції",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCopyTheSelection": "Copy the selection",
+  "keyCopyTheSelection": "Копіювати виділене",
   "@keyCopyTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyCutTheSelection": "Cut the selection",
+  "keyCutTheSelection": "Вирізати виділене",
   "@keyCutTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyDeleteTheSelection": "Delete the selection",
+  "keyDeleteTheSelection": "Видалити виділене",
   "@keyDeleteTheSelection": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyDeselectEverything": "Deselect everything",
+  "keyDeselectEverything": "Скасувати весь вибір",
   "@keyDeselectEverything": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyDuplicateTheLayer": "Duplicate the layer",
+  "keyDuplicateTheLayer": "Дублювати шар",
   "@keyDuplicateTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1665,11 +2663,11 @@
   "@keyEasyEaseOut": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyEffectControls": "Effect controls",
+  "keyEffectControls": "Керування ефектами",
   "@keyEffectControls": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyExportTheComposition": "Export the composition",
+  "keyExportTheComposition": "Експортувати композицію",
   "@keyExportTheComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1693,7 +2691,7 @@
   "@keyFocusThePreviousPanel": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyForwardTenFrames": "Forward ten frames",
+  "keyForwardTenFrames": "Вперед на десять кадрів",
   "@keyForwardTenFrames": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1705,7 +2703,7 @@
   "@keyGiveTheLayerARetime": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyGoToTheEnd": "Go to the end",
+  "keyGoToTheEnd": "Перейти в кінець",
   "@keyGoToTheEnd": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1717,7 +2715,7 @@
   "@keyGoToTheLayerSOutPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyGoToTheStart": "Go to the start",
+  "keyGoToTheStart": "Перейти на початок",
   "@keyGoToTheStart": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1757,11 +2755,11 @@
   "@keyMoveTheLayerSOutPointToThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewComposition": "New composition",
+  "keyNewComposition": "Нова композиція",
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNewProject": "New project",
+  "keyNewProject": "Новий проєкт",
   "@keyNewProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1769,23 +2767,23 @@
   "@keyNextEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNextFrame": "Next frame",
+  "keyNextFrame": "Наступний кадр",
   "@keyNextFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyNextKeyframe": "Next keyframe",
+  "keyNextKeyframe": "Наступний ключовий кадр",
   "@keyNextKeyframe": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenAProject": "Open a project",
+  "keyOpenAProject": "Відкрити проєкт",
   "@keyOpenAProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenProjectSettings": "Open Project settings",
+  "keyOpenProjectSettings": "Відкрити налаштування проєкту",
   "@keyOpenProjectSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyOpenSettings": "Open Settings",
+  "keyOpenSettings": "Відкрити налаштування",
   "@keyOpenSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1797,11 +2795,11 @@
   "@keyOpenTheFxConsole": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPanels": "Panels",
+  "keyPanels": "Панелі",
   "@keyPanels": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyPaste": "Paste",
+  "keyPaste": "Вставити",
   "@keyPaste": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1809,7 +2807,7 @@
   "@keyPenTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPlayOrPause": "Play or pause",
+  "keyPlayOrPause": "Відтворити або призупинити",
   "@keyPlayOrPause": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1821,15 +2819,15 @@
   "@keyPreviousEditPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPreviousFrame": "Previous frame",
+  "keyPreviousFrame": "Попередній кадр",
   "@keyPreviousFrame": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPreviousKeyframe": "Previous keyframe",
+  "keyPreviousKeyframe": "Попередній ключовий кадр",
   "@keyPreviousKeyframe": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyProjectPanel": "Project panel",
+  "keyProjectPanel": "Панель проєкту",
   "@keyProjectPanel": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
@@ -1845,19 +2843,19 @@
   "@keyRazorTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRedo": "Redo",
+  "keyRedo": "Повторити",
   "@keyRedo": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRenameTheLayer": "Rename the layer",
+  "keyRenameTheLayer": "Перейменувати шар",
   "@keyRenameTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRenameTheSelectedEffect": "Rename the selected effect",
+  "keyRenameTheSelectedEffect": "Перейменувати вибраний ефект",
   "@keyRenameTheSelectedEffect": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRenameTheSelectedItem": "Rename the selected item",
+  "keyRenameTheSelectedItem": "Перейменувати вибраний елемент",
   "@keyRenameTheSelectedItem": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1873,31 +2871,31 @@
   "@keyRevealAudioAgainForTheWaveform": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealEffects": "Reveal Effects",
+  "keyRevealEffects": "Показати ефекти",
   "@keyRevealEffects": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealMasks": "Reveal Masks",
+  "keyRevealMasks": "Показати маски",
   "@keyRevealMasks": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealOpacity": "Reveal Opacity",
+  "keyRevealOpacity": "Показати непрозорість",
   "@keyRevealOpacity": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealPosition": "Reveal Position",
+  "keyRevealPosition": "Показати позицію",
   "@keyRevealPosition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealRotation": "Reveal Rotation",
+  "keyRevealRotation": "Показати обертання",
   "@keyRevealRotation": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealScale": "Reveal Scale",
+  "keyRevealScale": "Показати масштаб",
   "@keyRevealScale": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyRevealVolume": "Reveal Volume",
+  "keyRevealVolume": "Показати гучність",
   "@keyRevealVolume": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1909,15 +2907,15 @@
   "@keyRotoBrushTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySaveTheProject": "Save the project",
+  "keySaveTheProject": "Зберегти проєкт",
   "@keySaveTheProject": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySaveTheProjectSomewhereElse": "Save the project somewhere else",
+  "keySaveTheProjectSomewhereElse": "Зберегти проєкт в іншому місці",
   "@keySaveTheProjectSomewhereElse": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keySelectEveryLayer": "Select every layer",
+  "keySelectEveryLayer": "Вибрати всі шари",
   "@keySelectEveryLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1941,15 +2939,15 @@
   "@keyShowOrHideTheGraphEditor": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheGrid": "Show or hide the grid",
+  "keyShowOrHideTheGrid": "Показати або сховати сітку",
   "@keyShowOrHideTheGrid": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheLayer": "Show or hide the layer",
+  "keyShowOrHideTheLayer": "Показати або сховати шар",
   "@keyShowOrHideTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheRulers": "Show or hide the rulers",
+  "keyShowOrHideTheRulers": "Показати або сховати лінійки",
   "@keyShowOrHideTheRulers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1973,7 +2971,7 @@
   "@keyTimeline": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyTools": "Tools",
+  "keyTools": "Інструменти",
   "@keyTools": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
@@ -1989,7 +2987,7 @@
   "@keyTypeTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyUndo": "Undo",
+  "keyUndo": "Скасувати",
   "@keyUndo": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -1997,11 +2995,11 @@
   "@keyViewer": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live."
   },
-  "keyZoomIn": "Zoom in",
+  "keyZoomIn": "Збільшити",
   "@keyZoomIn": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyZoomOut": "Zoom out",
+  "keyZoomOut": "Зменшити",
   "@keyZoomOut": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -2039,11 +3037,11 @@
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
   },
-  "keymapFileUnreadable": "That file could not be read.",
+  "keymapFileUnreadable": "Не вдалося прочитати цей файл.",
   "@keymapFileUnreadable": {
     "description": "Shown when importing a keymap failed."
   },
-  "keymapFileUnwritable": "That file could not be written.",
+  "keymapFileUnwritable": "Не вдалося записати цей файл.",
   "@keymapFileUnwritable": {
     "description": "Shown when exporting a keymap failed."
   },
@@ -2059,7 +3057,7 @@
   "@keymapNoMatches": {
     "description": "Shown when the keymap search finds nothing."
   },
-  "keymapNotSet": "Not set",
+  "keymapNotSet": "Не задано",
   "@keymapNotSet": {
     "description": "Shown in a keymap row that has no shortcut bound."
   },
@@ -2085,6 +3083,11 @@
       }
     }
   },
+  "label": "Мітка",
+  "@label": {
+    "description": "Row on the Project panel's right-click menu, beside a strip of colour chips that tag the picked items.",
+    "type": "text"
+  },
   "languageFollowSystem": "Same as this machine",
   "@languageFollowSystem": {
     "description": "Language picker: the default, which follows the operating system's own language."
@@ -2093,7 +3096,23 @@
   "@loadPresetEllipsis": {
     "description": "Button that applies an effect stack from a file."
   },
-  "marker": "Marker",
+  "makeProxy": "Створити проксі",
+  "@makeProxy": {
+    "description": "Project panel row menu, on a footage row: transcode a smaller stand-in file for this item and attach it."
+  },
+  "makingProxyFrame": "Створення проксі {frame} / {total}",
+  "@makingProxyFrame": {
+    "description": "Status line, while a proxy is being made: how far the transcode has got. {frame} is the frame written so far and {total} the clip's length in frames.",
+    "placeholders": {
+      "frame": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "marker": "Маркер",
   "@marker": {
     "description": "Title of the dialogue that edits one marker."
   },
@@ -2105,7 +3124,7 @@
   "@markerNoLabel": {
     "description": "Stands in for a marker's text in the marker list when it was given none. Keep the brackets."
   },
-  "maskExpansion": "Expansion",
+  "maskExpansion": "Розширення",
   "@maskExpansion": {
     "description": "Row label under a mask: how far its shape is grown or shrunk, in layer pixels."
   },
@@ -2113,31 +3132,31 @@
   "@maskFeather": {
     "description": "Row label under a mask: the width of its soft edge, in layer pixels."
   },
-  "maskInvertMark": "Inv",
+  "maskInvertMark": "Інв",
   "@maskInvertMark": {
     "description": "Very short marker on a mask row meaning it is inverted. Abbreviate in your language too — the cell is about three characters wide."
   },
-  "maskModeAdd": "Add",
+  "maskModeAdd": "Додавання",
   "@maskModeAdd": {
     "description": "Mask mode: this mask adds its shape to what the masks above it let through."
   },
-  "maskModeDifference": "Difference",
+  "maskModeDifference": "Різниця",
   "@maskModeDifference": {
     "description": "Mask mode: what one of this mask and the masks above it cover, but not both."
   },
-  "maskModeIntersect": "Intersect",
+  "maskModeIntersect": "Перетин",
   "@maskModeIntersect": {
     "description": "Mask mode: only where this mask and the masks above it overlap."
   },
-  "maskModeNone": "None",
+  "maskModeNone": "Немає",
   "@maskModeNone": {
     "description": "Mask mode: the shape is editable but gates nothing."
   },
-  "maskModeSubtract": "Subtract",
+  "maskModeSubtract": "Віднімання",
   "@maskModeSubtract": {
     "description": "Mask mode: this mask takes its shape away from what the masks above it let through."
   },
-  "maskNumbered": "Mask {n}",
+  "maskNumbered": "Маска {n}",
   "@maskNumbered": {
     "description": "Default name for a mask drawn with the Pen. {n} counts up from 1 within the layer.",
     "placeholders": {
@@ -2146,7 +3165,7 @@
       }
     }
   },
-  "maskOpacity": "Opacity",
+  "maskOpacity": "Непрозорість",
   "@maskOpacity": {
     "description": "The name of a mask's opacity row in the Timeline fold-out."
   },
@@ -2154,11 +3173,11 @@
   "@maskPath": {
     "description": "The name of a mask's shape row in the Timeline fold-out — the row that keyframes the drawn shape itself."
   },
-  "menu3dLayer": "3D layer",
+  "menu3dLayer": "3D-шар",
   "@menu3dLayer": {
     "description": "Menu item."
   },
-  "menuAboutLumit": "About Lumit",
+  "menuAboutLumit": "Про Lumit",
   "@menuAboutLumit": {
     "description": "Menu item."
   },
@@ -2186,7 +3205,7 @@
   "@menuAnimateText": {
     "description": "Menu item."
   },
-  "menuAnimation": "Animation",
+  "menuAnimation": "Анімація",
   "@menuAnimation": {
     "description": "Menu item."
   },
@@ -2198,6 +3217,10 @@
   "@menuAssignWorkspaceShortcut": {
     "description": "Menu item (a feature that is not built yet — it appears greyed out)."
   },
+  "menuAuto": "Авто",
+  "@menuAuto": {
+    "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
+  },
   "menuAutoOutline": "Auto-outline",
   "@menuAutoOutline": {
     "description": "Menu item."
@@ -2206,7 +3229,7 @@
   "@menuBlendingMode": {
     "description": "Menu item."
   },
-  "menuCamera": "Camera",
+  "menuCamera": "Камера",
   "@menuCamera": {
     "description": "Menu item."
   },
@@ -2214,7 +3237,11 @@
   "@menuClearBeatMarkers": {
     "description": "Menu item."
   },
-  "menuCloseProject": "Close project",
+  "menuClipSpeed": "Швидкість…",
+  "@menuClipSpeed": {
+    "description": "Context-menu item on a Sequence clip: opens a small dialogue asking for a new playback speed."
+  },
+  "menuCloseProject": "Закрити проєкт",
   "@menuCloseProject": {
     "description": "Menu item."
   },
@@ -2222,7 +3249,7 @@
   "@menuCommandPalette": {
     "description": "Menu item."
   },
-  "menuComposition": "Composition",
+  "menuComposition": "Композиція",
   "@menuComposition": {
     "description": "Menu item."
   },
@@ -2234,7 +3261,7 @@
   "@menuConvertToSequenceLayer": {
     "description": "Menu item: turn a Footage layer into a Sequence layer, whose clips can be cut and retimed."
   },
-  "menuCopy": "Copy",
+  "menuCopy": "Копіювати",
   "@menuCopy": {
     "description": "Menu item."
   },
@@ -2246,11 +3273,11 @@
   "@menuCropCompToWorkArea": {
     "description": "Menu item."
   },
-  "menuCut": "Cut",
+  "menuCut": "Вирізати",
   "@menuCut": {
     "description": "Menu item."
   },
-  "menuDeselectAll": "Deselect all",
+  "menuDeselectAll": "Скасувати вибір",
   "@menuDeselectAll": {
     "description": "Menu item."
   },
@@ -2262,15 +3289,15 @@
   "@menuDisableRetime": {
     "description": "Menu item. Retime is Lumit's name for time-remapping and is a product term."
   },
-  "menuDuplicate": "Duplicate",
+  "menuDuplicate": "Дублювати",
   "@menuDuplicate": {
     "description": "Menu item."
   },
-  "menuEdit": "Edit",
+  "menuEdit": "Редагування",
   "@menuEdit": {
     "description": "Menu item."
   },
-  "menuEffect": "Effect",
+  "menuEffect": "Ефект",
   "@menuEffect": {
     "description": "Menu item."
   },
@@ -2282,11 +3309,15 @@
   "@menuEnableRetime": {
     "description": "Menu item. Retime is Lumit's name for time-remapping and is a product term — keep it recognisable."
   },
-  "menuExport": "Export…",
+  "menuExport": "Експорт…",
   "@menuExport": {
     "description": "Menu item."
   },
-  "menuFile": "File",
+  "menuExportQueue": "Черга експорту…",
+  "@menuExportQueue": {
+    "description": "Window menu: opens the export queue window."
+  },
+  "menuFile": "Файл",
   "@menuFile": {
     "description": "Menu item."
   },
@@ -2306,17 +3337,21 @@
   "@menuHalf": {
     "description": "Menu item."
   },
-  "menuHelp": "Help",
+  "menuHelp": "Довідка",
   "@menuHelp": {
     "description": "Menu item."
   },
-  "menuHistory": "History",
+  "menuHistory": "Історія",
   "@menuHistory": {
     "description": "Menu item."
   },
-  "menuImport": "Import…",
+  "menuImport": "Імпорт…",
   "@menuImport": {
     "description": "Menu item."
+  },
+  "menuImportAe": "Проєкт After Effects…",
+  "@menuImportAe": {
+    "description": "Item in the File menu's Import submenu — opens a file chooser for an After Effects .aep project, which Lumit reads directly."
   },
   "menuKeyframeInterpolation": "Keyframe interpolation…",
   "@menuKeyframeInterpolation": {
@@ -2326,11 +3361,11 @@
   "@menuKeyframeSpeed": {
     "description": "Menu item (a feature that is not built yet). Speed, never velocity (docs/01-GLOSSARY.md)."
   },
-  "menuLayer": "Layer",
+  "menuLayer": "Шар",
   "@menuLayer": {
     "description": "Menu item."
   },
-  "menuLayerSettings": "Layer settings…",
+  "menuLayerSettings": "Налаштування шару…",
   "@menuLayerSettings": {
     "description": "Menu item."
   },
@@ -2338,7 +3373,7 @@
   "@menuLayerStyles": {
     "description": "Menu item."
   },
-  "menuLumitHelp": "Lumit help",
+  "menuLumitHelp": "Довідка Lumit",
   "@menuLumitHelp": {
     "description": "Menu item."
   },
@@ -2346,11 +3381,11 @@
   "@menuLumitOnlineGuides": {
     "description": "Menu item."
   },
-  "menuMarkers": "Markers",
+  "menuMarkers": "Маркери",
   "@menuMarkers": {
     "description": "Menu item."
   },
-  "menuMask": "Mask",
+  "menuMask": "Маска",
   "@menuMask": {
     "description": "Menu item."
   },
@@ -2358,7 +3393,7 @@
   "@menuMaskAndShapePath": {
     "description": "Menu item."
   },
-  "menuNew": "New",
+  "menuNew": "Створити",
   "@menuNew": {
     "description": "Menu item."
   },
@@ -2366,7 +3401,7 @@
   "@menuNextBlendingMode": {
     "description": "Menu item."
   },
-  "menuNothingYet": "Nothing yet",
+  "menuNothingYet": "Поки нічого",
   "@menuNothingYet": {
     "description": "Menu item."
   },
@@ -2374,15 +3409,15 @@
   "@menuNull": {
     "description": "Menu item."
   },
-  "menuOpenProject": "Open project…",
+  "menuOpenProject": "Відкрити проєкт…",
   "@menuOpenProject": {
     "description": "Menu item."
   },
-  "menuOpenRecent": "Open recent",
+  "menuOpenRecent": "Відкрити нещодавні",
   "@menuOpenRecent": {
     "description": "Menu item."
   },
-  "menuPaste": "Paste",
+  "menuPaste": "Вставити",
   "@menuPaste": {
     "description": "Menu item."
   },
@@ -2398,7 +3433,7 @@
   "@menuPreviousBlendingMode": {
     "description": "Menu item."
   },
-  "menuProjectSettings": "Project settings…",
+  "menuProjectSettings": "Налаштування проєкту…",
   "@menuProjectSettings": {
     "description": "Menu item."
   },
@@ -2410,7 +3445,7 @@
   "@menuRecover": {
     "description": "Menu item."
   },
-  "menuRedo": "Redo",
+  "menuRedo": "Повторити",
   "@menuRedo": {
     "description": "Menu item."
   },
@@ -2418,7 +3453,7 @@
   "@menuResetWorkspace": {
     "description": "Menu item."
   },
-  "menuResolution": "Resolution",
+  "menuResolution": "Роздільна здатність",
   "@menuResolution": {
     "description": "Menu item."
   },
@@ -2442,7 +3477,11 @@
   "@menuRevealPropertiesWithKeyframes": {
     "description": "Menu item."
   },
-  "menuSave": "Save",
+  "menuRowTicked": "Позначено",
+  "@menuRowTicked": {
+    "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
+  },
+  "menuSave": "Зберегти",
   "@menuSave": {
     "description": "Menu item."
   },
@@ -2450,11 +3489,11 @@
   "@menuSaveAnimationPreset": {
     "description": "Menu item."
   },
-  "menuSaveAs": "Save as…",
+  "menuSaveAs": "Зберегти як…",
   "@menuSaveAs": {
     "description": "Menu item."
   },
-  "menuSelectAll": "Select all",
+  "menuSelectAll": "Вибрати все",
   "@menuSelectAll": {
     "description": "Menu item."
   },
@@ -2466,19 +3505,19 @@
   "@menuSequence": {
     "description": "Menu item."
   },
-  "menuSetKeyframe": "Set keyframe",
+  "menuSetKeyframe": "Встановити ключовий кадр",
   "@menuSetKeyframe": {
     "description": "Menu item."
   },
-  "menuSettings": "Settings…",
+  "menuSettings": "Налаштування…",
   "@menuSettings": {
     "description": "Menu item."
   },
-  "menuShowGrid": "Show grid",
+  "menuShowGrid": "Показати сітку",
   "@menuShowGrid": {
     "description": "Menu item."
   },
-  "menuShowRuler": "Show ruler",
+  "menuShowRuler": "Показати лінійку",
   "@menuShowRuler": {
     "description": "Menu item."
   },
@@ -2494,11 +3533,11 @@
   "@menuSolid": {
     "description": "Menu item."
   },
-  "menuSplitLayer": "Split layer",
+  "menuSplitLayer": "Розділити шар",
   "@menuSplitLayer": {
     "description": "Menu item."
   },
-  "menuText": "Text",
+  "menuText": "Текст",
   "@menuText": {
     "description": "Menu item."
   },
@@ -2526,15 +3565,15 @@
   "@menuTrimCompToWorkArea": {
     "description": "Menu item."
   },
-  "menuUndo": "Undo",
+  "menuUndo": "Скасувати",
   "@menuUndo": {
     "description": "Menu item."
   },
-  "menuView": "View",
+  "menuView": "Вигляд",
   "@menuView": {
     "description": "Menu item."
   },
-  "menuWindow": "Window",
+  "menuWindow": "Вікно",
   "@menuWindow": {
     "description": "Menu item."
   },
@@ -2542,13 +3581,33 @@
   "@menuWorkspace": {
     "description": "Menu item."
   },
-  "menuZoomIn": "Zoom in",
+  "menuZoomIn": "Збільшити",
   "@menuZoomIn": {
     "description": "Menu item."
   },
-  "menuZoomOut": "Zoom out",
+  "menuZoomOut": "Зменшити",
   "@menuZoomOut": {
     "description": "Menu item."
+  },
+  "metadataAuthor": "Автор",
+  "@metadataAuthor": {
+    "description": "Export dialog, Metadata section: who made the piece, written into the file."
+  },
+  "metadataComment": "Коментар",
+  "@metadataComment": {
+    "description": "Export dialog, Metadata section: a free note written into the file."
+  },
+  "metadataCopyright": "Авторське право",
+  "@metadataCopyright": {
+    "description": "Export dialog, Metadata section: the copyright line written into the file."
+  },
+  "metadataCreated": "Створено",
+  "@metadataCreated": {
+    "description": "Export dialog, Metadata section: the creation time written into the file."
+  },
+  "metadataTitle": "Назва",
+  "@metadataTitle": {
+    "description": "Export dialog, Metadata section: the name of the piece, written into the file."
   },
   "missingFileCount": "{count, plural, =1{1 missing file} other{{count} missing files}}",
   "@missingFileCount": {
@@ -2559,9 +3618,13 @@
       }
     }
   },
-  "missingLayer": "Missing layer",
+  "missingLayer": "Відсутній шар",
   "@missingLayer": {
     "description": "Shown where a picker names a layer that has since been deleted."
+  },
+  "missingMask": "Відсутня маска",
+  "@missingMask": {
+    "description": "Effect controls: shown where a mask picker names a mask that has since been deleted."
   },
   "motionFull": "Full",
   "@motionFull": {
@@ -2591,39 +3654,39 @@
   "@moveUp": {
     "description": "Context-menu item: move an effect one place up the stack."
   },
-  "name": "Name",
+  "name": "Назва",
   "@name": {
     "description": "Field label."
   },
-  "newComposition": "New composition",
+  "newComposition": "Нова композиція",
   "@newComposition": {
     "description": "Button, menu item and tooltip: create a composition."
   },
-  "newLayer": "New layer",
+  "newLayer": "Новий шар",
   "@newLayer": {
     "description": "Button that opens the list of layer kinds."
   },
-  "noCameraToMove": "No camera to move — add a camera layer first",
+  "noCameraToMove": "Немає камери — спершу додайте шар камери",
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
   },
-  "noCommandsMatch": "No commands match",
+  "noCommandsMatch": "Немає відповідних команд",
   "@noCommandsMatch": {
     "description": "Shown in the command palette when the search finds nothing."
   },
-  "noEffectsMatch": "No effects match",
+  "noEffectsMatch": "Немає відповідних ефектів",
   "@noEffectsMatch": {
     "description": "Shown in the Effects & presets panel when the search finds nothing."
   },
-  "noEffectsYet": "No effects on this layer yet",
+  "noEffectsYet": "На цьому шарі ще немає ефектів",
   "@noEffectsYet": {
     "description": "Empty-state line in the Effect controls panel."
   },
-  "noMarkersYet": "No markers yet",
+  "noMarkersYet": "Ще немає маркерів",
   "@noMarkersYet": {
     "description": "Empty state in the marker list."
   },
-  "noMatches": "No matches",
+  "noMatches": "Немає збігів",
   "@noMatches": {
     "description": "Shown in a picker when the search finds nothing."
   },
@@ -2631,19 +3694,19 @@
   "@noMatte": {
     "description": "Shown in the matte picker when a layer is not gated by another."
   },
-  "noProject": "No project",
+  "noProject": "Немає проєкту",
   "@noProject": {
     "description": "Bottom strip: no project is open."
   },
-  "none": "None",
+  "none": "Немає",
   "@none": {
     "description": "The empty choice in a picker — no layer, no matte, nothing selected."
   },
-  "notBuilt": "Not built",
+  "notBuilt": "Не реалізовано",
   "@notBuilt": {
     "description": "Marker beside a tool in the toolbar flyout that is not implemented yet."
   },
-  "notImplemented": "{command} (Not implemented)",
+  "notImplemented": "{command} (не реалізовано)",
   "@notImplemented": {
     "description": "How a menu item marks a command that is specified but not built yet. {command} is the item's own name.",
     "placeholders": {
@@ -2652,13 +3715,29 @@
       }
     }
   },
-  "notSavedYet": "Not saved yet",
+  "notSavedYet": "Ще не збережено",
   "@notSavedYet": {
     "description": "Bottom strip: a new project that has never been saved."
   },
-  "off": "Off",
+  "off": "Вимкнено",
   "@off": {
     "description": "A setting that is switched off."
+  },
+  "openingPreparingProject": "Підготовка проєкту",
+  "@openingPreparingProject": {
+    "description": "Third phase line on the card shown while a project is being opened: the document is being made the open one."
+  },
+  "openingProject": "Відкриття проєкту…",
+  "@openingProject": {
+    "description": "Card shown over the interface while a project file is being read from disk."
+  },
+  "openingReadingFile": "Читання файлу проєкту",
+  "@openingReadingFile": {
+    "description": "First phase line on the card shown while a project is being opened: the .lum is being unzipped and read."
+  },
+  "openingResolvingMedia": "Пошук медіа",
+  "@openingResolvingMedia": {
+    "description": "Second phase line on the card shown while a project is being opened: each footage item's file is being located on this machine."
   },
   "paletteComps": "Comp",
   "@paletteComps": {
@@ -2680,11 +3759,11 @@
   "@panelEffectsAndPresets": {
     "description": "The name of the panel listing every effect and saved preset."
   },
-  "panelHierarchy": "Hierarchy",
+  "panelHierarchy": "Ієрархія",
   "@panelHierarchy": {
     "description": "The name of the panel showing how layers are parented to each other."
   },
-  "panelProject": "Project",
+  "panelProject": "Проєкт",
   "@panelProject": {
     "description": "The name of the panel listing the project's footage and compositions."
   },
@@ -2715,6 +3794,10 @@
   "playbackEveryFrame": "Every frame",
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
+  },
+  "popOutPanelBlocked": "Недоступно",
+  "@popOutPanelBlocked": {
+    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "Pre-compose",
   "@precompose": {
@@ -2766,15 +3849,15 @@
   "@previewCompositing": {
     "description": "What the Viewer is doing: combining the layers."
   },
-  "previewPreparing": "Preparing",
+  "previewPreparing": "Підготовка",
   "@previewPreparing": {
     "description": "What the Viewer is doing while a frame is being made ready."
   },
-  "previewReadingComposition": "Reading the composition",
+  "previewReadingComposition": "Читання композиції",
   "@previewReadingComposition": {
     "description": "What the Viewer is doing: working out what the comp asks for."
   },
-  "previewReadingMedia": "Reading media",
+  "previewReadingMedia": "Читання медіа",
   "@previewReadingMedia": {
     "description": "What the Viewer is doing: decoding footage from disk."
   },
@@ -2786,9 +3869,30 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
+  "projectColumnItems": "Елементи",
+  "@projectColumnItems": {
+    "description": "Project panel column heading: how many things a folder holds. Shown in capitals by the style, so write it sentence case."
+  },
+  "projectColumnPath": "Шлях",
+  "@projectColumnPath": {
+    "description": "Project panel column heading: where a footage item's file is. Shown in capitals by the style, so write it sentence case.",
+    "type": "text"
+  },
+  "projectColumnSize": "Розмір",
+  "@projectColumnSize": {
+    "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
+  },
   "projectEmpty": "No items yet — import footage or create a composition",
   "@projectEmpty": {
     "description": "Empty-state line in the Project panel."
+  },
+  "projectFooterComposition": "Композиція",
+  "@projectFooterComposition": {
+    "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
+  },
+  "projectFooterImport": "Імпорт",
+  "@projectFooterImport": {
+    "description": "Label on the Project panel's bottom-bar button that brings footage into the project. Shown in capitals by the style."
   },
   "projectInfoAudio": "audio",
   "@projectInfoAudio": {
@@ -2803,15 +3907,24 @@
       }
     }
   },
-  "projectItemMissing": "missing",
+  "projectItemInUse": "використовується",
+  "@projectItemInUse": {
+    "description": "Badge beside a Project panel item that some composition places as a layer. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
+  },
+  "projectItemMissing": "відсутній",
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
   },
-  "projectSettings": "Project settings",
+  "projectItemProxy": "проксі",
+  "@projectItemProxy": {
+    "description": "Project panel row badge, beside the item name: this footage item is being read from its proxy rather than the original file. Lower case, one word, like the other row badges."
+  },
+  "projectSettings": "Налаштування проєкту",
   "@projectSettings": {
     "description": "Title of the window holding settings that travel with the project file."
   },
-  "projectTypeComposition": "composition",
+  "projectTypeComposition": "композиція",
   "@projectTypeComposition": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
@@ -2827,9 +3940,51 @@
   "@projectTypeSolid": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is: a plain block of one colour. Lower case on purpose."
   },
+  "proxyCancelled": "Проксі скасовано",
+  "@proxyCancelled": {
+    "description": "Status line, when the person making a proxy pressed Cancel. Nothing half-written is left behind."
+  },
+  "proxyFailed": "Не вдалося створити проксі: {error}",
+  "@proxyFailed": {
+    "description": "Status line, when a proxy could not be made. {error} is the engine's own reason, in English.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "proxyMade": "Проксі створено: {path}",
+  "@proxyMade": {
+    "description": "Status line, when a proxy has finished and attached itself to its item. {path} is the file it wrote.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "ramTier": "RAM",
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
+  },
+  "recoveryQuestion": "Схоже, Lumit завершив роботу аварійно з незбереженими змінами. Відновити їх?",
+  "@recoveryQuestion": {
+    "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
+  },
+  "recoveryRestoreAll": "Відновити все",
+  "@recoveryRestoreAll": {
+    "description": "Recovery dialogue: the filled button at the far right of the footer. Replays the journal of edits onto the saved file, recovering everything. Three words at most — three buttons share one row."
+  },
+  "recoveryRestoreAutosave": "Відновити автозбереження",
+  "@recoveryRestoreAutosave": {
+    "description": "Recovery dialogue: the middle button in the footer. Opens the newest timed copy, losing whatever happened after it. Three words at most — three buttons share one row."
+  },
+  "recoveryRestoreNone": "Не відновлювати",
+  "@recoveryRestoreNone": {
+    "description": "Recovery dialogue: the leftmost button in the footer. Opens the saved file as it is; nothing is deleted. Three words at most — three buttons share one row."
+  },
+  "recoveryTitle": "Відновлення роботи",
+  "@recoveryTitle": {
+    "description": "Recovery dialogue: the kicker title, drawn in capitals by the style. Shown when a project has work its saved file does not contain."
   },
   "relink": "Relink",
   "@relink": {
@@ -2839,19 +3994,19 @@
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
   },
-  "removeEffect": "Remove effect",
+  "removeEffect": "Видалити ефект",
   "@removeEffect": {
     "description": "Context-menu item: delete an effect from the layer."
   },
-  "rename": "Rename",
+  "rename": "Перейменувати",
   "@rename": {
     "description": "Context-menu item."
   },
-  "renameEllipsis": "Rename…",
+  "renameEllipsis": "Перейменувати…",
   "@renameEllipsis": {
     "description": "Button that opens a dialogue asking for a new name."
   },
-  "reset": "Reset",
+  "reset": "Скинути",
   "@reset": {
     "description": "Button that puts an effect's parameters back to their defaults."
   },
@@ -2872,7 +4027,7 @@
       }
     }
   },
-  "save": "Save",
+  "save": "Зберегти",
   "@save": {
     "description": "Button that confirms a dialogue by writing the change."
   },
@@ -2880,7 +4035,7 @@
   "@savePresetEllipsis": {
     "description": "Button that writes the current effect stack to a file."
   },
-  "saved": "Saved",
+  "saved": "Збережено",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."
   },
@@ -2888,7 +4043,7 @@
   "@savedPresets": {
     "description": "Heading over the user's own saved effect stacks."
   },
-  "savedTo": "Saved to {path}",
+  "savedTo": "Збережено до {path}",
   "@savedTo": {
     "description": "Bottom-strip notice after a successful save. {path} is a file path.",
     "placeholders": {
@@ -2897,23 +4052,23 @@
       }
     }
   },
-  "schemeDark": "Dark",
+  "schemeDark": "Темна",
   "@schemeDark": {
     "description": "The name of a colour scheme."
   },
-  "schemeDarkBlue": "Dark blue",
+  "schemeDarkBlue": "Темно-синя",
   "@schemeDarkBlue": {
     "description": "The name of a colour scheme."
   },
-  "schemeLight": "Light",
+  "schemeLight": "Світла",
   "@schemeLight": {
     "description": "The name of a colour scheme."
   },
-  "scopeEverything": "Everything",
+  "scopeEverything": "Усе",
   "@scopeEverything": {
     "description": "Choice in the Applies to picker: every project on this machine."
   },
-  "scopeHistogram": "Histogram",
+  "scopeHistogram": "Гістограма",
   "@scopeHistogram": {
     "description": "The name of a scope counting how many pixels sit at each brightness."
   },
@@ -2921,11 +4076,11 @@
   "@scopeParade": {
     "description": "The name of a scope showing the red, green and blue waveforms side by side. \"Parade\" is the standard term of the trade."
   },
-  "scopeThisProject": "This project",
+  "scopeThisProject": "Цей проєкт",
   "@scopeThisProject": {
     "description": "Choice in the Applies to picker: only the project that is open."
   },
-  "scopeVectorscope": "Vectorscope",
+  "scopeVectorscope": "Вектороскоп",
   "@scopeVectorscope": {
     "description": "The name of a scope showing colour as angle and distance."
   },
@@ -2933,7 +4088,7 @@
   "@scopesWaiting": {
     "description": "Shown in the Scopes panel before the first frame has been measured."
   },
-  "search": "Search",
+  "search": "Пошук",
   "@search": {
     "description": "Placeholder in a search box that has nothing more specific to say."
   },
@@ -2946,27 +4101,31 @@
       }
     }
   },
-  "searchLayers": "Search layers",
+  "searchLayers": "Пошук шарів",
   "@searchLayers": {
     "description": "Placeholder in the Timeline's search box."
   },
-  "searchProject": "Search project",
+  "searchProject": "Пошук у проєкті",
   "@searchProject": {
     "description": "Placeholder in the Project panel's search box."
+  },
+  "searchSettings": "Пошук налаштувань",
+  "@searchSettings": {
+    "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
   },
   "searchShortcuts": "Search shortcuts",
   "@searchShortcuts": {
     "description": "Placeholder in the keymap table's search box."
   },
-  "selectACompositionFirst": "Select a composition in the Project panel.",
+  "selectACompositionFirst": "Виберіть композицію на панелі проєкту.",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
   },
-  "selectALayer": "Select a layer",
+  "selectALayer": "Виберіть шар",
   "@selectALayer": {
     "description": "Empty-state line in a panel that needs a layer selected."
   },
-  "selectALayerToPaint": "Select a layer to paint on",
+  "selectALayerToPaint": "Виберіть шар для малювання",
   "@selectALayerToPaint": {
     "description": "Shown when the brush is used with no layer selected."
   },
@@ -2978,6 +4137,14 @@
   "@setExpression": {
     "description": "Context-menu item on a value field: drive this value with a formula instead of a number."
   },
+  "setProxyEllipsis": "Встановити проксі…",
+  "@setProxyEllipsis": {
+    "description": "Project panel row menu, on a footage row: attach an existing file as this item's proxy. Opens a file picker, hence the ellipsis."
+  },
+  "settingsAccent": "Акцент",
+  "@settingsAccent": {
+    "description": "Settings window, Appearance: the name of the row of accent-colour swatches."
+  },
   "settingsAntiAliasing": "Anti-aliasing",
   "@settingsAntiAliasing": {
     "description": "Project settings: the name of the setting that smooths edges."
@@ -2986,29 +4153,61 @@
   "@settingsAntiAliasingInUse": {
     "description": "Project settings: the name of the row showing what the graphics card is actually doing."
   },
-  "settingsAppliesTo": "Applies to",
+  "settingsAppliesTo": "Застосовується до",
   "@settingsAppliesTo": {
     "description": "Settings window: the name of the row choosing which projects a cache setting covers."
   },
-  "settingsAutomaticUpdates": "Automatic updates",
+  "settingsAudioDevice": "Пристрій виведення",
+  "@settingsAudioDevice": {
+    "description": "Settings window, Audio: the name of the row whose dropdown chooses which speakers or headphones Lumit plays through."
+  },
+  "settingsAutomaticUpdates": "Автоматичні оновлення",
   "@settingsAutomaticUpdates": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsAutosaveEvery": "Зберігати копію кожні",
+  "@settingsAutosaveEvery": {
+    "description": "Settings window, Autosave: the name of the row whose number is the interval between autosaves. The word 'minutes' is shown after the number, so this reads as one sentence: 'Save a copy every 5 minutes'."
+  },
+  "settingsAutosaveKeep": "Кількість копій",
+  "@settingsAutosaveKeep": {
+    "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
   "settingsBudget": "Budget",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
   },
-  "settingsColourScheme": "Colour scheme",
+  "settingsChangesApplyImmediately": "Зміни застосовуються одразу",
+  "@settingsChangesApplyImmediately": {
+    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
+  },
+  "settingsColourScheme": "Колірна схема",
   "@settingsColourScheme": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsCorners": "Corners",
+  "settingsCorners": "Кути",
   "@settingsCorners": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsCustomColours": "Custom colours",
+  "settingsCustomColours": "Власні кольори",
   "@settingsCustomColours": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsExportAsk": "Питати щоразу",
+  "@settingsExportAsk": {
+    "description": "Destination option on Settings > Export: the Export dialog opens with no file chosen and the user browses for one."
+  },
+  "settingsExportBesideProject": "Поруч із проєктом",
+  "@settingsExportBesideProject": {
+    "description": "Destination option on Settings > Export: exports are written into the folder the project file is in."
+  },
+  "settingsExportDestination": "Призначення",
+  "@settingsExportDestination": {
+    "description": "Row label on Settings > Export. Chooses where finished exports are written."
+  },
+  "settingsExportPresetNone": "Немає",
+  "@settingsExportPresetNone": {
+    "description": "Option in the default-preset dropdown on Settings > Export, meaning no preset has been chosen and the Export dialog opens on the first built-in one."
   },
   "settingsFramesWaitingToBeWritten": "Frames waiting to be written",
   "@settingsFramesWaitingToBeWritten": {
@@ -3018,11 +4217,15 @@
   "@settingsGraphicsMemoryReserved": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsGroupColour": "Колір",
+  "@settingsGroupColour": {
+    "description": "A section heading in the Project settings window, over the colour-management rows."
+  },
   "settingsGroupDisplay": "Display",
   "@settingsGroupDisplay": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupEditing": "Editing",
+  "settingsGroupEditing": "Редагування",
   "@settingsGroupEditing": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3030,7 +4233,7 @@
   "@settingsGroupFramesParkedOnDisk": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupMemory": "Memory",
+  "settingsGroupMemory": "Пам'ять",
   "@settingsGroupMemory": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3038,7 +4241,11 @@
   "@settingsGroupPanels": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupPlayback": "Playback",
+  "settingsGroupPicture": "Зображення",
+  "@settingsGroupPicture": {
+    "description": "Settings window, Viewer: the heading over the settings that change how the image itself is shown."
+  },
+  "settingsGroupPlayback": "Відтворення",
   "@settingsGroupPlayback": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3062,7 +4269,7 @@
   "@settingsGroupTheme": {
     "description": "Settings window: heading over a group of rows."
   },
-  "settingsGroupUpdates": "Updates",
+  "settingsGroupUpdates": "Оновлення",
   "@settingsGroupUpdates": {
     "description": "Settings window: heading over a group of rows."
   },
@@ -3114,11 +4321,11 @@
       }
     }
   },
-  "settingsHelpColourScheme": "The palette every panel draws from.",
+  "settingsHelpColourScheme": "Палітра, з якої малює кожна панель.",
   "@settingsHelpColourScheme": {
     "description": "Settings window: the sentence under the settingsColourScheme setting."
   },
-  "settingsHelpCorners": "How rounded controls and panels are.",
+  "settingsHelpCorners": "Наскільки округлі елементи керування та панелі.",
   "@settingsHelpCorners": {
     "description": "Settings window: the sentence under the settingsCorners setting."
   },
@@ -3272,15 +4479,15 @@
   "@settingsHelpYourThemes": {
     "description": "Settings window: the sentence under the Your themes heading."
   },
-  "settingsInUse": "In use",
+  "settingsInUse": "Використовується",
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
   },
-  "settingsInterfaceScale": "Interface scale",
+  "settingsInterfaceScale": "Масштаб інтерфейсу",
   "@settingsInterfaceScale": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsLanguage": "Language",
+  "settingsLanguage": "Мова",
   "@settingsLanguage": {
     "description": "Settings window: the name of the row that chooses the interface language."
   },
@@ -3328,11 +4535,19 @@
   "@settingsPageAppearance": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageGeneral": "General",
+  "settingsPageAutosave": "Автозбереження",
+  "@settingsPageAutosave": {
+    "description": "Settings window: name of a page in the sidebar — how often Lumit writes a spare copy of the project."
+  },
+  "settingsPageExport": "Експорт",
+  "@settingsPageExport": {
+    "description": "Name of the Export page in the Settings window's sidebar of pages."
+  },
+  "settingsPageGeneral": "Загальні",
   "@settingsPageGeneral": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageInterface": "Interface",
+  "settingsPageInterface": "Інтерфейс",
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
@@ -3340,7 +4555,7 @@
   "@settingsPageKeymap": {
     "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
   },
-  "settingsPagePerformance": "Performance",
+  "settingsPagePerformance": "Продуктивність",
   "@settingsPagePerformance": {
     "description": "Settings window: name of a page in the sidebar."
   },
@@ -3360,6 +4575,10 @@
   "@settingsQualityTier": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsResetPage": "Скинути сторінку",
+  "@settingsResetPage": {
+    "description": "Settings window: the footer button that puts every setting on the page being shown back to the value Lumit ships with."
+  },
   "settingsRetimeOpensToSpeed": "Retime opens to Speed",
   "@settingsRetimeOpensToSpeed": {
     "description": "Settings window: the name of the setting that opens a Retime channel showing playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
@@ -3367,6 +4586,14 @@
   "settingsRetimeValuesInSeconds": "Retime values in seconds",
   "@settingsRetimeValuesInSeconds": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsScale": "Масштаб",
+  "@settingsScale": {
+    "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
+  },
+  "settingsShape": "Форма",
+  "@settingsShape": {
+    "description": "Settings window, Appearance: the name of the row choosing between square and rounded corners throughout the interface."
   },
   "settingsShowTheToneMapButton": "Show the tone map button",
   "@settingsShowTheToneMapButton": {
@@ -3376,6 +4603,10 @@
   "@settingsSmoothThePictureWhenZoomed": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsStyle": "Стиль",
+  "@settingsStyle": {
+    "description": "Settings window, Appearance: the name of the row choosing how an audio waveform is drawn."
+  },
   "settingsSurroundTakesThemeColours": "Surround takes theme colours",
   "@settingsSurroundTakesThemeColours": {
     "description": "Settings window: the name of one setting."
@@ -3384,11 +4615,11 @@
   "@settingsThisProcess": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsThisVersion": "This version",
+  "settingsThisVersion": "Ця версія",
   "@settingsThisVersion": {
     "description": "Settings window: the name of the row showing which version of Lumit is installed."
   },
-  "settingsTitle": "Settings",
+  "settingsTitle": "Налаштування",
   "@settingsTitle": {
     "description": "Title of the settings window."
   },
@@ -3428,7 +4659,7 @@
   "@settingsWhenTheMachineCannotKeep": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsWhere": "Where",
+  "settingsWhere": "Де",
   "@settingsWhere": {
     "description": "Settings window: the name of the row showing which folder frames are parked in."
   },
@@ -3436,7 +4667,83 @@
   "@settingsYourThemes": {
     "description": "Settings window: heading over the theme duplicate/rename/import/export buttons."
   },
-  "shapeMask": "Mask",
+  "shaderCompiles": "Шейдер компілюється",
+  "@shaderCompiles": {
+    "description": "Quiet line under the code box in the shader editor window, when the program the user has typed compiles. Replaced by the compiler's own message when it does not. A statement, not praise."
+  },
+  "shaderEditorTitle": "Редагувати шейдер",
+  "@shaderEditorTitle": {
+    "description": "Title of the window that opens from a Custom shader effect's 'Edit shader…' button, where the user types the shader program. Shown capitalised as a kicker in the window's title strip."
+  },
+  "shapeCombineApart": "Окремо",
+  "@shapeCombineApart": {
+    "description": "One choice on a shape layer's Combine row: this piece of art is drawn on its own, not joined to the one above it."
+  },
+  "shapeCombineExclude": "Виключення",
+  "@shapeCombineExclude": {
+    "description": "One choice on a shape layer's Combine row: only what exactly one of the two paths covered is kept."
+  },
+  "shapeCombineIntersect": "Перетин",
+  "@shapeCombineIntersect": {
+    "description": "One choice on a shape layer's Combine row: only what both paths covered is kept."
+  },
+  "shapeCombineSubtract": "Віднімання",
+  "@shapeCombineSubtract": {
+    "description": "One choice on a shape layer's Combine row: this path is taken out of the one above it."
+  },
+  "shapeCombineUnion": "Об'єднання",
+  "@shapeCombineUnion": {
+    "description": "One choice on a shape layer's Combine row: the combined art covers everything either path covered."
+  },
+  "shapeDash": "Штрих",
+  "@shapeDash": {
+    "description": "Timeline row under a shape layer's art: how long each dash of its outline is, in pixels."
+  },
+  "shapeDashOffset": "Зсув штриха",
+  "@shapeDashOffset": {
+    "description": "Timeline row under a shape layer's art: how far along the path the dash pattern starts, in pixels."
+  },
+  "shapeFill": "Заливка",
+  "@shapeFill": {
+    "description": "Timeline row under a shape layer's art: the colour inside its path."
+  },
+  "shapeGap": "Проміжок",
+  "@shapeGap": {
+    "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
+  },
+  "shapeGradient": "Градієнт",
+  "@shapeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its fill is a flat colour or a ramp, and which kind of ramp."
+  },
+  "shapeGradientColour": "Колір градієнта",
+  "@shapeGradientColour": {
+    "description": "Timeline row under a shape layer's art: the colour at the far end of its gradient fill."
+  },
+  "shapeGradientEndX": "Кінець градієнта x",
+  "@shapeGradientEndX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient ends at, in pixels."
+  },
+  "shapeGradientEndY": "Кінець градієнта y",
+  "@shapeGradientEndY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient ends at, in pixels."
+  },
+  "shapeGradientLinear": "Лінійний",
+  "@shapeGradientLinear": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps along a line."
+  },
+  "shapeGradientRadial": "Радіальний",
+  "@shapeGradientRadial": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
+  },
+  "shapeGradientStartX": "Початок градієнта x",
+  "@shapeGradientStartX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient starts at, in pixels."
+  },
+  "shapeGradientStartY": "Початок градієнта y",
+  "@shapeGradientStartY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient starts at, in pixels."
+  },
+  "shapeMask": "Маска",
   "@shapeMask": {
     "description": "What a shape used to cut a layer out is called."
   },
@@ -3444,11 +4751,23 @@
   "@shapePath": {
     "description": "What a pen-drawn shape is called."
   },
-  "size": "Size",
+  "shapeRepeatCopies": "Копії",
+  "@shapeRepeatCopies": {
+    "description": "Timeline row under a shape layer's art: how many copies of it are drawn. One is no repeater at all."
+  },
+  "shapeRepeatEndOpacity": "Кінцева непрозорість",
+  "@shapeRepeatEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the last repeated copy is, as a percentage."
+  },
+  "shapeRepeatStartOpacity": "Початкова непрозорість",
+  "@shapeRepeatStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the first repeated copy is, as a percentage."
+  },
+  "size": "Розмір",
   "@size": {
     "description": "Field label: width and height in pixels."
   },
-  "skip": "Skip",
+  "skip": "Пропустити",
   "@skip": {
     "description": "Button that passes over an optional step."
   },
@@ -3460,7 +4779,7 @@
   "@sourceInBetweenFrames": {
     "description": "Field label: how frames between the source's own frames are made when a layer is retimed."
   },
-  "sourceSection": "Source",
+  "sourceSection": "Джерело",
   "@sourceSection": {
     "description": "Heading over the rows describing where a layer's picture comes from."
   },
@@ -3472,7 +4791,7 @@
   "@sourceSolidSize": {
     "description": "Field label: the width and height of a solid layer."
   },
-  "sourceText": "Text",
+  "sourceText": "Текст",
   "@sourceText": {
     "description": "Field label: the words a text layer shows."
   },
@@ -3480,15 +4799,31 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Flutter frontend",
+  "splashSubtitle": "Моушн-графіка та композитинг",
   "@splashSubtitle": {
     "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
+  },
+  "stretchNewDuration": "Нова тривалість",
+  "@stretchNewDuration": {
+    "description": "Stretch dialogue: the well holding the length the layer will have, in frames. Linked to the speed well above it."
+  },
+  "stretchNewSpeed": "Нова швидкість",
+  "@stretchNewSpeed": {
+    "description": "Stretch dialogue: the well holding the speed the layer will play at, as a percentage. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "swatchForget": "Забути цей колір",
+  "@swatchForget": {
+    "description": "Row of the right-click menu on a colour kept on the project's shelf, inside the colour picker. Takes the colour off the shelf."
+  },
+  "swatchKeep": "Зберегти колір",
+  "@swatchKeep": {
+    "description": "Tooltip on the plus at the end of the project colour shelf, inside the colour picker. Adds the colour being edited to the project's shelf."
   },
   "switchAudible": "Audible",
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "Effects",
+  "switchEffects": "Ефекти",
   "@switchEffects": {
     "description": "Layer switch: whether this layer's effects are applied."
   },
@@ -3496,7 +4831,7 @@
   "@switchEffectsBypassed": {
     "description": "Layer switch, when the effects are being skipped."
   },
-  "switchEffectsOn": "Effects on",
+  "switchEffectsOn": "Ефекти увімкнено",
   "@switchEffectsOn": {
     "description": "Layer switch, when the effects are being applied."
   },
@@ -3504,15 +4839,15 @@
   "@switchFlow": {
     "description": "Layer switch: collapse a pre-composition's transformations. Flow is a Lumit term."
   },
-  "switchHidden": "Hidden",
+  "switchHidden": "Прихований",
   "@switchHidden": {
     "description": "Layer switch: the layer is not drawn."
   },
-  "switchLock": "Lock",
+  "switchLock": "Заблокувати",
   "@switchLock": {
     "description": "Layer switch: refuse edits to this layer."
   },
-  "switchLocked": "Locked",
+  "switchLocked": "Заблоковано",
   "@switchLocked": {
     "description": "Layer switch, when the layer is already locked."
   },
@@ -3528,11 +4863,15 @@
   "@switchMuted": {
     "description": "Layer switch: the layer's sound is silenced."
   },
+  "switchPluginOff": "Вимкнути цей плагін",
+  "@switchPluginOff": {
+    "description": "Command in the right-click menu on a plugin's row in the Effects & presets panel. It stops the plugin being offered and stops it rendering, and is remembered between sessions."
+  },
   "switchShy": "Shy",
   "@switchShy": {
     "description": "Layer switch: hide this layer from the list while the shy filter is on."
   },
-  "switchSolo": "Solo",
+  "switchSolo": "Соло",
   "@switchSolo": {
     "description": "Layer switch: render only the soloed layers."
   },
@@ -3540,13 +4879,25 @@
   "@switchSoloed": {
     "description": "Layer switch, when this layer is one of the soloed ones."
   },
-  "switchThreeD": "3D layer",
+  "switchThreeD": "3D-шар",
   "@switchThreeD": {
     "description": "Layer switch and its column heading: this layer lives in three-dimensional space."
   },
-  "switchVisible": "Visible",
+  "switchVisible": "Видимий",
   "@switchVisible": {
     "description": "Layer switch: the layer is drawn. One or two words — it is a tooltip."
+  },
+  "textAnimatorBasisCharacters": "Символи",
+  "@textAnimatorBasisCharacters": {
+    "description": "Option in the Animators section's Based on picker: the range counts single letters."
+  },
+  "textAnimatorBasisWords": "Слова",
+  "@textAnimatorBasisWords": {
+    "description": "Option in the Animators section's Based on picker: the range counts whole words, so a word's letters move together."
+  },
+  "textAnimatorRemove": "Видалити",
+  "@textAnimatorRemove": {
+    "description": "Button on one animator's heading row in the Animators section that deletes that animator."
   },
   "themeCopiedTo": "Copied to {name}.",
   "@themeCopiedTo": {
@@ -3566,11 +4917,11 @@
       }
     }
   },
-  "themeDefaultName": "My theme",
+  "themeDefaultName": "Моя тема",
   "@themeDefaultName": {
     "description": "The name suggested when saving a custom theme for the first time."
   },
-  "themeDeleted": "{name} deleted.",
+  "themeDeleted": "{name} видалено.",
   "@themeDeleted": {
     "description": "Shown after deleting a custom theme. {name} is its name.",
     "placeholders": {
@@ -3579,11 +4930,11 @@
       }
     }
   },
-  "themeEditorTitle": "Customise theme",
+  "themeEditorTitle": "Налаштувати тему",
   "@themeEditorTitle": {
     "description": "Title of the theme editor when no custom theme has been named yet."
   },
-  "themeEditorTitleNamed": "Customise {theme}",
+  "themeEditorTitleNamed": "Налаштувати {theme}",
   "@themeEditorTitleNamed": {
     "description": "Title of the theme editor. {theme} is the name the user gave their theme.",
     "placeholders": {
@@ -3592,7 +4943,7 @@
       }
     }
   },
-  "themeExported": "{name} exported.",
+  "themeExported": "{name} експортовано.",
   "@themeExported": {
     "description": "Shown after writing a theme out as a file. {name} is the theme name.",
     "placeholders": {
@@ -3609,11 +4960,11 @@
   "@themeFileNoName": {
     "description": "Refusal when a theme file is valid but unnamed."
   },
-  "themeFileNotATheme": "That file is not a Lumit theme.",
+  "themeFileNotATheme": "Цей файл не є темою Lumit.",
   "@themeFileNotATheme": {
     "description": "Refusal when opening a file that is not a .lumtheme."
   },
-  "themeImported": "{name} imported, and selected.",
+  "themeImported": "{name} імпортовано та вибрано.",
   "@themeImported": {
     "description": "Shown after reading a theme file in. {name} is the theme name.",
     "placeholders": {
@@ -3646,19 +4997,19 @@
       }
     }
   },
-  "themeNameTheCopy": "Name the copy",
+  "themeNameTheCopy": "Назвіть копію",
   "@themeNameTheCopy": {
     "description": "Title of the dialogue asking what a duplicated theme is called."
   },
-  "themeNameThis": "Name this theme",
+  "themeNameThis": "Назвіть цю тему",
   "@themeNameThis": {
     "description": "Label over the field that names a custom theme."
   },
-  "themeRenameTitle": "Rename this theme",
+  "themeRenameTitle": "Перейменувати цю тему",
   "@themeRenameTitle": {
     "description": "Title of the dialogue that renames a custom theme."
   },
-  "themeRenamedTo": "Renamed to {name}.",
+  "themeRenamedTo": "Перейменовано на {name}.",
   "@themeRenamedTo": {
     "description": "Shown after renaming a theme. {name} is the new name.",
     "placeholders": {
@@ -3667,19 +5018,19 @@
       }
     }
   },
-  "themeSaveACopy": "Save a copy…",
+  "themeSaveACopy": "Зберегти копію…",
   "@themeSaveACopy": {
     "description": "Button in the theme editor: keep the edits under a new name, leaving the original as it was."
   },
-  "themeSaveChanges": "Save your changes to this theme?",
+  "themeSaveChanges": "Зберегти зміни в цій темі?",
   "@themeSaveChanges": {
     "description": "Asked when closing the theme editor with unsaved changes."
   },
-  "themeUnnamed": "Theme",
+  "themeUnnamed": "Тема",
   "@themeUnnamed": {
     "description": "The name a custom theme falls back to when the user gave it none."
   },
-  "thisLayerSuffix": "{name} (this layer)",
+  "thisLayerSuffix": "{name} (цей шар)",
   "@thisLayerSuffix": {
     "description": "How a layer picker marks the layer the effect itself is on. {name} is the layer's own name.",
     "placeholders": {
@@ -3688,7 +5039,7 @@
       }
     }
   },
-  "timeColumn": "Time",
+  "timeColumn": "Час",
   "@timeColumn": {
     "description": "Heading of the Timeline's render-time column when nothing is being measured."
   },
@@ -3696,7 +5047,239 @@
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
   },
-  "tokenAccent": "Accent",
+  "timelineModeGraph": "Графік",
+  "@timelineModeGraph": {
+    "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
+  },
+  "timelineModeLayers": "Шари",
+  "@timelineModeLayers": {
+    "description": "Label on the left-hand mode segment in the Timeline's top row: the view showing each layer as a bar against time. Drawn in capitals; one word."
+  },
+  "tipAddKeyframe": "Додати ключовий кадр",
+  "@tipAddKeyframe": {
+    "description": "Tooltip. One or two words."
+  },
+  "tipAnimate": "Анімувати",
+  "@tipAnimate": {
+    "description": "Tooltip on the stopwatch that starts animating a property. One or two words."
+  },
+  "tipAspectLocked": "Пропорції зафіксовано",
+  "@tipAspectLocked": {
+    "description": "Tooltip on the padlock beside width and height, when the ratio is kept. One or two words."
+  },
+  "tipAspectUnlocked": "Пропорції вільні",
+  "@tipAspectUnlocked": {
+    "description": "Tooltip on the padlock beside width and height, when the ratio is free. One or two words."
+  },
+  "tipBrushShape": "Форма пензля",
+  "@tipBrushShape": {
+    "description": "Tooltip. Keep it to the control's name — one or two words."
+  },
+  "tipBrushSize": "Розмір пензля",
+  "@tipBrushSize": {
+    "description": "Tooltip. Keep it to the control's name — one or two words."
+  },
+  "tipCacheEmpty": "Кеш порожній",
+  "@tipCacheEmpty": {
+    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than two words (K-482)."
+  },
+  "tipDisable": "Вимкнути",
+  "@tipDisable": {
+    "description": "Tooltip on the checkbox that switches an effect off. One or two words."
+  },
+  "tipEnable": "Увімкнути",
+  "@tipEnable": {
+    "description": "Tooltip on the checkbox that switches an effect on. One or two words."
+  },
+  "tipExportColourSpaceUnavailable": "Недоступно",
+  "@tipExportColourSpaceUnavailable": {
+    "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
+  },
+  "tipFilterByLabel": "Цей колір",
+  "@tipFilterByLabel": {
+    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
+    "type": "text"
+  },
+  "tipFrameNumber": "Номер кадру",
+  "@tipFrameNumber": {
+    "description": "Tooltip on the Timeline's frame readout. One or two words."
+  },
+  "tipHideProperties": "Сховати властивості",
+  "@tipHideProperties": {
+    "description": "Tooltip on the twirl when the properties are already open. One or two words."
+  },
+  "tipInvert": "Інвертувати",
+  "@tipInvert": {
+    "description": "Tooltip on the button that flips a mask. One or two words."
+  },
+  "tipInverted": "Інвертовано",
+  "@tipInverted": {
+    "description": "Tooltip: the matte is the other way round. One or two words."
+  },
+  "tipLabelColour": "Колір мітки",
+  "@tipLabelColour": {
+    "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. One or two words."
+  },
+  "tipLabelInherit": "Успадкувати",
+  "@tipLabelInherit": {
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when the item sits in a folder that has a colour: picking it hands the item back to the folder's colour. One or two words."
+  },
+  "tipLabelNoColour": "Без кольору",
+  "@tipLabelNoColour": {
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when no folder above the item has a colour: picking it leaves the item untagged. One or two words."
+  },
+  "tipLinkPair": "Зв'язати",
+  "@tipLinkPair": {
+    "description": "Tooltip on the chain between an effect point's x and y fields while they are separate. Clicking ties them, so dragging one scales the other by the same factor.",
+    "type": "text"
+  },
+  "tipMaskMode": "Режим маски",
+  "@tipMaskMode": {
+    "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
+  },
+  "tipMoreInGroup": "Утримувати",
+  "@tipMoreInGroup": {
+    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
+  },
+  "tipMovePanel": "Перемістити панель",
+  "@tipMovePanel": {
+    "description": "Tooltip on a panel's drag handle. One or two words."
+  },
+  "tipNotBuiltYet": "Не реалізовано",
+  "@tipNotBuiltYet": {
+    "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
+  },
+  "tipNotInverted": "Не інвертовано",
+  "@tipNotInverted": {
+    "description": "Tooltip: the matte is the right way round. One or two words."
+  },
+  "tipOutlineWidth": "Ширина обведення",
+  "@tipOutlineWidth": {
+    "description": "Tooltip. Keep it to the control's name — one or two words."
+  },
+  "tipProperties": "Властивості",
+  "@tipProperties": {
+    "description": "Tooltip on the twirl that opens a layer's properties. One or two words."
+  },
+  "tipRecoverAll": "Усі зміни",
+  "@tipRecoverAll": {
+    "description": "Tooltip on the recovery dialogue's filled button, saying what it recovers. One or two words."
+  },
+  "tipRecoverAutosave": "Останнє автозбереження",
+  "@tipRecoverAutosave": {
+    "description": "Tooltip on the recovery dialogue's autosave button, saying what it opens. One or two words."
+  },
+  "tipRecoverNone": "Збережений файл",
+  "@tipRecoverNone": {
+    "description": "Tooltip on the recovery dialogue's leftmost button, saying what it opens. Nothing is deleted. One or two words."
+  },
+  "tipRemove": "Видалити",
+  "@tipRemove": {
+    "description": "Tooltip on the cross that deletes an effect from the stack. One or two words."
+  },
+  "tipRemoveKeyframe": "Видалити ключовий кадр",
+  "@tipRemoveKeyframe": {
+    "description": "Tooltip. One or two words."
+  },
+  "tipResetCurve": "Скинути криву",
+  "@tipResetCurve": {
+    "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. One or two words."
+  },
+  "tipResetParameters": "Скинути параметри",
+  "@tipResetParameters": {
+    "description": "Tooltip on the effect's Reset button. One or two words."
+  },
+  "tipShowEverything": "Показати все",
+  "@tipShowEverything": {
+    "description": "Tooltip on the Project panel's filter when it is showing only missing footage. One or two words."
+  },
+  "tipStopAnimating": "Зупинити анімацію",
+  "@tipStopAnimating": {
+    "description": "Tooltip on the stopwatch when the property is already animated. One or two words."
+  },
+  "tipStopMeasuring": "Зупинити вимірювання",
+  "@tipStopMeasuring": {
+    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is on. One or two words."
+  },
+  "tipTextSize": "Розмір тексту",
+  "@tipTextSize": {
+    "description": "Tooltip. Keep it to the control's name — one or two words."
+  },
+  "tipTrackCreateCamera": "Створити камеру",
+  "@tipTrackCreateCamera": {
+    "description": "Tooltip on the Create camera button in the Camera track's status row."
+  },
+  "tipTransportEnd": "У кінець",
+  "@tipTransportEnd": {
+    "description": "Tooltip on the Viewer transport's last button, an icon with no words: it takes the playhead to the composition's last frame."
+  },
+  "tipTransportNext": "Наступний кадр",
+  "@tipTransportNext": {
+    "description": "Tooltip on the Viewer transport's step-forward button, an icon with no words: it moves the playhead on by one frame."
+  },
+  "tipTransportPause": "Пауза",
+  "@tipTransportPause": {
+    "description": "Tooltip on the Viewer transport's play button while playback is running, an icon with no words: pressing it stops."
+  },
+  "tipTransportPlay": "Відтворити",
+  "@tipTransportPlay": {
+    "description": "Tooltip on the Viewer transport's play button while playback is stopped, an icon with no words: pressing it starts."
+  },
+  "tipTransportPrevious": "Попередній кадр",
+  "@tipTransportPrevious": {
+    "description": "Tooltip on the Viewer transport's step-back button, an icon with no words: it moves the playhead back by one frame."
+  },
+  "tipTransportStart": "На початок",
+  "@tipTransportStart": {
+    "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
+  },
+  "tipUnlinkPair": "Роз'єднати",
+  "@tipUnlinkPair": {
+    "description": "Tooltip on the chain between an effect point's x and y fields while they are tied together. Clicking lets each move on its own again.",
+    "type": "text"
+  },
+  "tipUseProxiesOff": "Використовуються оригінали",
+  "@tipUseProxiesOff": {
+    "description": "Tooltip on the Project panel's project-wide proxies switch while it is off."
+  },
+  "tipUseProxiesOn": "Використовуються проксі",
+  "@tipUseProxiesOn": {
+    "description": "Tooltip on the Project panel's project-wide proxies switch while it is on."
+  },
+  "tipViewerExposure": "Експозиція",
+  "@tipViewerExposure": {
+    "description": "Tooltip on the Viewer's exposure box, naming it and nothing else. That exposure is a preview and never touches the export is said by the colour badge beside it, which reads \"Preview only\" whenever exposure or tone mapping is in force."
+  },
+  "tipViewerExposureReset": "Скинути експозицію",
+  "@tipViewerExposureReset": {
+    "description": "Tooltip on the small mark to the left of the Viewer bar's exposure number. It appears only while the exposure is not zero, and clicking it puts the exposure back to zero."
+  },
+  "tipViewerSnapshotNone": "Немає знімка",
+  "@tipViewerSnapshotNone": {
+    "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. One or two words."
+  },
+  "tipViewerSnapshotTake": "Зробити знімок",
+  "@tipViewerSnapshotTake": {
+    "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. One or two words."
+  },
+  "tipZoomIn": "Збільшити",
+  "@tipZoomIn": {
+    "description": "Tooltip on the large landscape glyph at the right end of the Timeline's zoom slider. Clicking it zooms one step in."
+  },
+  "tipZoomOut": "Зменшити",
+  "@tipZoomOut": {
+    "description": "Tooltip on the small landscape glyph at the left end of the Timeline's zoom slider. Clicking it zooms one step out."
+  },
+  "tipZoomPercent": "Масштаб {percent}%",
+  "@tipZoomPercent": {
+    "description": "Tooltip on the Timeline's zoom slider. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "tokenAccent": "Акцент",
   "@tokenAccent": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3720,7 +5303,7 @@
   "@tokenCachediskHelp": {
     "description": "Theme editor: the sentence under the \"Cache, on disk\" colour, saying where it is used."
   },
-  "tokenCurve": "Curve {number}",
+  "tokenCurve": "Крива {number}",
   "@tokenCurve": {
     "description": "Theme editor: the name of one of the four graph-editor curve colours. {number} is 1 to 4.",
     "placeholders": {
@@ -3733,7 +5316,7 @@
   "@tokenCurveHelp": {
     "description": "Theme editor: the sentence under the graph curve colours."
   },
-  "tokenError": "Error",
+  "tokenError": "Помилка",
   "@tokenError": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3749,19 +5332,19 @@
   "@tokenGroupLayerKinds": {
     "description": "Theme editor: heading over a group of colours."
   },
-  "tokenGroupLines": "Lines",
+  "tokenGroupLines": "Лінії",
   "@tokenGroupLines": {
     "description": "Theme editor: heading over a group of colours."
   },
-  "tokenGroupRoles": "Roles",
+  "tokenGroupRoles": "Ролі",
   "@tokenGroupRoles": {
     "description": "Theme editor: heading over a group of colours."
   },
-  "tokenGroupSurfaces": "Surfaces",
+  "tokenGroupSurfaces": "Поверхні",
   "@tokenGroupSurfaces": {
     "description": "Theme editor: heading over a group of colours."
   },
-  "tokenGroupText": "Text",
+  "tokenGroupText": "Текст",
   "@tokenGroupText": {
     "description": "Theme editor: heading over a group of colours."
   },
@@ -3785,7 +5368,7 @@
   "@tokenHairlinestrongHelp": {
     "description": "Theme editor: the sentence under the \"Hairline, strong\" colour, saying where it is used."
   },
-  "tokenLayercamera": "Camera",
+  "tokenLayercamera": "Камера",
   "@tokenLayercamera": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3825,7 +5408,7 @@
   "@tokenLayersolidHelp": {
     "description": "Theme editor: the sentence under the \"Solid\" colour, saying where it is used."
   },
-  "tokenLayertext": "Text",
+  "tokenLayertext": "Текст",
   "@tokenLayertext": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3833,7 +5416,7 @@
   "@tokenLayertextHelp": {
     "description": "Theme editor: the sentence under the \"Text\" colour, saying where it is used."
   },
-  "tokenMarker": "Marker",
+  "tokenMarker": "Маркер",
   "@tokenMarker": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3849,7 +5432,7 @@
   "@tokenSelectionfillHelp": {
     "description": "Theme editor: the sentence under the \"Selected row\" colour, saying where it is used."
   },
-  "tokenSuccess": "Success",
+  "tokenSuccess": "Успіх",
   "@tokenSuccess": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3865,7 +5448,7 @@
   "@tokenSurface0Help": {
     "description": "Theme editor: the sentence under the \"Background\" colour, saying where it is used."
   },
-  "tokenSurface1": "Panel",
+  "tokenSurface1": "Панель",
   "@tokenSurface1": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3913,7 +5496,7 @@
   "@tokenTextmutedHelp": {
     "description": "Theme editor: the sentence under the \"Text, muted\" colour, saying where it is used."
   },
-  "tokenTextprimary": "Text",
+  "tokenTextprimary": "Текст",
   "@tokenTextprimary": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3937,7 +5520,7 @@
   "@tokenTimelineoutofrangeHelp": {
     "description": "Theme editor: the sentence under the \"Timeline outside the work area\" colour, saying where it is used."
   },
-  "tokenWarning": "Warning",
+  "tokenWarning": "Попередження",
   "@tokenWarning": {
     "description": "Theme editor: the name of one editable colour."
   },
@@ -3981,7 +5564,7 @@
   "@toolAnchor": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolBrush": "Brush",
+  "toolBrush": "Пензель",
   "@toolBrush": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -3997,31 +5580,31 @@
   "@toolCameraPan": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolCloneStamp": "Clone stamp",
+  "toolCloneStamp": "Штамп",
   "@toolCloneStamp": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolEraser": "Eraser",
+  "toolEraser": "Гумка",
   "@toolEraser": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolFill": "Fill",
+  "toolFill": "Заливка",
   "@toolFill": {
     "description": "Toolbar options strip — label beside the fill colour swatch."
   },
-  "toolHand": "Hand",
+  "toolHand": "Рука",
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolHardness": "Hardness",
+  "toolHardness": "Жорсткість",
   "@toolHardness": {
     "description": "Toolbar options strip — label beside the brush hardness field."
   },
-  "toolOpacity": "Opacity",
+  "toolOpacity": "Непрозорість",
   "@toolOpacity": {
     "description": "Toolbar options strip — label beside the brush opacity field."
   },
-  "toolPen": "Pen",
+  "toolPen": "Перо",
   "@toolPen": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4065,7 +5648,7 @@
   "@toolRefineEdge": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolRotate": "Rotation",
+  "toolRotate": "Обертання",
   "@toolRotate": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
@@ -4077,31 +5660,35 @@
   "@toolSelect": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeEllipse": "Ellipse",
+  "toolShape": "Форма",
+  "@toolShape": {
+    "description": "Toolbar options strip — label beside the brush shape picker."
+  },
+  "toolShapeEllipse": "Еліпс",
   "@toolShapeEllipse": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapePolygon": "Polygon",
+  "toolShapePolygon": "Багатокутник",
   "@toolShapePolygon": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeRectangle": "Rectangle",
+  "toolShapeRectangle": "Прямокутник",
   "@toolShapeRectangle": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeRoundedRectangle": "Rounded rectangle",
+  "toolShapeRoundedRectangle": "Округлений прямокутник",
   "@toolShapeRoundedRectangle": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolShapeStar": "Star",
+  "toolShapeStar": "Зірка",
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolSize": "Size",
+  "toolSize": "Розмір",
   "@toolSize": {
     "description": "Toolbar options strip — label beside the brush size field."
   },
-  "toolStroke": "Stroke",
+  "toolStroke": "Обведення",
   "@toolStroke": {
     "description": "Toolbar options strip — label beside the shape outline colour swatch."
   },
@@ -4113,7 +5700,7 @@
   "@toolTypeVertical": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "toolWidth": "Width",
+  "toolWidth": "Ширина",
   "@toolWidth": {
     "description": "Toolbar options strip — label beside the shape outline width field."
   },
@@ -4121,33 +5708,81 @@
   "@toolZoom": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "trackCreateCamera": "Створити камеру",
+  "@trackCreateCamera": {
+    "description": "Button beside the Camera track's status: adds a Camera layer that follows the solved shot."
+  },
+  "trackFailedNoFrames": "Немає кадрів для аналізу",
+  "@trackFailedNoFrames": {
+    "description": "Camera track status line when the analysis was refused: the media opened but has no pictures in it."
+  },
+  "trackFailedUnreadable": "Не вдалося прочитати медіа",
+  "@trackFailedUnreadable": {
+    "description": "Camera track status line when the analysis was refused: the file would not open, or carries no video."
+  },
+  "trackNotAnalysed": "Ще не проаналізовано",
+  "@trackNotAnalysed": {
+    "description": "Camera track status line in Effect controls, before Analyse has ever been pressed."
+  },
+  "trackSolvingCamera": "Обчислення камери",
+  "@trackSolvingCamera": {
+    "description": "Camera track status line: the frames are in and the camera path is being computed."
+  },
+  "trackStopped": "Аналіз зупинено",
+  "@trackStopped": {
+    "description": "Camera track status line after Cancel was pressed. Nothing was written."
+  },
+  "trackWaiting": "Очікує початку",
+  "@trackWaiting": {
+    "description": "Camera track status line: the analysis has been accepted but has not begun."
+  },
   "transformAnchorPoint": "Anchor point",
   "@transformAnchorPoint": {
     "description": "The point a layer rotates and scales about."
   },
-  "transformOpacity": "Opacity",
+  "transformOpacity": "Непрозорість",
   "@transformOpacity": {
     "description": "How solid a layer is."
   },
-  "transformPosition": "Position",
+  "transformPosition": "Позиція",
   "@transformPosition": {
     "description": "Where a layer sits."
   },
-  "transformRotation": "Rotation",
+  "transformPositionX": "Позиція x",
+  "@transformPositionX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the position, shown once its axes have been separated."
+  },
+  "transformPositionY": "Позиція y",
+  "@transformPositionY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the position, shown once its axes have been separated."
+  },
+  "transformPositionZ": "Позиція z",
+  "@transformPositionZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth half of a 3D layer's position, shown once its axes have been separated."
+  },
+  "transformRotation": "Обертання",
   "@transformRotation": {
     "description": "How far a layer is turned."
   },
-  "transformRotationX": "Rotation x",
+  "transformRotationX": "Обертання x",
   "@transformRotationX": {
     "description": "How far a 3D layer is turned about the x axis."
   },
-  "transformRotationY": "Rotation y",
+  "transformRotationY": "Обертання y",
   "@transformRotationY": {
     "description": "How far a 3D layer is turned about the y axis."
   },
-  "transformScale": "Scale",
+  "transformScale": "Масштаб",
   "@transformScale": {
     "description": "How large a layer is drawn."
+  },
+  "transformScaleX": "Масштаб x",
+  "@transformScaleX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the width half of the scale, shown once its axes have been separated."
+  },
+  "transformScaleY": "Масштаб y",
+  "@transformScaleY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the height half of the scale, shown once its axes have been separated."
   },
   "transformSection": "Transform",
   "@transformSection": {
@@ -4169,7 +5804,7 @@
   "@typeVerticalNotBuilt": {
     "description": "Notice when the vertical type tool is used."
   },
-  "unitDegrees": "degrees",
+  "unitDegrees": "градуси",
   "@unitDegrees": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
@@ -4177,23 +5812,42 @@
   "@unitFps": {
     "description": "The frames-per-second unit, shown after a rate such as 25 fps. Lower case."
   },
-  "unitGb": "GB",
+  "unitGb": "ГБ",
   "@unitGb": {
     "description": "The gigabyte unit, shown after an amount of memory."
   },
-  "unitMb": "MB",
+  "unitKhz": "кГц",
+  "@unitKhz": {
+    "description": "Unit beside a sound's sample rate — kilohertz. Most languages keep the SI symbol.",
+    "type": "text"
+  },
+  "unitMb": "МБ",
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
   },
-  "unitPercent": "percent",
+  "unitMinutes": "хвилин",
+  "@unitMinutes": {
+    "description": "The minutes unit, shown after a number of minutes — Settings → Autosave's interval."
+  },
+  "unitPercent": "відсотки",
   "@unitPercent": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
-  "unitPixels": "pixels",
+  "unitPixels": "пікселі",
   "@unitPixels": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
-  "unsavedChanges": "Unsaved changes",
+  "unitSymbolFrames": "кадри",
+  "@unitSymbolFrames": {
+    "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unitSymbolSeconds": "с",
+  "@unitSymbolSeconds": {
+    "description": "The unit rider beside an effect parameter's value when the number is a length of time in seconds. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unsavedChanges": "Незбережені зміни",
   "@unsavedChanges": {
     "description": "Bottom strip: the project has edits that are not written to disk."
   },
@@ -4217,15 +5871,15 @@
   "@updateCheckDidNotFinish": {
     "description": "Settings window: shown when checking for updates failed and the engine gave no reason."
   },
-  "updateCheckFailed": "Could not check for updates",
+  "updateCheckFailed": "Не вдалося перевірити оновлення",
   "@updateCheckFailed": {
     "description": "Notice: looking for a new version failed."
   },
-  "updateCheckFor": "Check for updates",
+  "updateCheckFor": "Перевірити оновлення",
   "@updateCheckFor": {
     "description": "Help menu row that starts looking for a new version."
   },
-  "updateChecking": "Checking for updates…",
+  "updateChecking": "Перевірка оновлень…",
   "@updateChecking": {
     "description": "Help menu row, while a check is running."
   },
@@ -4242,7 +5896,7 @@
       }
     }
   },
-  "updateDownload": "Download",
+  "updateDownload": "Завантажити",
   "@updateDownload": {
     "description": "Button that fetches an update."
   },
@@ -4259,11 +5913,11 @@
   "@updateDownloadCancelled": {
     "description": "Why an update download stopped: the user asked it to."
   },
-  "updateDownloadFailed": "Could not download the update",
+  "updateDownloadFailed": "Не вдалося завантажити оновлення",
   "@updateDownloadFailed": {
     "description": "Notice: fetching a new version failed."
   },
-  "updateDownloaded": "Lumit {version} is downloaded",
+  "updateDownloaded": "Lumit {version} завантажено",
   "@updateDownloaded": {
     "description": "Title shown when an update has been fetched but not installed.",
     "placeholders": {
@@ -4272,7 +5926,7 @@
       }
     }
   },
-  "updateDownloading": "Downloading Lumit {version}",
+  "updateDownloading": "Завантаження Lumit {version}",
   "@updateDownloading": {
     "description": "Shown while an update is being fetched.",
     "placeholders": {
@@ -4281,7 +5935,7 @@
       }
     }
   },
-  "updateDownloadingPercent": "Downloading update… {percent}%",
+  "updateDownloadingPercent": "Завантаження оновлення… {percent}%",
   "@updateDownloadingPercent": {
     "description": "Help menu row while an update is downloading. {percent} is a whole number.",
     "placeholders": {
@@ -4302,7 +5956,7 @@
   "@updateInstallerFailed": {
     "description": "Why an update could not finish."
   },
-  "updateIsAvailable": "Lumit {version} is available",
+  "updateIsAvailable": "Доступна версія Lumit {version}",
   "@updateIsAvailable": {
     "description": "Notice: a newer version exists. {version} is a version number.",
     "placeholders": {
@@ -4311,7 +5965,7 @@
       }
     }
   },
-  "updateLater": "Later",
+  "updateLater": "Пізніше",
   "@updateLater": {
     "description": "Button that puts off installing a downloaded update."
   },
@@ -4319,7 +5973,7 @@
   "@updateNoneAvailable": {
     "description": "Notice: the version installed is the newest there is."
   },
-  "updateNotNow": "Not now",
+  "updateNotNow": "Не зараз",
   "@updateNotNow": {
     "description": "Button that declines an update for the moment."
   },
@@ -4335,7 +5989,7 @@
       }
     }
   },
-  "updateOfferTitle": "Update to Lumit {version}?",
+  "updateOfferTitle": "Оновити до Lumit {version}?",
   "@updateOfferTitle": {
     "description": "Title of the dialogue offering a new version.",
     "placeholders": {
@@ -4344,7 +5998,7 @@
       }
     }
   },
-  "updateProgressOf": "{done} MB of {size}",
+  "updateProgressOf": "{done} МБ з {size}",
   "@updateProgressOf": {
     "description": "Under the download bar: how much of the update has arrived. {done} is a number of megabytes, {size} the whole amount such as 240 MB.",
     "placeholders": {
@@ -4399,7 +6053,7 @@
   "@updateRestartFailed": {
     "description": "Shown when an update worked but the restart did not."
   },
-  "updateRestartNow": "Restart now",
+  "updateRestartNow": "Перезапустити зараз",
   "@updateRestartNow": {
     "description": "Button: restart into the new version."
   },
@@ -4411,7 +6065,7 @@
   "@updateRestartWithoutSaving": {
     "description": "Button: restart into the new version and lose unsaved work."
   },
-  "updateSaveAndRestart": "Save and restart",
+  "updateSaveAndRestart": "Зберегти і перезапустити",
   "@updateSaveAndRestart": {
     "description": "Button: write the project, then restart into the new version."
   },
@@ -4424,7 +6078,7 @@
       }
     }
   },
-  "updateShowTheFile": "Show the file",
+  "updateShowTheFile": "Показати файл",
   "@updateShowTheFile": {
     "description": "Button: open the folder holding the downloaded update."
   },
@@ -4436,7 +6090,7 @@
   "@updateUnknownVersion": {
     "description": "Why an update check failed."
   },
-  "updateUnsavedChanges": "This project has unsaved changes.",
+  "updateUnsavedChanges": "У цьому проєкті є незбережені зміни.",
   "@updateUnsavedChanges": {
     "description": "Added to an update message when restarting would lose work."
   },
@@ -4448,6 +6102,10 @@
         "type": "String"
       }
     }
+  },
+  "useProxy": "Використовувати проксі",
+  "@useProxy": {
+    "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original."
   },
   "viewerDisplayTransform": "Linear → sRGB",
   "@viewerDisplayTransform": {
@@ -4462,13 +6120,57 @@
       }
     }
   },
-  "volume": "Volume",
+  "volume": "Гучність",
   "@volume": {
     "description": "Row label: how loud a layer's sound is."
   },
   "vramTier": "VRAM",
   "@vramTier": {
     "description": "Bottom strip: the name of the graphics-card cache tier, beside RAM and Disk. An abbreviation most languages keep."
+  },
+  "welcomeClearRecent": "Очистити",
+  "@welcomeClearRecent": {
+    "description": "Welcome screen: the quiet word beside the Recent heading that empties the whole list. The projects themselves are untouched."
+  },
+  "welcomeForgetProject": "Забути проєкт",
+  "@welcomeForgetProject": {
+    "description": "Welcome screen: hover hint on the small cross at the end of a recent project's row, which takes that one row off the list. The file is not deleted."
+  },
+  "welcomeManual": "Посібник",
+  "@welcomeManual": {
+    "description": "Welcome screen: the outlined button at the bottom right that opens the documentation site in the machine's own browser."
+  },
+  "welcomeNewProject": "Новий проєкт",
+  "@welcomeNewProject": {
+    "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."
+  },
+  "welcomeNewProjectNote": "Зберегти пізніше",
+  "@welcomeNewProjectNote": {
+    "description": "Welcome screen: the small note under New project, saying the project has no file until the user saves it. Two words if possible. One line in a 180px card."
+  },
+  "welcomeNoRecent": "Немає нещодавніх проєктів",
+  "@welcomeNoRecent": {
+    "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
+  },
+  "welcomeOpenProject": "Відкрити",
+  "@welcomeOpenProject": {
+    "description": "Welcome screen: the title of the second start card, which opens an existing project from disk."
+  },
+  "welcomeOpenProjectNote": "Файл .lum",
+  "@welcomeOpenProjectNote": {
+    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
+  },
+  "welcomeRecent": "Нещодавні",
+  "@welcomeRecent": {
+    "description": "Welcome screen: the heading over the list of recently opened projects. Drawn in capitals, so give the sentence-case word."
+  },
+  "welcomeToday": "Сьогодні",
+  "@welcomeToday": {
+    "description": "Welcome screen: shown in a recent project's date column when it was last opened today. Fits 70px of mono type."
+  },
+  "welcomeWhatsNew": "Що нового",
+  "@welcomeWhatsNew": {
+    "description": "Welcome screen: the outlined button at the bottom right that opens the release notes page in the machine's own browser."
   },
   "workAreaClear": "Clear work area",
   "@workAreaClear": {
