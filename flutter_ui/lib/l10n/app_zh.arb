@@ -4875,6 +4875,10 @@
   "@graphSaveGroup": {
     "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
   },
+  "graphSearchAdds": "添加一个驱动器节点",
+  "@graphSearchAdds": {
+    "description": "Graph panel node search, footer line when no wire is in hand: picking an entry adds that box to the canvas."
+  },
   "graphSearchWires": "把拖动的连线接到合适的位置",
   "@graphSearchWires": {
     "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."

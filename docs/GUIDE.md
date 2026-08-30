@@ -8301,52 +8301,94 @@ focus, and closing the editor is *what loses focus*. So cancelling marks the
 editor closed before it takes it down — otherwise Escape would commit the very
 value it was asked to discard.
 
-### The Ctrl+Space console: one search popover, everywhere (K-324, K-658, K-673)
+### The Ctrl+Space console, and why a ring beats a list (K-324, K-325)
 
-Press Ctrl+Space and a small search popover appears **at your mouse** —
-anywhere, including over the picture in the Viewer. Nothing is boxed and
-nothing dims: the work stays fully visible, because the work is what the
-console is about to act on. While it is open, the keyboard is the console's:
-anything you type goes into the search box, never into the panels underneath,
-so a keystroke can never rename a layer you did not mean to touch. Escape
-backs out one step at a time — it clears what you typed before it closes
-anything — and a click outside closes it too.
+Press Ctrl+Space and a ring of choices appears **around your mouse** —
+anywhere, including over the picture in the Viewer — with a search box
+floating just above it (or below, if your pointer is near the top of the
+window). Nothing is boxed: the console floats translucent over your work,
+because your work is the thing it is about to act on, and behind it the frame
+dims just a little — enough that every slice stays readable over any picture,
+never enough to hide what you are working on. While it is open, the keyboard
+is the console's: anything you type goes into the search box, never into the
+panels underneath, so a keystroke can never rename a layer you did not mean
+to touch. Escape closes it from anywhere; so does a click outside. Two ways
+into the same handful of things, because they suit different moments.
 
-The console once raised a radial ring of commands around the pointer; the
-owner ruled it out (K-658), and every slice the ring offered still lives in
-the menus, the palette and the panels it was drawn from. What remains is the
-half everyone actually used, modelled on Video Copilot's **FX Console** — the
-plug-in After Effects users install first: the list is open from the first
-frame, typing narrows it, and Enter applies the top match. Type "gau", press
-Enter, and Gaussian blur is on every selected layer. Effects always rank
-before compositions however well a comp matches, because the reason you hit
-this key is nearly always an effect; the comps are there so the same box can
-also be "take me to that comp". A strip of category kickers under the search
-row narrows by family, and the popover is sized so every kicker in that strip
-shows whole — the board's 320px is a floor, not the width (K-672).
+**The ring is a radial menu**, the kind Blender uses. The point of a ring is
+not that it looks better than a list. It is that every choice is in a fixed
+*direction*, and the ring opens where your hand already is — so after a few
+uses your hand knows "duplicate is up" and stops reading the menu at all: you
+press the chord, flick, and it is done. A list can never offer that, because a
+list's third entry moves the moment the list grows.
 
-**The same key answers differently over the graph** (K-673). With the Graph
-panel focused, Ctrl+Space opens the very same popover wearing the canvas's
-own list: every effect (a chosen one joins the layer's stack, which *is* the
-image chain, so its box lands already wired into the picture's path), every
-driver, and your saved node groups. Dropping a wire on empty canvas summons
-the same console, narrowed to what that wire could actually land on, and the
-chosen box arrives with the wire connected — one gesture, one undo step.
-Inside a Custom shader's inner graph the list is the shader vocabulary,
-Parameter box included. There is no second search surface and no second key:
-the graph's old Tab door went with K-673. Under the bonnet this is the same
-*claim* trick Delete uses — the graph leaves a small function with the shell,
-and the shell asks it before opening its own console.
+Two rules follow from that, and they are most of the code:
 
-That includes FX Console's **snapshot button** beside the box: one press
-writes the frame you are looking at to a PNG, so you can change a look and
-compare the two without setting up an export. Worth knowing how it is done,
-because the cheap way was also the right way: it is a **one-frame export**.
-Lumit's exporter already writes PNG sequences and is the tested path from a
-Lumit frame to a file — colour, sizing, all of it — so a snapshot is that,
-with the range set to "this frame and the next". The file goes into a
-`Snapshots` folder beside your project, or your pictures folder if the
-project has never been saved.
+- **A slice is chosen by angle, not by what you are hovering over.** Flick in a
+  direction and the choice is made, however far the pointer actually travelled.
+  If it were hit-testing a drawn wedge you would have to land *inside* the
+  shape, and the gesture could only be as fast as your aim.
+- **There is a dead zone in the middle.** Inside it nothing is chosen, so
+  opening the menu and letting go without moving cancels — rather than
+  committing you to whatever happened to be nearest the cursor.
+
+What is *in* the ring depends on what you have selected. An item picked in
+the Project panel (while you are standing in that panel) offers exactly one
+thing: **Add to comp**, which places it the way dropping it on the Timeline
+would — and when it cannot be placed (no comp open, a folder, a comp into
+itself) the slice sits there dimmed rather than vanishing, so the direction
+is learned before it is ever needed. An effect picked out
+in the stack offers the things you do to an effect; a selected layer the
+things you do to *that layer* — duplicate, add an effect, pre-compose, delete
+— and never a stray "new solid" beside them, because creating a layer is not
+something about your selection. Creation is still one flick away: the **New**
+slice carries a small caret, and choosing it expands the ring in place into
+the same six entries as Layer ▸ New, the way Blender nests its pies. The
+centre of the ring always names where you are, and inside a sub-ring it is
+also the way back out (so is Escape). A composition with nothing selected
+offers the new-layer ring directly, because that is what an empty timeline is
+asking for; with nothing open at all it offers the two ways to get somewhere.
+Never more than six to a ring — a ring of twelve is a ring nobody learns, and
+the long tail is the search box beside it. An entry that cannot run right now
+is dimmed rather than removed, so a direction your hand has learned keeps
+meaning the same thing tomorrow.
+
+A selected layer's ring has one more trick: the **Keyframe** slice. It expands
+into one slice per transform row — Anchor point, Position, Scale, Rotation,
+Opacity — and choosing one plants a keyframe at the playhead holding whatever
+value is already there, so nothing on screen moves. Then the Timeline comes to
+the front with that row open, and the key you just made is sitting there under
+the playhead. It is the flick-sized version of twirling the layer open,
+finding the row, and pressing its diamond — the three steps it replaces. A row
+already keyed at this frame is not keyed twice, and a row driven by an
+expression is dimmed, because writing keys over an expression would erase it.
+
+**The search box starts empty and shows nothing** — the ring is the offer.
+Start typing and the ring steps aside for a dropdown of matches under the box:
+type "gau", press Enter, and Gaussian blur is on every selected layer. The
+dropdown puts **effects first and compositions after a divider**, and — this
+is the deliberate part — a composition can never outrank an effect however
+well it matches. The reason you hit this key is nearly always an effect; a
+comp that happened to score better would just be in the way. The comps are
+there so the same box can also be "take me to that comp". Escape backs out one
+step at a time: it clears what you typed before it closes anything, so a
+mistyped search never costs you the whole console.
+
+This half is modelled on Video Copilot's **FX Console**, which is the plug-in
+After Effects users install first and then cannot work without. That includes
+its **snapshot button** beside the box: one press writes the frame you are
+looking at to a PNG, so you can change a look and compare the two without
+setting up an export.
+
+Worth knowing how the snapshot is done, because the cheap way was also the
+right way: it is a **one-frame export**. Lumit's exporter already writes PNG
+sequences, and it is the tested path from a Lumit frame to a file — colour,
+sizing, all of it. So a snapshot is that, with the range set to "this frame and
+the next". The alternative would have been a second still-writer living beside
+the exporter: a second thing to keep correct, for nothing gained. The file goes
+into a `Snapshots` folder beside your project, or your pictures folder if the
+project has never been saved — never into whatever directory the application
+happened to be started from, which is where a bare file name would have put it.
 
 One small mechanism makes "opens at the mouse" possible at all: a keyboard
 event does not know where the mouse is. So the shell keeps a note of the last
@@ -8363,6 +8405,13 @@ two are not competing: the palette is *every command by name*, the console is
 effects plus the thing you were about to do. Both build their lists in the same
 file as the menu items, so neither can drift into a different idea of what
 "New composition" means.
+
+No pie-menu library is involved: a ring is a stack of positioned
+labels over a gesture detector, and the only real content is the arithmetic of
+which slice a direction means — which is why that arithmetic, and the sums
+that place the ring and bar on screen, live in their own file,
+`widgets/radial_maths.dart`, with no Flutter in it and a test that treats it
+as pure maths.
 
 ### The rules that bite
 

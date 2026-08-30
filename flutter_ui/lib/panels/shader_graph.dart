@@ -33,8 +33,6 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
-import '../shell/fx_console_frb.dart';
-import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_panel.dart'
@@ -273,14 +271,26 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
   Offset? _panFrom;
   Offset? _pressAt;
 
-  /// Whether the console is up, so a second ask cannot stack another.
-  bool _searching = false;
+  /// The add-search, floated over the canvas: where it was asked for in
+  /// canvas units, and the filter so far.
+  Offset? _searchAt;
+  final TextEditingController _searchText = TextEditingController();
 
   /// The vocabulary, asked for once per session (it is a table in the
   /// engine's own code and cannot move).
   static List<BridgeShaderNodeKind>? _kinds;
 
   final FocusNode _focus = FocusNode(debugLabel: 'shader graph');
+
+  @override
+  void initState() {
+    super.initState();
+    // The filter narrows as it is typed; the list is a rebuild of this widget
+    // alone, over a held table.
+    _searchText.addListener(() {
+      if (mounted && _searchAt != null) setState(() {});
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -290,12 +300,6 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
     _ui?.model.removeListener(_reload);
     _ui = ui;
     ui.model.addListener(_reload);
-    // While the inner graph is the panel's face, Ctrl+Space adds a shader box
-    // (K-673) — the owner's "can't add options in the custom shader view".
-    // Chained over the outer canvas's own claim, which stands down while a
-    // shader is entered.
-    if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
-    ui.consoleClaim = _consoleClaim;
     final held = ui.shaderGraphViews[widget.entry.effect.toString()];
     if (held != null) {
       _pan = held.pan;
@@ -308,63 +312,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
   void dispose() {
     _rememberView();
     _ui?.model.removeListener(_reload);
-    if (_ui?.consoleClaim == _consoleClaim) {
-      _ui!.consoleClaim = _priorConsoleClaim;
-    }
+    _searchText.dispose();
     _focus.dispose();
     super.dispose();
-  }
-
-  /// The claim this view had to displace to take Ctrl+Space.
-  bool Function()? _priorConsoleClaim;
-
-  bool _consoleClaim() {
-    final ui = _ui;
-    if (!mounted ||
-        ui == null ||
-        ui.activePanel.value != Panel.graph ||
-        _graph == null ||
-        _searching) {
-      return _priorConsoleClaim?.call() ?? false;
-    }
-    _openConsole(_toCanvas(const Offset(80, 80)), byKey: true);
-    return true;
-  }
-
-  /// The Ctrl+Space console, wearing the shader vocabulary (K-673): every box
-  /// the engine lists — the Parameter box included — and picking one drops it
-  /// at [at]. A wire let go over empty canvas opens the same surface, exactly
-  /// as the outer graph's does.
-  ///
-  /// The list is deliberately unfiltered with a wire in hand: this panel never
-  /// learns the type rules (the engine is asked per drop), so it cannot
-  /// promise which boxes a wire fits — the picked box lands unwired and the
-  /// hand draws the wire, with the engine's refusal as the backstop.
-  Future<void> _openConsole(Offset at, {bool byKey = false}) async {
-    if (_searching) return;
-    setState(() => _searching = true);
-    final kinds = _kinds ??= listShaderNodes();
-    try {
-      await showFxConsoleFrb(
-        context: context,
-        anchor: lastKnownPointerPosition,
-        model: FxConsoleModel(
-          keyHint: byKey ? l10n.fxConsoleKey : null,
-          footer: l10n.shaderSearchAdds,
-          entries: [
-            for (final k in kinds)
-              if (k.kind != 'result' || !_hasResult())
-                FxConsoleEntry(
-                  label: shaderNodeWord(k.kind),
-                  kind: FxConsoleKind.effect,
-                  run: () => _addNode(k.kind, at),
-                ),
-          ],
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
   }
 
   /// The view you left is the view you return to (§4.2), held in the session
@@ -574,6 +524,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
 
   void _down(PointerDownEvent event, List<_Box> boxes) {
     _focus.requestFocus();
+    if (_searchAt != null) {
+      setState(() => _searchAt = null);
+      return;
+    }
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
@@ -682,9 +636,8 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
       if (landed != null) {
         _connect(flight.from, landed);
       } else if (moved) {
-        // Onto empty canvas: the console opens, and the picked box lands
-        // where the wire was let go.
-        _openConsole(at);
+        // Onto empty canvas: the search opens where the wire was let go.
+        setState(() => _searchAt = at);
       }
       return;
     }
@@ -771,11 +724,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
           if (event.logicalKey == LogicalKeyboardKey.escape) {
-            widget.onExit();
+            if (_searchAt != null) {
+              setState(() => _searchAt = null);
+            } else {
+              widget.onExit();
+            }
             return KeyEventResult.handled;
           }
-          // No Tab door (K-673): Ctrl+Space is the console's one key,
-          // answered through [_consoleClaim].
+          if (event.logicalKey == LogicalKeyboardKey.tab &&
+              _searchAt == null) {
+            setState(() => _searchAt = _toCanvas(const Offset(80, 80)));
+            return KeyEventResult.handled;
+          }
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
             return _deleteSelected()
@@ -857,11 +817,79 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel> {
                       style: t.small.copyWith(color: t.accent),
                     ),
                   ),
+                if (_searchAt case final at?) _search(t, at),
               ],
             ),
           ),
         ),
       );
+
+  /// The add-search: a filter over the engine's own vocabulary. Picking a row
+  /// drops that box where the search was asked for.
+  Widget _search(LumitTheme t, Offset at) {
+    final kinds = _kinds ??= listShaderNodes();
+    final filter = _searchText.text.trim().toLowerCase();
+    final hits = [
+      for (final k in kinds)
+        if (k.kind != 'result' || !_hasResult())
+          if (filter.isEmpty ||
+              shaderNodeWord(k.kind).toLowerCase().contains(filter))
+            k,
+    ];
+    return Positioned(
+      left: 40,
+      top: 30,
+      width: 220,
+      child: Container(
+        key: const ValueKey<String>('shader-search'),
+        decoration: BoxDecoration(
+          color: t.surface1,
+          border: Border.all(color: t.hairline),
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            HouseTextField(
+              controller: _searchText,
+              autofocus: true,
+              width: double.infinity,
+              hint: l10n.shaderGraphSearchHint,
+            ),
+            const SizedBox(height: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final k in hits)
+                    GestureDetector(
+                      key: ValueKey<String>('shader-add-${k.kind}'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          _searchAt = null;
+                          _searchText.clear();
+                        });
+                        _addNode(k.kind, at);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 3),
+                        child: Text(shaderNodeWord(k.kind),
+                            style: t.small.copyWith(color: t.textPrimary)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   bool _hasResult() =>
       _graph?.nodes.any((n) => n['kind'] == 'result') ?? false;

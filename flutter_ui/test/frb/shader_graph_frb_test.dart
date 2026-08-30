@@ -10,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/state/dock.dart';
 
 import 'frb_test_support.dart';
 
@@ -127,28 +126,17 @@ void main() {
       expect(p.layer.getEffects().single.shaderGraph(), isNull);
     });
 
-    /// **Ctrl+Space adds inside a shader** (K-673; the owner's "can't add
-    /// options in the custom shader view"): with the inner graph the panel's
-    /// face, the console lists the shader vocabulary and picking a row drops
-    /// that box — committed as one undo step.
-    testWidgets('the console adds a box, committed as one undo step',
+    testWidgets('adding a box commits the graph as one undo step',
         (tester) async {
       final p = withShader();
       await mount(tester, p);
       await enter(tester, p.layer);
 
-      p.uiState.activePanel.value = Panel.graph;
-      expect(p.uiState.consoleClaim!(), isTrue,
-          reason: 'the inner graph claims Ctrl+Space while it is the face');
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
-      expect(find.byKey(const ValueKey<String>('fx-console-bar')),
+      expect(find.byKey(const ValueKey<String>('shader-search')),
           findsOneWidget);
-      // The Parameter box is in the vocabulary — the row the fix is for.
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Parameter')),
-          findsOneWidget);
-
-      await tester
-          .tap(find.byKey(const ValueKey<String>('fx-console-item-UV')));
+      await tester.tap(find.byKey(const ValueKey<String>('shader-add-uv')));
       await tester.pump();
 
       final json = p.layer.getEffects().single.shaderGraph();
@@ -160,59 +148,6 @@ void main() {
       await tester.pump();
       expect(p.layer.getEffects().single.shaderGraph(), isNull,
           reason: 'one gesture, one undo step');
-    });
-
-    /// **Scrolling the console never zooms the inner graph** (owner item 12
-    /// — the leak's original home). The old popover sat *inside* the canvas's
-    /// pointer listener, so a wheel over its list also reached the zoom; the
-    /// console floats in the overlay, which the wheel cannot pass.
-    testWidgets('a wheel over the console leaves the inner zoom alone',
-        (tester) async {
-      final p = withShader();
-      await mount(tester, p);
-      await enter(tester, p.layer);
-
-      final before =
-          tester.getRect(find.byKey(const ValueKey<String>('shader-node-1')));
-
-      p.uiState.activePanel.value = Panel.graph;
-      expect(p.uiState.consoleClaim!(), isTrue);
-      await tester.pump();
-
-      final list = tester.getCenter(
-          find.byKey(const ValueKey<String>('fx-console-item-Picture')));
-      await tester.sendEventToBinding(
-          PointerScrollEvent(position: list, scrollDelta: const Offset(0, 40)));
-      await tester.pump();
-
-      expect(
-          tester.getRect(find.byKey(const ValueKey<String>('shader-node-1'))),
-          before,
-          reason: 'no zoom moved the box: the scroll was the console\'s');
-    });
-
-    /// A wire let go over empty canvas opens the same console, and the box
-    /// lands where the wire was dropped — the road that used to raise the
-    /// inner graph's own popover (K-673 took it).
-    testWidgets('a wire dropped on empty canvas opens the console',
-        (tester) async {
-      final p = withShader();
-      await mount(tester, p);
-      await enter(tester, p.layer);
-
-      // The Result box's one input socket: drag a wire out of it backwards
-      // onto empty ground. Grabbing an unwired input starts a fresh wire.
-      final socket = tester.getCenter(find.byKey(
-          const ValueKey<String>('shader-socket-1-in-colour')));
-      await tester.dragFrom(socket, const Offset(-160, 120));
-      await tester.pump();
-
-      expect(find.byKey(const ValueKey<String>('fx-console-bar')),
-          findsOneWidget,
-          reason: 'the drop summons the console, not a second search');
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Result')),
-          findsNothing,
-          reason: 'one Result box is the law, so the row is withheld');
     });
   });
 }

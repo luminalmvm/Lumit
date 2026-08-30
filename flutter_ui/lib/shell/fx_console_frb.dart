@@ -15,8 +15,7 @@
 // **snapshot** button, which writes the frame on screen to a PNG so two
 // versions of a look can be compared without setting up an export.
 //
-// The graph opens this same surface (K-645, K-673) — Ctrl+Space with the
-// canvas focused, or a wire let go over empty ground: what a caller
+// The graph canvas's Tab opens this same surface (K-645): what a caller
 // contributes is the list, the kicker naming its key, and the foot sentence.
 //
 // **The console applies things; it does not know how.** Every entry carries a
@@ -80,8 +79,8 @@ class FxConsoleModel {
   final VoidCallback? onSnapshot;
 
   /// The key that opened this — drawn as a kicker at the search row's right
-  /// end, the way the drawing has it ("Ctrl+Space" wherever a key did; null
-  /// for a console a gesture summoned, which draws nothing).
+  /// end, the way the drawing has it ("Ctrl+Space" from the shell, "Tab" from
+  /// the graph canvas). Null draws nothing.
   final String? keyHint;
 
   /// One quiet sentence under the list saying what choosing a row will do

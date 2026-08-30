@@ -538,11 +538,6 @@ class LumitMenuBarFrb extends StatelessWidget {
   /// and the comps it fronts must be the ones the menus mean.
   Future<void> _console(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    // With the graph focused, the console is the graph's own add surface
-    // (K-673): the panel opens the same popover wearing the canvas's list —
-    // a chosen box lands on the graph — and this one, which applies to the
-    // selected layers, stands down.
-    if (ui.consoleClaim?.call() ?? false) return;
     final comp = ui.selectedComp;
 
     void applyEffect(String name) {
