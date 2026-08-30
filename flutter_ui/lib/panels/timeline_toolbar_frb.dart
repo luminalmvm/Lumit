@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
@@ -21,6 +22,8 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/time_readout.dart';
+import 'graph_channels.dart';
+import 'graph_maths.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
 
@@ -82,7 +85,8 @@ class Toolbar extends StatelessWidget {
   final ValueChanged<TimelineMode> onMode;
   final ValueChanged<String> onSearch;
 
-  const Toolbar({super.key, 
+  const Toolbar({
+    super.key,
     required this.model,
     required this.playhead,
     required this.onSeek,
@@ -397,6 +401,7 @@ Future<void> _showMoreMenu(
       return;
   }
 }
+
 Future<void> _showLayerMenu(
   BuildContext context,
   CompositionReference comp,
@@ -429,6 +434,283 @@ Future<void> _showLayerMenu(
   picked();
   onChanged();
 }
+
+/// **The key commands, at the outline's foot** — the interpolation words and
+/// what goes with them, standing under the list they act on.
+///
+/// They stood on the lane bar until the owner moved them here: that bar had
+/// grown into the longest strip of buttons in the panel while this end of the
+/// same row had room to spare, and the commands act on a *key selection*,
+/// which is made in the outline above them. The bar under the lanes is left
+/// with the two things that are about the lanes — the zoom and the scrollbar.
+///
+/// The word *Interpolation* went with the move. It labelled the four words
+/// beside it, and Linear / Hold / Ease / Bezier need no telling what they are;
+/// a kicker naming a run of kickers only spent room the outline's foot has
+/// less of than the lane bar had.
+///
+/// Two shapes, one per view. In **Layers** it is the keyframe strip (K-458):
+/// the four interpolations, a rule, then Reverse, Copy and Paste at playhead.
+/// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
+/// the tangent modes, the value/speed lens and the auto-fit toggle. Every
+/// button keeps the face, the tooltip and the widget key it had on the lane
+/// bar — this is a move, not a redesign.
+class KeyCommandStrip extends StatelessWidget {
+  /// Set in **Layers mode**: the keyframe strip (K-458).
+  final bool strip;
+
+  /// Set in graph view; null leaves the graph's own commands out.
+  final GraphLens? lens;
+  final ValueChanged<GraphLens>? onLens;
+  final bool autoFit;
+  final VoidCallback? onToggleAutoFit;
+  final ValueChanged<BridgeSideInterp>? onInterp;
+
+  /// A tangent mode chosen for the selected keys — Auto / Clamp / Free (§6.3).
+  final ValueChanged<TangentMode>? onTangentMode;
+
+  /// The Easing… button pressed, with the button's own context so a popup can
+  /// be anchored to it. Whether that is a popup or a docked panel is the
+  /// panel's decision, not this strip's (K-349).
+  final ValueChanged<BuildContext>? onOpenEasing;
+
+  /// The Ease word pressed, with its own context so the popover can be
+  /// anchored to it — the same box the block badge opens.
+  final ValueChanged<BuildContext>? onEaseBlock;
+  final VoidCallback? onReverse;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
+
+  const KeyCommandStrip({
+    super.key,
+    this.strip = false,
+    this.lens,
+    this.onLens,
+    this.autoFit = true,
+    this.onToggleAutoFit,
+    this.onInterp,
+    this.onTangentMode,
+    this.onOpenEasing,
+    this.onEaseBlock,
+    this.onReverse,
+    this.onCopy,
+    this.onPaste,
+  });
+
+  Widget _button(
+    LumitTheme t, {
+    required String keyName,
+    required String label,
+    required String tip,
+    required bool on,
+    required VoidCallback onPressed,
+  }) =>
+      LumitTooltip(
+        message: tip,
+        child: HouseButton(
+          key: ValueKey<String>(keyName),
+          small: true,
+          // The one in force wears the button's own `hairline_strong` idle
+          // edge; the rest are frameless. **No accent** — §3.1's accent list
+          // is closed and a lens or an ease is not on it, so which is in force
+          // reads from the frame and the brighter label, as the mode tabs do.
+          frameless: !on,
+          // 18px bottom bar (K-451): one pixel of the button's own edge is
+          // all the room a 9px kicker leaves above and below it.
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          onPressed: onPressed,
+          child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Container(
+      key: const ValueKey('tl-key-commands'),
+      height: t.density.secondaryRow,
+      // The same ground as the column toggles it stands beside: the two are
+      // one bar, split between what the outline shows and what the selection
+      // can be told to do.
+      color: t.surface2,
+      padding: const EdgeInsets.only(left: 10),
+      // Scrolls sideways when the outline is narrow — the same answer the
+      // toolbar and the lane bar give; an overflow stripe is a layout fault.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Two gaps run through this strip: 2 between the chips of one
+            // segmented run, 12 between one run and the next, so the runs read
+            // as groups rather than as one long strip of buttons.
+            if (strip) ...[
+              _button(t,
+                  keyName: 'keys-interp-linear',
+                  label: l10n.easeLinear,
+                  tip: l10n.tipLinearKeyframes,
+                  on: false,
+                  onPressed: () =>
+                      onInterp?.call(const BridgeSideInterp.linear())),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'keys-interp-hold',
+                  label: l10n.easeHold,
+                  tip: l10n.tipHoldKeyframes,
+                  on: false,
+                  onPressed: () =>
+                      onInterp?.call(const BridgeSideInterp.hold())),
+              const SizedBox(width: 2),
+              // The shaped ease, one step along from the flat three: the same
+              // selection, a curve chosen by name instead of a constant. Its
+              // own Builder so the popover can be anchored to the word that
+              // opened it.
+              Builder(
+                builder: (buttonContext) => _button(t,
+                    keyName: 'keys-interp-ease',
+                    label: l10n.keysEase,
+                    tip: l10n.tipEaseTheBlock,
+                    on: false,
+                    onPressed: () => onEaseBlock?.call(buttonContext)),
+              ),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'keys-interp-bezier',
+                  label: l10n.easeBezier,
+                  tip: l10n.tipEasyEase,
+                  on: false,
+                  onPressed: () => onInterp?.call(easyEase)),
+              const SizedBox(width: 8),
+              // **The two runs read apart**: everything left of this rule says
+              // how the movement between keys is shaped; everything right of
+              // it moves the keys themselves.
+              Container(width: 1, height: 10, color: t.hairlineStrong),
+              const SizedBox(width: 8),
+              _button(t,
+                  keyName: 'keys-reverse',
+                  label: l10n.fxReverse,
+                  tip: l10n.tipReverseKeys,
+                  on: false,
+                  onPressed: () => onReverse?.call()),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'keys-copy',
+                  label: l10n.menuCopy,
+                  tip: l10n.tipCopyKeys,
+                  on: false,
+                  onPressed: () => onCopy?.call()),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'keys-paste',
+                  label: l10n.keysPasteAtPlayhead,
+                  tip: l10n.tipPasteKeysAtPlayhead,
+                  on: false,
+                  onPressed: () => onPaste?.call()),
+              const SizedBox(width: 12),
+            ],
+            if (lens != null) ...[
+              // The selected keys' easing, one click each — the F9 family's
+              // buttons (docs/07 §5.3).
+              _button(t,
+                  keyName: 'graph-interp-linear',
+                  label: l10n.easeLinear,
+                  tip: l10n.tipLinearKeyframes,
+                  on: false,
+                  onPressed: () =>
+                      onInterp?.call(const BridgeSideInterp.linear())),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-interp-bezier',
+                  label: l10n.easeBezier,
+                  tip: l10n.tipEasyEase,
+                  on: false,
+                  onPressed: () => onInterp?.call(easyEase)),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-interp-hold',
+                  label: l10n.easeHold,
+                  tip: l10n.tipHoldKeyframes,
+                  on: false,
+                  onPressed: () =>
+                      onInterp?.call(const BridgeSideInterp.hold())),
+              // The shaped ease, one step along from the one-click three: same
+              // selection, a curve instead of a constant. Its own Builder so
+              // the popup can find where this button is; the popup layout
+              // slides it up into view.
+              //
+              // Value lens only. The box draws a shape against the value's own
+              // travel, so a curve stamped while the speed lens is up would
+              // land on the value graph — a change the user cannot see in the
+              // view they drew it in. The one-click three above stay in both
+              // lenses: a side's interp means the same thing either way.
+              if (lens == GraphLens.value) ...[
+                const SizedBox(width: 2),
+                Builder(
+                  builder: (buttonContext) => _button(t,
+                      keyName: 'graph-interp-easing',
+                      label: l10n.easeCustom,
+                      tip: l10n.tipEasingEditor,
+                      on: false,
+                      onPressed: () => onOpenEasing?.call(buttonContext)),
+                ),
+              ],
+              const SizedBox(width: 12),
+              // Tangents — Auto / Clamp / Free (§6.3), between the ease
+              // presets and the lens pair. A run of three like the eases
+              // beside them, and unlit for the same reason: these are things
+              // to *do* to the selection, and a selection spanning two modes
+              // has no one answer to light. Which mode a side is in is legible
+              // where it matters — in the handle, which stops following its
+              // neighbours the moment it is dragged.
+              _button(t,
+                  keyName: 'graph-tangent-auto',
+                  label: l10n.graphTangentAuto,
+                  tip: l10n.tipTangentAuto,
+                  on: false,
+                  onPressed: () => onTangentMode?.call(TangentMode.auto)),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-tangent-clamp',
+                  label: l10n.graphTangentClamp,
+                  tip: l10n.tipTangentClamp,
+                  on: false,
+                  onPressed: () => onTangentMode?.call(TangentMode.clamp)),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-tangent-free',
+                  label: l10n.graphTangentFree,
+                  tip: l10n.tipTangentFree,
+                  on: false,
+                  onPressed: () => onTangentMode?.call(TangentMode.free)),
+              const SizedBox(width: 12),
+              _button(t,
+                  keyName: 'graph-lens-value',
+                  label: l10n.clipboardValueColumn,
+                  tip: l10n.tipValueGraph,
+                  on: lens == GraphLens.value,
+                  onPressed: () => onLens?.call(GraphLens.value)),
+              const SizedBox(width: 2),
+              _button(t,
+                  keyName: 'graph-lens-speed',
+                  label: l10n.graphSpeed,
+                  tip: l10n.tipSpeedGraph,
+                  on: lens == GraphLens.speed,
+                  onPressed: () => onLens?.call(GraphLens.speed)),
+              const SizedBox(width: 12),
+              _button(t,
+                  keyName: 'graph-autofit',
+                  label: l10n.graphAutoFit,
+                  tip: autoFit ? l10n.tipAutoFitOn : l10n.tipAutoFitOff,
+                  on: autoFit,
+                  onPressed: () => onToggleAutoFit?.call()),
+              const SizedBox(width: 12),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The outline's end of the bottom bar (K-448, §12A.1): one kicker per
 /// column group, lit while that group is drawn.
 ///
@@ -454,7 +736,8 @@ class ColumnToggles extends StatelessWidget {
   final bool animatedOnly;
   final VoidCallback onToggleAnimated;
 
-  const ColumnToggles({super.key, 
+  const ColumnToggles({
+    super.key,
     required this.groups,
     required this.hidden,
     required this.onToggle,

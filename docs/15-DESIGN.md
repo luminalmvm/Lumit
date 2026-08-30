@@ -872,7 +872,8 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   shut), which is the keyboard's answer to the same question, one layer at a time. Block
   selection, end-handle stretch and the Ease popover are Layers
   behaviours, and so is the **Interpolation / Reverse / Copy / Paste-at-playhead strip**,
-  which came to the Layers bottom bar when Keys went (K-529).
+  which came to the Layers bottom bar when Keys went (K-529) and to the outline's foot
+  when the lane bar was pared back (K-652).
 - **Composition tabs run the full width of the panel header**, between the panel's own
   `TIMELINE` kicker at the far left and **one filled `EXPORT`** at the far right — the
   single filled action a surface is allowed (§3.1), running the File menu's own Export
@@ -1014,7 +1015,15 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   first time); a tooltip carries the word either way.
 - **The zoom slider and the magnet lead the lane bottom bar in every view** (K-529): they
   are the one run it carries whatever the panel shows, so they sit at the left edge of the
-  lane area in Layers and in Graph alike, and each mode's own commands follow them.
+  lane area in Layers and in Graph alike.
+- **The lane bar carries nothing else** (K-652): the zoom, the magnet and the horizontal
+  scrollbar. Each mode's own commands — the Layers keyframe strip, the graph's eases,
+  tangents, lens pair and Auto fit — stand at the **outline's foot** instead, left of the
+  column toggles on the same row, because they act on a key selection and a key selection
+  is made in the outline above them. **The word *Interpolation* goes with the move**: it
+  labelled Linear / Hold / Ease / Bezier, which say what they are, and the outline's foot
+  has less room to spend on a kicker naming a run of kickers than the lane bar had. The
+  two runs share one row, each scrolling inside its own share when the outline is narrow.
 
 ### 12A.1a Keys mode — the dope sheet (K-455) — **withdrawn (K-529)**
 

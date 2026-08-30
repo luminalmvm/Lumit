@@ -20357,3 +20357,39 @@ Regression tests: `a_group_saves_its_members_the_wires_between_them_and_their_sh
 `a_node_group_round_trips_through_its_file_in_one_commit` (lumit_bridge);
 `Save group names the pick, washes the canvas and writes a file` and
 `a saved group is offered by the search and dropped whole` (graph_panel_frb_test).
+
+## K-652 — The key commands stand at the outline's foot; the lane bar is the zoom and the scrollbar
+
+**Status:** DECIDED (owner, 2026-08-30) · supersedes K-529's placement of the keyframe
+strip on the Layers bottom bar (the strip itself, K-458, is unchanged)
+
+The bar under the lanes had become the longest strip of buttons in the panel. In Layers it
+carried the zoom, the magnet, the word *Interpolation*, four interpolations, a rule, three
+key commands and then the scrollbar; in Graph it carried the zoom, the magnet, four eases,
+three tangent modes, two lenses and Auto fit. The same row at the **outline's** end carried
+three column toggles, a filter, two comp switches and a ⋯ — and had room to spare.
+
+**The lane bar reduces to what is about the lanes**: the zoom slider between its two
+landscapes, the magnet, and the horizontal scrollbar. Nothing else.
+
+**Everything that acts on a key moves to the outline's foot**, left of the column toggles
+on the same secondary row. That is the owner's suggested placement, and it is the right one
+for a plain reason: these commands act on a **key selection**, and a key selection is made
+in the outline — a property picked, a row's keys boxed up. The buttons were on the far side
+of the panel from the list they answer to.
+
+**The word *Interpolation* goes entirely.** It labelled Linear / Hold / Ease / Bezier,
+which say what they are; a kicker naming a run of kickers spent room the lane bar could
+afford and the outline's foot cannot.
+
+Nothing else about the buttons changed: same faces, same tooltips, same widget keys, same
+order, same behaviour, same keyboard equivalents. This is a move.
+
+The row divides loosely — the command strip takes the width its buttons need and the
+column toggles keep the rest; squeezed, each scrolls inside its own share rather than
+overflowing. The outline's foot was already reserved at a secondary row's height to hold
+the two halves' viewports level (K-278), so nothing about the scroll ranges moved.
+
+Regression tests: `the outline's foot carries the keyframe strip` and `the zoom and the
+magnet lead the bottom bar in both views` (timeline_panel_frb_test), both now measuring
+against the lane bar's leading edge — the commands end before it begins.

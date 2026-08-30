@@ -6972,11 +6972,12 @@ void main() {
           reason: 'one press, one undo step');
     });
 
-    /// **The strip lives on the Layers bar** (K-529). It was drawn for Keys
-    /// mode and it is what the owner valued about that mode, so it moved
-    /// rather than going with it — and it is there from the moment the panel
-    /// is, because the commands act on a key selection, not on a view.
-    testWidgets('the Layers bottom bar carries the keyframe strip',
+    /// **The strip lives at the outline's foot**. It was drawn for Keys mode,
+    /// came to the lane bar when that mode went (K-529), and moved again when
+    /// the lane bar was pared back to the zoom and the scrollbar: the commands
+    /// act on a key selection, which is made in the outline above them. It is
+    /// there from the moment the panel is, because a selection is not a view.
+    testWidgets('the outline\'s foot carries the keyframe strip',
         (tester) async {
       final p = withComp();
       blockLayer(p, [600, 1500]);
@@ -7002,6 +7003,15 @@ void main() {
       expect(x('keys-interp-bezier'), lessThan(x('keys-reverse')));
       expect(x('keys-reverse'), lessThan(x('keys-copy')));
       expect(x('keys-copy'), lessThan(x('keys-paste')));
+
+      // And the whole run stands under the outline, not under the lanes: its
+      // last button ends before the lane bar begins.
+      expect(
+          tester.getRect(find.byKey(const ValueKey('keys-paste'))).right,
+          lessThanOrEqualTo(tester
+              .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))
+              .left),
+          reason: 'the commands sit at the outline\'s foot');
     });
 
     /// Interpolation, from the strip: the selected keys' two sides, set at a
@@ -7229,10 +7239,10 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// **The zoom and the magnet are at the left edge of the lane area in
-    /// every view** (K-529): they are the one run this bar carries whatever
-    /// the panel is showing, and in graph view they used to sit behind four
-    /// runs of graph commands.
+    /// **The lane bar is the zoom, the magnet and the scrollbar, in every
+    /// view** (K-529 put the zoom first; the commands that used to follow it
+    /// have gone to the outline's foot). Nothing that acts on a key stands
+    /// under the lanes any more, in either view.
     testWidgets('the zoom and the magnet lead the bottom bar in both views',
         (tester) async {
       final p = withComp();
@@ -7257,12 +7267,13 @@ void main() {
       double zoomLeft() =>
           tester.getRect(find.byKey(const ValueKey('tl-zoom-slider'))).left;
 
-      // Layers: the strip follows the zoom, not the other way round.
+      // Layers: the zoom leads, and the key commands are not on this bar.
       expect(zoomLeft() - leadingEdge(), lessThan(40));
       expect(
-          tester.getRect(find.byKey(const ValueKey('keys-interp-linear'))).left,
-          greaterThan(
-              tester.getRect(find.byKey(const ValueKey('tl-magnet'))).right));
+          tester
+              .getRect(find.byKey(const ValueKey('keys-interp-linear')))
+              .right,
+          lessThanOrEqualTo(leadingEdge()));
 
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pumpAndSettle();
@@ -7272,10 +7283,9 @@ void main() {
       expect(
           tester
               .getRect(find.byKey(const ValueKey('graph-interp-linear')))
-              .left,
-          greaterThan(
-              tester.getRect(find.byKey(const ValueKey('tl-magnet'))).right),
-          reason: 'the graph\'s own commands follow them');
+              .right,
+          lessThanOrEqualTo(leadingEdge()),
+          reason: 'the graph\'s own commands are at the outline\'s foot too');
     });
 
     /// **A seam drag moves the columns as it goes** (K-633, moving K-529's

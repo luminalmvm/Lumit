@@ -1461,7 +1461,7 @@ measurement — the panel shows the numbers, it does not turn them on.
   selecting keyframes on a lane selects their properties the same way. **Keyed rows draw
   their keyframes as diamonds on their lanes**, and dragging empty lane space boxes them up
   for selection (the shared marquee the graph editor also uses); the F9 family and the
-  bottom bar's easing buttons act on that selection in either view. **Selection lets go**
+  key-command strip's easing buttons act on that selection in either view. **Selection lets go**
   (K-203): closing a fold drops the selection inside it, selecting a layer clears the
   property selection, and a click on empty ground in either half of the table selects
   nothing at all — no layer, no properties, no keys. `U`/`UU`/`UUU` reveal what is
@@ -1804,7 +1804,7 @@ instead (K-248, §4.4).
   `Ctrl` already suspends the magnet).
 - **Handle editing** with per-side independence; `Alt+drag` breaks tangent continuity;
   a *Continuous* lock keeps in/out speeds equal.
-- **Tangent modes** — Auto / Clamp / Free, a run of three on the footer strip, stored per
+- **Tangent modes** — Auto / Clamp / Free, a run of three on the key-command strip, stored per
   key side (K-506). An automatic side takes its speed from the key's neighbours on every
   read (Clamp additionally cannot overshoot them); Free is a side shaped by hand. Shaping
   a handle, an influence field or an ease preset takes its side back to Free, and a side
@@ -1814,7 +1814,11 @@ instead (K-248, §4.4).
   influence** fields (K-505; a side's speed is what the tangent handle drags and what the
   influence field writes at, so it is not a fifth number).
 - **Preset eases**: Ease (`F9`), Ease in (`Shift+F9`), Ease out (`Ctrl+Shift+F9`), hold,
-  linear, auto-bezier — buttons along the graph editor footer and in the context menu.
+  linear, auto-bezier — buttons on the key-command strip and in the context menu.
+- **The graph's own commands stand at the outline's foot, not under the curves** (K-652):
+  the eases, the tangent modes, the lens pair and Auto fit share one strip with the
+  Layers keyframe strip, which is where a key selection is made. The bar under the lanes
+  keeps the zoom slider, the magnet and the horizontal scrollbar and nothing else.
 - **Snap-to-beat-markers**: beat markers render as vertical lines in the graph; keyframe
   drags snap to them (same snapping rules as §4.5). This is how speed ramps land on kicks.
 - **Auto-zoom fit** (`F`): frame the selected keys, or all keys of shown properties when
@@ -1827,11 +1831,11 @@ selected property as its own coloured curve — a multi-axis property contribute
 per axis, and a static property draws as its flat value line. The curves are evaluated by a
 Dart port of the engine's cubic (`graph_maths.dart`, pinned to `anim.rs` by
 docs/impl/keyframe-eval.md and golden tests), so a paint costs zero bridge calls (K-184).
-Landed from the lists above: the **value and speed lenses** (bottom-bar buttons; the speed
+Landed from the lists above: the **value and speed lenses** (key-command-strip buttons; the speed
 lens is the exact derivative, each key an independent in/out dot with one influence handle
 each); **per-side tangent handles** with `Alt`-drag breaking and re-joining; **box-select**
 with `Shift`/`Ctrl` add; the **preset eases** — F9 / `Shift+F9` / `Ctrl+Shift+F9`, and
-Linear / Bezier / Hold buttons in the footer and the key context menu, acting on the lane
+Linear / Bezier / Hold buttons on the strip and in the key context menu, acting on the lane
 selection too; `Ctrl`+click planting a key on the curve under the pointer; **auto-zoom fit**
 (`F`, and an Auto fit toggle — off, the wheel pans the value axis and `Alt`+wheel zooms it;
 `Ctrl`/`Shift`+wheel stay the Timeline's time bindings); selection-key drags that move a
