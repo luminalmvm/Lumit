@@ -2393,74 +2393,54 @@ flowchart (the deferred node-graph view) grows from it.
 
 ---
 
-## 12.2 The FX console (`Ctrl+Space`, K-324; presentation K-325)
+## 12.2 The FX console (`Ctrl+Space`, K-324; popover face K-658)
 
 A second, narrower command surface, and deliberately not a duplicate of §12: the palette is
-every command by name, the console is **effects, fast** — plus the thing you were probably
-about to do. Modelled on Video Copilot's FX Console, which is what After Effects users
-install first. It supersedes the radial menu K-102 deferred.
+every command by name, the console is **effects, fast**. Modelled on Video Copilot's FX
+Console, which is what After Effects users install first. The radial ring the console once
+raised, and the scrim under it, are gone by the owner's ruling (K-658, superseding the
+radial half of K-325/K-326/K-327): the console is **one search popover**, and the graph
+canvas's `Tab` opens the very same surface (K-645).
 
-**Where it opens (K-325).** The ring MUST open **centred on the pointer** — anywhere in the
-window, the Viewer included, pulled in just enough that the whole ring stays on screen — so
-the flick can start the instant the chord lands. The search bar floats **above** the ring,
-or **below** it when the top of the window would clip it; its dropdown always opens downward
-from the bar. The console is not a boxed window: its surfaces are the standard menu float
-made slightly translucent, over a **half-strength scrim** — enough darkening that every
-slice reads over any frame, never so much that the work it acts on disappears. `Esc` MUST
-close it from anywhere, whatever has focus.
+**Where it opens.** The popover MUST open **on the pointer** — its search row under the
+hand, anywhere in the window, pulled in just enough that the whole popover stays on
+screen. No scrim, no boxed window chrome beyond the popover itself: the work it acts on
+stays fully visible. `Esc` MUST close it from anywhere, whatever has focus; so does a
+click outside.
 
 **While the console is open, the keyboard is the console's (K-328).** The search field MUST
 hold focus for the console's whole life — anything typed lands in the box from the first
 keystroke — and every command handler stands down (`lumitModalOpen`), so a keystroke aimed
-at the box can never run a shortcut underneath. The only ways out are `Esc` and a click
-outside.
+at the box can never run a shortcut underneath.
 
-**The search bar starts empty and lists nothing** — the ring is the offer. Typing opens a
-dropdown below the bar, which MUST rank **effects first and compositions after a divider**,
-within each kind and never across it: the reason to open this window is nearly always an
-effect, and a comp that happened to score better would be in the way. Matching is §12's
-subsequence ranking, so "gau" finds Gaussian blur. `Enter` applies the top match to
-**every** selected layer (K-217); a composition fronts; `Enter` on an empty bar closes. The
-arrow keys move the highlight. While the query is non-empty the ring steps aside — the
-dropdown needs the room, and typing is choosing the other way in. `Esc` retreats **one step
-at a time**: clear the text, then pop a sub-ring, then close.
+**Four bands, top to bottom** (widths, heights and insets per the approved board,
+`Console.dc.html`):
 
-**The snapshot button** sits beside the field and writes the frame on screen to a PNG. It
-MUST be a one-frame image-sequence export (§11's `png` codec, K-201) rather than a second
-still-writer: same colour and sizing path, and the status line already reports it. It writes
-to a `Snapshots` folder beside the saved project, or the user's pictures folder for a project
-never saved — never the working directory. It MUST grey out with no composition open.
+- The **search row**: the magnifier, the query, and a kicker at the right naming the key
+  that opened it ("Ctrl+Space" from the shell, "Tab" from the graph canvas) — one surface,
+  and the kicker is what says which door was used. The snapshot button sits at the row's
+  end.
+- The **category strip**: `All`, then every grouping the results carry (the browse
+  groupings, drivers filed under Controls per K-645). Choosing one narrows the list to
+  that group; `All` lets everything back in. A result with no grouping (a composition)
+  shows only under `All`.
+- The **list**, open from the first frame — the list is the offer, and typing narrows it.
+  It MUST rank **effects first and compositions after**, within each kind and never
+  across it: the reason to open this window is nearly always an effect, and a comp that
+  happened to score better would be in the way. Matching is §12's subsequence ranking, so
+  "gau" finds Gaussian blur. Each row carries its name, its grouping's kicker and a small
+  preview swatch. `Enter` applies the highlighted match to **every** selected layer
+  (K-217); a composition fronts. The arrow keys move the highlight. `Esc` retreats **one
+  step at a time**: clear the text, then close.
+- The **foot**: one quiet sentence saying what choosing a row will do ("Enter applies to
+  the selected layers"; the canvas's own words from K-645). Drawn only where the caller
+  has something to say.
 
-**The radial menu** follows Blender's:
-
-- A slice MUST be chosen by **angle alone**, not by hit-testing a drawn wedge — a flick in a
-  direction picks that slice however far the pointer travelled. That is the whole reason a
-  ring beats a list: the direction becomes muscle memory, and a list's third entry moves the
-  moment the list grows.
-- A **dead zone** in the middle picks nothing, so opening the menu and releasing without
-  moving cancels rather than committing to whatever was nearest.
-- The first slice is straight up, and they run clockwise.
-- Entries MUST follow the selection: a **Project panel item**, while that panel is active,
-  offers one slice — **Add to comp**, dimmed when the item cannot be placed (no comp open, a
-  folder, a comp into itself) rather than dropped (K-327), and never the new-layer ring; a
-  **picked effect** offers what you do to an effect (bypass, copy, remove, add another); a
-  **selected layer** what you do to *that* layer — never new-layer commands beside it
-  (K-325); a **composition with nothing selected** the new-layer menu, which is what an
-  empty timeline is asking for; **nothing open at all** the two ways to get somewhere.
-- A slice MAY carry a **ring of its own** (K-325): choosing it expands the menu in place, a
-  caret on the slice says it will, and the centre — or `Esc` — steps back out. This is how
-  the selected-layer ring reaches creation: a **New ▸** slice opens Layer ▸ New's items, in
-  the menu's order, so the two surfaces teach the same thing.
-- The selected-layer ring also carries **Keyframe ▸** (K-326): one slice per everyday
-  transform row. Choosing one plants a key at the playhead holding the value already there —
-  nothing moves — and fronts the Timeline with that row open, so the key just made is on
-  screen. A row already keyed there just reveals; a row driven by an expression is dimmed.
-- Each ring MUST be at most **six** entries. A ring of twelve is a ring nobody learns, and
-  the long tail is the search bar beside it.
-- A slice that cannot run right now MUST be drawn dimmed rather than dropped, so a direction
-  a hand has learned keeps its meaning.
-- The middle of the ring names what it is about (the picked effect, the layer, the comp, the
-  sub-ring entered), so the context is never a guess.
+**The snapshot button** writes the frame on screen to a PNG. It MUST be a one-frame
+image-sequence export (§11's `png` codec, K-201) rather than a second still-writer: same
+colour and sizing path, and the status line already reports it. It writes to a `Snapshots`
+folder beside the saved project, or the user's pictures folder for a project never saved —
+never the working directory. It MUST grey out with no composition open.
 
 The console's lists are declared beside the menu items, as §12's are, so the effects it
 applies and the comps it fronts cannot drift from what the menus mean.

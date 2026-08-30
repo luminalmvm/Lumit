@@ -763,8 +763,10 @@ void main() {
     });
 
     /// A box's position is document data: it persists, it travels, and a drag
-    /// stages it and commits once (K-344).
-    testWidgets('dragging a box commits its position once', (tester) async {
+    /// stages it and commits once (K-344). The magnet is on by default
+    /// (2026-08-30 board), so what commits is the dot grid's nearest pitch.
+    testWidgets('dragging a box commits its position once, on the grid',
+        (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
       await mount(tester, p);
@@ -773,13 +775,23 @@ void main() {
       await tester.dragFrom(tester.getCenter(box), const Offset(40, 20));
       await tester.pump();
 
-      final placed = p.layer
+      BridgeNodePosition placed() => p.layer
           .getGraph()
           .wiring
           .layout
           .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
-      expect(placed.x, 70);
-      expect(placed.y, 320);
+      // Raw would be (70, 320); the magnet lands it on the 20px pitch.
+      expect(placed().x, 80, reason: 'snapped to the dot grid (K-626)');
+      expect(placed().y, 320);
+
+      // Magnet off: the same drag commits exactly where the hand left it.
+      await tester.tap(find.byKey(const ValueKey('graph-snap')));
+      await tester.pump();
+      await tester.dragFrom(
+          tester.getCenter(box), const Offset(-13, -7));
+      await tester.pump();
+      expect(placed().x, 67, reason: 'off means off — no snapping');
+      expect(placed().y, 313);
     });
 
     /// **N7 — a box dropped on a wire falls into it.** The wire splits: what
@@ -1235,6 +1247,12 @@ void main() {
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      // The saved groups list after every driver, and the driver family has
+      // grown past the list's fold — so reach the row the way a hand does,
+      // by typing.
+      await tester.enterText(
+          find.byKey(const ValueKey('fx-console-query')), 'audio rig');
       await tester.pump();
       await tester
           .tap(find.byKey(const ValueKey<String>('fx-console-item-Audio rig')));

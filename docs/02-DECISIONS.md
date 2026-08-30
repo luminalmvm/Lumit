@@ -20599,3 +20599,59 @@ asks on every frame it draws.
 and Time / Constant / Colour ramp / Vector split. The dropdown's empty entry carries the
 meaning, which is one control rather than two; the rest are suggestions nobody has
 confirmed. docs/impl/node-graph.md §1.3 and docs/GUIDE.md carry it.
+
+## K-658 — The console is the popover: the radial ring and its scrim go
+
+**Status: DECIDED (2026-08-30).** The owner's ruling from the design session, carried by
+the approved **Console** board (`Caddis study/mockups/Console.dc.html`) and NodeGraph's
+popover. Supersedes the radial half of K-325, K-326 and K-327, and rewrites docs/07
+§12.2; K-324's search half, K-328's keyboard ownership and K-523's apply-to-selection
+stand.
+
+**What the console is now.** One search popover, opened on the pointer, four bands to the
+board's own measurements: the search row (magnifier, query, a kicker naming the key that
+opened it — "Ctrl+Space" from the shell, "Tab" from the graph canvas per K-645); a
+category strip (`All` plus every grouping the results carry, drivers filed under Controls
+per K-645, the saved presets under a Presets kicker); the result rows (name, grouping
+kicker, a small preview swatch — the slot a live per-effect picture will take when the
+engine grows a seam for one, which it does not have today); and the foot sentence. The
+list stands open from the first frame — the list is the offer — and typing narrows it.
+The scrim went with the ring: the work stays fully visible, and an invisible layer
+catches the click that means "never mind". The snapshot button, which the board does not
+draw, folds into the search row's end rather than being dropped (K-324's function is
+kept).
+
+**The saved presets join the list.** The board draws a preset row and a Presets kicker,
+so the console applies a `.lumfx` to every selected layer by the Effects & presets
+panel's own rules (K-523): read once, applied per layer.
+
+**What the ring's slices lose, and where each still lives.** Effect
+disable/copy/remove — the Effect controls panel and the Edit/Effect menus. Layer
+duplicate/pre-compose/delete — the Layer menu and the Timeline. The new-layer ring —
+Layer ▸ New and the palette. Add-to-comp — dragging from the Project panel. The Keyframe
+ring (K-326) — the row's own stopwatch; the one genuine loss is "key this transform row
+from anywhere in one gesture", which now takes fronting the Timeline first. The Timeline's
+answer to the reveal request stays, and stays tested — the P/S/R/T/A keys still raise it.
+
+`widgets/radial_maths.dart` and its test are deleted with the ring; `fx_console_context.dart`
+keeps only the snapshot half.
+
+Regression tests: `fx_console_test.dart` (opens straight to the popover, the category
+strip narrows and All lets back in, Enter applies the top match, Escape retreats one step
+at a time, the footer only where a caller has one); the graph metrics test's
+`the Tab search is the console, in the canvas's words` passes unchanged, which is the
+K-645 one-surface promise holding through the reface.
+
+## K-659 — The graph's snap magnet
+
+**Status: DECIDED (2026-08-30).** From the NodeGraph board: a magnet toggle sits in the
+Graph panel's toolbar beside frame-all and the zoom readout, drawn lit while on — the
+Timeline's own magnet glyph in the Timeline's own dress (glyph at foreground strength on
+the button face when on, frameless and muted when off; no accent, §3.1's list is closed).
+**On by default.** While on, a node drag lands the grabbed box on the K-626 dot grid's
+20 px pitch, and the rest of the pick rides the same snapped delta so a group keeps its
+internal spacing. Session view state, exactly as Auto-wire and Heal are (K-465's toggles);
+nothing crosses the bridge for it — what commits is simply the snapped position.
+
+Regression test: `dragging a box commits its position once, on the grid`
+(graph_panel_frb_test) — snapped with the magnet on, exact with it off.

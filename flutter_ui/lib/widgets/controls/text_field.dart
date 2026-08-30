@@ -95,12 +95,19 @@ class HouseTextField extends StatefulWidget {
   /// sink, a well alone in its own row only has to be a well).
   final Color? fill;
 
+  /// No well at all: bare text on whatever surface the caller sits it on, for
+  /// a field whose surroundings are already the box — the FX console's search
+  /// row is drawn as one popover, and a second edge inside it would draw a box
+  /// in a box (the 2026-08-30 board draws none).
+  final bool frameless;
+
   const HouseTextField({
     super.key,
     required this.controller,
     this.width = 200,
     this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
     this.fill,
+    this.frameless = false,
     this.onSubmitted,
     this.submitOnLostFocus = false,
     this.onTapOutside,
@@ -321,16 +328,20 @@ class _HouseTextFieldState extends State<HouseTextField>
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
       alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        color: widget.fill ?? t.surface0,
-        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-        // `animated`, not `accent`: a focused well is the one focus that means
-        // "you are about to change a value" (§3.1, §6.5), and the drawings
-        // draw the focused well's edge in that token. [DragValueField] has
-        // answered focus this way all along; a well you type into rather than
-        // scrub had simply never answered at all.
-        border: Border.all(color: _focus.hasFocus ? t.animated : t.hairline),
-      ),
+      decoration: widget.frameless
+          ? null
+          : BoxDecoration(
+              color: widget.fill ?? t.surface0,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              // `animated`, not `accent`: a focused well is the one focus that
+              // means "you are about to change a value" (§3.1, §6.5), and the
+              // drawings draw the focused well's edge in that token.
+              // [DragValueField] has answered focus this way all along; a well
+              // you type into rather than scrub had simply never answered at
+              // all.
+              border:
+                  Border.all(color: _focus.hasFocus ? t.animated : t.hairline),
+            ),
       child: _withLeading(
         leading,
         widget.leadingInteractive,

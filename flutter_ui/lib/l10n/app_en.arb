@@ -1614,30 +1614,6 @@
   "@fxConfidence": {
     "description": "Effect controls — a control on Posterize time."
   },
-  "fxConsoleAddEffect": "Add effect",
-  "@fxConsoleAddEffect": {
-    "description": "The FX console radial menu: opens the Effects & presets panel."
-  },
-  "fxConsoleAddToComp": "Add to comp",
-  "@fxConsoleAddToComp": {
-    "description": "The FX console radial menu with a Project panel item picked: places the item in the open composition."
-  },
-  "fxConsoleCompositions": "Compositions",
-  "@fxConsoleCompositions": {
-    "description": "The FX console search list: the heading over the composition results."
-  },
-  "fxConsoleEffects": "Effects",
-  "@fxConsoleEffects": {
-    "description": "The FX console search list: the heading over the effect results."
-  },
-  "fxConsoleKeyframe": "Keyframe",
-  "@fxConsoleKeyframe": {
-    "description": "The FX console radial menu: the slice that expands into one slice per transform row, each planting a keyframe at the playhead."
-  },
-  "fxConsoleNothingSelected": "Nothing selected",
-  "@fxConsoleNothingSelected": {
-    "description": "Shown in the middle of the FX console’s radial menu when nothing is selected."
-  },
   "fxAudioThisComp": "This comp",
   "@fxAudioThisComp": {
     "description": "Effect controls — the first entry of the Audio level driver's source dropdown, meaning the composition's own mix rather than one named layer."

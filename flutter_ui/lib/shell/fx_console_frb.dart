@@ -1,34 +1,22 @@
-// The Ctrl+Space console (K-324, reshaped by K-325): a radial menu around the
-// pointer, with a search bar floating beside it.
+// The Ctrl+Space console (K-324; popover face K-658):
+// one search popover floating where the pointer is.
 //
-// **In plain terms.** Two ways of reaching the same kinds of thing, in one
-// gesture, because they suit different moments.
+// **In plain terms.** One box, four bands, top to bottom: a search row (the
+// magnifier, the query, and a kicker naming the key that opened it), a strip
+// of category kickers to browse by, the matching rows — each with its name,
+// its category and a small preview swatch — and one quiet sentence saying
+// what choosing a row will do. The radial ring the console used to raise, and
+// the hush it drew over the work, are gone by the owner's ruling: the list is
+// the offer, open from the first frame, and typing narrows it.
 //
-// The console opens **where the mouse is**: the ring of choices is centred on
-// the pointer, so the flick that picks a slice can start the instant the key
-// goes down — no travel to a window first. The **search bar** floats just
-// above the ring (or below it, when the pointer is near the top of the
-// window). It starts empty and shows nothing: the ring is the offer. Start
-// typing and the ring steps aside for a dropdown of matches under the bar —
-// type "gau", press Enter, and Gaussian blur is on every selected layer.
-//
-// Effects come first in that dropdown and compositions after a divider,
-// because the overwhelmingly common thing to want is an effect; comps are
-// there so the same bar can also be "take me to that comp".
-//
+// The console opens **where the mouse is**, so the eye never travels: type
+// "gau", press Enter, and Gaussian blur is on every selected layer (K-523).
 // The search half is modelled on Video Copilot's FX Console — including its
 // **snapshot** button, which writes the frame on screen to a PNG so two
 // versions of a look can be compared without setting up an export.
 //
-// The **radial menu** is for when you do not want to type at all. Its entries
-// are chosen by what is selected, and every entry sits at a fixed angle, so
-// the hand learns the direction and stops reading. A slice can carry a ring
-// of its own: choosing it expands the menu in place (Blender's nested pies),
-// and the centre — or Escape — steps back out. See `widgets/radial_maths.dart`
-// for why direction rather than hit-testing decides the choice.
-//
-// Nothing here is a boxed window: the console floats translucent over the
-// work, because what it acts on is what you should keep seeing.
+// The graph canvas's Tab opens this same surface (K-645): what a caller
+// contributes is the list, the kicker naming its key, and the foot sentence.
 //
 // **The console applies things; it does not know how.** Every entry carries a
 // callback the caller supplied, exactly as the command palette does (docs/07
@@ -41,20 +29,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
-import '../widgets/radial_maths.dart';
 
 /// Where the pointer last was, in global coordinates — recorded by the shell
 /// on every hover, move and press, because the keyboard event that opens the
-/// console carries no position and the ring is centred on the mouse (K-325).
+/// console carries no position and the popover opens on the mouse (K-325).
 /// Null until the pointer has ever been seen, which falls back to centre.
 Offset? lastKnownPointerPosition;
 
-/// What kind of thing a search row is — what the divider separates, and what
-/// the row's badge says.
+/// What kind of thing a search row is — what the ranking keeps apart.
 enum FxConsoleKind {
   /// A built-in effect, applied to the selection.
   effect,
@@ -69,6 +57,7 @@ class FxConsoleEntry {
   final FxConsoleKind kind;
 
   /// The group shown beside the label — an effect's category, or nothing.
+  /// It is also what the category strip filters by.
   final String? group;
   final VoidCallback run;
 
@@ -80,80 +69,41 @@ class FxConsoleEntry {
   });
 }
 
-/// One slice of the radial menu.
-class RadialEntry {
-  final String label;
-
-  /// What choosing the slice does — or null for a slice that only opens
-  /// [children].
-  final VoidCallback? run;
-
-  /// Drawn dimmed and unpickable — an action that belongs in this context but
-  /// cannot run right now, so the ring keeps its shape and the direction a
-  /// hand has learned still means the same thing.
-  final bool enabled;
-
-  /// A ring of its own (K-325): choosing this slice expands the menu in place
-  /// rather than running anything, the way Blender nests its pies. The centre
-  /// of the ring, or Escape, steps back out.
-  final List<RadialEntry> children;
-
-  const RadialEntry({
-    required this.label,
-    this.run,
-    this.enabled = true,
-    this.children = const [],
-  }) : assert(run != null || children.length > 0,
-            'a slice either runs or expands');
-}
-
 /// Everything the console shows, gathered by the caller from the live
 /// selection — see `menu_bar_frb.dart`, which builds it beside the menus.
 class FxConsoleModel {
   final List<FxConsoleEntry> entries;
 
-  /// The radial slices for the current selection, in ring order from straight
-  /// up, clockwise. Empty hides the ring entirely rather than drawing a
-  /// circle with nothing in it.
-  final List<RadialEntry> radial;
-
-  /// What the radial menu is about right now ("Timeline", "Gaussian blur") —
-  /// drawn in the middle of the ring so the context is never a guess.
-  final String radialTitle;
-
   /// Save the frame on screen as a PNG. Null where there is nothing to save
   /// (no composition open), which greys the button.
   final VoidCallback? onSnapshot;
 
-  /// The key that opened this — drawn as a kicker at the bar's right end, the
-  /// way the drawing has it ("Ctrl+Space" from the shell, "Tab" from the graph
-  /// canvas). Null draws nothing.
+  /// The key that opened this — drawn as a kicker at the search row's right
+  /// end, the way the drawing has it ("Ctrl+Space" from the shell, "Tab" from
+  /// the graph canvas). Null draws nothing.
   final String? keyHint;
 
   /// One quiet sentence under the list saying what choosing a row will do
-  /// ("Enter applies to the selected layers", "Accepts the dragged number
-  /// wire"). Null draws no foot at all.
+  /// ("Enter applies to the selected layers", "Adds a driver node"). Null
+  /// draws no foot at all.
   final String? footer;
 
   const FxConsoleModel({
     required this.entries,
-    required this.radial,
-    required this.radialTitle,
     this.onSnapshot,
     this.keyHint,
     this.footer,
   });
 }
 
-/// Show the console over the work, centred on [anchor] (global coordinates —
-/// normally [lastKnownPointerPosition]). Null anchors fall back to the middle
-/// of the window, which is where a pointer nobody has moved yet would be
-/// guessed to be.
+/// Show the console over the work, its search row on [anchor] (global
+/// coordinates — normally [lastKnownPointerPosition]). Null anchors fall back
+/// to the middle of the window, which is where a pointer nobody has moved yet
+/// would be guessed to be.
 ///
-/// Its own overlay entry rather than `showLumitModal`: the console is not a
-/// boxed window but a ring floating where the pointer is, with no dimmed
-/// backdrop — the work stays visible because the work is what the console
-/// acts on (K-325).
+/// Its own overlay entry rather than `showLumitModal`: no box chrome, no
+/// dimmed backdrop — the work stays fully visible because the work is what
+/// the console acts on (the scrim went with the ring, owner's ruling).
 Future<void> showFxConsoleFrb({
   required BuildContext context,
   required FxConsoleModel model,
@@ -199,10 +149,9 @@ int? fxConsoleScore(String needle, String haystack) {
   return (last - first) + first;
 }
 
-/// The matching entries, effects first and compositions after — the order the
-/// divider in the list stands for. Ranked within each kind, never across it:
-/// a comp is never allowed to outrank an effect, because the reason to open
-/// this window is nearly always an effect.
+/// The matching entries, effects first and compositions after. Ranked within
+/// each kind, never across it: a comp is never allowed to outrank an effect,
+/// because the reason to open this window is nearly always an effect.
 List<FxConsoleEntry> fxConsoleMatches(
     List<FxConsoleEntry> entries, String query) {
   final needle = query.trim();
@@ -238,9 +187,14 @@ class _FxConsole extends StatefulWidget {
   State<_FxConsole> createState() => _FxConsoleState();
 }
 
-/// The bar's fixed footprint, shared by the layout maths and the widgets.
-const double _barWidth = 356;
-const double _barHeight = 44;
+// The popover's manifest, from the approved board (Console.dc.html): its
+// width, and each band's height and inset.
+const double _popWidth = 320;
+const double _searchRowHeight = 28;
+const double _stripHeight = 22;
+const double _rowHeight = 26;
+const double _footHeight = 20;
+const double _margin = 8;
 
 class _FxConsoleState extends State<_FxConsole> {
   final TextEditingController _query = TextEditingController();
@@ -251,24 +205,18 @@ class _FxConsoleState extends State<_FxConsole> {
   final FocusNode _queryFocus = FocusNode(debugLabel: 'fx-console-query');
   int _highlighted = 0;
 
-  /// Which radial slice the pointer is choosing, or null in the dead zone.
-  int? _radialHover;
-
-  /// The rings entered so far: the model's own, then one more per expanded
-  /// slice. The last is what is drawn; leaving a sub-ring pops it.
-  late final List<({String title, List<RadialEntry> entries})> _rings = [
-    (title: widget.model.radialTitle, entries: widget.model.radial),
-  ];
+  /// The category the strip has narrowed to, or null for All.
+  String? _category;
 
   @override
   void initState() {
     super.initState();
     _query.addListener(() => setState(() => _highlighted = 0));
-    // Escape has to work from anywhere — over the ring, mid-flick, wherever
-    // focus happens to sit. A handler on the search field's node covers only
-    // the field, so this claims the ladder's dialogue rung for the console's
-    // lifetime (widgets/escape_ladder.dart): one press is one step back, and
-    // a menu raised over the console is what that press takes first.
+    // Escape has to work with focus anywhere. A handler on the search field's
+    // node covers only the field, so this claims the ladder's dialogue rung
+    // for the console's lifetime (widgets/escape_ladder.dart): one press is
+    // one step back, and a menu raised over the console is what that press
+    // takes first.
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, _escapeAnywhere);
     // While the console is up, the keyboard is the console's (K-328): the
     // panels' hardware-keyboard commands stand down exactly as they do for a
@@ -310,57 +258,38 @@ class _FxConsoleState extends State<_FxConsole> {
     return true;
   }
 
-  bool get _typing => _query.text.trim().isNotEmpty;
+  /// The matches, ranked by the query and then narrowed to the strip's
+  /// category. The category compares against the entry's own group, so the
+  /// strip needs no idea of what the groups mean.
+  List<FxConsoleEntry> get _matches => [
+        for (final entry in fxConsoleMatches(widget.model.entries, _query.text))
+          if (_category == null || entry.group == _category) entry,
+      ];
 
-  /// Whether the list stands in for the ring. With no slices to offer — the
-  /// graph canvas's flavour, which has nothing radial to say — an empty bar
-  /// shows the whole list rather than an empty float, so Tab still opens a
-  /// list you can arrow down without typing first (K-645).
-  bool get _listIsTheOffer => widget.model.radial.isEmpty;
-
-  List<FxConsoleEntry> get _matches =>
-      fxConsoleMatches(widget.model.entries, _query.text);
+  /// Every group the entries carry, in first-appearance order — the browse
+  /// groupings the strip offers after All (K-645 files the drivers under
+  /// Controls before they ever get here).
+  List<String> get _groups {
+    final seen = <String>[];
+    for (final entry in widget.model.entries) {
+      final group = entry.group;
+      if (group != null && !seen.contains(group)) seen.add(group);
+    }
+    return seen;
+  }
 
   void _runHighlighted(List<FxConsoleEntry> matches) {
-    if (!_typing && !_listIsTheOffer) {
-      // Enter on an empty bar: nothing chosen, nothing to run — the key that
-      // usually means "done" closes the console rather than sitting inert.
-      widget.onClose();
-      return;
-    }
     if (matches.isEmpty) return;
     final entry = matches[_highlighted.clamp(0, matches.length - 1)];
     widget.onClose();
     entry.run();
   }
 
-  void _runSlice(int index) {
-    final entries = _rings.last.entries;
-    if (index < 0 || index >= entries.length) return;
-    final entry = entries[index];
-    if (!entry.enabled) return;
-    if (entry.children.isNotEmpty) {
-      // The slice is a ring of its own: expand in place rather than run.
-      setState(() {
-        _rings.add((title: entry.label, entries: entry.children));
-        _radialHover = null;
-      });
-      return;
-    }
-    widget.onClose();
-    entry.run!();
-  }
-
-  /// One step out: typed text clears first, then a sub-ring pops, then the
-  /// console closes — so Escape always retreats by exactly one decision.
+  /// One step out: typed text clears first, then the console closes — so
+  /// Escape always retreats by exactly one decision.
   void _back() {
-    if (_typing) {
+    if (_query.text.trim().isNotEmpty) {
       _query.clear();
-    } else if (_rings.length > 1) {
-      setState(() {
-        _rings.removeLast();
-        _radialHover = null;
-      });
     } else {
       widget.onClose();
     }
@@ -400,68 +329,41 @@ class _FxConsoleState extends State<_FxConsole> {
         builder: (context, box) {
           final anchor =
               widget.anchor ?? Offset(box.maxWidth / 2, box.maxHeight / 2);
-          final at = fxConsoleLayout(
-            screenWidth: box.maxWidth,
-            screenHeight: box.maxHeight,
-            anchorX: anchor.dx,
-            anchorY: anchor.dy,
-            barWidth: _barWidth,
-            barHeight: _barHeight,
-          );
-          // **Every child is keyed, and that is load-bearing** (K-328). The
-          // ring comes and goes with the query, so without keys the bar
-          // shifts index the moment a letter is typed — and Flutter matches
-          // unkeyed children by index and type, both of these being
-          // `Positioned`. The bar's element was recycled onto the ring's old
-          // slot, the field beneath it rebuilt from nothing, and a fresh
-          // `EditableText` whose focus node is *already* focused never opens
-          // a text-input connection: typing stopped dead after one letter.
-          // Keys make the match by identity, so the field survives untouched.
+          // The search row lands on the pointer, pulled in so the whole
+          // popover fits; the list is capped to the room below it. 56 is the
+          // least list the clamp guarantees room for — two rows and the
+          // vertical padding — so a pointer at the very bottom still shows a
+          // usable console rather than a bar with nothing under it.
+          final left = _fit(
+              anchor.dx - _popWidth / 2, _margin, box.maxWidth - _popWidth - _margin);
+          final top = _fit(anchor.dy - _searchRowHeight / 2, _margin,
+              box.maxHeight - _searchRowHeight - _stripHeight - _footHeight - 56 - _margin);
+          final room = box.maxHeight -
+              top -
+              _margin -
+              _searchRowHeight -
+              _stripHeight -
+              _footHeight;
           return Stack(
             children: [
-              // A hush, not a blackout: the modal scrim at half its strength,
-              // so the slices stay legible over any frame while the work stays
-              // part of the picture. It also catches the click that means
-              // "never mind".
+              // Invisible, not a scrim (owner's ruling: the hush went with the
+              // ring): the work stays untouched underneath, and this only
+              // catches the click that means "never mind".
               Positioned.fill(
-                key: const ValueKey('fx-console-scrim'),
+                key: const ValueKey('fx-console-away'),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.onClose,
                   onSecondaryTap: widget.onClose,
-                  child: ColoredBox(
-                    color: t.scrim.withValues(alpha: t.scrim.a * 0.5),
-                  ),
                 ),
               ),
-              // The ring steps aside while the user is typing: the dropdown
-              // needs the space, and starting to type is choosing the other
-              // way in.
-              if (!_typing && _rings.last.entries.isNotEmpty)
-                Positioned(
-                  key: const ValueKey('fx-console-ring'),
-                  left: at.centreX - radialExtent,
-                  top: at.centreY - radialExtent,
-                  width: radialExtent * 2,
-                  height: radialExtent * 2,
-                  child: _ring(t),
-                ),
               Positioned(
                 key: const ValueKey('fx-console-bar'),
-                left: at.barLeft,
-                top: at.barTop,
-                width: _barWidth,
-                height: _barHeight,
-                child: _searchBar(t, matches),
+                left: left,
+                top: top,
+                width: _popWidth,
+                child: _popover(t, matches, room),
               ),
-              if (_typing || _listIsTheOffer)
-                Positioned(
-                  key: const ValueKey('fx-console-dropdown'),
-                  left: at.barLeft,
-                  top: at.barTop + _barHeight + 4,
-                  width: _barWidth,
-                  child: _dropdown(t, matches, box.maxHeight, at.barTop),
-                ),
             ],
           );
         },
@@ -469,50 +371,87 @@ class _FxConsoleState extends State<_FxConsole> {
     );
   }
 
-  /// The translucent float every part of the console sits on: the standard
-  /// menu surface let through a little (K-325), so the work underneath stays
-  /// part of the picture. Derived from the theme — never its own colour.
-  BoxDecoration _float(LumitTheme t, {double radius = 0}) => BoxDecoration(
-        color: t.surface3.withValues(alpha: 0.88),
-        borderRadius:
-            BorderRadius.circular(radius == 0 ? t.tokens.floatRadius : radius),
-        border: Border.all(color: t.hairline, width: 1),
-        boxShadow: t.floatShadow,
+  static double _fit(double v, double lo, double hi) =>
+      hi < lo ? lo : (v < lo ? lo : (v > hi ? hi : v));
+
+  /// The popover: the standard float surface with the board's four bands.
+  Widget _popover(LumitTheme t, List<FxConsoleEntry> matches, double room) =>
+      Container(
+        decoration: BoxDecoration(
+          color: t.surface1,
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          border: Border.all(color: t.hairline, width: 1),
+          boxShadow: t.floatShadow,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _searchRow(t, matches),
+            if (_groups.isNotEmpty) ...[
+              Container(height: 1, color: t.hairline),
+              _categoryStrip(t),
+            ],
+            Container(height: 1, color: t.hairline),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: _list(t, matches, room),
+            ),
+            if (widget.model.footer case final footer?) ...[
+              Container(height: 1, color: t.hairline),
+              Container(
+                height: _footHeight,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                alignment: Alignment.centerLeft,
+                child: Text(footer,
+                    key: const ValueKey('fx-console-foot'),
+                    style: t.kicker.copyWith(letterSpacing: 0.54)),
+              ),
+            ],
+          ],
+        ),
       );
 
-  Widget _searchBar(LumitTheme t, List<FxConsoleEntry> matches) => Container(
-        decoration: _float(t),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+  Widget _searchRow(LumitTheme t, List<FxConsoleEntry> matches) => Container(
+        height: _searchRowHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           children: [
+            glyph.LumitIcon(LumitIcons.search,
+                size: iconSize, colour: t.textMuted),
+            const SizedBox(width: 8),
             Expanded(
               child: HouseTextField(
                 key: const ValueKey('fx-console-query'),
                 controller: _query,
-                width: 280,
+                width: 200,
+                frameless: true,
+                padding: EdgeInsets.zero,
                 focusNode: _queryFocus,
+                style: t.bodyPrimary,
                 hint: l10n.fxConsoleHint,
                 onSubmitted: (_) => _runHighlighted(matches),
               ),
             ),
-            // The key that opened this, in the corner the drawing puts it —
-            // "Ctrl+Space" from the shell, "Tab" from the graph canvas. One
-            // surface, and the kicker is what says which door was used.
             if (widget.model.keyHint case final hint?) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(hint,
                   key: const ValueKey('fx-console-key'),
                   style: t.kicker.copyWith(letterSpacing: 0.54)),
             ],
-            const SizedBox(width: 6),
-            // The snapshot button, in the corner FX Console puts it: one press
-            // writes the frame on screen to a PNG, so two versions of a look
-            // can be compared without setting an export up.
+            // The snapshot button, folded in from the old bar (K-324): one
+            // press writes the frame on screen to a PNG, so two versions of a
+            // look can be compared without setting an export up. The board
+            // draws no home for it; the row's end is where FX Console keeps
+            // its own.
+            const SizedBox(width: 8),
             LumitTooltip(
               message: l10n.fxConsoleSnapshotTip,
               child: HouseButton(
                 key: const ValueKey('fx-console-snapshot'),
                 small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 2),
                 onPressed: widget.model.onSnapshot == null
                     ? null
                     : () {
@@ -527,44 +466,50 @@ class _FxConsoleState extends State<_FxConsole> {
         ),
       );
 
-  /// The matches, under the bar. While there is a ring to offer, an empty bar
-  /// lists nothing — the ring is the offer (K-325); where there is no ring the
-  /// list takes its place and stands open from the first frame.
-  Widget _dropdown(
-    LumitTheme t,
-    List<FxConsoleEntry> matches,
-    double screenHeight,
-    double barTop,
-  ) {
-    if (matches.isEmpty) return const SizedBox.shrink();
-    // Capped at the room below the bar, scrolling inside that.
-    final room = screenHeight - barTop - _barHeight - 12;
-    return Container(
-      decoration: _float(t),
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _list(t, matches, room),
-          // One quiet sentence saying what a row will do. Drawn only where the
-          // caller has something to say, so the shell's own console is
-          // unchanged unless it asks for one.
-          if (widget.model.footer case final footer?) ...[
-            Container(height: 1, color: t.hairline),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 5, 6, 2),
-              child: Text(footer,
-                  key: const ValueKey('fx-console-foot'),
-                  style: t.kicker.copyWith(letterSpacing: 0.54)),
-            ),
+  /// The strip of category kickers: All, then every group the entries carry.
+  /// The chosen one reads at full strength; choosing narrows the list to that
+  /// group, and All lets everything back in.
+  Widget _categoryStrip(LumitTheme t) => Container(
+        height: _stripHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            _categoryKicker(t, label: l10n.fxConsoleAll, category: null),
+            for (final group in _groups) ...[
+              const SizedBox(width: 10),
+              _categoryKicker(t, label: group, category: group),
+            ],
           ],
-        ],
-      ),
+        ),
+      );
+
+  Widget _categoryKicker(LumitTheme t,
+      {required String label, required String? category}) {
+    final chosen = _category == category;
+    return GestureDetector(
+      key: ValueKey<String>('fx-console-cat-${category ?? '*all'}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() {
+        _category = category;
+        _highlighted = 0;
+      }),
+      child: Text(label,
+          style: t.kicker.copyWith(
+              letterSpacing: 0.54,
+              color: chosen ? t.textPrimary : t.textMuted)),
     );
   }
 
   Widget _list(LumitTheme t, List<FxConsoleEntry> matches, double room) {
+    if (matches.isEmpty) {
+      return Container(
+        height: _rowHeight,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text(l10n.noEffectsMatch,
+            style: t.small.copyWith(color: t.textMuted)),
+      );
+    }
     return ConstrainedBox(
         constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
         child: ListView.builder(
@@ -572,225 +517,52 @@ class _FxConsoleState extends State<_FxConsole> {
           itemCount: matches.length,
           itemBuilder: (context, i) {
             final entry = matches[i];
-            // The divider between the effects and everything below them: drawn
-            // where the kind changes, so it is right however the list is
-            // filtered rather than at a fixed row.
-            final startsSection = i > 0 && matches[i - 1].kind != entry.kind;
-            final row = MenuRow(
+            final hot = i == _highlighted;
+            return GestureDetector(
               key: ValueKey<String>('fx-console-item-${entry.label}'),
-              selected: i == _highlighted,
-              onPressed: () {
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
                 widget.onClose();
                 entry.run();
               },
-              child: Row(
-                children: [
-                  Expanded(child: Text(entry.label)),
-                  if (entry.group != null)
-                    Text(entry.group!,
-                        style: t.small.copyWith(color: t.textMuted)),
-                ],
-              ),
-            );
-            if (!startsSection) return row;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
-                  child: Row(
-                    children: [
-                      Expanded(child: Container(height: 1, color: t.hairline)),
-                      const SizedBox(width: 6),
-                      Text(_sectionLabel(entry.kind),
-                          style: t.small.copyWith(color: t.textMuted)),
+              child: Container(
+                height: _rowHeight,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: hot ? t.surface2 : null,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(entry.label,
+                          overflow: TextOverflow.ellipsis,
+                          style: hot ? t.bodyPrimary : t.body),
+                    ),
+                    if (entry.group case final group?) ...[
+                      const SizedBox(width: 8),
+                      Text(group, style: t.kicker.copyWith(letterSpacing: 0.54)),
                     ],
-                  ),
+                    const SizedBox(width: 8),
+                    // The preview swatch the board draws on every row. There
+                    // is no per-effect render behind it yet, so it is the
+                    // surface's own gradient — the slot the picture will take.
+                    Container(
+                      width: 34,
+                      height: 19,
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(t.tokens.controlRadius),
+                        border: Border.all(color: t.hairline, width: 1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [t.surface2, t.surface4],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                row,
-              ],
+              ),
             );
           },
         ));
   }
-
-  String _sectionLabel(FxConsoleKind kind) => switch (kind) {
-        FxConsoleKind.effect => l10n.fxConsoleEffects,
-        FxConsoleKind.composition => l10n.fxConsoleCompositions,
-      };
-
-  /// The ring. A press anywhere in it chooses by direction — see
-  /// `radial_maths.dart` — and releasing runs what is chosen, so the whole
-  /// menu is one flick. Clicking a label works too, for a hand that would
-  /// rather aim than flick. A slice with children expands in place; the
-  /// centre steps back out.
-  Widget _ring(LumitTheme t) {
-    final ring = _rings.last;
-    const centre = Offset(radialExtent, radialExtent);
-    void track(Offset local) {
-      final at = local - centre;
-      final slice = radialSliceAt(at.dx, at.dy, ring.entries.length);
-      if (slice != _radialHover) setState(() => _radialHover = slice);
-    }
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (d) => track(d.localPosition),
-      onPanUpdate: (d) => track(d.localPosition),
-      onPanEnd: (_) {
-        final slice = _radialHover;
-        setState(() => _radialHover = null);
-        if (slice != null) _runSlice(slice);
-      },
-      child: MouseRegion(
-        onHover: (e) => track(e.localPosition),
-        onExit: (_) => setState(() => _radialHover = null),
-        child: Stack(
-          children: [
-            Positioned.fill(child: Center(child: _centre(t))),
-            for (var i = 0; i < ring.entries.length; i++)
-              _slice(t, i, ring.entries[i], centre),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The middle of the ring: the context's name on a translucent disc — and,
-  /// inside a sub-ring, the way back out (K-325), because the hand that
-  /// expanded a slice is already there.
-  Widget _centre(LumitTheme t) {
-    final inSubRing = _rings.length > 1;
-    final disc = Container(
-      key: const ValueKey('fx-radial-centre'),
-      width: radialDeadZone * 2 + 8,
-      height: radialDeadZone * 2 + 8,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: t.surface2.withValues(alpha: 0.8),
-        shape: BoxShape.circle,
-        border: Border.all(color: t.hairline, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (inSubRing)
-            CustomPaint(
-              size: const Size(7, 9),
-              painter: _RadialCaret(t.textMuted, pointRight: false),
-            ),
-          if (inSubRing) const SizedBox(width: 3),
-          Flexible(
-            child: Text(
-              _rings.last.title,
-              textAlign: TextAlign.center,
-              style: t.small.copyWith(color: t.textMuted),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-    if (!inSubRing) return disc;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _back,
-      child: disc,
-    );
-  }
-
-  Widget _slice(LumitTheme t, int index, RadialEntry entry, Offset centre) {
-    final at = radialSliceOffset(index, _rings.last.entries.length);
-    final chosen = _radialHover == index && entry.enabled;
-    const width = 108.0;
-    const height = 26.0;
-    return Positioned(
-      left: centre.dx + at.dx - width / 2,
-      top: centre.dy + at.dy - height / 2,
-      width: width,
-      height: height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: entry.enabled ? () => _runSlice(index) : null,
-        child: Container(
-          key: ValueKey<String>('fx-radial-${entry.label}'),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            // Translucent like the bar, so the ring sits over the work
-            // rather than blotting it out; the chosen slice goes solid
-            // accent, which is what "about to happen" looks like.
-            color: chosen ? t.accent : t.surface3.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(color: chosen ? t.accent : t.hairline, width: 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  entry.label,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: t.small.copyWith(
-                    color: !entry.enabled
-                        ? t.textDisabled
-                        : chosen
-                            ? t.surface0
-                            : t.textPrimary,
-                  ),
-                ),
-              ),
-              // A slice that expands says so, the way a menu row with a
-              // flyout does.
-              if (entry.children.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                CustomPaint(
-                  size: const Size(5, 7),
-                  painter: _RadialCaret(
-                    !entry.enabled
-                        ? t.textDisabled
-                        : chosen
-                            ? t.surface0
-                            : t.textMuted,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The little triangle a slice with children carries — pointing right on the
-/// slice ("more this way"), left in the centre ("back out").
-class _RadialCaret extends CustomPainter {
-  final Color colour;
-  final bool pointRight;
-  const _RadialCaret(this.colour, {this.pointRight = true});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = pointRight
-        ? (Path()
-          ..moveTo(0, 0)
-          ..lineTo(size.width, size.height / 2)
-          ..lineTo(0, size.height)
-          ..close())
-        : (Path()
-          ..moveTo(size.width, 0)
-          ..lineTo(0, size.height / 2)
-          ..lineTo(size.width, size.height)
-          ..close());
-    canvas.drawPath(path, Paint()..color = colour);
-  }
-
-  @override
-  bool shouldRepaint(_RadialCaret old) =>
-      old.colour != colour || old.pointRight != pointRight;
 }

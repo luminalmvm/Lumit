@@ -1,6 +1,6 @@
-// The Ctrl+Space console (K-324, reshaped by K-325): what the search ranks
-// and divides, where the console opens, and what the ring does with a flick —
-// including the rings inside rings.
+// The Ctrl+Space console (K-324; popover face from the 2026-08-30 boards):
+// what the search ranks, what the category strip narrows, and what the keys
+// do while the popover is up.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,13 +9,14 @@ import 'package:lumit_flutter/shell/fx_console_context.dart';
 import 'package:lumit_flutter/shell/fx_console_frb.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
-import 'package:lumit_flutter/widgets/radial_maths.dart';
 
 void main() {
-  FxConsoleEntry effect(String label, {VoidCallback? run}) => FxConsoleEntry(
+  FxConsoleEntry effect(String label,
+          {VoidCallback? run, String group = 'Blur & sharpen'}) =>
+      FxConsoleEntry(
         label: label,
         kind: FxConsoleKind.effect,
-        group: 'Blur & sharpen',
+        group: group,
         run: run ?? () {},
       );
   FxConsoleEntry comp(String label, {VoidCallback? run}) => FxConsoleEntry(
@@ -85,18 +86,24 @@ void main() {
     }
 
     Finder query() => find.byKey(const ValueKey('fx-console-query'));
-    Finder centre() => find.byKey(const ValueKey('fx-radial-centre'));
+    Finder item(String label) =>
+        find.byKey(ValueKey<String>('fx-console-item-$label'));
 
-    testWidgets('the search field holds focus for the console whole life',
+    testWidgets('the console opens straight to the popover, list and all',
         (tester) async {
       await open(
         tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: [effect('Glow')],
-        ),
+        FxConsoleModel(entries: [effect('Glow'), comp('Scene 2')]),
       );
+      expect(find.byKey(const ValueKey('fx-console-bar')), findsOneWidget);
+      expect(item('Glow'), findsOneWidget,
+          reason: 'the list is the offer, open from the first frame');
+      expect(item('Scene 2'), findsOneWidget);
+    });
+
+    testWidgets('the search field holds focus for the console whole life',
+        (tester) async {
+      await open(tester, FxConsoleModel(entries: [effect('Glow')]));
       expect(tester.binding.focusManager.primaryFocus?.debugLabel,
           'fx-console-query',
           reason: 'typing lands in the box from the first keystroke');
@@ -110,68 +117,40 @@ void main() {
           reason: 'the console owns the keyboard while it is open');
     });
 
-    /// The first letter hides the ring, which changes the Stack's children —
-    /// and an unkeyed Stack matches its children by index, so the bar's
-    /// element was recycled onto the ring's old slot and the field rebuilt
-    /// from nothing. Its text-input connection died with it and typing
-    /// stopped dead after one letter (K-328).
-    ///
+    /// The list and strip rebuild around the field as the query narrows them;
+    /// the field itself must survive those rebuilds, or its text-input
+    /// connection dies and typing stops after one letter (the K-328 lesson).
     /// The second letter is delivered through the **connection already
     /// open**, not via `enterText`, which re-attaches one and would hide
-    /// exactly this fault.
-    testWidgets('typing keeps going after the ring steps aside',
-        (tester) async {
+    /// exactly that fault.
+    testWidgets('typing keeps going while the list narrows', (tester) async {
       await open(
         tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: [effect('Glow'), effect('Gaussian blur')],
-        ),
+        FxConsoleModel(entries: [effect('Glow'), effect('Gaussian blur')]),
       );
       final field = tester.state<EditableTextState>(find.byType(EditableText));
 
       await tester.enterText(query(), 'g');
       await tester.pumpAndSettle();
-      expect(centre(), findsNothing, reason: 'the ring has stepped aside');
       expect(tester.state<EditableTextState>(find.byType(EditableText)),
           same(field),
-          reason: 'the field must survive the ring leaving, not be rebuilt');
+          reason: 'the field must survive the rebuild, not be replaced');
 
       tester.testTextInput.updateEditingValue(const TextEditingValue(
         text: 'ga',
         selection: TextSelection.collapsed(offset: 2),
       ));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-console-item-Gaussian blur')),
-          findsOneWidget,
+      expect(item('Gaussian blur'), findsOneWidget,
           reason: 'the second letter reached the box and narrowed the list');
     });
 
-    testWidgets('an empty bar lists nothing — the ring is the offer',
-        (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: [effect('Glow'), comp('Scene 2')],
-        ),
-      );
-      expect(find.byKey(const ValueKey('fx-console-item-Glow')), findsNothing,
-          reason: 'no query, no list — typing is what asks for one');
-      expect(find.text('Scene 2'), findsNothing);
-      expect(centre(), findsOneWidget, reason: 'the ring is what is offered');
-    });
-
-    testWidgets('typing opens the dropdown and Enter applies the top match',
+    testWidgets('typing narrows and Enter applies the top match',
         (tester) async {
       var applied = '';
       await open(
         tester,
         FxConsoleModel(
-          radialTitle: 'Timeline',
-          radial: const [],
           entries: [
             effect('Gaussian blur', run: () => applied = 'gaussian'),
             effect('Directional blur', run: () => applied = 'directional'),
@@ -181,87 +160,92 @@ void main() {
 
       await tester.enterText(query(), 'gau');
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-console-item-Gaussian blur')),
-          findsOneWidget,
-          reason: 'the dropdown appears under the bar once there is a query');
+      expect(item('Gaussian blur'), findsOneWidget);
+      expect(item('Directional blur'), findsNothing,
+          reason: 'the query narrowed the list');
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(applied, 'gaussian');
     });
 
-    testWidgets('typing lets the ring step aside; clearing brings it back',
+    testWidgets('the category strip narrows the list, and All lets it back',
         (tester) async {
       await open(
         tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: [effect('Glow')],
-        ),
+        FxConsoleModel(entries: [
+          effect('Glow', group: 'Stylise'),
+          effect('Gaussian blur', group: 'Blur'),
+          comp('Scene 2'),
+        ]),
       );
-      expect(centre(), findsOneWidget);
+      expect(find.byKey(const ValueKey('fx-console-cat-Stylise')),
+          findsOneWidget);
 
-      await tester.enterText(query(), 'g');
+      await tester.tap(find.byKey(const ValueKey('fx-console-cat-Stylise')));
       await tester.pumpAndSettle();
-      expect(centre(), findsNothing,
-          reason: 'the dropdown needs the room, and typing chose the bar');
+      expect(item('Glow'), findsOneWidget);
+      expect(item('Gaussian blur'), findsNothing,
+          reason: 'another category\'s row is out');
+      expect(item('Scene 2'), findsNothing,
+          reason: 'a comp has no category, so a narrowed strip hides it');
 
-      await tester.enterText(query(), '');
+      await tester.tap(find.byKey(const ValueKey('fx-console-cat-*all')));
       await tester.pumpAndSettle();
-      expect(centre(), findsOneWidget, reason: 'an empty bar offers the ring');
+      expect(item('Gaussian blur'), findsOneWidget);
+      expect(item('Scene 2'), findsOneWidget);
     });
 
     testWidgets('Escape retreats one step at a time: clear, then close',
         (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: [effect('Glow')],
-        ),
-      );
+      await open(tester, FxConsoleModel(entries: [effect('Glow')]));
       await tester.enterText(query(), 'gl');
       await tester.pumpAndSettle();
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(query(), findsOneWidget, reason: 'still open — the text cleared');
-      expect(centre(), findsOneWidget, reason: 'and the ring is back');
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(query(), findsNothing, reason: 'a second Escape closes');
     });
 
-    testWidgets('the ring opens centred on the anchor', (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: const [],
-        ),
-        anchor: const Offset(500, 300),
-      );
-      expect(tester.getCenter(centre()), const Offset(500, 300),
-          reason: 'the flick starts where the pointer already is');
-    });
-
-    testWidgets('an anchor off the edge is pulled in so the ring fits',
+    testWidgets('the popover opens with its search row on the anchor',
         (tester) async {
       await open(
         tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [RadialEntry(label: 'Solid', run: () {})],
-          entries: const [],
-        ),
+        FxConsoleModel(entries: [effect('Glow')]),
+        anchor: const Offset(500, 300),
+      );
+      final at = tester.getTopLeft(find.byKey(const ValueKey('fx-console-bar')));
+      expect(at.dx, 500 - 320 / 2, reason: 'centred on the pointer');
+      expect(at.dy, 300 - 28 / 2, reason: 'the search row is under the hand');
+    });
+
+    testWidgets('an anchor off the edge is pulled in so the popover fits',
+        (tester) async {
+      await open(
+        tester,
+        FxConsoleModel(entries: [effect('Glow')]),
         anchor: const Offset(4, 4),
       );
-      final at = tester.getCenter(centre());
-      expect(at.dx, greaterThanOrEqualTo(radialExtent));
-      expect(at.dy, greaterThanOrEqualTo(radialExtent));
+      final at = tester.getTopLeft(find.byKey(const ValueKey('fx-console-bar')));
+      expect(at.dx, greaterThanOrEqualTo(8));
+      expect(at.dy, greaterThanOrEqualTo(8));
+    });
+
+    testWidgets('the footer sentence draws when the caller has one',
+        (tester) async {
+      await open(
+        tester,
+        FxConsoleModel(entries: [effect('Glow')], footer: 'Enter applies'),
+      );
+      expect(find.byKey(const ValueKey('fx-console-foot')), findsOneWidget);
+    });
+
+    testWidgets('no footer sentence, no foot at all', (tester) async {
+      await open(tester, FxConsoleModel(entries: [effect('Glow')]));
+      expect(find.byKey(const ValueKey('fx-console-foot')), findsNothing);
     });
 
     testWidgets('the snapshot button saves when there is something to save',
@@ -270,8 +254,6 @@ void main() {
       await open(
         tester,
         FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: const [],
           entries: [effect('Glow')],
           onSnapshot: () => shots++,
         ),
@@ -283,216 +265,19 @@ void main() {
 
     testWidgets('the snapshot button greys out with no composition open',
         (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Nothing selected',
-          radial: const [],
-          entries: [effect('Glow')],
-        ),
-      );
+      await open(tester, FxConsoleModel(entries: [effect('Glow')]));
       final button = tester.widget<HouseButton>(
           find.byKey(const ValueKey('fx-console-snapshot')));
       expect(button.onPressed, isNull,
           reason: 'no composition, nothing to snapshot');
     });
 
-    testWidgets('a flick in a direction runs that slice', (tester) async {
-      final run = <String>[];
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [
-            RadialEntry(label: 'Solid', run: () => run.add('solid')),
-            RadialEntry(label: 'Text', run: () => run.add('text')),
-            RadialEntry(label: 'Null', run: () => run.add('null')),
-            RadialEntry(label: 'Camera', run: () => run.add('camera')),
-          ],
-          entries: [effect('Glow')],
-        ),
-      );
-
-      // Flick straight up from the ring's centre, which is the first slice.
-      final gesture = await tester.startGesture(tester.getCenter(centre()));
-      await gesture.moveBy(const Offset(0, -(radialDeadZone + 30)));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(run, ['solid'], reason: 'up is the first slice');
-    });
-
-    testWidgets('releasing inside the dead zone cancels', (tester) async {
-      final run = <String>[];
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: [
-            RadialEntry(label: 'Solid', run: () => run.add('solid')),
-            RadialEntry(label: 'Text', run: () => run.add('text')),
-          ],
-          entries: [effect('Glow')],
-        ),
-      );
-
-      final gesture = await tester.startGesture(tester.getCenter(centre()));
-      await gesture.moveBy(const Offset(0, -(radialDeadZone - 8)));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(run, isEmpty,
-          reason: 'opening and letting go without travelling picks nothing');
-    });
-
-    testWidgets('a slice with children expands in place, and the centre backs '
-        'out', (tester) async {
-      final run = <String>[];
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'My layer',
-          radial: [
-            RadialEntry(label: 'Duplicate', run: () => run.add('duplicate')),
-            RadialEntry(label: 'New', children: [
-              RadialEntry(label: 'Solid', run: () => run.add('solid')),
-              RadialEntry(label: 'Text', run: () => run.add('text')),
-            ]),
-          ],
-          entries: const [],
-        ),
-      );
-
-      await tester.tap(find.byKey(const ValueKey('fx-radial-New')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-radial-Solid')), findsOneWidget,
-          reason: 'the ring expanded rather than running anything');
-      expect(find.byKey(const ValueKey('fx-radial-Duplicate')), findsNothing);
-      expect(find.text('New'), findsOneWidget,
-          reason: 'the centre names the ring it is inside');
-      expect(run, isEmpty);
-
-      // The centre is the way back out.
-      await tester.tap(centre());
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-radial-Duplicate')), findsOneWidget);
-
-      // Back in, and this time choose: the child runs and the console closes.
-      await tester.tap(find.byKey(const ValueKey('fx-radial-New')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('fx-radial-Solid')));
-      await tester.pumpAndSettle();
-      expect(run, ['solid']);
-      expect(query(), findsNothing, reason: 'a chosen child closes the console');
-    });
-
-    testWidgets('a flick expands a slice with children rather than closing',
-        (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'My layer',
-          radial: [
-            RadialEntry(label: 'Duplicate', run: () {}),
-            RadialEntry(label: 'New', children: [
-              RadialEntry(label: 'Solid', run: () {}),
-            ]),
-          ],
-          entries: const [],
-        ),
-      );
-
-      // Two slices: up is Duplicate, down is New. Flick down.
-      final gesture = await tester.startGesture(tester.getCenter(centre()));
-      await gesture.moveBy(const Offset(0, radialDeadZone + 30));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-radial-Solid')), findsOneWidget,
-          reason: 'the console stays open, one ring deeper');
-    });
-
-    testWidgets('Escape pops a sub-ring before it closes the console',
-        (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'My layer',
-          radial: [
-            RadialEntry(label: 'New', children: [
-              RadialEntry(label: 'Solid', run: () {}),
-            ]),
-          ],
-          entries: const [],
-        ),
-      );
-      await tester.tap(find.byKey(const ValueKey('fx-radial-New')));
-      await tester.pumpAndSettle();
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('fx-radial-New')), findsOneWidget,
-          reason: 'one step back, not gone');
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    testWidgets('a click beside the popover closes it', (tester) async {
+      await open(tester, FxConsoleModel(entries: [effect('Glow')]),
+          anchor: const Offset(400, 300));
+      await tester.tapAt(const Offset(20, 580));
       await tester.pumpAndSettle();
       expect(query(), findsNothing);
-    });
-
-    testWidgets('a disabled slice keeps its place but does not run',
-        (tester) async {
-      final run = <String>[];
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Nothing selected',
-          radial: [
-            RadialEntry(
-                label: 'New composition', run: () => run.add('new')),
-            RadialEntry(
-                label: 'Import',
-                enabled: false,
-                run: () => run.add('import')),
-          ],
-          entries: const [],
-        ),
-      );
-
-      expect(find.byKey(const ValueKey('fx-radial-Import')), findsOneWidget,
-          reason: 'the ring keeps its shape, so directions stay learned');
-      await tester.tap(find.byKey(const ValueKey('fx-radial-Import')));
-      await tester.pumpAndSettle();
-      expect(run, isEmpty);
-    });
-
-    testWidgets('with no radial entries the ring is not drawn at all',
-        (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: const [],
-          entries: [effect('Glow')],
-        ),
-      );
-      expect(centre(), findsNothing,
-          reason: 'an empty ring is hidden rather than drawn empty');
-    });
-
-    testWidgets('Enter on an empty bar closes rather than sitting inert',
-        (tester) async {
-      await open(
-        tester,
-        FxConsoleModel(
-          radialTitle: 'Scene',
-          radial: const [],
-          entries: [effect('Glow')],
-        ),
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(query(), findsNothing,
-          reason: 'nothing chosen, nothing to run — done means done');
     });
   });
 

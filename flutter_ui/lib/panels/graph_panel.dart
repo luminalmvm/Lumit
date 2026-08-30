@@ -618,6 +618,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   bool _autoWire = true;
   bool _heal = true;
 
+  /// The snap magnet (K-659): while on — and it starts on, drawn
+  /// lit in the toolbar — a node drag lands on the dot grid's own pitch
+  /// (K-626), so boxes line up without nudging. Session view state, exactly
+  /// as Auto-wire and Heal are.
+  bool _snapToGrid = true;
+
   _InFlight? _flight;
   _NodeDrag? _nodeDrag;
 
@@ -1153,10 +1159,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   // --- The Tab search -----------------------------------------------------
 
   /// Tab, and a wire let go over empty canvas, open **the console** (K-645) —
-  /// the same surface Ctrl+Space opens, with no ring to offer and a foot line
-  /// saying what a row will do. One search surface, two doors: what the canvas
-  /// contributes is the list (the drivers a dragged wire could land on), the
-  /// spot the box lands on, and the sentence.
+  /// the same popover Ctrl+Space opens, with a foot line saying what a row
+  /// will do. One search surface, two doors: what the canvas contributes is
+  /// the list (the drivers a dragged wire could land on), the spot the box
+  /// lands on, and the sentence.
   Future<void> _openSearch(Offset at, {_Socket? wire}) async {
     if (_searching) return;
     setState(() => _searching = true);
@@ -1166,8 +1172,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         context: context,
         anchor: lastKnownPointerPosition,
         model: FxConsoleModel(
-          radialTitle: '',
-          radial: const [],
           keyHint: l10n.graphSearchKey,
           footer: wire == null ? l10n.graphSearchAdds : l10n.graphSearchWires,
           entries: [
@@ -1422,8 +1426,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return;
     }
     // A press while the console is up never reaches here: it floats over the
-    // canvas in the overlay and its own scrim catches the click that means
-    // "never mind".
+    // canvas in the overlay and its own click-away layer catches the click
+    // that means "never mind".
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
@@ -1515,8 +1519,21 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     }
     if (_nodeDrag case final drag?) {
       setState(() {
+        var delta = at - drag.grab;
+        // The magnet: the grabbed box lands on the dot grid's pitch, and the
+        // rest of the pick rides the same snapped delta, so a group keeps its
+        // internal spacing while its anchor lines up.
+        final origin = _snapToGrid ? drag.origins[drag.key] : null;
+        if (origin != null) {
+          final raw = origin + delta;
+          delta += Offset(
+                (raw.dx / graphDotGrid).round() * graphDotGrid,
+                (raw.dy / graphDotGrid).round() * graphDotGrid,
+              ) -
+              raw;
+        }
         for (final entry in drag.origins.entries) {
-          _positions[entry.key] = entry.value + (at - drag.grab);
+          _positions[entry.key] = entry.value + delta;
         }
         _dropWire = _dropInsert(layout)?.edge;
       });
@@ -1728,6 +1745,24 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
               key: const ValueKey('graph-heal'),
               value: _heal,
               onChanged: (on) => setState(() => _heal = on),
+            ),
+            const SizedBox(width: 10),
+            // The snap magnet, beside the view controls where the board draws
+            // it: on reads as the glyph at foreground strength on the button's
+            // own face, off frameless and muted — the Timeline's own magnet,
+            // in the Timeline's own dress (no accent; §3.1's list is closed).
+            LumitTooltip(
+              message: _snapToGrid ? l10n.tipSnapOn : l10n.tipSnapOff,
+              child: HouseButton(
+                key: const ValueKey('graph-snap'),
+                small: true,
+                frameless: !_snapToGrid,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: () => setState(() => _snapToGrid = !_snapToGrid),
+                child: lumitIcon(LumitIcon.magnet,
+                    size: graphIconSize,
+                    color: _snapToGrid ? t.textPrimary : t.textMuted),
+              ),
             ),
             const SizedBox(width: 10),
             LumitTooltip(

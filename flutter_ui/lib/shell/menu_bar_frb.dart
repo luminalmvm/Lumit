@@ -547,14 +547,34 @@ class LumitMenuBarFrb extends StatelessWidget {
       app.notifyDocumentChanged();
     }
 
+    // A saved preset's whole stack, to every selected layer — the Effects &
+    // presets panel's own rules (K-523): read once, applied per layer, each
+    // layer's refusal leaving the rest of the batch standing.
+    void applyPreset(BridgePresetInfo preset) {
+      final layers = ui.selectedLayers.value;
+      if (layers.isEmpty) return;
+      final String text;
+      try {
+        text = File(preset.path).readAsStringSync();
+      } catch (_) {
+        return;
+      }
+      for (final layer in layers) {
+        try {
+          layer.loadPreset(text: text);
+        } catch (_) {}
+      }
+      app.notifyDocumentChanged();
+    }
+
     await showFxConsoleFrb(
       context: context,
-      // The ring opens around the mouse (K-325): the shell records where the
+      // The popover opens on the mouse (K-325): the shell records where the
       // pointer last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
-        radialTitle: fxConsoleContextTitle(ui),
-        radial: fxConsoleRadial(context, app, ui),
+        keyHint: l10n.fxConsoleKey,
+        footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
           // Effects first — the overwhelmingly common reason to open this.
@@ -565,7 +585,16 @@ class LumitMenuBarFrb extends StatelessWidget {
               group: engineLabel(effect.categoryLabel),
               run: () => applyEffect(effect.name),
             ),
-          // Then the comps, under the list's divider.
+          // The saved presets beside them, under the Presets kicker the
+          // board's category strip draws.
+          for (final preset in listPresets())
+            FxConsoleEntry(
+              label: preset.name,
+              kind: FxConsoleKind.effect,
+              group: l10n.fxConsolePresets,
+              run: () => applyPreset(preset),
+            ),
+          // Then the comps.
           for (final (each, name) in app.comps())
             FxConsoleEntry(
               label: name,
