@@ -83,6 +83,9 @@
 //! 9. **The `CUSTOM_VALUE` blobs** — the DOM could not read them at all, so
 //!    there is no value to compare against. This route recovers the raw bytes,
 //!    which is the one place it beats the Bridge outright (K-412's stretch).
+//!    Curves' is decoded from those bytes and checked against After Effects'
+//!    own baked table, which is a proof of its own rather than a comparison
+//!    with the golden capture (K-639, and the Curves test below).
 //! 10. **A layer's start on the comp's timeline** — every layer in the golden
 //!     project starts at zero, so `ldta`'s start offset is compared against
 //!     After Effects at that one value and the layer-local arithmetic the whole
@@ -721,6 +724,158 @@ fn the_custom_value_blobs_the_dom_cannot_read_arrive_as_raw_bytes() {
     for (path, bytes) in &blobs {
         assert!(*bytes > 0, "{path}: the blob is not empty");
     }
+}
+
+/// **The Curves blob's layout holds against the file's own bytes, and the
+/// effect maps.**
+///
+/// K-410 recorded Curves as the effect that could not come across: its five
+/// channels' control points are `CUSTOM_VALUE` data After Effects' own
+/// scripting refuses. The direct route has always recovered the bytes; this
+/// asserts what is *in* them, twice over and from two directions.
+///
+/// **First, the layout, re-derived here rather than borrowed.** The offsets are
+/// written out longhand — four bytes of header, five 256-byte lookup tables,
+/// five 72-byte records of sixteen big-endian `(x, y)` pairs plus a count and a
+/// selected index — so that a change to `map::curves` cannot make this test
+/// agree with it by construction. The claim that makes it a decode rather than
+/// a reading is the last one: **every control point sits exactly on the lookup
+/// table After Effects baked from it**, `table[x] == y` to the byte. The two
+/// halves are written by different code inside After Effects, so they can only
+/// agree if both have been read right, which is why the decoder repeats this
+/// check on every blob it is handed.
+///
+/// **Then the effect.** The golden project's Curves sits at its default, so the
+/// five channels are the identity diagonal — and that is the assertion worth
+/// having, because a record read one channel out, byte-swapped or off by a
+/// pair would not produce five clean diagonals. It arrives as a real Curves
+/// rather than the placeholder the Bridge route still gets, with the two
+/// `EffectDiffers` rows naming what the points cannot carry: the working space,
+/// and the end condition of the line drawn through them.
+#[test]
+fn the_curves_blob_decodes_to_the_curve_after_effects_baked() {
+    const TABLES_AT: usize = 4;
+    const TABLE: usize = 256;
+    const POINTS_AT: usize = TABLES_AT + 5 * TABLE;
+    const RECORD: usize = 16 * 4 + 4 + 4;
+
+    let bundle = parsed();
+    let hex = bundle
+        .capture
+        .comps
+        .iter()
+        .flat_map(|comp| &comp.layers)
+        .flat_map(|layer| {
+            let mut flat = BTreeMap::new();
+            flatten(&layer.properties, "", &mut flat);
+            flat.into_iter()
+                .filter(|(path, _)| path.ends_with("ADBE CurvesCustom-0001#1"))
+                .map(|(_, node)| node.clone())
+                .collect::<Vec<_>>()
+        })
+        .next()
+        .and_then(|node| node.value?.get("bytes")?.as_str().map(str::to_owned))
+        .expect("the Curves blob arrives as bytes");
+
+    let bytes: Vec<u8> = hex
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            u8::from_str_radix(std::str::from_utf8(pair).expect("hex is ASCII"), 16)
+                .expect("hex digits")
+        })
+        .collect();
+    assert_eq!(bytes.len(), 1644, "the blob is one fixed-size record");
+    assert_eq!(
+        u16::from_be_bytes([bytes[0], bytes[1]]),
+        1,
+        "the header's version word"
+    );
+
+    let mut counts = Vec::new();
+    for channel in 0..5 {
+        let table = &bytes[TABLES_AT + channel * TABLE..TABLES_AT + (channel + 1) * TABLE];
+        let record = POINTS_AT + channel * RECORD;
+        let count = u32::from_be_bytes(
+            bytes[record + 64..record + 68]
+                .try_into()
+                .expect("four bytes"),
+        );
+        assert!(
+            (2..=16).contains(&count),
+            "channel {channel}: {count} control points"
+        );
+        counts.push(count);
+
+        let mut last: Option<u16> = None;
+        for i in 0..count as usize {
+            let at = record + i * 4;
+            let x = u16::from_be_bytes([bytes[at], bytes[at + 1]]);
+            let y = u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]);
+            assert!(x <= 255 && y <= 255, "channel {channel}: an 8-bit square");
+            assert!(
+                last.is_none_or(|l| x > l),
+                "channel {channel}: points in x order"
+            );
+            assert_eq!(
+                u16::from(table[usize::from(x)]),
+                y,
+                "channel {channel} point {i}: ({x}, {y}) is not on After Effects' own table \
+                 — the layout is wrong, not the curve"
+            );
+            last = Some(x);
+        }
+        // Past the count is dead space, and reading it as points is exactly the
+        // mistake this record's trailing zeros invite.
+        assert!(
+            bytes[record + count as usize * 4..record + 64]
+                .iter()
+                .all(|b| *b == 0),
+            "channel {channel}: the unused pairs are zero"
+        );
+    }
+    assert_eq!(counts, vec![2; 5], "the fixture's Curves is at its default");
+
+    // And the effect that comes out of it.
+    let (doc, report) = lumit_import::map_capture(&bundle.capture);
+    let curves = doc
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            lumit_core::model::ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        })
+        .flat_map(|comp| &comp.layers)
+        .flat_map(|layer| &layer.effects)
+        .find(|fx| fx.effect.match_name == "curves")
+        .expect("Curves maps on the direct route");
+    assert_eq!(
+        curves.effect.namespace,
+        lumit_core::model::EffectNamespace::Builtin,
+        "not the placeholder K-410 left it as"
+    );
+    for channel in ["master", "red", "green", "blue", "alpha"] {
+        assert_eq!(
+            curves
+                .params
+                .iter()
+                .find(|p| p.id == channel)
+                .map(|p| &p.value),
+            Some(&lumit_core::model::EffectValue::Curve(vec![
+                [0.0, 0.0],
+                [1.0, 1.0]
+            ])),
+            "{channel} is the identity diagonal"
+        );
+    }
+    let differs = report
+        .rows
+        .iter()
+        .filter(|row| {
+            matches!(&row.reason, lumit_import::Reason::EffectDiffers { effect, .. } if effect == "Curves")
+        })
+        .count();
+    assert_eq!(differs, 2, "the working space and the end condition");
 }
 
 /// **Every keyframe the golden capture has, the parser has, with its time, its

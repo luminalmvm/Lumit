@@ -32,6 +32,7 @@
 //! save untouched (docs/10 §1.1), so it survives indefinitely and a later
 //! Lumit that grows the field can pick it up.
 
+mod curves;
 mod effects;
 mod fx_colour;
 mod fx_distort;

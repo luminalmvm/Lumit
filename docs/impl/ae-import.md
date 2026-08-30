@@ -115,8 +115,9 @@ docs/10 §1.1's rule) and refuses only a newer *major* version.
   nothing useful for Curves' point list, Levels' histogram, Hue/Saturation's channel
   ranges (audit: `ADBE CurvesCustom-0001`, `ADBE Easy Levels2-0002`,
   `ADBE HUE SATURATION-0003`). Record `unreadable`, keep walking. Levels and
-  Hue/Saturation still map fine from their plain sibling properties; Curves does not
-  (K-410's honesty note).
+  Hue/Saturation still map fine from their plain sibling properties; Curves does not,
+  which is why a Bridge bundle's Curves is still a placeholder while the direct route's
+  maps (K-410's honesty note, answered for the direct route by K-639 and §7.2 below).
 - **ExtendScript has no `JSON`** — reuse `tools/ae-audit/audit.jsx`'s escaper/writer.
   ES3 only: no `Array.prototype.map`, no `const`, no getters.
 - **`addSolid` needs all six arguments** including duration — the audit hit this too.
@@ -332,8 +333,8 @@ masks, expressions → differential per-category recovery numbers; **C** the sur
 the picker takes the `.aep` file (docs/11 §1's seamless front door), parse → the one
 mapping, plus the stretch goals (the Curves `CUSTOM_VALUE` blob is IN the file, so
 the K-412 sixteen-point target may finally be reachable — measured, not promised).
-A and B are built (§7.1, §7.2); C is built too (§7.3), with the blob decode among
-what it leaves owed.
+A and B are built (§7.1, §7.2); C is built too (§7.3); and the Curves blob decode
+that was the stretch goal is measured and built as well (K-639, §7.2).
 
 ### 7.1 Phase A: the layouts that are proved
 
@@ -604,7 +605,36 @@ golden capture and each producing a plausible-looking wrong project if missed:
   match name directly.
 - **The `CUSTOM_VALUE` blob is a `LIST aRbs` beside the parameter's `tdbs`**,
   holding one `aRbp` of raw bytes (the default is the identically-shaped `aRbp`
-  in `parT`). Curves' is 1,644 bytes.
+  in `parT`). Curves' is 1,644 bytes, and its layout is now decoded (K-639,
+  `crates/lumit-import/src/map/curves.rs`):
+
+  | offset | length | what |
+  | --- | --- | --- |
+  | 0 | 4 | header: `u16` version (1), then `u16` (1) |
+  | 4 | 5 × 256 | one baked 8-bit lookup table a channel — AE's own answer, `table[input] = output` |
+  | 1284 | 5 × 72 | one record a channel: 16 × (`u16` x, `u16` y) big-endian, then `u32` count (2..=16), then `i32` selected-point index (−1 = none) |
+
+  Both halves are in **channel order Master, Red, Green, Blue, Alpha** — the order
+  AE's own Channel menu lists (its `pdnm` string is `RGB|Red|Green|Blue|Alpha`) and
+  the order docs/08 §3.30 declares. Coordinates are 8-bit display values widened to
+  16 bits, so a point crosses to Lumit's unit square as `x / 255`. Points past the
+  count are zero. The pairs are ordered by x and need not span the whole range: a
+  curve that stops short is held flat past its last point, which is what the baked
+  table shows.
+
+  **The check that makes this a decode.** Every control point sits exactly on the
+  table AE baked from it — `table[x] == y`, to the byte, on all 95 channels of the
+  nineteen Curves instances in the owner's project and on the golden fixture's. The
+  two halves are written by different code inside AE, so a misread offset,
+  endianness or record stride breaks the agreement at once. The decoder repeats the
+  check on every blob and refuses one that fails it, so a future AE that changes the
+  layout gets the old placeholder rather than a curve of the wrong shape.
+
+  Recorded but not used: the line AE draws between the points is a **natural** cubic
+  spline (zero second derivative at both ends), which reproduced all 95 tables byte
+  for byte. Lumit's Curves draws a **clamped** one (K-412), and the two part by up to
+  15/255 between the outer points of a steep bend on that project — a report row on
+  the import, and an open question for the effect rather than for the importer.
 - **`ADBE Layer Styles` has no switch of its own.** Scripting reports it as on
   when any style below it is on, and Blending Options mirrors that; reading the
   group's own `tdsb` says "on" for every layer in every project.
@@ -634,8 +664,10 @@ effect, and none of the fixture's needed it. (4) **A mask path's linear speed**
 is reported by the DOM as exactly 1.0 per segment; one sample cannot say
 whether that is a constant or a duration-derived number, so it is recorded
 rather than curve-fitted. Nothing downstream reads a linear side's speed.
-(5) **Decoding** the arbitrary-data blobs — K-412's sixteen-point Curves target
-is now reachable in principle, since the bytes are in hand.
+(5) **Decoding** the arbitrary-data blobs — Curves' is decoded and reaches K-412's
+sixteen-point target (K-639, the layout in §7.2); Levels' histogram and
+Hue/Saturation's channel ranges are still carried undecoded, and neither is needed,
+because both effects map from their plain sibling properties.
 
 ### 7.3 Phase C: the front door
 
@@ -669,8 +701,7 @@ change in what the parser recovers). The bundle folder route is proved beside it
 through the second row, and a file named `.aep` holding rubbish posts the calm notice
 with the project still standing.
 
-**Owed** (docs/TODO.md): the Curves `CUSTOM_VALUE` blob decode — the bytes are in hand
-(§7.2), the sixteen-point target is not yet reached; the text document (`btds`) and the
+**Owed** (docs/TODO.md): the text document (`btds`) and the
 gradient (`GCst`) encodings, and shape-layer contents, which arrive named and marked
 rather than decoded; a fixture with real file footage, without which the remaining
 footage *interpretation* offsets (rate, alpha, fields, pulldown, loop) stay unread by

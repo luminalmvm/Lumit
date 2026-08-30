@@ -87,6 +87,17 @@ name = "Levels"
 lumit = "levels"
 conversion = "levels"
 
+# Curves' five point lists live in an arbitrary-data blob After Effects' own
+# scripting will not hand over (K-410, K-639). The direct .aep route reads it out of
+# the file, so this row maps the effect there; on a Bridge bundle there are no
+# bytes to decode and the conversion falls through to the placeholder road,
+# where the report's PropertyUnreadable row says why.
+[[effect]]
+ae = "ADBE CurvesCustom"
+name = "Curves"
+lumit = "curves"
+conversion = "curves"
+
 [[effect]]
 ae = "ADBE HUE SATURATION"
 name = "Hue/Saturation"
@@ -464,10 +475,6 @@ conversion = "point_control"
 pending_audit = true
 
 # --- Deliberate placeholders (docs/11 §5) ----------------------------------
-#
-# Curves is not here: its point list is the one property After Effects' own
-# scripting cannot read (K-410), so the instance takes the ordinary placeholder
-# road and the report's PropertyUnreadable row says why.
 
 [[effect]]
 ae = "VISINF Grain Removal"

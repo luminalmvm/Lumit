@@ -86,10 +86,11 @@ pub(super) fn claim(
 fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     let row = super::table::table().row(match_name_of(node))?;
     // A row the table deliberately sends to a placeholder, naming what does the
-    // job in Lumit instead (docs/11 §5). Curves is not one of them: its point
-    // list is the one property After Effects' own scripting cannot read
-    // (K-410), so it takes the ordinary placeholder road and the report's
-    // `PropertyUnreadable` row says why.
+    // job in Lumit instead (docs/11 §5). Curves is not one of them any more:
+    // its point list is the property After Effects' own scripting cannot read
+    // (K-410), but the direct `.aep` route reads it out of the file, so the
+    // effect maps on that route and takes the ordinary placeholder road on the
+    // Bridge's, where there are no bytes to decode.
     if let Some(instead) = &row.suggest {
         suggest(conv, path, node, instead);
         return None;
@@ -104,6 +105,7 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "glow" => glow(conv, path, node, row),
 
         // --- Colour ------------------------------------------------------
+        "curves" => curves(conv, path, node, row),
         "levels" => levels(conv, path, node, row),
         "hue_saturation" => hue_saturation(conv, path, node, row),
         "brightness" => brightness(conv, path, node, row),
@@ -675,6 +677,52 @@ fn channel_group(v: i64) -> Option<&'static str> {
         4 => Some("blue"),
         _ => None,
     }
+}
+
+/// "Curves" → **Curves** (docs/08 §3.30, K-639). All five channels' control
+/// points live in one arbitrary-data blob that After Effects' own scripting
+/// refuses to hand over (K-410); [`super::curves`] reads it out of the file
+/// itself, and the five point lists land on Lumit's five in the same order.
+///
+/// **The Bridge route still gets a placeholder.** Its capture has the property
+/// but no bytes — nothing to decode — so the effect falls through to the
+/// placeholder road and the `PropertyUnreadable` row says why, exactly as
+/// before. A blob the decoder refuses does the same, which is what keeps a
+/// changed After Effects from producing a curve of the wrong shape.
+fn curves(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    node: &Property,
+    row: &'static Row,
+) -> Option<EffectInstance> {
+    let mut fx = Fx::new(path, node, row)?;
+    let channels = fx
+        .leaf("ADBE CurvesCustom-0001")
+        .and_then(|leaf| leaf.value.as_ref())
+        .and_then(|value| value.get("bytes"))
+        .and_then(serde_json::Value::as_str)
+        .and_then(super::curves::from_hex)
+        .and_then(|bytes| super::curves::decode(&bytes))?;
+    for (lumit, points) in ["master", "red", "green", "blue", "alpha"]
+        .into_iter()
+        .zip(channels)
+    {
+        fx.set(lumit, EffectValue::Curve(points));
+    }
+    // The two honest differences, both of them about the line rather than the
+    // points. The points themselves cross exactly.
+    fx.differs(
+        conv,
+        "the curve bends scene-linear light where After Effects bent display values, so the \
+         same control points move a mid-tone by a different amount",
+    );
+    fx.differs(
+        conv,
+        "the line through the points is drawn with Lumit's clamped ends rather than After \
+         Effects' free ones, which parts the two curves by a few per cent between the outer \
+         points of a steep bend",
+    );
+    fx.done()
 }
 
 /// "Levels" → **Levels** (docs/08 §3.31). The scripting DOM exposes one set of
