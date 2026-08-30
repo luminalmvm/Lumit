@@ -23,6 +23,7 @@ import 'sequence_view_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
+import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
@@ -936,28 +937,50 @@ class LayerArea extends StatelessWidget {
               rationalSeconds(span.startOffset) + (p?.offsetShift ?? 0) / fps;
           final secondsPerPixel =
               axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
-          return CustomPaint(
-            key: ValueKey<String>('tl-wave-$id'),
-            size: Size(axis.width, t.density.laneRow),
-            painter: WaveformPainter(
-              peaks: peaks[id],
-              // Canvas x 0 is the axis's left padding, comp time 0 sits a
-              // padding's width in, and the source's own clock runs from there
-              // less wherever the layer starts it.
-              originSeconds: -startOffset - TimelineAxis.pad * secondsPerPixel,
-              secondsPerPixel: secondsPerPixel,
-              left: axis.xOf(inFrame),
-              right: axis.xOf(outFrame),
-              colours: t.waveform,
-              style: waveformStyle,
-              // Both rows (K-437): the lane's own, and the empty one belonging
-              // to the **Waveform** twirl directly above it. A centred wave
-              // then sits on the divider between the two rather than inside
-              // half of one, and a wave rising from the floor has the pair to
-              // rise through. The paint reaches up; the row does not grow, so
-              // the outline and the lanes stay level.
-              height: t.density.laneRow * 2,
-            ),
+          return Stack(
+            children: [
+              CustomPaint(
+                key: ValueKey<String>('tl-wave-$id'),
+                size: Size(axis.width, t.density.laneRow),
+                painter: WaveformPainter(
+                  peaks: peaks[id],
+                  // Canvas x 0 is the axis's left padding, comp time 0 sits a
+                  // padding's width in, and the source's own clock runs from
+                  // there less wherever the layer starts it.
+                  originSeconds:
+                      -startOffset - TimelineAxis.pad * secondsPerPixel,
+                  secondsPerPixel: secondsPerPixel,
+                  left: axis.xOf(inFrame),
+                  right: axis.xOf(outFrame),
+                  colours: t.waveform,
+                  style: waveformStyle,
+                  // Both rows (K-437): the lane's own, and the empty one
+                  // belonging to the **Waveform** twirl directly above it. A
+                  // centred wave then sits on the divider between the two
+                  // rather than inside half of one, and a wave rising from
+                  // the floor has the pair to rise through. The paint reaches
+                  // up; the row does not grow, so the outline and the lanes
+                  // stay level.
+                  height: t.density.laneRow * 2,
+                ),
+              ),
+              // The volume rubber band ON the wave (K-695, the board): the
+              // Volume curve as a line the pointer takes hold of, claiming
+              // only the pixels near itself so the marquee keeps the rest of
+              // the row.
+              Positioned.fill(
+                child: VolumeBand(
+                  entry: entry,
+                  axis: axis,
+                  fps: fps,
+                  fpsNum: fpsNum,
+                  fpsDen: fpsDen,
+                  barShift: keyShiftOf(preview, id),
+                  rowHeight: t.density.laneRow,
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
           );
         },
       );

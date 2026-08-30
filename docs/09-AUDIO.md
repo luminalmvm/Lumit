@@ -263,7 +263,14 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   layer's own peaks in its lane (replacing the comp-wide strip — the per-layer lane
   follows a dragged bar in realtime, where the strip only refreshed on re-mix). `L` opens
   that group on the selected layers, `LL` opens the waveform lane inside it, `LLL` shuts
-  them again (K-281).
+  them again (K-281). **The waveform lane wears the volume rubber band** (K-695, the
+  AudioWorkspace board): the Volume curve as a line over the wave with a diamond per
+  keyframe and a dB readout, grabbable only near itself so the lane keeps its other
+  gestures. A vertical drag moves the grabbed key's value — or the whole level while the
+  volume is static — committing once on release; `Ctrl`-click plants a key at the level
+  the line already reads, `Alt`-click lifts one. It is the same `Layer.volume_db` every
+  other control writes, so the band, the graph editor and the Audio panel are three views
+  of one curve.
 - **Mute / solo** via the audible and solo switches ([01-GLOSSARY.md](01-GLOSSARY.md) §2).
   Solo on any layer silences non-soloed audio, matching video solo semantics.
 - **Audio from video footage**: a Footage layer with audio exposes its audio as part of

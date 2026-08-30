@@ -387,6 +387,13 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Static() => const [],
           BridgeScalar_Expression() => const [],
         },
+      // The Volume's keys are lane diamonds like any other property's
+      // (K-172, K-695): the rubber band draws them on the wave, and the
+      // Volume row's own lane drags them.
+      FoldVolumeRow(:final scalar) => switch (scalar) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       FoldFlowRow(:final rate) => switch (rate) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
@@ -1104,6 +1111,13 @@ bool moveLaneKeys({
       final next = moved(scalar.field0);
       if (next == null) return false;
       entry.layer.setRetimeProperty(value: BridgeScalar.keyframed(next));
+      return true;
+
+    case FoldVolumeRow(:final scalar):
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      entry.layer.setVolumeDb(value: BridgeScalar.keyframed(next));
       return true;
 
     case FoldMaskValueRow(:final mask, :final value, :final vertex):
