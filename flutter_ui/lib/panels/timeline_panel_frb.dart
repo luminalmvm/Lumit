@@ -134,7 +134,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void _setOpen(String path, bool open) {
     // Whatever this path belongs to is being twirled by hand or by another
     // reveal, so it stops answering the last single `U` (K-622).
-    _revealedKeyed.remove(path.split('/').first);
+    _revealed.remove(path.split('/').first);
     if (open) {
       _open.add(path);
     } else {
@@ -146,7 +146,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// before it opens the rows it names, so a reveal shows what it says rather
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
-    _revealedKeyed.remove(id);
+    _revealed.remove(id);
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
 
@@ -1428,22 +1428,32 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// on at rest is a panel that appears to be missing rows. The strip's answer
   /// covers the whole comp and stays on until it is switched off; a single `U`
   /// asks the same question of the layers it revealed and lets go of them the
-  /// moment anything else touches their twirls ([_revealedKeyed]).
+  /// moment anything else touches their twirls ([_revealed]).
   bool _animatedOnly = false;
 
-  /// Layers a single `U` opened onto their **keyed rows alone** (K-622).
+  /// Layers a reveal opened onto **the rows it named alone**, and which rule
+  /// each was opened by (K-622, K-684).
   ///
   /// The reveal cycle used to open a layer's *groups* — Transform, the effects,
   /// Audio — and a group opens whole, so revealing one keyed Intensity also
   /// unrolled every other parameter on that effect and every transform property
   /// beside a keyed one. `U` names the property, not the heading, so it filters
-  /// the rows the way the Animated strip does and stops at the keys.
+  /// the rows the way the Animated strip does and stops at the keys. The menu's
+  /// three Reveal rows are the same machinery under a wider rule each, which is
+  /// why the filter is stored per layer rather than the layer merely marked.
   ///
   /// Dropped per layer by [_setOpen] and [_shutLayerDeep], which is every twirl
   /// a hand or another reveal key can turn: a layer someone has started opening
   /// by hand is no longer showing the answer to a `U`, and going on filtering it
   /// would make the caret look broken.
-  final Set<String> _revealedKeyed = {};
+  final Map<String, RevealFilter> _revealed = {};
+
+  /// The comp's size when the last **modified** reveal was run, kept for the
+  /// builds after it: that reveal asks whether a layer has been moved, and
+  /// unmoved means the middle of the comp — a fact about the document that a
+  /// build may not go and ask for (K-681).
+  double _revealCompWidth = 0;
+  double _revealCompHeight = 0;
 
   bool _syncingScroll = false;
 
@@ -1496,6 +1506,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // be on screen (K-326). Ensure-open, not the reveal keys' toggle: showing
     // a row that is already showing must never hide it.
     _ui!.revealPropertyRequest.addListener(_onRevealRequested);
+    // Animation ▸ Reveal … (K-684): the menu says which reveal, the panel runs
+    // it over the selection, exactly as `U` does.
+    _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
@@ -2291,7 +2304,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // shows everything under it, which is exactly what the first tap is
         // not for.
         if (_revealTaps == 1) {
-          _revealedKeyed.add(id);
+          _revealed[id] = RevealFilter.keyframed;
           continue;
         }
         if (groups.transform) _open.add(transformPath(id));
@@ -2308,6 +2321,85 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       }
     });
     return true;
+  }
+
+  /// **Animation ▸ Reveal properties with keyframes / with animation / all
+  /// modified properties** (K-684): the same filtered opening a single `U`
+  /// does, over the same layers, under a wider rule each.
+  ///
+  /// The menu is *not* the cycle. A menu row is chosen deliberately and names
+  /// what it does, so it says it once: no tap counting, and no third press that
+  /// shuts what the first two opened. Which layers is the `U` answer — the
+  /// selection, or the whole comp when nothing is selected (K-203, K-523).
+  ///
+  /// **The rows decide whether a layer opens**, not a separate question to the
+  /// engine: the reveal is built here, so asking the engine "does anything
+  /// qualify" could disagree with what the filter then keeps, and a layer
+  /// opened onto no rows is the empty fold-out K-622 set out to remove.
+  void _revealFiltered(LumitUiState ui, RevealFilter filter) {
+    final selected = ui.selectedLayers.value;
+    final ids = {
+      for (final layer in selected) layer.internallayerId.toString()
+    };
+    final entries = ids.isEmpty
+        ? ui.model.layers
+        : [
+            for (final entry in ui.model.layers)
+              if (ids.contains(entry.layer.internallayerId.toString())) entry
+          ];
+    if (entries.isEmpty) return;
+    // Where an unmoved layer sits, for the one filter that asks. Read here
+    // rather than in the build that follows, which may ask the engine nothing.
+    if (filter == RevealFilter.modified) {
+      final settings = ui.selectedComp?.getSettings();
+      _revealCompWidth = settings?.width.toDouble() ?? 0;
+      _revealCompHeight = settings?.height.toDouble() ?? 0;
+    }
+    setState(() {
+      for (final entry in entries) {
+        final id = entry.layer.internallayerId.toString();
+        // Every reveal starts from the layers closed, so it shows exactly what
+        // it says rather than adding to whatever was already open.
+        _shutLayerDeep(id);
+        _dropSelectionUnder(id);
+      }
+      // Built the way the panel is about to build them, so "does this layer
+      // show anything" is answered by the rows themselves. Heights are not
+      // read from this pass, only which rows survived the filter.
+      final rows = layerRows(
+        layers: entries,
+        open: _open,
+        rowHeight: 1,
+        hasAudio: _hasAudio,
+        hasPicture: _hasPicture,
+        sequenceExtra: _sequenceExtra,
+        flowParams: _flowParams,
+        volumeDb: _volumeDb,
+        driven: _driven,
+        reveal: {
+          for (final entry in entries)
+            entry.layer.internallayerId.toString(): filter
+        },
+        compWidth: _revealCompWidth,
+        compHeight: _revealCompHeight,
+      );
+      for (final row in rows) {
+        // Nothing qualifies: leave the layer shut rather than opening it onto
+        // a list of headings the reveal just said were empty.
+        if (row.foldRows.isEmpty) continue;
+        // In this order: `_setOpen` drops whatever reveal the layer was under,
+        // which is exactly what a hand on the twirl should do and exactly what
+        // this must not do to the reveal it is in the middle of setting.
+        _setOpen(row.id, true);
+        _revealed[row.id] = filter;
+      }
+    });
+  }
+
+  /// The menu asked for one of the three reveals (K-684).
+  void _onRevealFilterRequested() {
+    if (!mounted) return;
+    _revealFiltered(_ui!, _ui!.revealFilter);
   }
 
   /// When the last `L` was pressed, and how many times in a row (K-281) — the
@@ -2373,6 +2465,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
+    _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
     if (_ui?.deleteClaim == _deleteClaim) _ui!.deleteClaim = null;
     if (_ui?.copyClaim == _copySelectedKeys) _ui!.copyClaim = null;
@@ -2772,9 +2865,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         flowParams: _flowParams,
         volumeDb: _volumeDb,
         driven: _driven,
-        // The strip filters the whole comp; a single `U` filters only the
-        // layers it revealed (K-622).
-        animatedOnly: _animatedOnly ? everyLayerId : _revealedKeyed);
+        // The strip filters the whole comp; a reveal filters only the layers
+        // it opened, by the rule it opened them with (K-622, K-684).
+        reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
+        compWidth: _revealCompWidth,
+        compHeight: _revealCompHeight);
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,

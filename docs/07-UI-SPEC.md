@@ -1428,6 +1428,16 @@ measurement — the panel shows the numbers, it does not turn them on.
   layer" are facts about the document. A reveal starts from the layer shut, so it shows
   exactly what it says rather than adding to what was already open, and a layer with
   nothing to show stays shut rather than opening onto empty headings.
+- **Animation ▸ Reveal properties with keyframes / with animation / all modified
+  properties** are the same reveal under the menu's own words, one rule widening three
+  times (K-684). *With keyframes* is `U`'s own answer, the rows carrying diamonds; *with
+  animation* adds the rows that move without them — an expression, or a wire from the node
+  graph (K-471); *all modified* adds everything a fresh layer would not carry. They open
+  down to the **rows**, which is what separates the last of them from `UU`: `UU` opens the
+  groups that hold a modification and a group opens whole, so it shows an untouched
+  Position beside a rotation somebody typed. A menu row is not a cycle — chosen
+  deliberately, it says what it does once — and it reads the selection, or the whole
+  composition when nothing is selected, exactly as `U` does. **Shipped (K-684).**
 
   **The first tap stops at the keys** (K-622). `U` opens down to the keyframed *rows* —
   each heading over one is kept so the row is placed, and nothing else under that heading

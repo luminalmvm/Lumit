@@ -38,6 +38,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/clipboard.dart';
@@ -1033,10 +1034,25 @@ List<MenuSection> lumitMenus(
         trackCameraRow(app, ui),
         MenuEntry.todo(l10n.menuTrackMotion),
         MenuEntry.divider(),
-        MenuEntry.todo(l10n.menuRevealPropertiesWithKeyframes,
-            action: 'reveal.animated'),
-        MenuEntry.todo(l10n.menuRevealPropertiesWithAnimation),
-        MenuEntry.todo(l10n.menuRevealAllModifiedProperties),
+        // The Reveal family (K-684): `U`'s own machinery under the menu's
+        // words, each row a wider rule than the one above it. They act on the
+        // selection, or on the whole composition when nothing is selected —
+        // which is why they are live whenever a comp is open, and greyed
+        // rather than absent when none is.
+        for (final reveal in const [
+          (RevealFilter.keyframed, 'reveal.animated'),
+          (RevealFilter.animated, null),
+          (RevealFilter.modified, null),
+        ])
+          MenuEntry(
+            switch (reveal.$1) {
+              RevealFilter.keyframed => l10n.menuRevealPropertiesWithKeyframes,
+              RevealFilter.animated => l10n.menuRevealPropertiesWithAnimation,
+              RevealFilter.modified => l10n.menuRevealAllModifiedProperties,
+            },
+            comp == null ? null : () => ui.requestRevealFilter(reveal.$1),
+            action: reveal.$2,
+          ),
       ]
     ),
     (

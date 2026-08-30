@@ -449,7 +449,52 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
 /// is treated as a possible container, so the mask row above a keyed feather
 /// survives on the same rule the Effects heading does — one rule, not one per
 /// kind of heading.
-List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
+List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) =>
+    revealFoldRows(rows, RevealFilter.keyframed);
+
+/// Which rows a reveal keeps (K-684) — the three Animation ▸ Reveal commands,
+/// widening one at a time.
+///
+/// In plain terms: **keyframes** is what `U` shows, the rows with diamonds on
+/// them. **Animation** adds the rows that move without diamonds — an
+/// expression, or a wire from the node graph driving the parameter. **Modified**
+/// adds everything a fresh layer would not have: a value someone typed, an
+/// effect they applied, a mask they drew. Each is a superset of the one before,
+/// so a row shown by the narrow answer is shown by the wide one.
+enum RevealFilter {
+  /// `U`'s own rule: the rows carrying keyframes.
+  keyframed,
+
+  /// Keyed, expression-driven, or driven by a wire (K-471).
+  animated,
+
+  /// Anything that differs from what a freshly made layer carries.
+  modified,
+}
+
+/// The rows of [rows] that [filter] admits, and the headings that lead down to
+/// one.
+///
+/// [compWidth] and [compHeight] are the composition's size, which
+/// [RevealFilter.modified] needs and the other two do not: a layer's Position
+/// starts at the middle of the comp, so "unmoved" is a fact about the comp
+/// rather than about the number. Left at zero, Position is exempt rather than
+/// reported as moved — the same answer the engine gives the Anchor, whose own
+/// seeded value depends on a source size nothing here knows.
+///
+/// Read **backwards** because that is where the answer is: a heading's fate is
+/// decided by the rows *after* it, so one pass from the end carries "the
+/// shallowest row still kept" along with it and every heading shallower than
+/// that is a heading something kept sits under. Any row that does not qualify
+/// on its own is treated as a possible container, so the mask row above a keyed
+/// feather survives on the same rule the Effects heading does — one rule, not
+/// one per kind of heading.
+List<LayerFoldRow> revealFoldRows(
+  List<LayerFoldRow> rows,
+  RevealFilter filter, {
+  double compWidth = 0,
+  double compHeight = 0,
+}) {
   final keep = List<bool>.filled(rows.length, false);
   // The depth of the shallowest row kept since here, or null while nothing has
   // been kept at all — in which case no row to the left of this one can be a
@@ -462,7 +507,11 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
   for (var i = rows.length - 1; i >= 0; i--) {
     final row = rows[i];
     final container = need != null && row.depth < need;
-    if (!container && laneKeysOf(row).isEmpty) continue;
+    if (!container &&
+        !foldRowRevealed(row, filter,
+            compWidth: compWidth, compHeight: compHeight)) {
+      continue;
+    }
     keep[i] = true;
     need = row.depth;
   }
@@ -471,6 +520,124 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
       if (keep[i]) rows[i],
   ];
 }
+
+/// Whether one row answers [filter] on its own account — headings aside, which
+/// [revealFoldRows] decides from what is under them.
+bool foldRowRevealed(
+  LayerFoldRow row,
+  RevealFilter filter, {
+  double compWidth = 0,
+  double compHeight = 0,
+}) {
+  if (laneKeysOf(row).isNotEmpty) return true;
+  if (filter == RevealFilter.keyframed) return false;
+  // Moving without diamonds: an expression writes the value at every frame,
+  // and a wire from the node graph hands it over (K-471). Both are animation
+  // in the only sense that matters here — the number is not the user's to
+  // drag, and it is not the same at every frame.
+  if (foldRowScalar(row) is BridgeScalar_Expression) return true;
+  if (row is FoldEffectParamRow && row.driven != null) return true;
+  return filter == RevealFilter.modified &&
+      _foldRowChanged(row, compWidth, compHeight);
+}
+
+/// The one animatable number a fold row carries, or null for a row that has
+/// none: a heading, a waveform, a colour or choice, and the **path** rows —
+/// a mask's or a shape's outline keys as whole paths rather than as a scalar
+/// (K-344), which is why [laneKeysOf] reads those two out of the path key list
+/// instead.
+BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
+      // The lead axis, exactly as the row's diamonds are read: the axes of one
+      // row key and drive together.
+      FoldTransformRow(:final group, :final transform) =>
+        read(transform, group.axes.first.prop),
+      FoldRetimeRow(:final scalar) => scalar,
+      FoldVolumeRow(:final scalar) => scalar,
+      FoldFlowRow(:final rate) => rate,
+      FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
+        field0,
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        value == MaskValue.path ? null : maskScalarOf(mask, value, vertex),
+      FoldStrokeValueRow(:final stroke, :final value) =>
+        strokeScalarOf(stroke, value),
+      FoldAnimatorValueRow(:final animator, :final value) =>
+        textAnimatorScalarOf(animator, value),
+      FoldShapeValueRow(:final item, :final value) =>
+        value == ShapeValue.path ? null : shapeScalarOf(item, value),
+      _ => null,
+    };
+
+/// Whether a row differs from what a freshly made layer would carry.
+///
+/// Two kinds of answer, and the second is the one that is easy to miss. Some
+/// rows hold a **number with a default** — a transform axis, an effect
+/// parameter, the Volume — and those are compared with it. The rest exist only
+/// because somebody made them: an effect applied, a mask drawn, a stroke
+/// painted, a Retime switched on, a shape drawn, a text animator added. A row
+/// like that *is* the modification, whatever its numbers say, which is the
+/// same call the engine makes for the groups (`reveal_groups`, K-199).
+bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
+    switch (row) {
+      FoldTransformRow(:final group, :final transform) => group.axes.any((a) {
+          final scalar = read(transform, a.prop);
+          final fresh = _transformDefault(a.prop, compWidth, compHeight);
+          // No default to compare against — the Anchor, whose seeded value is
+          // the source's own half-size, and Position with no comp size to
+          // hand. Only its animation can say anything, and that has been asked
+          // already.
+          if (fresh == null) return false;
+          return switch (scalar) {
+            BridgeScalar_Static(:final field0) => field0 != fresh,
+            _ => true,
+          };
+        }),
+      FoldVolumeRow(:final scalar) => switch (scalar) {
+          null => false,
+          BridgeScalar_Static(:final field0) => field0 != 0,
+          _ => true,
+        },
+      FoldEffectParamRow(:final param, :final value) =>
+        value != null && value != defaultEffectValue(param.kind),
+      // A heading is a container, save for an effect's own: an effect on a
+      // layer is a modification even with every parameter left alone, so its
+      // name shows and the untouched parameters under it do not.
+      FoldGroupRow(:final path) => effectIdOfPath(path) != null,
+      FoldRetimeRow() ||
+      FoldFlowRow() ||
+      FoldMaskRow() ||
+      FoldMaskValueRow() ||
+      FoldStrokeRow() ||
+      FoldStrokeValueRow() ||
+      FoldShapeRow() ||
+      FoldShapeValueRow() ||
+      FoldShapePaintRow() ||
+      FoldAnimatorValueRow() =>
+        true,
+      FoldWaveformRow() => false,
+    };
+
+/// What a transform axis reads on a layer nobody has touched, or null for an
+/// axis with no knowable default.
+///
+/// Position is the comp's middle, which is where every add path seeds it
+/// (`centred_transform`). The Anchor is the source's own middle, and the source
+/// is not this file's to know — so it is exempt, exactly as the engine exempts
+/// it when it answers the same question for the groups.
+double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
+    switch (prop) {
+      BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => null,
+      BridgeTransformProp.positionX => w > 0 ? w / 2 : null,
+      BridgeTransformProp.positionY => h > 0 ? h / 2 : null,
+      BridgeTransformProp.positionZ ||
+      BridgeTransformProp.rotation ||
+      BridgeTransformProp.rotationX ||
+      BridgeTransformProp.rotationY =>
+        0,
+      BridgeTransformProp.scaleX ||
+      BridgeTransformProp.scaleY ||
+      BridgeTransformProp.opacity =>
+        100,
+    };
 
 /// What a keyed row is called when it is read **out of its fold-out** — the
 /// dope sheet's flat list, where "Position" on its own would not say which of
@@ -508,12 +675,26 @@ List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
 /// layer's rows as though every twirl in it were down.
 const Set<String> everyFoldPath = _EveryPath();
 
-/// The same set under the name the **Animated filter** wants it by: every layer
-/// id, so the filter is on for the whole comp rather than for the handful of
-/// layers a `U` revealed (K-622). Two names for one object because the two
-/// readers key it differently — one by fold path, one by layer id — and a set
-/// that says yes to everything is honest about both.
-const Set<String> everyLayerId = _EveryPath();
+/// The **Animated filter**'s answer for every layer there is: keyed rows only,
+/// whichever layer is asked about, so the filter is on for the whole comp
+/// rather than for the handful of layers a reveal opened (K-622, K-684). The
+/// same trick [everyFoldPath] plays, one map along: a reveal names the layers
+/// it filters, and the strip filters them all.
+const Map<String, RevealFilter> everyLayerKeyframed = _EveryLayer();
+
+class _EveryLayer extends MapBase<String, RevealFilter> {
+  const _EveryLayer();
+  @override
+  RevealFilter? operator [](Object? key) => RevealFilter.keyframed;
+  @override
+  void operator []=(String key, RevealFilter value) {}
+  @override
+  void clear() {}
+  @override
+  Iterable<String> get keys => const [];
+  @override
+  RevealFilter? remove(Object? key) => null;
+}
 
 /// What a mask's value row is called — shared by the row, the graph channel
 /// and anything else that has to name one.

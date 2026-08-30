@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -634,6 +635,134 @@ void main() {
       expect(find.text('Rotation'), findsOneWidget,
           reason:
               'a hand on the caret ends the filter rather than fighting it');
+    });
+  });
+
+  /// **Animation ▸ Reveal properties with keyframes / with animation / all
+  /// modified properties** (K-684) — the `U` machinery under the menu's own
+  /// words, each row a wider rule than the one above it.
+  ///
+  /// The menu is not the cycle: a row chosen deliberately says what it does
+  /// once, so there is no tap counting and no third press that shuts what the
+  /// first two opened. What separates the widest row from `UU` is here too — a
+  /// heading opens *whole* for `UU`, and this opens down to the rows that were
+  /// actually changed.
+  group('The Reveal rows (frb)', () {
+    testWidgets('each row is a wider rule than the one above it',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      p.uiState
+        ..setSelectedComp(comp)
+        ..selectedLayer.value = layer;
+
+      // Opacity is keyed, Scale is driven by an expression, Rotation is merely
+      // changed, and Position is where it was put — one property for each of
+      // the three rules, and one for none of them.
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 0),
+              value: 100,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+          BridgeKeyframe(
+              time: comp.timeOfFrame(frame: 12),
+              value: 0,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear()),
+        ]),
+      );
+      layer.setTransform(
+        prop: BridgeTransformProp.scaleX,
+        value: const BridgeScalar.expression('time * 10'),
+      );
+      layer.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: const BridgeScalar.static_(45),
+      );
+      p.state.notifyDocumentChanged();
+
+      await tester.pumpWidget(hostPanel(
+        child: const TimelinePanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      Future<void> reveal(RevealFilter filter) async {
+        p.uiState.requestRevealFilter(filter);
+        await tester.pump();
+      }
+
+      await reveal(RevealFilter.keyframed);
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'the keyed row, which is what U shows');
+      expect(find.text('Scale'), findsNothing,
+          reason: 'an expression has no keyframes');
+      expect(find.text('Rotation'), findsNothing);
+
+      await reveal(RevealFilter.animated);
+      expect(find.text('Scale'), findsOneWidget,
+          reason: 'an expression writes the value at every frame');
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'each rule is a superset, not a swap');
+      expect(find.text('Rotation'), findsNothing,
+          reason: 'a number somebody typed does not move');
+
+      await reveal(RevealFilter.modified);
+      expect(find.text('Rotation'), findsOneWidget,
+          reason: 'the widest rule takes what was changed and left');
+      expect(find.text('Opacity'), findsOneWidget);
+      expect(find.text('Scale'), findsOneWidget);
+      expect(find.text('Position'), findsNothing,
+          reason: 'a layer sitting where it was put is not modified — which is '
+              'what separates this row from UU, where the heading opens whole');
+    });
+
+    /// The rows read the **whole selection** (K-523), and the whole comp when
+    /// nothing is selected (K-203) — the same two rules `U` follows, because
+    /// they are the same command.
+    testWidgets('the reveal covers every selected layer', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      // Three layers, and only the last is changed — so a reveal that stopped
+      // at the selection's primary would find nothing at all.
+      final layers = [for (var i = 0; i < 3; i++) comp.addSolidLayer()];
+      layers.last.setTransform(
+        prop: BridgeTransformProp.rotation,
+        value: const BridgeScalar.static_(45),
+      );
+      p.state.notifyDocumentChanged();
+      p.uiState.setSelectedComp(comp);
+
+      await tester.pumpWidget(hostPanel(
+        child: const TimelinePanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1400, 700),
+      ));
+      await tester.pump();
+
+      // What the shell's `Ctrl+A` does in the Timeline (K-522).
+      p.uiState.setSelection(comp.getLayers());
+      await tester.pump();
+
+      p.uiState.requestRevealFilter(RevealFilter.modified);
+      await tester.pump();
+      expect(find.text('Rotation'), findsOneWidget,
+          reason: 'the layer behind the primary was read too');
     });
   });
 

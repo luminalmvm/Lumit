@@ -351,16 +351,18 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 /// `volumeDb` are the panel's once-per-revision reads, riding down onto the
 /// fold rows (K-184).
 ///
-/// [animatedOnly] names the layers drawn **keyed rows only**: each builds its
-/// fold-out as though every twirl in it were down, and then keeps only what is
-/// keyed ([animatedFoldRows]). A layer with nothing keyed comes back shut, which
-/// is also a layer with no summary diamonds to draw — it has no keys anywhere,
-/// so the two answers cannot disagree.
+/// [reveal] names the layers drawn **filtered**, and by which rule: each builds
+/// its fold-out as though every twirl in it were down, and then keeps only the
+/// rows that answer ([revealFoldRows]). A layer with nothing qualifying comes
+/// back shut.
 ///
-/// Two things ask for it. The **Animated filter** (K-441, 6.43) asks for the
-/// whole comp, and passes [everyLayerId]. A single **`U`** asks for the layers
-/// it just revealed and no others (K-622), so that opening one layer's keyed
-/// rows does not quietly filter every other layer on the panel.
+/// Three things ask for it. The **Animated filter** (K-441, 6.43) asks for the
+/// whole comp, and passes [everyLayerKeyframed]. A single **`U`** asks for the
+/// layers it just revealed and no others (K-622), so that opening one layer's
+/// keyed rows does not quietly filter every other layer on the panel. The
+/// **Animation ▸ Reveal** rows (K-684) ask the same of the selection, with the
+/// wider filters. [compWidth]/[compHeight] ride along for the widest of them,
+/// which is the only one that needs to know where an unmoved layer sits.
 List<LayerRow> layerRows({
   required List<BridgeLayerEntry> layers,
   required Set<String> open,
@@ -371,21 +373,26 @@ List<LayerRow> layerRows({
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
   Map<String, Map<String, DrivenParam>> driven = const {},
-  Set<String> animatedOnly = const {},
+  Map<String, RevealFilter> reveal = const {},
+  double compWidth = 0,
+  double compHeight = 0,
 }) {
   final out = <LayerRow>[];
   for (final entry in layers) {
     final id = entry.layer.internallayerId.toString();
-    final keyedOnly = animatedOnly.contains(id);
+    final filter = reveal[id];
     final built = layerFoldRows(
         entry: entry,
-        open: keyedOnly ? everyFoldPath : open,
+        open: filter != null ? everyFoldPath : open,
         hasAudio: hasAudio[id] ?? false,
         flowParams: flowParams[id],
         volumeDb: volumeDb[id],
         driven: driven[id] ?? const {});
-    final fold = keyedOnly ? animatedFoldRows(built) : built;
-    final isOpen = keyedOnly ? fold.isNotEmpty : open.contains(id);
+    final fold = filter == null
+        ? built
+        : revealFoldRows(built, filter,
+            compWidth: compWidth, compHeight: compHeight);
+    final isOpen = filter != null ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(
       entry: entry,
       id: id,

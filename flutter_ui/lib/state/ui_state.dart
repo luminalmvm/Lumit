@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart' show EasingCurve;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show RevealFilter;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
@@ -345,6 +346,24 @@ class LumitUiState extends ChangeNotifier {
 
   void requestRevealProperty(UuidValue layer, String action) =>
       revealPropertyRequest.value = (layer, action);
+
+  /// A reveal the Timeline has been asked to run over the selection — the
+  /// Animation ▸ Reveal rows (K-684), which are the `U` machinery under the
+  /// menu's own words.
+  ///
+  /// A **counter** beside the filter rather than the filter alone: asking for
+  /// the same reveal twice running is two commands, and a notifier holding a
+  /// value it already has tells nobody. The same shape [paletteRequest] uses,
+  /// and for the same reason.
+  final ValueNotifier<int> revealFilterRequest = ValueNotifier(0);
+
+  /// Which reveal the last [requestRevealFilter] asked for.
+  RevealFilter revealFilter = RevealFilter.keyframed;
+
+  void requestRevealFilter(RevealFilter filter) {
+    revealFilter = filter;
+    revealFilterRequest.value++;
+  }
 
   /// **Which property rows the Timeline has picked**, as their paths, published
   /// so the Viewer can answer the same question (K-341).

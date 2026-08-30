@@ -6,9 +6,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
+import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
+import 'package:uuid/uuid.dart';
 
 void main() {
   group('A twirl on a selected row moves the selection with it (§6.4)', () {
@@ -167,6 +171,162 @@ void main() {
     test('nothing keyed anywhere is no rows at all', () {
       expect(animatedFoldRows([still(1), still(2)]), isEmpty);
       expect(animatedFoldRows(const []), isEmpty);
+    });
+  });
+
+  /// **Animation ▸ Reveal properties with keyframes / with animation / all
+  /// modified properties** (K-684). Three rules over one fold-out, each a
+  /// superset of the one before it: the diamonds, then the rows that move
+  /// without diamonds, then everything a fresh layer would not carry.
+  group('The three Reveal rules widen one at a time (K-684)', () {
+    const centre = 960.0, middle = 540.0;
+    BridgeScalar st(double v) => BridgeScalar.static_(v);
+
+    /// A transform nobody has touched, in a 1920×1080 comp.
+    BridgeTransform fresh({
+      BridgeScalar? opacity,
+      BridgeScalar? rotation,
+      BridgeScalar? scale,
+    }) =>
+        BridgeTransform(
+          anchorX: st(0),
+          anchorY: st(0),
+          positionX: st(centre),
+          positionY: st(middle),
+          positionZ: st(0),
+          scaleX: scale ?? st(100),
+          scaleY: scale ?? st(100),
+          rotation: rotation ?? st(0),
+          rotationX: st(0),
+          rotationY: st(0),
+          opacity: opacity ?? st(100),
+        );
+
+    const oneKey = BridgeScalar.keyframed([
+      BridgeKeyframe(
+        time: BridgeRational(num: 0, den: 1),
+        value: 0,
+        interpIn: BridgeSideInterp.linear(),
+        interpOut: BridgeSideInterp.linear(),
+      ),
+    ]);
+
+    FoldTransformRow row(String label, BridgeTransformProp prop,
+            BridgeTransform transform) =>
+        FoldTransformRow(
+            TransformGroup(label, [TransformAxis(prop)]), transform,
+            depth: 2);
+
+    // Position, untouched: the one row that is neither animated nor changed,
+    // and the one that needs the comp's size to know it.
+    final still_ = row('Position', BridgeTransformProp.positionX, fresh());
+    // Opacity, keyframed.
+    final keyed_ =
+        row('Opacity', BridgeTransformProp.opacity, fresh(opacity: oneKey));
+    // Rotation, driven by an expression: no diamonds, and a different number
+    // at every frame all the same.
+    final expressed = row('Rotation', BridgeTransformProp.rotation,
+        fresh(rotation: const BridgeScalar.expression('time * 10')));
+    // Scale, typed to something else and left there.
+    final changed = row('Scale', BridgeTransformProp.scaleX, fresh(scale: st(50)));
+
+    const layerId = 'layer-a';
+    final fxId = UuidValue.fromString(const Uuid().v4());
+    final fxHeading = FoldGroupRow(
+        path: '$layerId/effects/$fxId', label: 'Glow', open: true, depth: 2);
+    const param = BridgeParamInfo(
+        id: 'intensity',
+        label: 'Intensity',
+        kind: BridgeParamKind.float(
+            default_: 1, sliderMin: 0, sliderMax: 10),
+        unit: BridgeUnit.raw);
+    final info = BridgeEffectInstanceInfo(
+        id: fxId,
+        name: 'lumit.glow',
+        enabled: true,
+        values: const [],
+        linkedPairs: const [],
+        derivedParams: const []);
+    // A parameter at its default, with a wire from the node graph on it
+    // (K-471): nothing has been typed into it and it is not the same at every
+    // frame either.
+    final driven = FoldEffectParamRow(
+        info, param, const BridgeEffectValue.float(BridgeScalar.static_(1)),
+        depth: 3,
+        driven: (
+          driver: 'Wobble',
+          type: BridgePortType.number,
+          noStream: false
+        ));
+
+    final rows = [still_, keyed_, expressed, changed, fxHeading, driven];
+
+    List<LayerFoldRow> kept(RevealFilter filter) => revealFoldRows(rows, filter,
+        compWidth: 1920, compHeight: 1080);
+
+    test('with keyframes keeps the diamonds alone', () {
+      expect(kept(RevealFilter.keyframed), [keyed_],
+          reason: 'the expression, the wire and the typed value have no keys');
+    });
+
+    test('with animation adds the expression and the wire', () {
+      expect(kept(RevealFilter.animated), [keyed_, expressed, fxHeading, driven],
+          reason: 'the heading leads down to the driven parameter');
+    });
+
+    test('all modified adds the value somebody typed', () {
+      expect(kept(RevealFilter.modified),
+          [keyed_, expressed, changed, fxHeading, driven]);
+    });
+
+    test('an unmoved Position is modified by nothing', () {
+      for (final filter in RevealFilter.values) {
+        expect(kept(filter), isNot(contains(still_)),
+            reason: 'it sits where a fresh layer puts it');
+      }
+    });
+
+    test('a moved Position is only modified with the comp size to hand', () {
+      final movedRow = FoldTransformRow(
+          const TransformGroup(
+              'Position', [TransformAxis(BridgeTransformProp.positionX)]),
+          BridgeTransform(
+            anchorX: st(0),
+            anchorY: st(0),
+            positionX: st(100),
+            positionY: st(middle),
+            positionZ: st(0),
+            scaleX: st(100),
+            scaleY: st(100),
+            rotation: st(0),
+            rotationX: st(0),
+            rotationY: st(0),
+            opacity: st(100),
+          ),
+          depth: 2);
+      expect(
+          revealFoldRows([movedRow], RevealFilter.modified,
+              compWidth: 1920, compHeight: 1080),
+          [movedRow]);
+      // No comp size: Position is exempt rather than reported as moved, the
+      // same answer the engine gives the Anchor.
+      expect(revealFoldRows([movedRow], RevealFilter.modified), isEmpty);
+    });
+
+    test('an effect nobody touched still shows its name under the widest rule',
+        () {
+      final untouched = FoldEffectParamRow(
+          info, param, const BridgeEffectValue.float(BridgeScalar.static_(1)),
+          depth: 3);
+      expect(
+          revealFoldRows([fxHeading, untouched], RevealFilter.modified,
+              compWidth: 1920, compHeight: 1080),
+          [fxHeading],
+          reason: 'applying an effect is a modification; its default is not');
+      expect(
+          revealFoldRows([fxHeading, untouched], RevealFilter.animated),
+          isEmpty,
+          reason: 'and nothing about it is animated');
     });
   });
 }
