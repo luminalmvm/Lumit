@@ -53,11 +53,13 @@ use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 
 pub mod audio_level;
 pub mod colour_cycle;
+pub mod combine;
 pub mod layer_points;
 pub mod math;
 pub mod points_sample;
 pub mod remap;
 pub mod smooth;
+pub mod split;
 pub mod wiggle;
 
 /// How many driver nodes one frame's evaluation may visit.
@@ -984,6 +986,84 @@ mod tests {
         // An option index this build does not know renders as the default
         // rather than faulting (K-065).
         assert_eq!(math::apply(99, 2.0, 3.0), 6.0);
+    }
+
+    /// A colour through Split and back through Combine is the colour that went
+    /// in, **bit for bit** — including a channel above one, because neither
+    /// node converts anything and a driver's own sockets are never held to a
+    /// range (K-510). Split's four numbers are the channels themselves.
+    #[test]
+    fn a_colour_survives_split_and_combine_unchanged() {
+        // Scene-linear, deliberately awkward: over one on red, exact zero on
+        // blue, a fraction that is not representable in eight bits on alpha.
+        let want = [1.5f32, 0.25, 0.0, 0.7];
+        let mut s = inst("split");
+        for p in &mut s.params {
+            if p.id == "colour" {
+                p.value =
+                    EffectValue::Colour(want.map(|c| crate::anim::Property::fixed(f64::from(c))));
+            }
+        }
+
+        // Each channel out of Split, on its own, is that channel's number.
+        for (port, channel) in ["red", "green", "blue", "alpha"].iter().zip(want) {
+            let fill = inst("fill");
+            // Through a Combine socket rather than an effect's, so the hard
+            // range of whatever it lands on cannot be what is being measured.
+            let c = inst("combine");
+            let graph = LayerGraph {
+                edges: vec![
+                    edge(&s, port, NodeRef::Driver(c.id), "red"),
+                    edge(&c, "colour", NodeRef::Effect(fill.id), "colour"),
+                ],
+                nodes: vec![s.clone(), c.clone()],
+                ..LayerGraph::default()
+            };
+            match resolve_drivers(&graph, 0.0, ctx(), None)
+                .param(NodeRef::Effect(fill.id), ParamId::new("colour"))
+            {
+                Some(Value::Colour(got)) => assert_eq!(got[0], channel, "{port} out of Split"),
+                other => panic!("a colour port must carry a colour, not {other:?}"),
+            }
+        }
+
+        // And all four together are the colour again.
+        let c = inst("combine");
+        let fill = inst("fill");
+        let graph = LayerGraph {
+            edges: vec![
+                edge(&s, "red", NodeRef::Driver(c.id), "red"),
+                edge(&s, "green", NodeRef::Driver(c.id), "green"),
+                edge(&s, "blue", NodeRef::Driver(c.id), "blue"),
+                edge(&s, "alpha", NodeRef::Driver(c.id), "alpha"),
+                edge(&c, "colour", NodeRef::Effect(fill.id), "colour"),
+            ],
+            nodes: vec![s.clone(), c.clone()],
+            ..LayerGraph::default()
+        };
+        match resolve_drivers(&graph, 0.0, ctx(), None)
+            .param(NodeRef::Effect(fill.id), ParamId::new("colour"))
+        {
+            Some(Value::Colour(got)) => assert_eq!(got, want, "the round trip is not lossless"),
+            other => panic!("a colour port must carry a colour, not {other:?}"),
+        }
+
+        // A Combine with nothing wired into Alpha makes an opaque colour, which
+        // is the three-wire shape the node is usually built in.
+        let mut three = inst("combine");
+        set(&mut three, "red", 0.2);
+        set(&mut three, "green", 0.4);
+        set(&mut three, "blue", 0.6);
+        let graph = LayerGraph {
+            edges: vec![edge(&three, "colour", NodeRef::Effect(fill.id), "colour")],
+            nodes: vec![three.clone()],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            resolve_drivers(&graph, 0.0, ctx(), None)
+                .param(NodeRef::Effect(fill.id), ParamId::new("colour")),
+            Some(Value::Colour([0.2, 0.4, 0.6, 1.0]))
+        );
     }
 
     /// The straight line, its clamp, and the two ends the wrong way round.

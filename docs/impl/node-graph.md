@@ -121,7 +121,7 @@ The v1 driver set is the six the drawings show, in a **Drivers** catalogue categ
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Wiggle** | Amount, Frequency (number) | Value (number) | Deterministic value noise seeded by the node's id, sampled at layer time. Same recipe as the expressions' wiggle if one exists when built; otherwise pin the noise in this note's test plan. |
-| **Audio level** | Audio (layer reference), Window (seconds) | Amplitude, Low (number) | Windowed RMS of the referenced layer's decoded audio at layer time; Low is the same over a low band (one pole at 200 Hz). Deterministic per (audio fingerprint, time, window). |
+| **Audio level** | Audio (layer reference, **unset = this comp's mix**), Window (seconds) | Amplitude, Low (number) | Windowed RMS of the chosen sound; Low is the same over a low band (one pole at 200 Hz). Deterministic per (audio fingerprint, time, window). |
 | **Colour cycle** | Phase (turns), Rate (turns/second), Saturation, Brightness | Colour (colour) | Hue rotation over time. |
 | **Math** | A, B (number), operation (choice) | Value (number) | An expression you can see. |
 | **Remap** | Value, in/out ranges (number) | Value (number) | Linear range map with clamp choice. |
@@ -148,6 +148,19 @@ driver whose *output* is a stream rather than a number:
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Layer points** | Points layer (layer reference) | Points (stream) | Another layer's points, brought into this layer's graph. The family's cross-layer tap. It has no wire inputs at all: what it reads is *named*, because edges never cross layers. The stream is the first enabled effect on the named layer that makes points, evaluated with **that layer's own graph applied** — so what a tap reads is what that layer draws. `eval_driver` pushes nothing (a stream is not a `Value`); the walk fetches it through `Eval::points_input` instead, and the draw builder through `fx::driver_stream`. |
+
+And a **ninth and tenth** (K-656), the two halves of one idea — the join between the number
+wires and the colour ones, which the graph had no way to cross:
+
+| Driver | Inputs | Outputs | Notes |
+|---|---|---|---|
+| **Split** | Colour (colour) | Red, Green, Blue, Alpha (number) | A colour taken apart. Nothing is converted or clamped on the way through: the channels leave scene-linear exactly as the colour holds them, so a value above one survives. Unwired, the row's own swatch makes the node a constant four numbers. |
+| **Combine** | Red, Green, Blue, Alpha (number; Alpha defaults to one) | Colour (colour) | Four numbers put back together. Sliders rather than one swatch, because each row is a **socket** and a swatch has nowhere for four wires to land; the 0..1 range is where a colour is usually written, and a wire may carry any number (K-510). |
+
+Both are closed-form and pointwise — no window, no state, `driver_window` nought — and
+`a_colour_survives_split_and_combine_unchanged` is the pair's own test: a colour through
+Split and back through Combine is the colour that went in, **bit for bit**, including a
+channel above one. That round trip is the whole specification of "nothing is converted".
 
 **A tap reaches one layer, never two.** The far side is evaluated by a fresh walk over that
 layer's graph, built with the crossing flag cleared, so a tap over there answers the empty
@@ -181,6 +194,32 @@ same labelled no-op a dangling reference gives. The K-031 matrix gained an audio
 row (`headless::tests::the_preview_and_export_paths_agree_on_an_audio_driven_comp`),
 which asserts both that the two renders agree **and** that the driven picture differs
 from the same comp with the wire cut — equal pixels there would mean silence again.
+
+**The source is a choice of two, and one of them is the comp (K-657).** Audio level's Audio
+row left **unset** reads the composition's own mix rather than silence: the picker's empty
+entry says *This comp*, and the row is the source dropdown the feature was asked for
+without a second control beside it. The mix is not a second summing — `DocumentAudio::mix`
+asks `AudioJobsBuilder::audio_jobs` for the same job list export, playback and beat
+detection all mix from (every audible layer at its own Volume, precomps' carriers
+multiplied through, a solo honoured) and sums it with `place_on_timeline`, `volume_bake`
+and `mix_stereo`, the master ceiling included. It is `export::mix_decoded` restricted to a
+window: each clip is clipped to the window *before* its Volume is baked, so a five-minute
+track costs a window's arithmetic per frame rather than a track's, and preview and export
+reach the same number because both run this same function at the same comp time
+(`headless::tests::a_comp_mix_driven_parameter_renders_the_same_picture_twice`).
+
+**The window is centred by the host, not named by the driver.** `AudioTap` gained
+`mix(half, out)` beside `samples(layer, from, to, out)` because a driver knows only its
+*own* layer's time, and a layer that starts late would otherwise read the comp's mix at
+the wrong moment of the track. The comp's clock belongs to whoever built the frame, so the
+tap holds it. The default implementation answers `None`, which is the documented silence
+for a host with no mix to offer.
+
+**A probe that claimed to happen once now does.** `AudioJobsBuilder`'s has-audio memo moved
+from a field to a process-wide map keyed by the footage item: a builder is made afresh on
+every ask — and the comp-mix tap asks on every frame it draws — so per builder, "probed at
+most once a session" was a comment rather than a fact, and an FFmpeg open per item per
+frame is not a thing a playing timeline can afford.
 
 A driver's cross-layer input (Audio level's Audio, Layer points' Points layer) is a
 **layer-reference parameter** (docs/03 §8) — the existing machinery, with the existing

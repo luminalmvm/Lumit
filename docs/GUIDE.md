@@ -10824,6 +10824,27 @@ what lands in the file. A layer with no sound, a file that has moved, a referenc
 layer somebody deleted — each reads as silence, which is a picture that simply does not
 pulse rather than an error.
 
+**And "that layer" can be the whole composition.** Audio level's Audio row is a dropdown,
+and its first entry — where it starts — is *This comp*. That means the sound of the comp
+as a whole: everything the mixing desk is already adding together, each layer at its own
+volume, a muted layer contributing nothing and a soloed one contributing everything. It is
+the entry most projects want. Music rarely arrives as one tidy file; it arrives as a bass
+stem, a drum stem and a vocal, and picking any single one of them makes the picture follow
+a third of the track. Pick a layer from the same dropdown when you *do* mean one thing in
+particular — the voice-over, the kick, a sound effect. Nothing is summed twice over for
+this: the number comes from the same mixer, the same volumes and the same master ceiling
+as the sound you are listening to, so what pulses is what you hear.
+
+**Split and Combine: getting between colours and numbers.** Wires carry different things,
+and a colour will not plug into a number socket. These two are the doorway. **Split**
+takes a colour in and gives four numbers out — how much red, how much green, how much
+blue, and how opaque — so you can drive a scale from the red of a tint. **Combine** goes
+the other way: three or four numbers in, one colour out, so an Audio level on the red and
+a Wiggle on the blue make a colour that moves. Nothing is altered in either direction: a
+colour sent through Split and straight back through Combine is exactly the colour you
+started with, down to the last digit, including the very bright values that live above
+"full" in a scene-linear picture.
+
 **Deleting a driven effect takes its wires with it.** The wires live beside the effect
 list, so removing an effect could leave a wire pointing at a box that no longer exists —
 and the next thing you did on the canvas, even just dragging a box, would be refused

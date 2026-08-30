@@ -1207,12 +1207,21 @@ class EffectParamRowFrb extends StatelessWidget {
   /// reference is a labelled no-op engine-side, never a fault, so None is a
   /// first-class choice rather than an error state.
   ///
+  /// **On a sound row the empty entry means something** (K-657). A parameter
+  /// named `audio` is measuring sound, not sampling a picture, and unset is
+  /// the composition's own mix — so it reads *This comp* rather than None, and
+  /// the list offers every layer instead of only the ones that draw. A music
+  /// clip is audio-only: the picture filter left it out of the one picker in
+  /// the catalogue that exists to point at it.
+  ///
   /// **Lazy, and it has to be** (K-194): the options are built when the menu
   /// opens, so they can name every layer and ask which of them has a picture
   /// without either crossing the bridge on a rebuild (K-184) or probing a
   /// container with FFmpeg while drawing a row.
   Widget _layerPicker(BuildContext context, UuidValue id, UuidValue? current) {
     final chosen = current?.toString();
+    final sound = param.id == 'audio';
+    final empty = sound ? l10n.fxAudioThisComp : l10n.none;
     // The layer the effect is on says so, so "everything below" is readable
     // on an adjustment layer rather than an unexplained self-reference.
     String named(String name, UuidValue layerId) =>
@@ -1224,14 +1233,14 @@ class EffectParamRowFrb extends StatelessWidget {
         // Named from the read model when it can be, so the closed button
         // costs nothing; a reference to a layer since deleted says so.
         label: chosen == null
-            ? l10n.none
+            ? empty
             : (ownerLayers
                     .where((l) => l.layer.internallayerId == current)
                     .map((l) => named(l.info.name, l.layer.internallayerId))
                     .firstOrNull ??
                 l10n.missingLayer),
         options: () => [
-          (null, l10n.none),
+          (null, empty),
           // **Numbered as the composition numbers them** (item 6.13): the
           // entry reads "3. Sky", the layer's own place in the stack, so a
           // list of layers that share a name is still a list of different
@@ -1248,7 +1257,8 @@ class EffectParamRowFrb extends StatelessWidget {
             // whole point on an **adjustment layer** — which has no picture
             // of its own, and whose input is the composite of everything
             // below it. A Lens flare added to one starts here.
-            if (ownerLayers[i].layer.internallayerId == ownerLayerId ||
+            if (sound ||
+                ownerLayers[i].layer.internallayerId == ownerLayerId ||
                 ownerLayers[i].layer.hasPicture())
               (
                 ownerLayers[i].layer.internallayerId,

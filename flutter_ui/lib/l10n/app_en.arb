@@ -1630,10 +1630,6 @@
   "@fxConsoleEffects": {
     "description": "The FX console search list: the heading over the effect results."
   },
-  "fxConsoleHint": "Search effects and compositions",
-  "@fxConsoleHint": {
-    "description": "Placeholder in the FX console’s search field."
-  },
   "fxConsoleKeyframe": "Keyframe",
   "@fxConsoleKeyframe": {
     "description": "The FX console radial menu: the slice that expands into one slice per transform row, each planting a keyframe at the playhead."
@@ -1641,6 +1637,30 @@
   "fxConsoleNothingSelected": "Nothing selected",
   "@fxConsoleNothingSelected": {
     "description": "Shown in the middle of the FX console’s radial menu when nothing is selected."
+  },
+  "fxAudioThisComp": "This comp",
+  "@fxAudioThisComp": {
+    "description": "Effect controls — the first entry of the Audio level driver's source dropdown, meaning the composition's own mix rather than one named layer."
+  },
+  "fxConsoleAll": "All",
+  "@fxConsoleAll": {
+    "description": "The FX console popover’s category strip: the first entry, which shows every result rather than one category’s."
+  },
+  "fxConsoleApplies": "Enter applies to the selected layers",
+  "@fxConsoleApplies": {
+    "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
+  },
+  "fxConsoleHint": "Search effects and compositions",
+  "@fxConsoleHint": {
+    "description": "Placeholder in the FX console’s search field."
+  },
+  "fxConsoleKey": "Ctrl+Space",
+  "@fxConsoleKey": {
+    "description": "The keyboard shortcut named at the right of the FX console popover’s search row — the key that opened it. Keep as the key combination."
+  },
+  "fxConsolePresets": "Presets",
+  "@fxConsolePresets": {
+    "description": "The FX console popover: the category kicker worn by the user’s saved effect presets, in the strip and beside each preset row."
   },
   "fxConsoleSnapshotTip": "Save snapshot",
   "@fxConsoleSnapshotTip": {
@@ -7721,6 +7741,14 @@
   "fxSmooth": "Smooth",
   "@fxSmooth": {
     "description": "Driver name in the Graph panel — averages its input over a stretch of time."
+  },
+  "fxSplit": "Split",
+  "@fxSplit": {
+    "description": "Driver name in the Graph panel — takes a colour apart into its four channel numbers."
+  },
+  "fxCombine": "Combine",
+  "@fxCombine": {
+    "description": "Driver name in the Graph panel — puts four channel numbers back together as a colour."
   },
   "fxWiggle": "Wiggle",
   "@fxWiggle": {

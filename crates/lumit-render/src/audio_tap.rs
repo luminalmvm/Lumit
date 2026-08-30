@@ -9,6 +9,12 @@
 //! **tap** for "the sound of that layer between these two moments". This module
 //! is the tap, and it answers from the layer's own footage file.
 //!
+//! **Two questions, one tap.** "That layer's sound" is answered from the
+//! layer's own footage file. "This comp's sound" is answered from the mixer's
+//! own job list — every audible layer at its own volume, precomps and solo
+//! included — summed by the mixer's own arithmetic, so the number a driver
+//! reads and the sound a listener hears cannot come apart.
+//!
 //! **One tap, both renders.** The preview and the export build their draw lists
 //! through the same [`crate::build::build_comp_draws_at`], which makes one of
 //! these from the document it was handed. There is no second implementation to
@@ -23,8 +29,8 @@
 //!
 //! **Silence is the degrade** (never a fault): a layer that is not footage, a
 //! footage item that has gone, a file that is not there or will not decode, and
-//! a reference that names no layer at all all read as no sound. That is the
-//! same labelled no-op a dangling matte gives.
+//! a comp in which nothing sounds all read as no sound. That is the same
+//! labelled no-op a dangling matte gives.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -134,17 +140,29 @@ fn decoded(path: &Path) -> Option<Arc<AudioBuffer>> {
 pub struct DocumentAudio<'a> {
     doc: &'a Document,
     comp: &'a Composition,
+    /// The comp time of the frame being built. The mix is read around *this*
+    /// moment rather than around a driver's own layer time, because the mix is
+    /// the composition's and the composition's clock is this one.
+    t_comp: f64,
+    /// The comp's audio jobs — what the mixer sums — built at most once per
+    /// frame, and only when something actually asks for the mix.
+    jobs: std::sync::OnceLock<Vec<crate::export::AudioJob>>,
 }
 
 impl<'a> DocumentAudio<'a> {
-    /// The tap for `comp`'s layers within `doc`.
+    /// The tap for `comp`'s layers within `doc`, for the frame at `t_comp`.
     ///
     /// A driver's Audio parameter names a layer of the composition its own
     /// layer sits in — wires never cross layers, and neither does this
-    /// (K-471 §1.3).
+    /// (K-471 §1.3) — or names nothing, which is the comp's own mix.
     #[must_use]
-    pub fn new(doc: &'a Document, comp: &'a Composition) -> Self {
-        Self { doc, comp }
+    pub fn new(doc: &'a Document, comp: &'a Composition, t_comp: f64) -> Self {
+        Self {
+            doc,
+            comp,
+            t_comp,
+            jobs: std::sync::OnceLock::new(),
+        }
     }
 
     /// The file `layer` plays, if it is a footage layer whose item is still in
@@ -186,6 +204,82 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             // which is what the RMS of "the sound" means.
             out.push((buffer.samples[frame * 2] + buffer.samples[frame * 2 + 1]) * 0.5);
         }
+        Some(rate)
+    }
+
+    /// The composition's own mix over a window centred on the frame.
+    ///
+    /// **The seam is the mixer's, not a second opinion.** What layers sound,
+    /// where they land, how loud they are and which of them a solo silences is
+    /// [`AudioJobsBuilder`]'s answer — the same list export, playback and beat
+    /// detection all mix from — and the summing is
+    /// [`lumit_audio::mix::mix_stereo`] over
+    /// [`place_on_timeline`](lumit_audio::mix::place_on_timeline) placements at
+    /// [`crate::export::volume_bake`] gains, which is exactly
+    /// `export::mix_decoded` restricted to a window. Preview and export read
+    /// the same numbers because they run this same function at the same
+    /// `t_comp`, with the master ceiling applied as the mixer applies it.
+    ///
+    /// Each clip is clipped to the window **before** its Volume is baked, so a
+    /// five-minute track costs a window's arithmetic per frame rather than a
+    /// track's. An animated Volume's control points therefore sit on a grid
+    /// starting at the window rather than at the clip — a hair off the sound
+    /// the file will carry, identical in every render of the picture, which is
+    /// the property that matters here.
+    fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
+        if half <= 0.0 || half.is_nan() || !self.t_comp.is_finite() {
+            return None;
+        }
+        let rate = f64::from(TAP_RATE);
+        let (first, last) = (
+            ((self.t_comp - half) * rate).ceil() as i64,
+            ((self.t_comp + half) * rate).ceil() as i64,
+        );
+        let window = (last - first).max(0) as usize;
+        if window == 0 {
+            return None;
+        }
+        let jobs = self.jobs.get_or_init(|| {
+            crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp)
+        });
+        let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
+            .iter()
+            .filter_map(|job| Some((decoded(&job.path)?, job)))
+            .collect();
+        let placed: Vec<lumit_audio::mix::PlacedAudio<'_>> = decoded
+            .iter()
+            .filter_map(|(buffer, job)| {
+                let (start, src_start, len) = lumit_audio::mix::place_on_timeline(
+                    job.in_s,
+                    job.out_s,
+                    job.offset_s,
+                    buffer.frames(),
+                    TAP_RATE,
+                )?;
+                // The overlap with the window, in output frames.
+                let from = start.max(first);
+                let to = (start + len as i64).min(last);
+                if to <= from {
+                    return None;
+                }
+                let skip = (from - start) as usize;
+                let len = (to - from) as usize;
+                let (gain, envelope) = crate::export::volume_bake(job, from, len, TAP_RATE);
+                let head = (src_start + skip) * 2;
+                Some(lumit_audio::mix::PlacedAudio {
+                    start_frame: from - first,
+                    samples: &buffer.samples[head..head + len * 2],
+                    gain,
+                    envelope,
+                })
+            })
+            .collect();
+        if placed.is_empty() {
+            return None;
+        }
+        out.extend(lumit_audio::mix::downmix_to_mono(
+            &lumit_audio::mix::mix_stereo(&placed, window),
+        ));
         Some(rate)
     }
 }
@@ -309,7 +403,7 @@ mod tests {
         let missing = dir.path().join("not-here.wav");
         let (doc, comp_id, layer) = doc_with_audio_layer(&missing);
         let comp = doc.comp(comp_id).expect("comp");
-        let tap = DocumentAudio::new(&doc, comp);
+        let tap = DocumentAudio::new(&doc, comp, 0.0);
 
         let mut out = Vec::new();
         assert_eq!(
@@ -337,7 +431,7 @@ mod tests {
         };
         let (doc, comp_id, layer) = doc_with_audio_layer(&path);
         let comp = doc.comp(comp_id).expect("comp");
-        let tap = DocumentAudio::new(&doc, comp);
+        let tap = DocumentAudio::new(&doc, comp, 0.0);
 
         let (mut first, mut second) = (Vec::new(), Vec::new());
         let rate = tap.samples(layer, 0.4, 0.45, &mut first).expect("a rate");

@@ -677,7 +677,7 @@ pub fn build_comp_draws_at(
     // from the document this walk already holds, so the preview and the export
     // — which both build their draws through this function — hand the driver
     // the same sound and reach the same number (K-031).
-    let audio = crate::audio_tap::DocumentAudio::new(doc, comp);
+    let audio = crate::audio_tap::DocumentAudio::new(doc, comp, t_comp);
 
     // A layer's driver graph, resolved with the camera its own particles would
     // be drawn through (K-561). One closure for all four resolve sites: the

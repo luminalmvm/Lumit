@@ -1,10 +1,16 @@
 //! Audio level (K-471 §1.3): how loud the music is, as a number.
 //!
-//! **In plain terms.** Point it at a layer that carries sound and it gives you
-//! that layer's loudness at the moment being drawn — one number for the whole
-//! sound, and a second for the low end alone, which is the one that follows a
-//! kick drum rather than a hi-hat. Wire either into a scale, a glow or a
-//! brightness and the picture moves with the track.
+//! **In plain terms.** It gives you the loudness at the moment being drawn —
+//! one number for the whole sound, and a second for the low end alone, which
+//! is the one that follows a kick drum rather than a hi-hat. Wire either into
+//! a scale, a glow or a brightness and the picture moves with the track.
+//!
+//! **What it listens to is a choice of two shapes.** Left on *This comp*, it
+//! reads the composition's own mix — everything the mixer sums, at the layers'
+//! own volumes, muted layers silent and a solo honoured — so a project whose
+//! music arrives as four stems drives from the music rather than from whichever
+//! stem was named. Point it at a layer instead and it reads that layer alone,
+//! which is what a stem, a voice-over or a sound effect wants.
 //!
 //! **It reads a window, not an instant.** A single audio sample is a
 //! meaningless number — sound is a wave, and a wave crosses zero constantly —
@@ -13,9 +19,10 @@
 //! ([`EffectDef::driver_window`]) so the frame key folds the range in and a
 //! cached frame cannot outlive the sound it was measured from.
 //!
-//! **Silence is the degrade.** No host tap, no footage, or a reference that
-//! names a layer somebody deleted: the level reads nought, which is the same
-//! labelled no-op a dangling matte gives, never a fault.
+//! **Silence is the degrade.** No host tap, no footage, a comp nothing sounds
+//! in, or a reference that names a layer somebody deleted: the level reads
+//! nought, which is the same labelled no-op a dangling matte gives, never a
+//! fault.
 
 use crate::fx::{
     DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
@@ -34,9 +41,13 @@ use lumit_fx_macros::Effect;
     matte = false,
 )]
 pub struct AudioLevel {
-    /// The layer whose sound is measured — an ordinary layer-reference
-    /// parameter (docs/03 §8), with the ordinary degrade-to-silence on a
-    /// dangling id. **Edges never cross layers** (K-471): the canvas draws the
+    /// What is measured: **unset is the composition's own mix**, and naming a
+    /// layer reads that layer alone. An ordinary layer-reference parameter
+    /// (docs/03 §8) whose empty entry carries a meaning rather than nothing —
+    /// the picker reads *This comp* — so the driver as dropped already follows
+    /// the track. A named layer somebody then deletes still degrades to
+    /// silence: it says which layer it wanted, and the comp mix is not it.
+    /// **Edges never cross layers** (K-471): the canvas draws the
     /// referenced layer as a derived source node and the wire from it renders
     /// this parameter, exactly as the image chain's wires render the stack.
     #[layer(label = "Audio", self_default = false)]
@@ -110,12 +121,13 @@ impl EffectDef for AudioLevelDef {
     }
 }
 
-/// The windowed RMS of the referenced layer's sound, whole and low-band.
+/// The windowed RMS of the chosen sound — the comp's mix, or one layer's —
+/// whole and low-band.
 ///
 /// Deterministic per (audio, time, window): the same samples through the same
 /// two sums give the same two numbers, on any machine and in any render.
 fn level(cx: &DriverCx<'_>, window: f64) -> (f32, f32) {
-    let (Some(tap), Some(layer)) = (cx.audio, cx.inst.layer_ref("audio")) else {
+    let Some(tap) = cx.audio else {
         return (0.0, 0.0);
     };
     if window <= 0.0 {
@@ -124,12 +136,18 @@ fn level(cx: &DriverCx<'_>, window: f64) -> (f32, f32) {
     // ponytail: one Vec per driver per frame. A window is milliseconds of
     // mono audio; give the tap a reusable buffer if a profile ever shows it.
     let mut samples = Vec::new();
-    let Some(rate) = tap.samples(
-        layer,
-        cx.lt - window / 2.0,
-        cx.lt + window / 2.0,
-        &mut samples,
-    ) else {
+    // Unset is the comp's mix, and the tap centres that window itself: the
+    // comp's clock is the host's, not this layer's (K-657).
+    let read = match cx.inst.layer_ref("audio") {
+        Some(layer) => tap.samples(
+            layer,
+            cx.lt - window / 2.0,
+            cx.lt + window / 2.0,
+            &mut samples,
+        ),
+        None => tap.mix(window / 2.0, &mut samples),
+    };
+    let Some(rate) = read else {
         return (0.0, 0.0);
     };
     if samples.is_empty() || rate <= 0.0 {

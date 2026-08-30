@@ -20531,3 +20531,71 @@ came across, `EffectNearest` says which Lumit effect is standing in and that it 
 defaults. The rule K-060 was protecting survives untouched — **nothing is ever silently
 something else**; what lapses is only the claim that a placeholder was the sole honest
 outcome when the real plug-in is sitting in the catalogue.
+
+## K-656 — Split and Combine: the graph's crossing between a colour and its four numbers
+
+**DECIDED 2026-08-30.** The driver set gains the two halves of one idea, and they are the
+smallest drivers in it: **Split** takes a Colour in and hands out Red, Green, Blue and
+Alpha as numbers; **Combine** takes four numbers and hands out a Colour, with Alpha at one
+so the usual three-wire shape makes an opaque colour rather than an invisible one. Both are
+closed-form and pointwise — no window, no state, `driver_window` nought — and both sit in
+the Drivers category beside the arithmetic ones, which is what they are.
+
+**Nothing is converted or clamped in either direction.** The channels are the colour's own
+scene-linear numbers, so a value above one survives the trip, and a driver's own sockets
+are not held to a range anyway (K-510). That gives the pair its whole specification as a
+single test: a colour through Split and back through Combine is the colour that went in,
+**bit for bit**, awkward values included
+(`a_colour_survives_split_and_combine_unchanged`).
+
+**Combine's rows are sliders, not one swatch**, because each row is a *socket*: the point
+of the node is that a number arriving by wire becomes a channel, and a swatch has nowhere
+for four separate wires to land. Split's single row is a swatch, because unwired it is a
+constant colour — and a constant four numbers is a perfectly good thing for the node to be.
+
+Why they earn their place: the type system has had a Colour wire and a Number wire since
+K-472, and until now nothing in the catalogue could get from one to the other. An Audio
+level could not touch a tint and a Colour cycle could not move a scale. Two nodes with a
+line of arithmetic each close that, and no new machinery is involved — schema, ports,
+wire colours from `PortColours` and the fx-reference regeneration are all the existing
+road. docs/impl/node-graph.md §1.3 carries the rows.
+
+## K-657 — Audio level reads the composition's mix by default, and one layer when it is told to
+
+**DECIDED 2026-08-30**, an owner ruling. Audio level's Audio row is a **source dropdown**:
+its empty entry reads *This comp* and means the composition's own mix, and naming a layer
+means that layer alone. Unset was silence before, which made the driver as dropped do
+nothing; it now follows the track from the moment it lands. A named layer somebody then
+deletes still degrades to silence — it said which layer it wanted, and the comp's mix is
+not it.
+
+**The mix is the mixer's, not a second opinion.** `DocumentAudio::mix` asks
+`AudioJobsBuilder::audio_jobs` for the very list export, playback and beat detection mix
+from — every audible layer at its own Volume, precomps' carrier Volumes multiplied
+through, a solo honoured — and sums it with `place_on_timeline`, `volume_bake` and
+`mix_stereo`, master ceiling included. It is `export::mix_decoded` restricted to a window,
+so what a parameter follows and what a listener hears cannot come apart, and preview and
+export reach the same number because both run the same function at the same comp time
+(`a_comp_mix_driven_parameter_renders_the_same_picture_twice`, which also asserts the
+picture differs from the same comp with the wire cut — equal pixels there would mean
+silence).
+
+**The window is centred by the host, not named by the driver.** `AudioTap` gains
+`mix(half, out)` beside `samples(layer, from, to, out)`, because a driver knows only its
+*own* layer's time and a layer that starts late would otherwise read the comp's mix at the
+wrong moment of the track. The comp's clock belongs to whoever built the frame. The
+default answers `None`, which is the documented silence.
+
+**Two repairs came with it, and both were pre-existing.** The layer picker filtered to
+layers with a *picture*, so an audio-only music clip — the one thing this row exists to
+point at — was not in the list; on a row named `audio` it now offers every layer, and a
+layer that makes no sound reads as silence, which is what a layer-reference degrade has
+always been. And `AudioJobsBuilder`'s has-audio probe moved from a field to a process-wide
+memo keyed by the footage item: a builder is made afresh wherever the question is asked,
+so "probed at most once a session" was a comment rather than a fact, and the comp-mix tap
+asks on every frame it draws.
+
+**Not built, and deliberately:** a per-band picker, a second control beside the dropdown,
+and Time / Constant / Colour ramp / Vector split. The dropdown's empty entry carries the
+meaning, which is one control rather than two; the rest are suggestions nobody has
+confirmed. docs/impl/node-graph.md §1.3 and docs/GUIDE.md carry it.

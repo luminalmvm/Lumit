@@ -37,7 +37,7 @@ use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectIt
 use lumit_gpu::scaled_size;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
 /// The persistent GPU engines a render needs, held between calls so shaders
@@ -2403,16 +2403,28 @@ impl HeadlessRenderer {
 /// does. The has-audio probe result is cached per item, so each file is probed
 /// at most once per session.
 #[derive(Default)]
-pub struct AudioJobsBuilder {
-    /// Whether each footage item carries an audio stream, cached so each file
-    /// is probed at most once.
-    has_audio: HashMap<Uuid, bool>,
-}
+pub struct AudioJobsBuilder;
+
+/// Whether each footage **item** carries an audio stream, probed once per
+/// process rather than once per [`AudioJobsBuilder`] — see
+/// [`AudioJobsBuilder::item_has_audio`], which is the only reader.
+///
+/// Keyed by the item rather than by its file, so two projects, two tests, and a
+/// relink to a different file are each their own question and cannot answer for
+/// one another.
+///
+/// ponytail: an item whose file gains or loses its audio stream **in place**
+/// keeps the answer it first gave until Lumit restarts — a re-encode over the
+/// top of a clip already in the project. Clear this on the same signal the
+/// decoded-audio cache would need, if overwriting a track under a running Lumit
+/// ever stops adding the mute switch.
+static HAS_AUDIO: LazyLock<Mutex<HashMap<Uuid, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// The comp's audio jobs (empty for a silent comp) — the same list export,
@@ -2553,15 +2565,29 @@ impl AudioJobsBuilder {
 
     /// Whether footage `item` at `path` carries an audio stream, cached so each
     /// file is probed for audio at most once across a session.
+    ///
+    /// The memo is [`HAS_AUDIO`] — **per process, not per builder**: a builder
+    /// is made afresh wherever the question is asked (the timeline asking each
+    /// row for its mute switch, the audio engine preparing a plan, the Audio
+    /// level driver reading the comp's mix on every frame it draws), and a
+    /// probe is an FFmpeg open. Per builder, "once a session" was a sentence
+    /// this comment made rather than a thing that happened.
     fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
-        if let Some(&has) = self.has_audio.get(&item) {
-            return has;
+        if let Ok(memo) = HAS_AUDIO.lock() {
+            if let Some(&has) = memo.get(&item) {
+                return has;
+            }
         }
+        // The lock is not held across the probe: FFI, and as slow as opening a
+        // file (14-ENGINEERING-RULES §5). Two threads racing one new item probe
+        // it twice and agree.
         let has = path.is_file()
             && lumit_media::probe::probe(path)
                 .map(|p| p.audio.is_some())
                 .unwrap_or(false);
-        self.has_audio.insert(item, has);
+        if let Ok(mut memo) = HAS_AUDIO.lock() {
+            memo.insert(item, has);
+        }
         has
     }
 }
@@ -3036,6 +3062,13 @@ mod tests {
                 colour_space: None,
             }));
         id
+    }
+
+    /// Tell the has-audio memo that `item` carries sound, so a test can place a
+    /// song without a file on disk. Ids are fresh per test, so seeding one says
+    /// nothing about anybody else's.
+    fn seed_has_audio(item: Uuid) {
+        HAS_AUDIO.lock().unwrap().insert(item, true);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
@@ -3782,12 +3815,17 @@ mod tests {
         let comp = doc.comp(comp_id).unwrap().clone();
         let mut builder = AudioJobsBuilder::new();
         assert!(builder.audio_jobs(&doc, &comp).is_empty());
-        assert_eq!(builder.has_audio.len(), 1, "the probe result is cached");
-        assert_eq!(builder.has_audio.get(&item_id), Some(&false));
-        // A second build reads the cache (no way to observe the skipped disk
-        // probe directly, but the cached map must not grow).
+        assert_eq!(
+            HAS_AUDIO.lock().unwrap().get(&item_id),
+            Some(&false),
+            "the probe result is remembered"
+        );
+        // A second build reads the memo, and so does a **second builder** —
+        // which is the point of it being a process-wide memo rather than a
+        // field: the driver reading the comp's mix makes a fresh builder on
+        // every frame it draws, and must not reopen the file for each one.
         assert!(builder.audio_jobs(&doc, &comp).is_empty());
-        assert_eq!(builder.has_audio.len(), 1);
+        assert!(AudioJobsBuilder::new().audio_jobs(&doc, &comp).is_empty());
     }
 
     /// **Sound inside a precomp reaches the comp that holds it.** A song sits
@@ -3820,7 +3858,7 @@ mod tests {
         }
 
         let mut builder = AudioJobsBuilder::new();
-        builder.has_audio.insert(song, true);
+        seed_has_audio(song);
         let comp = doc.comp(outer).unwrap().clone();
         let jobs = builder.audio_jobs(&doc, &comp);
 
@@ -3868,7 +3906,7 @@ mod tests {
         push_layer(&mut doc, outer, LayerKind::Precomp { comp: silent });
 
         let mut builder = AudioJobsBuilder::new();
-        builder.has_audio.insert(song, true);
+        seed_has_audio(song);
         let c = doc.comp(outer).unwrap().clone();
         assert!(
             builder.layer_has_audio(&doc, &c.layers[0]),
@@ -4682,33 +4720,19 @@ surfaces:
         );
     }
 
-    /// **A parameter the music drives is the same number in both renders**
-    /// (K-471 §1.3, K-031) — and it is a number, not silence.
+    /// The comp of `the_preview_and_export_paths_agree_on_an_audio_driven_comp`
+    /// and its comp-mix twin: a solid whose Brightness is driven, through a
+    /// Remap, by an Audio level reading either the music layer by name or —
+    /// `named` false — the composition's own mix.
     ///
-    /// The row the matrix was missing: a Brightness on a solid, driven through
-    /// a Remap by the level of a track on another layer. Two things are checked,
-    /// and the second is the one that would have caught the gap this closes:
-    /// the interactive and export paths agree pixel for pixel, **and** the
-    /// driven picture differs from the same comp with the wire cut. Before the
-    /// tap was wired the driver read nought in both renders, so the first
-    /// assertion passed on a picture that had ignored the music entirely.
-    #[test]
-    fn the_preview_and_export_paths_agree_on_an_audio_driven_comp() {
+    /// `None` when there is no FFmpeg to make a tone with, which is the row's
+    /// own skip.
+    fn audio_driven_doc(named: bool) -> Option<(Document, Uuid)> {
         use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
 
-        let mut r = match HeadlessRenderer::new() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
         let dir = std::env::temp_dir().join("lumit-audio-driver-fixture");
         std::fs::create_dir_all(&dir).expect("temp dir");
-        let Some(tone) = lumit_media::index::tests_support::tone(&dir) else {
-            eprintln!("no ffmpeg CLI: the audio-driven row is skipped");
-            return;
-        };
+        let tone = lumit_media::index::tests_support::tone(&dir)?;
 
         let (cw, ch) = (32u32, 16u32);
         let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.2, 0.2, 0.2, 1.0]));
@@ -4740,7 +4764,9 @@ surfaces:
         let mut level = lumit_core::fx::instantiate("audio_level").expect("the catalogue knows it");
         for p in &mut level.params {
             if p.id == "audio" {
-                p.value = lumit_core::model::EffectValue::Layer(Some(music_id));
+                // Unset is the comp's own mix (K-657), which here is that same
+                // tone through the mixer rather than straight off the file.
+                p.value = lumit_core::model::EffectValue::Layer(named.then_some(music_id));
             }
         }
         let level_id = level.id;
@@ -4780,6 +4806,32 @@ surfaces:
             comp.layers[0].effects = vec![brightness];
             comp.layers[0].graph = graph;
         }
+        Some((doc, comp_id))
+    }
+
+    /// **A parameter the music drives is the same number in both renders**
+    /// (K-471 1.3, K-031) - and it is a number, not silence.
+    ///
+    /// The row the matrix was missing: a Brightness on a solid, driven through
+    /// a Remap by the level of a track on another layer. Two things are checked,
+    /// and the second is the one that would have caught the gap this closes:
+    /// the interactive and export paths agree pixel for pixel, **and** the
+    /// driven picture differs from the same comp with the wire cut. Before the
+    /// tap was wired the driver read nought in both renders, so the first
+    /// assertion passed on a picture that had ignored the music entirely.
+    #[test]
+    fn the_preview_and_export_paths_agree_on_an_audio_driven_comp() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some((doc, comp_id)) = audio_driven_doc(true) else {
+            eprintln!("no ffmpeg CLI: the audio-driven row is skipped");
+            return;
+        };
         // The same comp with the last wire cut: the parameter falls back to its
         // own stored value, which is what "reads silence" looked like.
         let mut unwired = doc.clone();
@@ -4804,7 +4856,52 @@ surfaces:
             .expect("unwired render");
         assert_ne!(
             export, silent,
-            "the driver must actually read the sound — equal pixels mean it read silence"
+            "the driver must actually read the sound - equal pixels mean it read silence"
+        );
+    }
+
+    /// **An Audio level left on This comp drives from the mixer's own sum, and
+    /// does it identically every time it is asked** (K-657).
+    ///
+    /// The comp-mix half of the row above, and the same two claims: the picture
+    /// is the *same* picture twice (the mix is rebuilt from the document on
+    /// every frame, so a walk that depended on anything else would show up
+    /// here), and it is not the picture the same comp draws with the wire cut,
+    /// which is what says the mix was heard at all rather than read as silence.
+    #[test]
+    fn a_comp_mix_driven_parameter_renders_the_same_picture_twice() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some((doc, comp_id)) = audio_driven_doc(false) else {
+            eprintln!("no ffmpeg CLI: the comp-mix row is skipped");
+            return;
+        };
+        let mut unwired = doc.clone();
+        unwired.comp_mut(comp_id).expect("comp").layers[0]
+            .graph
+            .edges
+            .pop();
+
+        let doc = std::sync::Arc::new(doc);
+        let (first, w, h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("first render");
+        let (again, w2, h2) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("second render");
+        assert_eq!((w, h), (w2, h2));
+        assert_eq!(
+            first, again,
+            "the comp's mix must reach the same number on every render of one frame"
+        );
+
+        let (silent, _, _) = r
+            .render_rgba(&std::sync::Arc::new(unwired), comp_id, 0, 1.0)
+            .expect("unwired render");
+        assert_ne!(
+            first, silent,
+            "the driver must actually read the comp's mix - equal pixels mean silence"
         );
     }
 

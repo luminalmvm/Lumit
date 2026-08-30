@@ -124,6 +124,44 @@ void main() {
       }
     });
 
+    /// **Audio level's source row is a dropdown that starts on the comp**
+    /// (K-657). Unset means the composition's own mix, so the empty entry reads
+    /// *This comp* rather than None — and the list offers **every** layer, not
+    /// only the ones that draw a picture. That second half is the repair: music
+    /// arrives as an audio-only clip, which has no picture, so the one picker in
+    /// the catalogue that exists to point at sound was the one picker that left
+    /// it out. A Null stands in for it here — no picture either, and no fixture
+    /// to decode.
+    testWidgets('an Audio level names the comp until a layer is picked',
+        (tester) async {
+      final p = withBlur();
+      final comp = p.uiState.selectedComp!;
+      comp.addNullLayer();
+      final made = p.layer.newDriver(name: 'audio_level');
+      final id = made.id();
+      p.layer.setGraph(
+        drivers: [...p.layer.getGraphDrivers(), made],
+        wiring: p.layer.getGraph().wiring,
+      );
+      p.uiState.model.refresh();
+      p.uiState.graphNode.value = BridgeNodeRef.driver(id);
+      await mount(tester, p, const NodePanelFrb());
+
+      expect(find.text(l10n.fxAudioThisComp), findsOneWidget,
+          reason: 'the closed picker says what an unset row means');
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-layer-$id-audio')));
+      await tester.pumpAndSettle();
+      final names = [for (final e in p.uiState.model.layers) e.info.name];
+      expect(names, hasLength(2));
+      // The Null is the layer with no picture; it must still be offered.
+      final nulls = p.uiState.model.layers
+          .where((e) => e.info.kind == BridgeLayerKind.nullLayer);
+      expect(nulls, hasLength(1));
+      expect(find.textContaining(nulls.single.info.name), findsWidgets,
+          reason: 'a layer that draws nothing may still be the one that sounds');
+    });
+
     testWidgets('the header counts the parameters a wire has taken over',
         (tester) async {
       final p = withBlur();

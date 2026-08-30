@@ -193,6 +193,20 @@ pub trait AudioTap: Sync {
     /// appended to `out` in order, and the rate they were taken at. `None` for
     /// a layer with no audio, or a reference that names nothing.
     fn samples(&self, layer: uuid::Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64>;
+
+    /// Mono samples of the **whole composition's mix** — everything the mixer
+    /// sums, at the layers' own volumes — over a window `half` seconds either
+    /// side of the frame being drawn, appended to `out`, and the rate.
+    ///
+    /// The window is centred by the host rather than named by the caller
+    /// because the comp's clock is the *host's*: a driver knows only its own
+    /// layer's time, and a layer that starts late would read the mix at the
+    /// wrong moment of the track. `None` — the default, and a comp whose
+    /// layers make no sound — is the same silence a dangling reference gives.
+    fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
+        let _ = (half, out);
+        None
+    }
 }
 
 /// One effect's behaviour: everything the engine needs of it that is not the

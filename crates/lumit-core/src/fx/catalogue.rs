@@ -22,11 +22,13 @@
 use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
+    combine::{Combine, CombineDef},
     layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
     smooth::{Smooth, SmoothDef},
+    split::{Split, SplitDef},
     wiggle::{Wiggle, WiggleDef},
 };
 use super::effects::{
@@ -299,6 +301,12 @@ crate::catalogue![
     MathDef => Math,
     RemapDef => Remap,
     SmoothDef => Smooth,
+    // The two halves of one idea (node-graph.md §1.3): a colour taken apart
+    // into four numbers, and four numbers put back together as a colour. They
+    // sit beside the arithmetic drivers because that is what they are —
+    // closed-form, pointwise, no window and no state.
+    SplitDef => Split,
+    CombineDef => Combine,
     // The first driver that reads data rather than only numbers (K-492,
     // K-494): a Points stream in, a count and a distance out. Last, because it
     // arrived last and the order here is the order the Graph panel's search

@@ -99,6 +99,7 @@ Colour dodge
 Colour edge
 Colour noise
 Columns
+Combine
 Combine with existing alpha
 Completion
 Complexity
@@ -604,6 +605,7 @@ Speed jitter
 Spherize
 Spiky
 Spin
+Split
 Spread
 Spread z
 Sprite

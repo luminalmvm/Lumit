@@ -17150,6 +17150,80 @@
       "matte_role": "none"
     },
     {
+      "slug": "split",
+      "match_name": "split",
+      "label": "Split",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "combine",
+      "match_name": "combine",
+      "label": "Combine",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "red",
+          "label": "Red",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "alpha",
+          "label": "Alpha",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "points-sample",
       "match_name": "points_sample",
       "label": "Points sample",
