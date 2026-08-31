@@ -45,7 +45,27 @@ pub const CHANNEL_OPTIONS: &[&str] = &["Luminance", "Alpha", "Red", "Green", "Bl
 /// Since K-593 the catalogue also carries whatever registered at run time, so
 /// this answers for a scanned OFX plugin as readily as for a built-in.
 pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
-    super::BUILTIN_DEFS.get(match_name).map(|d| d.schema())
+    def(match_name).map(|d| d.schema())
+}
+
+/// The definition named `match_name`, whichever list it lives on — **the one
+/// lookup** (K-706).
+///
+/// The catalogue is asked first, then the layer styles
+/// ([`STYLE_DEFS`](super::STYLE_DEFS)). The two are separate lists on purpose:
+/// the catalogue is what the Add-effect menu, the command palette and the preset
+/// browser walk, and offering "Drop shadow (style)" there beside the Drop shadow
+/// effect would be the wrong answer to every search for a shadow. But a style
+/// resolves, backfills, greys a row and reads its parameters through exactly the
+/// machinery an effect does, and every one of those places wants "the definition
+/// answering to this name" — so they ask here rather than picking a list.
+///
+/// `None` for a name this build does not know, which stays an inert placeholder
+/// rendering as identity (K-065, K-258).
+pub fn def(match_name: &str) -> Option<&'static dyn super::EffectDef> {
+    super::BUILTIN_DEFS
+        .get(match_name)
+        .or_else(|| super::STYLE_DEFS.get(match_name))
 }
 
 /// What every OFX plugin's `match_name` begins with (K-593) — the host mints
@@ -77,8 +97,7 @@ pub const VST3_MATCH_PREFIX: &str = "vst3:";
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
-    } else if match_name.starts_with(CLAP_MATCH_PREFIX)
-        || match_name.starts_with(VST3_MATCH_PREFIX)
+    } else if match_name.starts_with(CLAP_MATCH_PREFIX) || match_name.starts_with(VST3_MATCH_PREFIX)
     {
         EffectNamespace::Clap
     } else {
@@ -622,6 +641,9 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
         // A fresh audio plugin has no memory of itself yet; it is the plugin's
         // own defaults until something saves one (K-700).
         plugin_state: None,
+        // A fresh Roto brush has no strokes and no base frame, which is what
+        // makes Propagate refuse with `NoBaseFrame` rather than guess (K-710).
+        roto: None,
         extra: serde_json::Map::new(),
     })
 }

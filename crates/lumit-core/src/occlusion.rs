@@ -231,7 +231,9 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -293,6 +295,7 @@ mod tests {
             custom_name: None,
             linked_pairs: Vec::new(),
             plugin_state: None,
+            roto: None,
             extra: serde_json::Map::new(),
         }
     }

@@ -13728,6 +13728,22 @@ before — a saved blob is last year's answer and your keyframes are this year's
 the other way round and a keyframed cutoff silently reverts to whatever a preset had, with
 nothing on screen to say so.
 
+### What you actually see
+
+Four small things on screen, and nothing else changed. In **Effects & presets** the
+plugins found on the machine sit under one *Audio plugins* heading — they fold, search,
+star and drag like everything above them, and right-clicking a row says where it came from
+and offers *Switch this plugin off*, which is remembered between sessions. In **Effect
+controls** the layer's plugins gather under an *Audio* heading at the foot of the stack:
+each is the ordinary effect card, with the tick, the rows, the stopwatches and the drag to
+reorder, because the stack really is the rack. On a **Mixer** strip a small *FX* chip
+appears while the layer's sound goes through plugins, with the count. And when a plugin is
+missing, switched off, or died mid-play, its card wears the same calm badge a video plugin
+wears — a sentence, never a dialogue box, with the plugin's own words underneath where it
+had any. Switching a plugin off does two things at once: the badge appears immediately,
+and the mix is quietly rebuilt without it, so the sound stops going through it rather than
+merely being labelled.
+
 ### The test plugin
 
 A host cannot be tested against nothing, and it should not be tested only against somebody
@@ -14361,3 +14377,45 @@ flow crate carries the GPU with it and this one has no business owning a graphic
 (the camera tracker keeps its distance for the same reason). Every buffer it needs is
 allocated when the frame size first arrives and reused for every frame after, so a
 six-hundred-frame job does its allocating once.
+
+## 54. What a roto stroke throws away, in plain terms
+
+The section above is about working a matte out. This one is about the bookkeeping that
+decides how much of that work has to be done again when you change your mind — which, in a
+job made of corrections, is most of the job.
+
+Two kinds of thing are in play, and Lumit keeps them strictly apart. Your **strokes** are
+the edit: they are saved inside the project file, they undo, they appear in the History
+list, and they are all that is needed to recreate everything else. The **mattes** are
+*derived*: worked out from the strokes, kept in a cache folder outside the project, and
+deletable at any moment for the price of working them out again. Nothing in the project file
+ever points at a cached matte, which is the rule the whole cache folder lives under.
+
+Now the interesting part. Suppose you have propagated a three-hundred-frame shot from a base
+frame at frame 0, you scrub to frame 200, see the matte has swallowed a chair, and scribble
+over the chair. How many of the three hundred mattes are now wrong?
+
+The answer is a hundred, and it is a hundred because of one rule Lumit enforces rather than
+hopes for: **influence flows outward from the base frame and never back toward it.** The
+matte at any frame depends on the media, the settings, the base frame, and only the strokes
+drawn between the base and that frame, on that frame's side of the base. A stroke at 200
+therefore cannot affect frames 0 to 199 — and a stroke at −50 (a correction on the other
+side of the base) cannot affect frame 200 either.
+
+That rule is enforced by a small piece of arithmetic called a **chain hash**. For every
+frame, Lumit stirs together the settings, the base frame, and exactly the strokes that
+frame depends on, and boils it down to a short fingerprint. Two things then follow for free.
+A cached matte is stored beside the fingerprint of the strokes it was made from, so
+re-propagating after your correction can *copy* every frame whose fingerprint still matches
+and only re-solve the hundred that changed — the correction loop stays quick however long
+the shot is. And the fingerprint also goes into the name Lumit files the finished *rendered
+frame* under, so the frames you have already watched and banked are re-rendered exactly
+where the matte changed and nowhere else. The engine's tests count solves rather than
+timing them, because "it felt faster" is not an assertion.
+
+One design choice falls out of the rule and is worth saying plainly: a correction stroke
+cannot improve the frames between it and the base. That feels asymmetric the first time you
+meet it, and it is deliberate — the moment influence is allowed to travel both ways, the
+sentence above stops being one sentence, and nothing can be copied with confidence again. If
+you want the frames before your correction re-decided too, you move the base frame there,
+which says what you mean and re-solves what it should.

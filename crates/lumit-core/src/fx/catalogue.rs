@@ -102,6 +102,7 @@ use super::effects::{
     radio_waves::{RadioWaves, RadioWavesDef},
     rgb_split::{RgbSplit, RgbSplitDef},
     ripple::{Ripple, RippleDef},
+    roto_brush::{RotoBrush, RotoBrushDef},
     roughen_edges::{RoughenEdges, RoughenEdgesDef},
     saturation::{Saturation, SaturationDef},
     scanlines::{Scanlines, ScanlinesDef},
@@ -241,6 +242,11 @@ crate::catalogue![
     // way, which is what puts it here rather than in Distortion beside the
     // Corner pin it writes.
     PlanarTrackDef => PlanarTrack,
+    // Roto brush (docs/08 §3.88, K-710), after the two tracking handles: it is
+    // the third effect in Utility that holds a background job, and the first
+    // whose answer is a picture applied where it stands rather than a number
+    // another layer reads.
+    RotoBrushDef => RotoBrush,
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,

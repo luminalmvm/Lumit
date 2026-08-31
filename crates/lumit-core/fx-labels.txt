@@ -57,6 +57,7 @@ Bottom left tangent y
 Bottom right tangent x
 Bottom right tangent y
 Bottom to top
+Boundary
 Brightness
 Broadband, amber
 Broadband, blue
@@ -236,6 +237,8 @@ Flash
 Flip axis
 Flip direction
 Flip order
+Flow resolution
+Flow smoothness
 Focus (m)
 Focus distance
 Focus map
@@ -276,6 +279,7 @@ Green blur
 Green from
 Greens
 Grid
+Half
 Hard
 Hard colour
 Hard light
@@ -388,7 +392,9 @@ Mask/Path
 Master
 Math
 Matte
+Matte inverted
 Matte key
+Matte mode
 Max clones
 Max connections
 Max distance
@@ -413,6 +419,7 @@ Motion blur
 Motion vectors
 Multiply
 NTSC
+Native
 Near blur
 Nearest distance
 Noise
@@ -480,7 +487,9 @@ Preserve luminance
 Preserve luminosity
 Producer x
 Producer y
+Propagate
 Quality
+Quarter
 RGB split
 Radial
 Radial blur
@@ -501,6 +510,7 @@ Red from
 Reds
 Reduce brightness
 Reduce saturation
+Refine radius
 Relief
 Remainder
 Remap
@@ -512,6 +522,7 @@ Repeat edge pixels
 Replace colour
 Replace method
 Reset interval
+Result
 Reveal original
 Reverse
 Right bottom tangent x
@@ -528,6 +539,7 @@ Rotation
 Rotation amount
 Rotation frequency
 Rotation jitter
+Roto brush
 Roughen
 Roughen edges
 Roundness

@@ -28,6 +28,7 @@ pub mod preset;
 /// deformer over it (K-704).
 pub mod puppet;
 pub mod retime;
+pub mod roto;
 pub mod sequence;
 pub mod shape;
 pub mod store;

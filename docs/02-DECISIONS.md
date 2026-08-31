@@ -22326,3 +22326,113 @@ and say why (§12).
 
 **Coverage.** The crate joins CI's engine-crate coverage gate on the day it lands (93.7%
 lines measured, threshold 80), which is the K-007 policy applied rather than deferred.
+
+## K-709 — AP5, the panel surface: one Audio plugins group, the rack under an Audio heading, the badge fed by the bake, and the switch that re-plans
+
+**Status: DECIDED (2026-08-31).** Package AP5 of
+[docs/impl/audio-plugins.md](impl/audio-plugins.md) §8, built — the last numbered AP
+package. Builds on K-700 and K-707; reverses nothing. The plugin GUI window stays the
+recorded follow-on (K-683).
+
+**One browser group, not one per vendor.** Neither CLAP nor VST3 declares a menu path the
+way OFX does, so the browser gets a single **Audio plugins** heading rather than a
+grouping per plugin: `list_effects` gives an audio plugin `namespace: "audio"`, `category:
+"audio"` and an *empty* `category_label`, and the frontend words the heading — the same
+rule as an OFX plugin that declared no grouping, beside which it sits. The row's context
+menu carries the K-594 grammar unchanged: a provenance line ("From an audio plugin") and
+the per-plugin switch-off, writing the one preference file both hosts read.
+
+**The rack is drawn under an Audio heading at the foot of the stack.** "The stack is the
+rack" stands: an audio plugin's card in Effect controls is the ordinary effect card —
+enable tick, rows with stopwatches, rename, reorder, remove — and only where it is
+*listed* changed. The audio-typed entries gather under a twirling **Audio** heading after
+the picture effects, each card keeping its **stack index**, so a drag within the group is
+a reorder of the chain and lands as the one `SetLayerEffects` undo step every stack edit
+is. Which entries are audio is the match name's own prefix, read Dart-side with no bridge
+call — the held model already carries the names.
+
+**The calm badge is fed by the chain bake, into the OFX table.** `run_chain` now counts
+dry blocks **per link**, and `chain_bake` files a link that shipped any block dry into the
+same errored table an OFX frame files into — `plugin_failed`, with the host's own sentence
+kept by the processor (`AudioProcessor::last_error`) underneath — and clears the note for
+a link whose every block came back. One table, one `badge_of`, one badge grammar. A
+**switched-off** plugin badges `plugin_disabled` straight off the session list (checked
+first, so it outranks a stale failure note), and `open_audio` now refuses a switched-off
+plugin before any of its code runs, which is what K-594's "a disable that means something"
+requires of the audio side too.
+
+**Flicking the switch re-plans the comps that play the plugin.** The switched-off list is
+not in the document, so the mix signature folds in whether each of *a chain's own* plugins
+is disabled — not the whole list, so switching off a plugin no comp uses re-plans nothing.
+The browser calls `audio_prepare` after the flick; the rebake opens the chain without the
+plugin and the sound actually stops, rather than the badge alone changing.
+
+**The Mixer strip wears a small FX chip** — `FX n`, counting the enabled audio entries in
+the layer's stack, tooltip naming the count — shown only while the rack would play, read
+from the held model so a strip costs no bridge call for it.
+
+**VST3 rows stay top-level: `IUnitInfo` is not bound.** AP5 was the recorded owner of that
+question (K-707) and answers it by declining: the flat rows read fine, and a further COM
+interface for twirl headings is not v1 weight. Bind it when a real plugin's panel is
+unusable without it — a quirks-table-sized decision, not a rework.
+
+New arb keys (Crowdin owes translations): `effectsAudioPlugins`, `effectFromAudioPlugin`,
+`mixerChain`.
+
+## K-710 — RB2, the document half: a Roto brush row in Utility, the strokes on the instance, and one hash per frame
+
+**Status:** DECIDED. Implements [impl/roto.md](impl/roto.md) §1 and §5 (K-705), on the crate
+K-708 built. The propagation job, the `roto/` sidecar and the render seam are the same
+package's second half and are recorded where they land.
+
+**The Roto brush is an effect, at the Utility family's end** (docs/08 §3.96), beside the two
+tracking handles and unlike them in one respect: it **is an image operation**. The Camera
+track and the Planar track hold a job whose answer another layer reads, so they render
+identity; this one holds a job whose answer is a picture applied exactly where the effect
+stands in the stack. Everything below it in the stack is cut; everything above sees the cut
+picture. That is the whole reason the matte is an effect rather than a mode on the layer.
+
+**It carries no Matte row** — the third effect to opt out of K-395's universal row, after the
+Matte key (K-425) and Set matte (K-429), and for Set matte's reason read from the other side.
+Every Matte row answers "how much of me happens here"; what a Roto brush applies **is** a
+coverage, so a second picture gating it would be a coverage over a coverage. The honest way
+to say "not there" is another stroke. `every_effect_carries_a_matte_row` gains the third
+argued exception and no fourth may be added without one.
+
+**The strokes are on the effect instance, not among its parameters.**
+`EffectInstance::roto` is an `Option<RotoBlock>` — the base frame and the ordered stroke
+table — serde-defaulted and skipped when absent, so a project written before roto existed
+reads and saves back byte for byte (K-258). Parameters were the obvious home and are the
+wrong one twice over: a parameter is a number the timeline animates, and a stroke table
+hashed whole into the frame key would rename every cached frame in the shot each time one
+correction was made. There is **no new op**: a stroke edit is `SetLayerEffects`, the
+coarse-and-exactly-invertible whole-stack commit every parameter edit already rides, so
+strokes undo, journal and replay with no second mechanism. *Ponytail: the History row
+therefore reads "Edit effects"; a `SetRotoStrokes` with its own label is one arm away if the
+wording ever matters more than the machinery it would duplicate.*
+
+**One hash per frame, and it is the invalidation rule.** `roto::chain_hash(block, settings,
+frame)` stirs the tier version, the propagation settings, the base frame and **exactly the
+strokes between the base and that frame on that frame's side** — impl/roto.md §1's purity
+sentence, read as arithmetic. Editing a stroke on frame `n` therefore changes the hash of
+every frame at least as far out as `n` on `n`'s side and of nothing else. The sidecar files
+each matte beside its chain hash so a re-propagation copies what still matches instead of
+re-solving it, and the frame key stamps the same hash so a stroke edit retires exactly the
+rendered frames it spoiled.
+
+**Which settings are in that hash is a decision, not an oversight.** Refine radius, flow
+resolution and flow smoothness are; **Matte mode and View are not**. The first three change
+what the matte *is*; the last two change how it is *shown*, and hashing them would throw a
+whole propagation away every time the user glanced at the boundary. Both still reach the
+frame key through the ordinary parameter hash, which is where a change in the picture
+belongs.
+
+**Refine radius declares `Unit::Raw`, not `Px`.** px@comp means "converted to the raster in
+play by the resolve step" (docs/08 §2.3), and this number is never read at a comp raster: the
+matte is solved at the source's own raster (K-248) on a thread the preview tier does not
+reach. Declaring it px@comp would put a rider on the panel that scaled with a quality switch
+the propagation cannot see.
+
+New arb keys (Crowdin owes translations): `fxBoundary`, `fxFlowResolution`,
+`fxFlowSmoothness`, `fxHalf`, `fxMatteInverted`, `fxMatteMode`, `fxNative`, `fxPropagate`,
+`fxQuarter`, `fxRefineRadius`, `fxResult`, `fxRotoBrush`.

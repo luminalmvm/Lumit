@@ -11869,6 +11869,90 @@
       "matte_role": "none"
     },
     {
+      "slug": "roto-brush",
+      "match_name": "roto_brush",
+      "label": "Roto brush",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "propagate",
+          "label": "Propagate",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "mode",
+          "label": "Matte mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Matte",
+            "Matte inverted"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "view",
+          "label": "View",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Result",
+            "Matte",
+            "Boundary"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "refine_radius",
+          "label": "Refine radius",
+          "kind": "float",
+          "unit": "raw",
+          "default": 8.0,
+          "slider_min": 0.0,
+          "slider_max": 64.0,
+          "hard_min": 0.0,
+          "hard_max": 256.0
+        },
+        {
+          "id": "flow_resolution",
+          "label": "Flow resolution",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Native",
+            "Half",
+            "Quarter"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "flow_smoothness",
+          "label": "Flow smoothness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "invert",
       "match_name": "invert",
       "label": "Invert",

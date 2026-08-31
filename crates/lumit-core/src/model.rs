@@ -993,6 +993,26 @@ pub struct EffectInstance {
     /// blob back off a live instance necessary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_state: Option<String>,
+    /// A **Roto brush's strokes and base frame** (K-710, docs/impl/roto.md §1).
+    ///
+    /// # In plain terms
+    ///
+    /// The scribbles the user drew to say what the subject is, and which frame
+    /// they started from. They are the user's edit — ordered, undoable,
+    /// journaled, saved — while the mattes worked out from them are derived
+    /// data in the cache folder that can be deleted at any time.
+    ///
+    /// Not parameters, deliberately: a stroke table is a growing list where
+    /// *when* each entry was drawn decides which frames it affects, and hashing
+    /// it whole into the frame key would rename every cached frame in the shot
+    /// each time one correction was made. [`crate::roto::chain_hash`] is what
+    /// reaches the key instead.
+    ///
+    /// `None` on every effect that is not a Roto brush and on every Roto brush
+    /// nobody has stroked yet, and left out of the file then — so a project
+    /// written before roto existed reads and saves back byte for byte (K-258).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub roto: Option<crate::roto::RotoBlock>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -2058,10 +2078,33 @@ pub struct Layer {
     /// gate them and before its effects run (docs/03 §7.1, K-227).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paint: Vec<crate::paint::PaintStroke>,
+    /// The layer's **puppet** (docs/impl/puppet.md §4, K-704): the pins that
+    /// push its pixels about, and the three numbers the mesh under them is
+    /// built from. Warped at the same seam paint and masks act on, right after
+    /// them, because a puppet moves the layer's own picture.
+    ///
+    /// `None` — every layer nobody has pinned — is absent from the file, so a
+    /// project written before puppets existed loads and saves back the same
+    /// bytes (K-258). No triangle is ever stored: the mesh is rebuilt from the
+    /// layer's alpha at the block's reference time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub puppet: Option<crate::puppet::PuppetBlock>,
     /// The ordered effect stack (docs/03 §8; applied top-to-bottom after
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
+    /// The layer's **style stack** (docs/impl/layer-styles.md §1, K-706): the
+    /// shadow, glow, overlay and stroke a layer wears rather than the effects it
+    /// carries.
+    ///
+    /// Same shape as [`Self::effects`] — each entry an [`EffectInstance`] whose
+    /// match name is one of the nine `style_*` definitions — but **order-locked**
+    /// to §2's painting order and capped at one instance per style
+    /// ([`crate::fx::normalise_styles`], run by the edit commands and restored on
+    /// load). Empty is no styles at all, and a layer with none renders and saves
+    /// byte for byte what it did before the field existed (K-258).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<EffectInstance>,
     /// The layer's **driver graph** (K-471): the drivers it carries, the wires
     /// from them into parameters and mattes, and where the boxes sit on the
     /// Graph panel's canvas.
@@ -2874,7 +2917,9 @@ mod tests {
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -3435,7 +3480,9 @@ mod tests {
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches {
                 visible,
                 ..Switches::default()
@@ -3777,7 +3824,9 @@ mod tests {
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }

@@ -84,6 +84,7 @@ pub mod radial_wipe;
 pub mod radio_waves;
 pub mod rgb_split;
 pub mod ripple;
+pub mod roto_brush;
 pub mod roughen_edges;
 pub mod saturation;
 pub mod scanlines;

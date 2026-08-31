@@ -427,7 +427,9 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects,
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -4737,7 +4739,9 @@ fn marker_rig(
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -8700,7 +8704,9 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         };
@@ -11661,8 +11667,8 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
-        // **Two image effects opt out** (K-425 and K-429, the owner's rule for
-        // mattes), and each has its own reason.
+        // **Three image effects opt out** (K-425, K-429 and K-710, the owner's
+        // rule for mattes), and each has its own reason.
         //
         // The **Matte key**: a keyer's subject is the picture it keys, and a
         // strength matte over a key is a garbage matte, which is a mask's job.
@@ -11674,9 +11680,16 @@ fn every_effect_carries_a_matte_row() {
         // ordinary auxiliary-layer carriage that `layer_input` is the predicate
         // for.
         //
+        // **Roto brush** (K-710): the same answer as Set matte's, arrived at
+        // from the other side. What this effect applies IS a coverage — the
+        // matte its propagation solved for this source frame — so a second
+        // picture saying how much of it happens here would be a coverage laid
+        // over a coverage, and the honest place to say "not there" is another
+        // stroke.
+        //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
-        if matches!(s.match_name, "matte_key" | "set_matte") {
+        if matches!(s.match_name, "matte_key" | "set_matte" | "roto_brush") {
             assert_eq!(
                 s.matte,
                 MatteRole::None,

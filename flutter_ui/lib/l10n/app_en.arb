@@ -236,6 +236,10 @@
   "@fxBottomToTop": {
     "description": "Effect controls — a Flip order option on Card wipe."
   },
+  "fxBoundary": "Boundary",
+  "@fxBoundary": {
+    "description": "Effect controls — a View option on Roto brush: keep the picture and draw the matte's edge over it."
+  },
   "fxBrushHardness": "Brush hardness",
   "@fxBrushHardness": {
     "description": "Effect controls — a control on Stroke: how crisp the brush’s edge is."
@@ -299,6 +303,30 @@
   "fxCreateCornerPin": "Create corner pin",
   "@fxCreateCornerPin": {
     "description": "Effect controls — a button on Planar track: puts a Corner pin effect on the chosen layer, keyframed to the tracked surface."
+  },
+  "fxFlowResolution": "Flow resolution",
+  "@fxFlowResolution": {
+    "description": "Effect controls — a control on Roto brush: the resolution the propagation's optical flow is measured at."
+  },
+  "fxFlowSmoothness": "Flow smoothness",
+  "@fxFlowSmoothness": {
+    "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
+  },
+  "fxHalf": "Half",
+  "@fxHalf": {
+    "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at half the source size."
+  },
+  "fxMatteInverted": "Matte inverted",
+  "@fxMatteInverted": {
+    "description": "Effect controls — a Matte mode option on Roto brush: drop the subject rather than keep it."
+  },
+  "fxMatteMode": "Matte mode",
+  "@fxMatteMode": {
+    "description": "Effect controls — a control on Roto brush: whether the matte keeps the subject or drops it."
+  },
+  "fxNative": "Native",
+  "@fxNative": {
+    "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at the source's own size."
   },
   "fxPinLayer": "Pin layer",
   "@fxPinLayer": {
@@ -536,6 +564,14 @@
   "@fxProducerY": {
     "description": "Effect controls — a control on Radio waves: where the waves are emitted, vertically."
   },
+  "fxPropagate": "Propagate",
+  "@fxPropagate": {
+    "description": "Effect controls — the button on Roto brush that carries the matte outward from the base frame."
+  },
+  "fxQuarter": "Quarter",
+  "@fxQuarter": {
+    "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at a quarter of the source size."
+  },
   "fxRadioWaves": "Radio waves",
   "@fxRadioWaves": {
     "description": "Effect name in the Add effect menu — emits expanding shapes from a point."
@@ -556,6 +592,14 @@
   "@fxRectangularToPolar": {
     "description": "Effect controls — a Conversion option on Polar coordinates."
   },
+  "fxRefineRadius": "Refine radius",
+  "@fxRefineRadius": {
+    "description": "Effect controls — a control on Roto brush: how wide the softened band round the matte's edge is."
+  },
+  "fxResult": "Result",
+  "@fxResult": {
+    "description": "Effect controls — a View option on Roto brush: draw the cut-out picture."
+  },
   "fxRevealOriginal": "Reveal original",
   "@fxRevealOriginal": {
     "description": "Effect controls — an option of Stroke’s Paint style: keep the picture only where the brush went."
@@ -563,6 +607,10 @@
   "fxRightToLeft": "Right to left",
   "@fxRightToLeft": {
     "description": "Effect controls — a Flip order option on Card wipe."
+  },
+  "fxRotoBrush": "Roto brush",
+  "@fxRotoBrush": {
+    "description": "Effect controls — the name of the Roto brush effect."
   },
   "fxRows": "Rows",
   "@fxRows": {
@@ -9547,6 +9595,15 @@
   "@mixerLufsPending": {
     "description": "The Master strip's muted loudness readout: loudness measurement is a planned later feature, so the value is an em dash rather than a number. LUFS is the standard loudness unit and stays untranslated."
   },
+  "mixerChain": "Audio plugins: {count}",
+  "@mixerChain": {
+    "description": "Tooltip on the small FX chip a Mixer strip wears when the layer's sound plays through audio plugins. The count is how many plugins are in the layer's chain.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "audioSectionLevels": "Levels",
   "@audioSectionLevels": {
     "description": "Audio panel section header over the output level meters. A noun, plural."
@@ -10528,9 +10585,17 @@
   "@effectsPlugins": {
     "description": "Heading in the Effects & presets panel over installed OFX plugins that declare no menu grouping of their own. Plugins that do declare one are headed by that instead."
   },
+  "effectsAudioPlugins": "Audio plugins",
+  "@effectsAudioPlugins": {
+    "description": "Heading in the Effects & presets panel, and in the Effect controls panel's Add effect menu, over the audio plugins (CLAP and VST3) found on this machine. Sits beside the OFX plugin headings."
+  },
   "effectFromPlugin": "From an OpenFX plugin",
   "@effectFromPlugin": {
     "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from a plugin installed on this machine rather than shipping with Lumit."
+  },
+  "effectFromAudioPlugin": "From an audio plugin",
+  "@effectFromAudioPlugin": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect is an audio plugin (CLAP or VST3) installed on this machine."
   },
   "effectBuiltIn": "Built in",
   "@effectBuiltIn": {

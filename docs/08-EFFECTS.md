@@ -6108,6 +6108,58 @@ says the shader is broken.
 and there is no second implementation of somebody else's arithmetic to hold it to. The
 degradation ladder's CPU rung renders it as a passthrough.
 
+### 3.96 Roto brush — a scribble on one frame, a matte on the whole shot
+
+**Parameters:** **Propagate** (action), **Cancel** (action), **Matte mode** (Matte / Matte
+inverted, default Matte), **View** (Result / Matte / Boundary, default Result), **Refine
+radius** (0–64, default 8, a plain number rather than px@comp), **Flow resolution** (Native /
+Half / Quarter, default Half), **Flow smoothness** (0–100, default 50).
+
+Rotoscoping is cutting a moving thing out of its shot: for every frame, a greyscale
+**matte** that is white where the subject is and black where it is not. Doing it by hand is
+the most tedious job in compositing. This effect shortens it. Scribble through the subject
+on one clear frame and through the background beside it — the two strokes the Roto brush
+tool draws (docs/07 §1, Alt+W) — and the frame is cut immediately. Press **Propagate** and a
+background job carries the cut outward from that **base frame** in both directions, watching
+how the picture moved (the same optical flow §3.1 measures) and re-deciding the edge on
+every frame from that frame's own colours. Where it drifts, scribble on the frame it drifts
+on and propagate again: the correction carries forward, and every frame the correction
+cannot reach is copied from the cache rather than solved a second time.
+
+**The strokes are the document; the mattes are not.** The strokes are saved in the `.lum`,
+undo, and journal like any other edit; the mattes live in the `roto/` sidecar tier
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §3) and can be deleted at any moment for the price
+of a re-propagation. Strokes are recorded in **source raster pixels** on the unaltered
+footage (K-248), so one shot's mattes serve every composition that cuts it and survive every
+transform, retime and preview tier.
+
+**It is an image operation**, unlike the two tracking handles beside it in Utility: what it
+holds is a job whose answer is a picture applied where the effect stands in the stack.
+**Matte mode** says whether the layer keeps the subject or drops it; the matte multiplies the
+layer's alpha and leaves its colour alone (§2.2's straight-alpha rule, Set matte's reasoning
+exactly). **It carries no Matte row** (K-429): what it applies *is* a coverage, and a second
+picture saying how much of it happens here would be a coverage over a coverage — the honest
+way to say "not there" is another stroke.
+
+**Outside the propagated span the effect is a passthrough**, with the panel saying how far
+the span reaches. Never a held neighbouring matte: that would be a wrong answer wearing a
+right one's face.
+
+**Refusals, each named and none a fault:** *Offline* (no resolved media fingerprint, so
+nothing to key a cache with), *Flow unavailable* (no GPU flow on this device — the CPU
+oracle at seconds a pair would misrepresent a minutes-long job as hung, and mixing backends
+would break the byte-identical rebuild claim), *Busy* (one propagation at a time), *No base
+frame* (Propagate pressed before any stroke). **Cancel finalises rather than discards**
+(K-540): the frames already solved are kept and correctly named, and a later Propagate
+resumes from them.
+
+**Honest about its ceiling.** This is classical machinery — stroke-seeded geodesic
+segmentation with a guided-filter edge, pinned in [impl/roto.md](impl/roto.md) — not a neural
+matter. On well-separated subjects it does the job with a handful of strokes; on hair against
+a similar tone it needs more correction strokes than a network would. The distance leaks
+through any low-contrast gap in the boundary, and the fix is a stroke across the leak rather
+than beside it.
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)
