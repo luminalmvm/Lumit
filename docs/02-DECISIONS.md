@@ -23016,3 +23016,44 @@ which the Timeline listens to.
 
 Tests: `audio_workspace_lanes_test` (the preset opens a sounding layer's lane and leaves
 a solid shut; re-applying re-opens a lane a hand shut; the Edit preset opens nothing).
+
+## K-729 — The Easing panel is a preset library: a grid of curve tiles that apply on click
+
+**Status:** DECIDED — 2026-08-31 (owner ask: the Easing panel should work like the Flow
+plugin for After Effects — a panel of stock easing curves, a custom editor, apply).
+
+The panel held the K-348 unit box and a row of seven preset *names*; the shapes
+themselves were invisible until loaded, and applying one took a pick and then a press of
+Apply. It is now what Flow's library is: the unit-box editor on top and a **grid of
+preset tiles** under it, each tile a thumbnail of its actual curve — drawn by the same
+`EasingCurve` maths the apply stamps, one source of truth — with its name beneath.
+Clicking a tile loads the shape into the box **and applies it** through the standing
+K-349 claim, so easing a selection is one click; while the claim is down a click only
+loads. Apply stays for the hand-drawn case. Saved custom shapes join the grid as tiles
+(same click, right-click Rename/Delete, `easings.json` as before).
+
+The shipped set grows from seven to twenty-three: the five house basics (Easy ease, Slow
+start, Slow finish, Heavy ease, Snap) plus the standard families — sine, quad, cubic,
+quart, expo, back, each in / out / in-out, easings.net's control points with Back's
+vertical reach written pre-clamped to the editor's ±0.5 so the stated numbers are the
+stored ones. Overshoot and Anticipate are retired as names: they *were* Back out and
+Back in. The families wear the web's names — "Sine in" is a slow start — which
+supersedes K-348's names-say-the-slow-end rule *for the grid only*: that rule guarded a
+text row where the word was all there was, and a tile draws its curve, so the sense is
+shown. The basics keep their house names.
+
+Two consequences worth the ink: the grid made the panel tall enough to scroll, so the
+unit box now sits in the gesture arena (empty drag handlers) to keep a handle drag from
+scrolling the panel; and the panel's apply is wrapped in an undo group, so a press
+spanning several layers is one undo step (K-720's rule — it was one step per layer).
+
+New strings: `easingSineIn/Out/InOut`, `easingQuadIn/Out/InOut`, `easingCubicIn/Out/InOut`,
+`easingQuartIn/Out/InOut`, `easingExpoIn/Out/InOut`, `easingBackIn/Out/InOut`;
+`easingOvershoot` and `easingAnticipate` retired.
+
+Tests: `easing_panel_frb_test` (a tile applies in one click; a claimless click only
+loads; a dragged handle applies exactly what it shows; customs join the grid, persist
+across a remount and a store reload), `easing_curve_test` (every shipped family shape is
+legal, monotone and non-degenerate), `timeline_selection_test` (an applied ease writes
+the drawn tangents on every selected span and a two-layer apply is one undo step —
+fails without the undo group).

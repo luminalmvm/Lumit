@@ -9,11 +9,14 @@
 // Written against the real engine like every other frb panel test: a selection
 // that does not reach the document is not a selection.
 
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/easing_curve.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -595,6 +598,71 @@ void main() {
           Offset(lane.right - 1, lane.bottom - 1));
       expect(selectedOn(tester, laneKeyOf(layer)), hasLength(2),
           reason: 'the walk stepped over the view\'s room, not through it');
+    });
+
+    // ---------------------------------------------------------------------
+    // The easing claim (K-349): what a preset tile presses (K-726).
+    // ---------------------------------------------------------------------
+
+    /// **An applied ease writes the drawn tangents, and however many layers
+    /// the selection spans it is one undo step** (K-720's rule: a
+    /// multi-selection edit is one edit). The write is one op per layer, so
+    /// without the undo group a two-layer apply was two steps — this fails
+    /// without the `asOneUndoStep` round `_applyEasing`.
+    testWidgets('an applied ease writes its tangents as one undo step',
+        (tester) async {
+      final p = withComp();
+      final a = keyedLayer(p);
+      final b = keyedLayer(p);
+      await mount(tester, p);
+      // By group-row key rather than [openTransform]'s text tap: with two
+      // layers twirled open there are two rows called Transform.
+      for (final layer in [a, b]) {
+        await tester.tap(find
+            .byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(
+            ValueKey<String>('tl-group-${layer.internallayerId}/transform')));
+        await tester.pumpAndSettle();
+      }
+
+      // One box round all four keys, across both lanes.
+      final laneA = tester.getRect(find.byKey(laneKeyOf(a)));
+      final laneB = tester.getRect(find.byKey(laneKeyOf(b)));
+      await boxFrom(
+          tester,
+          Offset(laneA.left + 1, math.min(laneA.top, laneB.top) + 1),
+          Offset(laneA.right - 1, math.max(laneA.bottom, laneB.bottom) - 1));
+      expect(selectedOn(tester, laneKeyOf(a)), hasLength(2));
+      expect(selectedOn(tester, laneKeyOf(b)), hasLength(2));
+
+      // The claim the Timeline publishes while it can take a shape — the very
+      // callback a preset tile presses.
+      final apply = p.uiState.easingApply.value;
+      expect(apply, isNotNull, reason: 'lane view publishes the claim');
+      apply!(easingPresets.firstWhere((e) => e.id == 'sineIn').curve);
+      await tester.pumpAndSettle();
+
+      for (final layer in [a, b]) {
+        final keys = opacityKeys(layer);
+        // Sine in (0.12, 0, 0.39, 0): flat out of the first key over 12% of
+        // the span, and into the second across the remaining 61%.
+        final out = keys[0].interpOut;
+        expect(out, isA<BridgeSideInterp_Bezier>());
+        expect((out as BridgeSideInterp_Bezier).field0.speed,
+            closeTo(0, 1e-9));
+        expect(out.field0.influence, closeTo(0.12, 1e-9));
+        final inTo = keys[1].interpIn;
+        expect(inTo, isA<BridgeSideInterp_Bezier>());
+        expect((inTo as BridgeSideInterp_Bezier).field0.influence,
+            closeTo(0.61, 1e-9));
+      }
+
+      p.state.project!.undo();
+      expect(opacityKeys(a)[0].interpOut, isA<BridgeSideInterp_Linear>(),
+          reason: 'one undo takes the whole apply back');
+      expect(opacityKeys(b)[0].interpOut, isA<BridgeSideInterp_Linear>(),
+          reason: 'both layers in the one step — one press, one edit');
     });
   }, skip: !engineAvailable);
 }

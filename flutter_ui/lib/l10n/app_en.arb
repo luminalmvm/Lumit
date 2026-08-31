@@ -1046,10 +1046,6 @@
   "@easeHold": {
     "description": "Keyframe easing: no change at all until the next key."
   },
-  "easingAnticipate": "Anticipate",
-  "@easingAnticipate": {
-    "description": "Easing preset: the move pulls back a little before it sets off."
-  },
   "easingHeavy": "Heavy ease",
   "@easingHeavy": {
     "description": "Easing preset: slow at both ends, more strongly than Easy ease."
@@ -1061,10 +1057,6 @@
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
-  },
-  "easingOvershoot": "Overshoot",
-  "@easingOvershoot": {
-    "description": "Easing preset: the move goes past its end and settles back."
   },
   "easingSaveEllipsis": "Save…",
   "@easingSaveEllipsis": {
@@ -1081,6 +1073,78 @@
   "easingSnap": "Snap",
   "@easingSnap": {
     "description": "Easing preset: away very fast, then a long glide into the end."
+  },
+  "easingSineIn": "Sine in",
+  "@easingSineIn": {
+    "description": "Easing preset tile: the sine family's gentle slow start (the web's easeInSine). The tile draws the curve, so the name only has to say which family and which variant."
+  },
+  "easingSineOut": "Sine out",
+  "@easingSineOut": {
+    "description": "Easing preset tile: the sine family's gentle slow finish (the web's easeOutSine)."
+  },
+  "easingSineInOut": "Sine in out",
+  "@easingSineInOut": {
+    "description": "Easing preset tile: the sine family, slow at both ends (the web's easeInOutSine)."
+  },
+  "easingQuadIn": "Quad in",
+  "@easingQuadIn": {
+    "description": "Easing preset tile: the quadratic family's slow start (the web's easeInQuad)."
+  },
+  "easingQuadOut": "Quad out",
+  "@easingQuadOut": {
+    "description": "Easing preset tile: the quadratic family's slow finish (the web's easeOutQuad)."
+  },
+  "easingQuadInOut": "Quad in out",
+  "@easingQuadInOut": {
+    "description": "Easing preset tile: the quadratic family, slow at both ends (the web's easeInOutQuad)."
+  },
+  "easingCubicIn": "Cubic in",
+  "@easingCubicIn": {
+    "description": "Easing preset tile: the cubic family's slow start (the web's easeInCubic)."
+  },
+  "easingCubicOut": "Cubic out",
+  "@easingCubicOut": {
+    "description": "Easing preset tile: the cubic family's slow finish (the web's easeOutCubic)."
+  },
+  "easingCubicInOut": "Cubic in out",
+  "@easingCubicInOut": {
+    "description": "Easing preset tile: the cubic family, slow at both ends (the web's easeInOutCubic)."
+  },
+  "easingQuartIn": "Quart in",
+  "@easingQuartIn": {
+    "description": "Easing preset tile: the quartic family's slow start (the web's easeInQuart). 'Quart' is the name the family is known by — keep it recognisable."
+  },
+  "easingQuartOut": "Quart out",
+  "@easingQuartOut": {
+    "description": "Easing preset tile: the quartic family's slow finish (the web's easeOutQuart)."
+  },
+  "easingQuartInOut": "Quart in out",
+  "@easingQuartInOut": {
+    "description": "Easing preset tile: the quartic family, slow at both ends (the web's easeInOutQuart)."
+  },
+  "easingExpoIn": "Expo in",
+  "@easingExpoIn": {
+    "description": "Easing preset tile: the exponential family's slow start (the web's easeInExpo). 'Expo' is the name the family is known by — keep it recognisable."
+  },
+  "easingExpoOut": "Expo out",
+  "@easingExpoOut": {
+    "description": "Easing preset tile: the exponential family's slow finish (the web's easeOutExpo)."
+  },
+  "easingExpoInOut": "Expo in out",
+  "@easingExpoInOut": {
+    "description": "Easing preset tile: the exponential family, slow at both ends (the web's easeInOutExpo)."
+  },
+  "easingBackIn": "Back in",
+  "@easingBackIn": {
+    "description": "Easing preset tile: the move pulls back before it sets off (the web's easeInBack)."
+  },
+  "easingBackOut": "Back out",
+  "@easingBackOut": {
+    "description": "Easing preset tile: the move overshoots its end and settles back (the web's easeOutBack)."
+  },
+  "easingBackInOut": "Back in out",
+  "@easingBackInOut": {
+    "description": "Easing preset tile: the move pulls back, overshoots, and settles (the web's easeInOutBack)."
   },
   "easeLinear": "Linear",
   "@easeLinear": {

@@ -37,8 +37,24 @@ String easingPresetName(String id) => switch (id) {
       'slowFinish' => l10n.easingSlowFinish,
       'heavy' => l10n.easingHeavy,
       'snap' => l10n.easingSnap,
-      'overshoot' => l10n.easingOvershoot,
-      _ => l10n.easingAnticipate,
+      'sineIn' => l10n.easingSineIn,
+      'sineOut' => l10n.easingSineOut,
+      'sineInOut' => l10n.easingSineInOut,
+      'quadIn' => l10n.easingQuadIn,
+      'quadOut' => l10n.easingQuadOut,
+      'quadInOut' => l10n.easingQuadInOut,
+      'cubicIn' => l10n.easingCubicIn,
+      'cubicOut' => l10n.easingCubicOut,
+      'cubicInOut' => l10n.easingCubicInOut,
+      'quartIn' => l10n.easingQuartIn,
+      'quartOut' => l10n.easingQuartOut,
+      'quartInOut' => l10n.easingQuartInOut,
+      'expoIn' => l10n.easingExpoIn,
+      'expoOut' => l10n.easingExpoOut,
+      'expoInOut' => l10n.easingExpoInOut,
+      'backIn' => l10n.easingBackIn,
+      'backOut' => l10n.easingBackOut,
+      _ => l10n.easingBackInOut,
     };
 
 /// The unit box, in logical pixels — the square the travel runs across.
@@ -60,6 +76,15 @@ const double _grabRadius = 18;
 /// popup is pinned to.
 const double _popupWidth = _boxSide + _marginX * 2;
 const double _popupHeight = _boxSide + _marginY * 2;
+
+/// The preset grid's tiles: three to a row of the content width.
+const double _tileGap = 3;
+const double _tileWidth = (_popupWidth - _tileGap * 2) / 3;
+
+/// A tile's curve thumbnail height. Its drawn unit box leaves a margin above
+/// and below for the Back family's overshoot; the last pixel or two of a full
+/// overshoot clips, which is what the tile's ClipRect is for.
+const double _thumbHeight = 32;
 
 /// Open the easing editor at [position] as a popup, and call [onApply] with the
 /// shape each time Apply is pressed — the *inline* mode of Settings ▸ Interface
@@ -90,9 +115,16 @@ Future<void> showEasingPopup({
             borderRadius: BorderRadius.circular(t.tokens.floatRadius),
             border: Border.all(color: t.hairlineStrong),
           ),
-          child: EasingEditor(
-            onApply: onApply,
-            onClose: () => close(null),
+          // The preset grid makes the editor taller than a popup should be:
+          // past this it scrolls, where the docked panel scrolls for itself.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 460),
+            child: SingleChildScrollView(
+              child: EasingEditor(
+                onApply: onApply,
+                onClose: () => close(null),
+              ),
+            ),
           ),
         );
       }),
@@ -215,18 +247,30 @@ class _EasingEditorState extends State<EasingEditor> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Listener(
-            onPointerDown: (e) => _grab(e.localPosition),
-            onPointerMove: (e) => _drag(e.localPosition),
-            onPointerUp: (_) => setState(() => _dragging = null),
-            onPointerCancel: (_) => setState(() => _dragging = null),
-            child: CustomPaint(
-              size: const Size(_popupWidth, _popupHeight),
-              painter: _EasingPainter(curve: _curve, box: _box, theme: t),
+          // The empty drag handlers are not dead code: they put the box in the
+          // gesture arena, where the inner member beats the panel's scroll
+          // view — the preset grid made the panel tall enough to scroll, and a
+          // handle drag must shape the curve, not scroll it away. The Listener
+          // does the actual work, because it hears the very first pointer-down
+          // rather than waiting out the drag slop.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragUpdate: (_) {},
+            onHorizontalDragUpdate: (_) {},
+            child: Listener(
+              key: const ValueKey('easing-box'),
+              onPointerDown: (e) => _grab(e.localPosition),
+              onPointerMove: (e) => _drag(e.localPosition),
+              onPointerUp: (_) => setState(() => _dragging = null),
+              onPointerCancel: (_) => setState(() => _dragging = null),
+              child: CustomPaint(
+                size: const Size(_popupWidth, _popupHeight),
+                painter: _EasingPainter(curve: _curve, box: _box, theme: t),
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          _presetRow(t),
+          _presetGrid(t),
           if (_naming != null) ...[
             const SizedBox(height: 6),
             HouseTextField(
@@ -301,22 +345,28 @@ class _EasingEditorState extends State<EasingEditor> {
     );
   }
 
-  /// The shipped shapes and the user's own, each a button that loads it into
-  /// the box. Loading rather than applying: a preset is a starting point to
-  /// nudge, and Apply stays the one thing that touches the document.
+  /// The preset library (K-726): the shipped shapes and the user's own, each a
+  /// tile drawing its curve with its name under it — the grid the panel is
+  /// mostly made of, the way Flow's library is.
   ///
-  /// The saved ones sit in the same row, after the seven that ship, and behave
+  /// **A click is an apply.** The tile loads its shape into the box *and*
+  /// presses the same road the Apply button presses, so easing a selection is
+  /// one click, not a pick and a confirm. While there is nowhere to send a
+  /// shape (Apply is grey) a click only loads, and the box is a place to look
+  /// at the curve.
+  ///
+  /// The saved ones sit in the same grid, after the shipped shapes, and behave
   /// the same in every way but one: they can be renamed and thrown away, from a
-  /// right-click on the shape itself. A shipped preset has no such menu — there
+  /// right-click on the tile itself. A shipped preset has no such menu — there
   /// is nothing there the user put in.
-  Widget _presetRow(LumitTheme t) => SizedBox(
+  Widget _presetGrid(LumitTheme t) => SizedBox(
         width: _popupWidth,
         child: Wrap(
-          spacing: 4,
-          runSpacing: 4,
+          spacing: _tileGap,
+          runSpacing: _tileGap,
           children: [
             for (final preset in easingPresets)
-              _shapeButton(t, easingPresetName(preset.id), preset.curve),
+              _tile(t, easingPresetName(preset.id), preset.curve),
             for (final saved in CustomEasings.all)
               HouseContextMenu(
                 itemBuilder: (close) => [
@@ -335,25 +385,52 @@ class _EasingEditorState extends State<EasingEditor> {
                     child: Text(l10n.delete, style: t.small),
                   ),
                 ],
-                child: _shapeButton(t, saved.name, saved.curve),
+                child: _tile(t, saved.name, saved.curve),
               ),
           ],
         ),
       );
 
-  Widget _shapeButton(LumitTheme t, String name, EasingCurve curve) =>
-      HouseButton(
-        small: true,
-        frameless: true,
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        onPressed: () => setState(() => _curve = curve),
-        child: Text(
-          name,
-          style: t.caption.copyWith(
-            color: _curve == curve ? t.accent : t.textMuted,
-          ),
+  Widget _tile(LumitTheme t, String name, EasingCurve curve) {
+    final current = _curve == curve;
+    return HouseButton(
+      small: true,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      onPressed: () {
+        setState(() => _curve = curve);
+        widget.onApply?.call(curve);
+      },
+      child: SizedBox(
+        width: _tileWidth - 8,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The thumbnail clips: an overshooting curve may bend past the
+            // drawn margin, and the caption under it is not the place for it.
+            ClipRect(
+              child: CustomPaint(
+                size: const Size(_tileWidth - 8, _thumbHeight),
+                painter: _TilePainter(
+                  curve: curve,
+                  theme: t,
+                  current: current,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.caption.copyWith(
+                color: current ? t.accent : t.textMuted,
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _EasingPainter extends CustomPainter {
@@ -423,4 +500,56 @@ class _EasingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_EasingPainter old) =>
       old.curve != curve || old.box != box || old.theme != theme;
+}
+
+/// A preset tile's thumbnail: the chord as a hairline and the curve over it,
+/// walked by the same [EasingCurve.xAt]/[EasingCurve.yAt] the editor's box
+/// walks — the tile draws the very shape Apply would stamp, not a picture of
+/// one.
+class _TilePainter extends CustomPainter {
+  final EasingCurve curve;
+  final LumitTheme theme;
+  final bool current;
+
+  const _TilePainter({
+    required this.curve,
+    required this.theme,
+    required this.current,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final box = Rect.fromLTWH(2, 7, size.width - 4, size.height - 14);
+    Offset at(double x, double y) =>
+        Offset(box.left + x * box.width, box.bottom - y * box.height);
+
+    canvas.drawLine(
+      at(0, 0),
+      at(1, 1),
+      Paint()
+        ..color = theme.hairline
+        ..strokeWidth = 1,
+    );
+
+    final path = Path()..moveTo(at(0, 0).dx, at(0, 0).dy);
+    // Half the editor's walk: the tile is a quarter the size, and 32 straight
+    // pieces are already below a pixel each here.
+    const steps = 32;
+    for (var i = 1; i <= steps; i++) {
+      final u = i / steps;
+      final p = at(curve.xAt(u), curve.yAt(u));
+      path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = current ? theme.accent : theme.curve.first
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TilePainter old) =>
+      old.curve != curve || old.theme != theme || old.current != current;
 }

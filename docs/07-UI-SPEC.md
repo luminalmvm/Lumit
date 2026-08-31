@@ -2017,7 +2017,7 @@ mirrored to the system clipboard as a tab-separated `Lumit <version> Keyframe Da
 whose per-value easing columns carry the shaping across, and which parses foreign
 keyframe tables back in as linear keys. **A shaped ease is drawn once and stamped on many**
 (K-348): an **Easing…** button beside the three one-click eases opens a unit box — travel
-left to right, two draggable control points, a row of preset shapes, Apply. Apply puts the
+left to right, two draggable control points, a grid of preset tiles (§5.4), Apply. Apply puts the
 shape on every **span** whose two keys are both selected (a lone key names no travel and is
 left alone), converting it per span against that span's own chord slope, so one drawn curve
 reads the same across a selection whose spans move by different amounts. It is offered in
@@ -2042,12 +2042,30 @@ Still to build:
 the acceleration lens and auto view (K-070),
 snap-to-beat-markers in the graph, waveform ghosting, and the Retime lenses of §5.2.
 
-### 5.4 The Easing panel (K-349)
+### 5.4 The Easing panel (K-349, K-729)
 
-A dockable panel holding the shape editor of §5.3 and nothing else: the unit box, the
-preset row, the four `cubic-bezier` numbers as text, and **Apply**. No Close — a panel is
-closed from its tab or the Window menu, like every other.
+A dockable panel holding the shape editor of §5.3 and its **preset library**: the unit
+box, the four `cubic-bezier` numbers as text, **Apply**, and a grid of preset tiles —
+each tile one shape, drawn as its own curve thumbnail with its name under it, the way
+Flow's library reads. No Close — a panel is closed from its tab or the Window menu, like
+every other.
 
+- **A tile applies in one click** (K-729). Clicking a tile loads its shape into the box
+  *and* presses the same road Apply presses, so easing a selection is one gesture rather
+  than a pick and a confirm. While Apply is grey a click only loads. Apply stays for the
+  hand-drawn case: it re-sends whatever shape the box holds.
+- **The shipped shapes** are five house basics — Easy ease, Slow start, Slow finish,
+  Heavy ease, Snap — and the standard families: sine, quad, cubic, quart, expo and back,
+  each as in / out / in-out, drawn from easings.net's own control points. The families
+  wear the web's names ("Sine in" is a slow start); a tile draws its curve, so which end
+  is slow is shown rather than argued, which is what lets the web sense stand beside the
+  basics' "slow start" naming without a collision (K-729, superseding K-348's
+  names-say-the-slow-end rule for the drawn grid).
+- **Saved shapes are tiles too**, after the shipped ones, applied by the same click;
+  right-clicking one offers Rename and Delete. They belong to the person, not the
+  project (`easings.json` beside the settings file).
+- **One press is one undo step**, however many layers the selection spans — the apply is
+  an undo group over the per-layer writes, K-720's rule.
 - **It never learns what is selected.** The Timeline publishes a callback while it can take
   a shape; the panel presses it and is told nothing about what it landed on. The keyframe
   selection stays the Timeline's.

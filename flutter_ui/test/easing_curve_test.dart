@@ -163,27 +163,24 @@ void main() {
       }
     });
 
-    test('the overshoot preset leaves the box and comes back', () {
-      final overshoot =
-          easingPresets.firstWhere((p) => p.id == 'overshoot').curve;
+    test('the back out preset leaves the box and comes back', () {
+      final backOut = easingPresets.firstWhere((p) => p.id == 'backOut').curve;
       var peak = 0.0;
       for (var i = 0; i <= 64; i++) {
-        peak = peak > overshoot.yAt(i / 64) ? peak : overshoot.yAt(i / 64);
+        peak = peak > backOut.yAt(i / 64) ? peak : backOut.yAt(i / 64);
       }
       expect(peak, greaterThan(1));
-      expect(overshoot.yAt(1), closeTo(1, 1e-12));
+      expect(backOut.yAt(1), closeTo(1, 1e-12));
     });
 
-    test('the anticipate preset dips below the start and recovers', () {
-      final anticipate =
-          easingPresets.firstWhere((p) => p.id == 'anticipate').curve;
+    test('the back in preset dips below the line and recovers', () {
+      final backIn = easingPresets.firstWhere((p) => p.id == 'backIn').curve;
       var trough = 0.0;
       for (var i = 0; i <= 64; i++) {
-        trough =
-            trough < anticipate.yAt(i / 64) ? trough : anticipate.yAt(i / 64);
+        trough = trough < backIn.yAt(i / 64) ? trough : backIn.yAt(i / 64);
       }
       expect(trough, lessThan(0));
-      expect(anticipate.yAt(1), closeTo(1, 1e-12));
+      expect(backIn.yAt(1), closeTo(1, 1e-12));
     });
   });
 

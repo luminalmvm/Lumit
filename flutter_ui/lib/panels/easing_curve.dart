@@ -140,16 +140,25 @@ class EasingPreset {
   const EasingPreset(this.id, this.curve);
 }
 
-/// The shipped shapes, gentlest first, ending with the two that leave the box.
+/// The shipped shapes: five house basics, then the standard cubic-bezier
+/// families the rest of the trade ships (K-726) — the grid the Easing panel
+/// draws, and the very curves Apply stamps, one list for both.
 ///
 /// The first is the F9 easy ease exactly: speed 0 at both ends, influence one
 /// third — the same constant as [easyEase], drawn rather than stated.
 ///
-/// **Named by what they do, not by "in" and "out".** Those two words already
-/// mean a *side* here — `ease in` touches the in side, the way F9 does — while
-/// the web's `ease-in` means a slow start, which is the other side entirely. A
-/// preset row using either sense would be read in the other. So the names say
-/// which end of the travel is slow, and the ambiguity never arises.
+/// **Two naming senses, on purpose.** The basics name which end of the travel
+/// is slow ("slow start"), because "in" and "out" already mean a keyframe
+/// *side* here. The families wear the web's names — `Sine in` is
+/// easings.net's `easeInSine`, a slow start — because those names are what
+/// the family shapes are known by everywhere else, and every tile draws its
+/// curve, so which end is slow is shown rather than argued (K-726, which
+/// supersedes K-348's names-only rule for the drawn grid).
+///
+/// The family numbers are easings.net's, with the Back family's vertical
+/// points written pre-clamped to [easingHandleReach] so the value stated here
+/// is the value stored — the old Overshoot and Anticipate presets were these
+/// two Back shapes under house names, and the family absorbs them.
 ///
 /// A side drawn *on the chord* (handle at 1/3 along the diagonal) is what
 /// `anim.rs` calls a linear side, so "slow start" really is flat out of the
@@ -160,6 +169,22 @@ final List<EasingPreset> easingPresets = [
   EasingPreset('slowFinish', EasingCurve(1 / 3, 1 / 3, 2 / 3, 1)),
   EasingPreset('heavy', EasingCurve(0.77, 0, 0.175, 1)),
   EasingPreset('snap', EasingCurve(0.16, 1, 0.3, 1)),
-  EasingPreset('overshoot', EasingCurve(0.34, 1.5, 0.64, 1)),
-  EasingPreset('anticipate', EasingCurve(0.36, -0.5, 0.66, 1)),
+  EasingPreset('sineIn', EasingCurve(0.12, 0, 0.39, 0)),
+  EasingPreset('sineOut', EasingCurve(0.61, 1, 0.88, 1)),
+  EasingPreset('sineInOut', EasingCurve(0.37, 0, 0.63, 1)),
+  EasingPreset('quadIn', EasingCurve(0.11, 0, 0.5, 0)),
+  EasingPreset('quadOut', EasingCurve(0.5, 1, 0.89, 1)),
+  EasingPreset('quadInOut', EasingCurve(0.45, 0, 0.55, 1)),
+  EasingPreset('cubicIn', EasingCurve(0.32, 0, 0.67, 0)),
+  EasingPreset('cubicOut', EasingCurve(0.33, 1, 0.68, 1)),
+  EasingPreset('cubicInOut', EasingCurve(0.65, 0, 0.35, 1)),
+  EasingPreset('quartIn', EasingCurve(0.5, 0, 0.75, 0)),
+  EasingPreset('quartOut', EasingCurve(0.25, 1, 0.5, 1)),
+  EasingPreset('quartInOut', EasingCurve(0.76, 0, 0.24, 1)),
+  EasingPreset('expoIn', EasingCurve(0.7, 0, 0.84, 0)),
+  EasingPreset('expoOut', EasingCurve(0.16, 1, 0.84, 1)),
+  EasingPreset('expoInOut', EasingCurve(0.87, 0, 0.13, 1)),
+  EasingPreset('backIn', EasingCurve(0.36, 0, 0.66, -0.5)),
+  EasingPreset('backOut', EasingCurve(0.34, 1.5, 0.64, 1)),
+  EasingPreset('backInOut', EasingCurve(0.68, -0.5, 0.32, 1.5)),
 ];

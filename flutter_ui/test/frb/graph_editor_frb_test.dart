@@ -597,12 +597,17 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
       await openEditor();
+      // A tile now applies as it loads (K-726), and the Apply press repeats
+      // it — both are no-ops on a lone key.
+      await tester.ensureVisible(find.text('Slow start'));
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Apply'.toUpperCase()));
       await tester.tap(find.text('Apply'.toUpperCase()));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Linear>(),
           reason: 'one key on its own has no span to shape');
+      await tester.ensureVisible(find.text('Close'));
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
@@ -613,8 +618,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pump();
       await openEditor();
+      await tester.ensureVisible(find.text('Slow start'));
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Apply'.toUpperCase()));
       await tester.tap(find.text('Apply'.toUpperCase()));
       await tester.pumpAndSettle();
 
@@ -630,6 +637,7 @@ void main() {
 
       // The speed lens takes the button away, so a shape cannot be stamped on a
       // graph the user is not looking at.
+      await tester.ensureVisible(find.text('Close'));
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
       await tester
