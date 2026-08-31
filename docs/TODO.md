@@ -38,6 +38,12 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
+- **An undecodable file imports silently.** The dialogue no longer hides formats
+    (the filter lists what the engine reads, with All files beside it), so what is left
+    is the answer: a file FFmpeg cannot open becomes a footage item with no picture and
+    no reason. `thumbnail` returns `None` for undecodable and missing alike, and only
+    missing wears a badge. Testers reading that as "it would not import" is what raised
+    it. Wants the probe's error carried to the row and said in one line.
 - **The Crowdin branch's last translations are not in the files.** `origin/translation/main` (c5845a78) was merged, and its five `.arb`s lost to the
     site tool's own output, which is newer and much fuller. What it had and ours do
     not: 152 keys in Kazakh, 134 in Ukrainian, 42 in German, 37 in each Chinese. Their

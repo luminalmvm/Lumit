@@ -1337,6 +1337,10 @@
       }
     }
   },
+  "fileTypeAllFiles": "All files",
+  "@fileTypeAllFiles": {
+    "description": "A file type in the system's Import dialogue, offered beside Footage so a file with an unlisted extension can still be chosen."
+  },
   "fileTypeFootage": "Footage",
   "@fileTypeFootage": {
     "description": "A file type in the system's Import dialogue: video, images and sound."

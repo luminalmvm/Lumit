@@ -14,29 +14,39 @@ import 'workspace.dart' show workspaceFileExtension;
 XTypeGroup _projectGroup() =>
     XTypeGroup(label: l10n.fileTypeProject, extensions: const ['lum']);
 
-/// The extensions the footage filter offers, mirroring the egui import filter
-/// exactly (crates/lumit-ui/src/app_state/layers.rs `import_footage_dialog`).
+/// The extensions the footage filter offers.
+///
+/// Two lists in one: the containers FFmpeg reads, and every still-image format
+/// `lumit_media::sequence::STILL_EXTENSIONS` names - a numbered run of any of
+/// those imports as one sequence (K-539), so offering fewer here than the
+/// engine reads is the dialogue hiding files that would have worked.
+///
+/// It is a convenience, not a gate. The dialogue also offers All files, the
+/// engine refuses nothing by extension, and the probe is what decides whether a
+/// file can be read - so a codec somebody has and this list has never heard of
+/// still opens.
 ///
 /// Public because the file picker is no longer the only road in: a folder
 /// dropped on the Project panel (K-581) is read with this same list, so what a
 /// folder yields and what the dialogue offers cannot drift apart.
 const List<String> footageExtensions = [
-  'mp4',
-  'mov',
-  'mkv',
-  'avi',
-  'webm',
-  'png',
-  'jpg',
-  'jpeg',
-  'wav',
-  'mp3',
-  'flac',
+  // Video containers
+  'mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'mpg', 'mpeg', 'ts', 'mts', 'm2ts',
+  'wmv', 'flv', '3gp', 'ogv', 'mxf', 'gif',
+  // Stills, mirroring the engine's STILL_EXTENSIONS
+  'png', 'jpg', 'jpeg', 'tif', 'tiff', 'exr', 'tga', 'targa', 'dpx', 'bmp',
+  'webp', 'ppm', 'pgm', 'pnm', 'pbm',
+  // Sound
+  'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
 ];
-
 /// The footage type group.
 XTypeGroup _footageGroup() =>
     XTypeGroup(label: l10n.fileTypeFootage, extensions: footageExtensions);
+
+/// Everything, offered under the footage group. A file whose extension nobody
+/// listed - a container the machine's own codecs handle, a camera's odd suffix -
+/// is still reachable, and the probe gives the honest answer about it.
+XTypeGroup _anyGroup() => XTypeGroup(label: l10n.fileTypeAllFiles);
 
 /// Pick one project file to open, or null when the dialogue was cancelled.
 Future<String?> pickProjectToOpen() async {
@@ -56,7 +66,9 @@ Future<String?> pickProjectSaveLocation() async {
 
 /// Pick one or more footage files, or an empty list when cancelled.
 Future<List<String>> pickFootage() async {
-  final files = await openFiles(acceptedTypeGroups: [_footageGroup()]);
+  final files = await openFiles(
+    acceptedTypeGroups: [_footageGroup(), _anyGroup()],
+  );
   return [for (final f in files) f.path];
 }
 
