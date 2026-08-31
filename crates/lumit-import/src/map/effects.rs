@@ -441,6 +441,7 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
         enabled: node.enabled.unwrap_or(true),
         params,
         sample_temporally: true,
+        roto: None,
         // docs/11 §6: the placeholder keeps the name the user was looking at,
         // which is what `custom_name` is for (K-321).
         custom_name: Some(name),
