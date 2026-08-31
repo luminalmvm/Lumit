@@ -74,9 +74,7 @@ fn stroke_of(
     kind: BridgeRotoStrokeKind,
     frame: i64,
 ) -> Result<RotoStroke, BridgeError> {
-    if points.is_empty()
-        || !points.len().is_multiple_of(2)
-        || !points.iter().all(|v| v.is_finite())
+    if points.is_empty() || !points.len().is_multiple_of(2) || !points.iter().all(|v| v.is_finite())
     {
         return Err(BridgeError::InvalidParam);
     }
