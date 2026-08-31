@@ -16,6 +16,9 @@
 // the day docs/13 §7.3's real-window CI harness supersedes it.
 
 import 'dart:io';
+import 'dart:ui' as dart_ui;
+
+import 'package:flutter/rendering.dart';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
@@ -380,6 +383,35 @@ class _Probe {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     await Future<void>.delayed(const Duration(seconds: 1));
+
+    // One whole-window capture beside the table, for eyeballing what the
+    // engine under test does to text and hairlines (the WP-7 A/B's visual
+    // half; external capture is dead on this machine, so it is taken from
+    // inside the tree). Best effort: a run that cannot capture still measures.
+    try {
+      final root = WidgetsBinding.instance.rootElement?.renderObject;
+      RenderRepaintBoundary? boundary;
+      void find(RenderObject node) {
+        if (boundary != null) return;
+        if (node is RenderRepaintBoundary) {
+          boundary = node;
+          return;
+        }
+        node.visitChildren(find);
+      }
+
+      if (root != null) find(root);
+      final image = await boundary?.toImage(pixelRatio: view.devicePixelRatio);
+      final bytes =
+          await image?.toByteData(format: dart_ui.ImageByteFormat.png);
+      if (bytes != null) {
+        final shot = File('$probeOutPath.png');
+        shot.writeAsBytesSync(bytes.buffer.asUint8List());
+        out.writeln('screenshot: ${shot.path}');
+      }
+    } catch (e) {
+      out.writeln('screenshot failed: $e');
+    }
 
     // G0: idle baseline — how many frames does a quiet editor draw?
     await _measure('idle 3s', () async {

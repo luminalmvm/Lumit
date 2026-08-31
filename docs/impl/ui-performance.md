@@ -910,10 +910,22 @@ package that reopens it, in the order evidence would be gathered:
   app, one `Texture` widget over a D3D11 shared handle marked available each frame, a
   full-window gesture. Our end is already minimal (§4.1), so the value here is a
   standalone case an engine engineer can run, not another change to our transport.
-- **Try the MSAA hypothesis where it can be tried** — a local engine build with the
-  Impeller backing store made single-sample says in one number how much of the floor is
-  the 4× MSAA offscreen and its resolve. That is an engine experiment, not a Lumit
-  change, and it belongs to whoever answers §7.1.
+- **The MSAA hypothesis was tried, and it is not the floor** (2026-08-31). A local
+  engine build of the same commit the SDK ships (3.47's `5d531788…`) with the
+  Impeller backing store forced single-sample — no 4× MSAA renderbuffers, no
+  resolve in `Present` — was A/B'd against stock by swapping `flutter_windows.dll`
+  under the **identical built app**, two runs each, owner's conditions (maximised,
+  live preview), the §6 probe. Stock: zoom fly 35.5–35.8 fps / 25.5–25.7 ms raster;
+  playhead 29–36 fps / 25–30 ms; work-area 35–36 fps / 26 ms. Patched: zoom
+  27.3 fps / 33.7–34.3 ms; playhead 25–30 fps / 30–38 ms; work-area 29–30 fps /
+  31–32 ms — the single-sample path is consistently ~5 ms of raster **worse**, and
+  visually indistinguishable (text and hairlines identical in same-window
+  captures). So the maximised-frame floor is not the MSAA offscreen or its
+  resolve; what remains pointed at is the whole-window re-record with no damage
+  plumbing, and the upstream issue (§7.1) should say so rather than lead with
+  MSAA. The same session could no longer reproduce §2.2's ~18 ms live-vs-empty
+  term at all (live and empty rasters within 1 ms on stock, this project's saved
+  layout) — re-measure it before building anything else on it.
 
 Until one of those moves, WP-2..WP-6 stand on their own: they are the frames Lumit is
 responsible for, and each is measured against the backend that ships.
