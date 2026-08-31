@@ -985,7 +985,18 @@ class Workspace extends ChangeNotifier {
     activeUserWorkspace = null;
     notifyListeners();
     save();
+    presetApplied.value++;
   }
+
+  /// Bumped every time a shipped preset is applied — pressing the strip's word
+  /// a second time included. Its own notifier rather than [notifyListeners]
+  /// because this class notifies for a theme edit too, and a listener acting
+  /// on "the user asked for this arrangement" must not fire on those; and
+  /// because re-applying the preset already in force notifies nobody else.
+  ///
+  /// The Timeline is the listener (K-728): the Audio arrangement's board draws
+  /// the sound lanes open, which a dock tree cannot say.
+  final ValueNotifier<int> presetApplied = ValueNotifier<int>(0);
 
   /// Which shipped preset the arrangement was last set to, for the toolbar's
   /// workspace strip to tick (docs/07 §1.4).

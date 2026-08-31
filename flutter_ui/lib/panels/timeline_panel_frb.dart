@@ -1693,6 +1693,41 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Edge-follow: the playhead stays on screen while the transport runs
     // (docs/07 §4.6).
     _ui!.playheadFrame.addListener(_edgeFollow);
+    // The workspace strip landed on an arrangement (K-728): the Audio board
+    // draws the Timeline with every sounding layer's waveform lane open, and
+    // the dock split alone cannot say so.
+    _ui!.workspace.presetApplied.addListener(_onPresetApplied);
+  }
+
+  /// A shipped preset was applied. Audio's board (docs/09 §1) draws the
+  /// Timeline with the sound of every layer open — wave, rubber band, lane
+  /// chip — so the preset twirls the Audio group and the Waveform lane open on
+  /// every layer that carries sound, exactly as `LL` does one layer at a time
+  /// (K-281). Additive only: nothing a hand has opened is shut, and the lanes
+  /// stay session state a twirl can put away again.
+  void _onPresetApplied() {
+    final ui = _ui;
+    if (ui == null || !mounted) return;
+    if (ui.workspace.activePreset != WorkspacePreset.audio) return;
+    for (final entry in ui.model.layers) {
+      final id = entry.layer.internallayerId.toString();
+      // Asked rather than read off [_hasAudio]: a probe still in flight holds
+      // the claimed `false` there, and the engine answers a repeat ask from
+      // its own cache.
+      entry.layer.hasAudio().then((has) {
+        if (!mounted || !has) return;
+        if (ui.workspace.activePreset != WorkspacePreset.audio) return;
+        setState(() {
+          _hasAudio[id] = true;
+          // A layer with sound has a Volume scalar to fetch, and the document
+          // has not moved: forget the revision so the next build reads it.
+          _boundsRevision = null;
+          _setOpen(id, true);
+          _open.add(audioPath(id));
+          _open.add(waveformPath(id));
+        });
+      });
+    }
   }
 
   /// Keep the playhead in view during playback (docs/07 §4.6).
@@ -2131,11 +2166,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final channels = _selectionChannels(ui);
     final selection = _actionKeySelection(channels);
     if (selection.isEmpty) return;
-    applyEasingToSelection(
-      channels: channels,
-      selectedKeys: selection,
-      curve: curve,
-    );
+    // One press, one undo step, however many layers the selection spans — the
+    // batch writes one op per layer, and K-720's rule is that a multi-selection
+    // edit is one edit.
+    asOneUndoStep(_project, () {
+      applyEasingToSelection(
+        channels: channels,
+        selectedKeys: selection,
+        curve: curve,
+      );
+    });
     ui.model.refresh();
   }
 
@@ -2635,6 +2675,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void dispose() {
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
     _ui?.selectedLayer.removeListener(_onPrimaryChanged);
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);

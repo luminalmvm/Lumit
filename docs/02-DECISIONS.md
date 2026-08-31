@@ -22972,3 +22972,27 @@ Strings: `tipFilterColour` ("Filter colour") replaces `tipFilterByLabel`.
 
 Tests: `project_panel_frb_test` (filter and clear through the picker),
 `project_panel_metrics_test` 8d/8e (one 10px square inside the well; the picker's chips).
+
+## K-728 — Applying the Audio workspace opens the sound lanes
+
+**Status:** DECIDED — 2026-08-31 (owner finding: "the audio workspace's timeline doesn't
+look anything like the one we mocked up").
+
+The Audio preset's dock landed with a comment promising "the Timeline taller than Edit's
+with its waveform lanes open", and only the first half was true: switching to the Audio
+workspace rearranged the panels and left every Timeline row shut, so none of what the
+approved AudioWorkspace board draws in the lanes — the waves, the volume rubber band, the
+lane-mode chips, the spectral lane — was on screen until each layer was twirled open by
+hand with `LL`.
+
+Applying the **Audio** preset now opens the Audio group and the Waveform lane on every
+layer that carries sound, exactly what `LL` does one layer at a time (K-281), and leaves
+silent layers alone. Additive only: nothing a hand has opened is shut, the lanes stay
+ordinary session-state twirls that can be put away again, and pressing the strip's word a
+second time re-opens them. The mechanism is a `presetApplied` notifier on the workspace
+store — its own notifier rather than the store's general one, because the store notifies
+for theme edits too and re-applying the preset already in force notifies nobody else —
+which the Timeline listens to.
+
+Tests: `audio_workspace_lanes_test` (the preset opens a sounding layer's lane and leaves
+a solid shut; re-applying re-opens a lane a hand shut; the Edit preset opens nothing).

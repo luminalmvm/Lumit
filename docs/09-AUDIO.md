@@ -19,7 +19,10 @@ Out (explicitly, §7): audio effects, mixer **buses and sends**, and audio retim
 
 The engine layer (`lumit-audio`, `lumit-bridge`) is built, and so are the Flutter **Mixer**
 and **Audio** panels with the Audio workspace preset that hosts them (the approved
-AudioWorkspace board). [TODO.md](TODO.md) is the one document that says what remains.
+AudioWorkspace board). Applying that preset also opens the Audio group and the Waveform
+lane on every layer that carries sound (K-728), so the Timeline shows the board's own
+picture — waves, rubber bands, lane chips — rather than a stack of shut rows.
+[TODO.md](TODO.md) is the one document that says what remains.
 
 ## 2. Import and decode
 
