@@ -97,6 +97,31 @@ List<int> thinStrokeIndices(List<Offset> points,
   return out;
 }
 
+/// [points] as a polyline, ready to be stroked.
+///
+/// A single point is drawn as a line to itself: a path with one point in it
+/// draws nothing, and a dab is a stroke of one point that still has to leave
+/// its round cap on the picture.
+Path strokePath(List<Offset> points) {
+  final path = Path()..moveTo(points.first.dx, points.first.dy);
+  for (final p in points.skip(1)) {
+    path.lineTo(p.dx, p.dy);
+  }
+  if (points.length == 1) path.lineTo(points.first.dx, points.first.dy);
+  return path;
+}
+
+/// How a mark is stroked: round cap, round join, and a width that cannot fall
+/// below a hairline or run away past the canvas — the recipe every overlay that
+/// draws a brushed stroke shares, so a paint stroke and a roto scribble look
+/// like the same instrument.
+Paint strokePaint(Color colour, double width) => Paint()
+  ..color = colour
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = width.clamp(1.0, 4000.0)
+  ..strokeCap = StrokeCap.round
+  ..strokeJoin = StrokeJoin.round;
+
 /// How hard the stylus is pressing, 0..1, or **1.0 for anything that is not a
 /// stylus** — a mouse, a finger, a tablet that reports no range. That is the
 /// whole of "if no stylus is present nothing changes" (K-583): a full press
@@ -206,13 +231,8 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   }
 
   /// The layer being painted on: the primary selection, as the shape tools use.
-  LayerBox? get _target {
-    final ids = widget.uiState.selectedLayerIds;
-    for (final box in widget.boxes) {
-      if (ids.contains(box.id)) return box;
-    }
-    return null;
-  }
+  LayerBox? get _target =>
+      primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
   /// Backspace takes back the last stroke committed — the reason a bad stroke
   /// is never a trip to the Timeline. (Escape, which abandons the stroke still
@@ -469,20 +489,11 @@ class _StrokePainter extends CustomPainter {
     }
 
     if (stroke.isEmpty) return;
-    final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
-    for (final p in stroke.skip(1)) {
-      path.lineTo(p.dx, p.dy);
-    }
     // An eraser has no colour to show, so it draws as an outline of where it
     // would rub: filling it in the theme's ink would read as painting.
     canvas.drawPath(
-      path,
-      Paint()
-        ..color = erasing ? hairline : colour
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width.clamp(1.0, 4000.0)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
+      strokePath(stroke),
+      strokePaint(erasing ? hairline : colour, width),
     );
   }
 

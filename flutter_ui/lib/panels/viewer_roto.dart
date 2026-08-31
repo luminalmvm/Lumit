@@ -47,7 +47,7 @@ import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
-import 'viewer_paint.dart' show thinStroke;
+import 'viewer_paint.dart' show strokePaint, strokePath, thinStroke;
 import 'viewer_tool_cursor.dart';
 
 /// The Roto brush's `view` choice, by index — the order
@@ -210,13 +210,8 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   /// The layer being scribbled on: the primary selection, as every other
   /// drawing tool uses.
-  LayerBox? get _target {
-    final ids = widget.uiState.selectedLayerIds;
-    for (final box in widget.boxes) {
-      if (ids.contains(box.id)) return box;
-    }
-    return null;
-  }
+  LayerBox? get _target =>
+      primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
   /// The three engine answers the overlay draws from, asked for once per frame,
   /// per document revision and per propagation landing — never per rebuild
@@ -303,15 +298,26 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
                       strokes: _strokes,
                       sourceFrame: _sourceFrame,
                       boundary: _boundary,
-                      inFlight: _stroke,
-                      inFlightColour:
-                          rotoStrokeColour(rotoKindFor(widget.tool, alt: alt), t),
-                      width: widget.uiState.tools.rotoSize * widget.viewScale,
                       foreground: t.success,
                       background: t.error,
                       refine: t.accent,
                       edge: t.marker,
                       outline: t.surface0,
+                    ),
+                  ),
+                ),
+                // The scribble in flight on its own layer above the edge: a
+                // drag adds a point per pointer move, and the boundary below is
+                // up to twelve thousand points that have to be mapped one by one
+                // to be drawn. Keeping the two apart means a drag redraws only
+                // the scribble.
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _ScribblePainter(
+                      points: _stroke,
+                      colour: rotoStrokeColour(
+                          rotoKindFor(widget.tool, alt: alt), t),
+                      width: widget.uiState.tools.rotoSize * widget.viewScale,
                     ),
                   ),
                 ),
@@ -425,8 +431,39 @@ int _sourceFrameFromEngine(LayerReference layer, int frame) =>
 Float32List _boundaryFromEngine(UuidValue effect, int frame) =>
     rotoBoundary(effect: effect, frame: frame);
 
-/// The scribbles on this frame, the scribble in flight, and — in the Boundary
-/// view — the propagated matte's edge.
+/// The scribble under the pointer, on its own layer so a drag does not redraw
+/// the edge underneath it.
+class _ScribblePainter extends CustomPainter {
+  /// The scribble in screen coordinates, and the colour of the claim it is
+  /// about to make.
+  final List<Offset> points;
+  final Color colour;
+
+  /// How wide it draws, in screen pixels.
+  final double width;
+
+  const _ScribblePainter({
+    required this.points,
+    required this.colour,
+    required this.width,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    canvas.drawPath(strokePath(points), strokePaint(colour, width));
+  }
+
+  @override
+  bool shouldRepaint(_ScribblePainter old) =>
+      old.points.length != points.length ||
+      old.points.lastOrNull != points.lastOrNull ||
+      old.colour != colour ||
+      old.width != width;
+}
+
+/// The scribbles on this frame and — in the Boundary view — the propagated
+/// matte's edge.
 ///
 /// Every colour arrives from the theme struct; nothing here chooses one.
 class RotoOverlayPainter extends CustomPainter {
@@ -443,14 +480,6 @@ class RotoOverlayPainter extends CustomPainter {
   /// every view but Boundary, and outside the propagated span.
   final Float32List boundary;
 
-  /// The scribble under the pointer, in screen coordinates, and the colour of
-  /// the claim it is about to make.
-  final List<Offset> inFlight;
-  final Color inFlightColour;
-
-  /// How wide a scribble draws, in screen pixels.
-  final double width;
-
   final Color foreground;
   final Color background;
   final Color refine;
@@ -462,9 +491,6 @@ class RotoOverlayPainter extends CustomPainter {
     required this.strokes,
     required this.sourceFrame,
     required this.boundary,
-    required this.inFlight,
-    required this.inFlightColour,
-    required this.width,
     required this.foreground,
     required this.background,
     required this.refine,
@@ -481,20 +507,9 @@ class RotoOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final m = map;
-    if (m != null) {
-      _paintBoundary(canvas, m);
-      _paintStrokes(canvas, m);
-    }
-    if (inFlight.isEmpty) return;
-    canvas.drawPath(
-      _pathOf(inFlight),
-      Paint()
-        ..color = inFlightColour
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width.clamp(1.0, 4000.0)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
+    if (m == null) return;
+    _paintBoundary(canvas, m);
+    _paintStrokes(canvas, m);
   }
 
   /// The strokes already in the document, at their stored width, faded — they
@@ -503,34 +518,18 @@ class RotoOverlayPainter extends CustomPainter {
   void _paintStrokes(Canvas canvas, ViewerLayerMap m) {
     for (final s in strokes) {
       if (s.frame != sourceFrame || s.points.length < 2) continue;
-      final path = Path();
-      for (var i = 0; i + 1 < s.points.length; i += 2) {
-        final at = m.toScreen(s.points[i], s.points[i + 1]);
-        if (i == 0) {
-          path.moveTo(at.dx, at.dy);
-        } else {
-          path.lineTo(at.dx, at.dy);
-        }
-      }
-      // A one-point stroke is a dab, and a path with one point draws nothing;
-      // the round cap needs somewhere to sit.
-      if (s.points.length == 2) {
-        final at = m.toScreen(s.points[0], s.points[1]);
-        path.lineTo(at.dx, at.dy);
-      }
+      final at = <Offset>[
+        for (var i = 0; i + 1 < s.points.length; i += 2)
+          m.toScreen(s.points[i], s.points[i + 1]),
+      ];
       // The stored radius is in source pixels; on screen it is that through the
       // same map the points went through, measured rather than assumed so a
       // scaled or rotated layer draws the width it will really claim.
-      final centre = m.toScreen(s.points[0], s.points[1]);
       final rim = m.toScreen(s.points[0] + s.radius, s.points[1]);
       canvas.drawPath(
-        path,
-        Paint()
-          ..color = _colourOf(s.kind).withValues(alpha: 0.45)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = ((rim - centre).distance * 2).clamp(1.0, 4000.0)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
+        strokePath(at),
+        strokePaint(_colourOf(s.kind).withValues(alpha: 0.45),
+            (rim - at.first).distance * 2),
       );
     }
   }
@@ -565,23 +564,15 @@ class RotoOverlayPainter extends CustomPainter {
     );
   }
 
-  Path _pathOf(List<Offset> points) {
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final p in points.skip(1)) {
-      path.lineTo(p.dx, p.dy);
-    }
-    if (points.length == 1) path.lineTo(points.first.dx, points.first.dy);
-    return path;
-  }
-
   @override
   bool shouldRepaint(RotoOverlayPainter old) =>
       old.map != map ||
       !identical(old.strokes, strokes) ||
       old.sourceFrame != sourceFrame ||
       !identical(old.boundary, boundary) ||
-      old.inFlight.length != inFlight.length ||
-      old.inFlight.lastOrNull != inFlight.lastOrNull ||
-      old.inFlightColour != inFlightColour ||
-      old.width != width;
+      old.foreground != foreground ||
+      old.background != background ||
+      old.refine != refine ||
+      old.edge != edge ||
+      old.outline != outline;
 }
