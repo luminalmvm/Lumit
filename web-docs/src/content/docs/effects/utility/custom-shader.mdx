@@ -1,0 +1,72 @@
+---
+title: Custom shader
+description: An effect you write yourself, as WGSL text or a graph of boxes.
+---
+
+Custom shader is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Runs a program you write. Freshly applied it does nothing; **Edit shader…** opens a
+code editor, or **Load from file…** reads a `.wgsl` file somebody sent you. The
+program is one WGSL function — `fn shade(uv: vec2<f32>) -> vec4<f32>`, one pixel in,
+one colour out — with helpers for sampling the input, the original, the matte and the
+second input already declared.
+
+Parameters the shader declares become ordinary rows in Effect controls, with sliders,
+keyframes and expressions like any built-in effect's.
+
+The effect also holds an inner **graph**: double-click the effect — its box on the
+Graph panel or its heading in Effect controls — and it opens the way a precomp does,
+breadcrumb and all. Add boxes from the `Ctrl+Space` [effects console](/use/fx-console/), wire them up, and
+the graph compiles into the shader. `Escape` returns.
+
+A shader that fails to compile shows a badge with the error and the layer keeps
+drawing its last good picture while you type. A shader cannot read your disc, and its
+picture is the same on every machine.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Second input** | Layer | Any layer in the composition | None | - |
+| **Edit shader…** | Button | - | - | - |
+| **Load from file…** | Button | - | - | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Second input**: one extra layer the shader can sample. A shader that needs three
+  inputs is two shaders in a stack.
+- **Edit shader…**: opens the code editor.
+- **Load from file…**: reads the shader text from a file.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer; see
+  [Effects](/use/effects/).
+
+Rows the shader declares appear below these, and are the shader's own.
+
+## Related
+
+- [The node graph](/use/nodes/)
+- [Plugins](/use/plugins/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

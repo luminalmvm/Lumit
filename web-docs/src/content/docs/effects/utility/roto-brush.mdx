@@ -1,0 +1,74 @@
+---
+title: Roto brush
+description: Cuts a subject out of a shot from a few strokes, carried frame to frame.
+---
+
+Roto brush is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns a few strokes into a matte and carries it through the shot. Stroke the subject
+with the Roto brush tool (`Alt+W`) — hold `Alt` to stroke the background — and the
+matte appears on that frame, which becomes the **base frame**. **Propagate** carries it
+outward from the base in both directions, following the shot's motion. Where it drifts,
+stroke that frame and the correction carries onward from there.
+
+Strokes live on the source footage, not the composition, so the matte survives
+transforms, retimes and preview resolutions, and serves every composition that cuts
+the same shot.
+
+Propagation is a background job and currently takes roughly a second per 1080p frame.
+You can keep working while it runs; the effect's card shows how far the span reaches.
+
+For the working loop, see [Cutting out a subject](/tutorials/roto-brush/).
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Propagate** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Matte mode** | Dropdown | Matte · Matte inverted | Matte | - |
+| **View** | Dropdown | Result · Matte · Boundary | Result | - |
+| **Refine radius** | Slider | 0 to 64; up to 256 | 8 | - |
+| **Flow resolution** | Dropdown | Native · Half · Quarter | Half | - |
+| **Flow smoothness** | Slider | 0 to 100 | 50 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Propagate**: carries the matte outward from the base frame. Only one propagation
+  runs at a time.
+- **Cancel**: stops the job and keeps the frames already solved; a later Propagate
+  resumes from them.
+- **Matte mode**: keep the subject, or drop it.
+- **View**: the cut-out picture, the matte itself, or the picture with the matte's
+  edge drawn over it.
+- **Refine radius**: how wide the softened band round the matte's edge is — room for
+  hair, motion blur and smoke. The Refine edge tool paints the band wider where one
+  spot needs more.
+- **Flow resolution**: the resolution the propagation's motion is measured at. Native
+  is slower and rarely better.
+- **Flow smoothness**: how strongly that motion is regularised.
+
+## Notes
+
+Frames the propagation has not reached render untouched — the effect never holds a
+neighbouring frame's matte over them.
+
+## Related
+
+- [Cutting out a subject](/tutorials/roto-brush/)
+- [Masks](/use/masks/)
+- [Mattes](/use/mattes/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)
