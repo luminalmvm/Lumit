@@ -22801,3 +22801,33 @@ layer in it.
 new-content commit sites (`CompositionReference::add_at_top`, `add_solid_layer`, `precompose`,
 `place_footage`, the two text-conversion commands, and the tracked-point plant). `lumit-core`'s
 op application is untouched — ops replay on undo and redo, and must stay exact.
+
+## K-720 — Dragging one selected bar drags the whole selection, and every multi-selection edit is one edit
+
+**DECIDED 2026-08-31.** Owner, testing a 53-layer comp: a Ctrl+A visibility click must
+respond immediately, dragging several layers through time "needs implementing", and undoing
+a multi-select change "records them one at a time, but it should actually undo all at once
+since they were all performed on the same action."
+
+**The new behaviour: a move drag on a bar inside the current multi-selection carries the
+whole selection.** Every selected layer's bar previews the same frame travel live —
+waveforms and keyframes travelling with their bars — and release commits one
+`slide_layers(layer_ids, delta)` batch, the same slide (and the same comp-zero clamp as a
+unit) the group bar's `shift_group` performs, factored so the two share one road. A locked
+selected layer sits still; the Timeline hands the engine the unlocked share. Grabbing an
+**unselected** bar keeps its old manners — the press makes it the selection and the drag
+moves it alone — which needed one refinement: a plain press on an already-selected bar now
+leaves the selection standing for the drag's sake, and the collapse to that one layer
+happens on the click's release instead of its press (same click, same outcome; a drag no
+longer destroys the set it was about to carry). **Trims stay single-layer** whatever is
+selected: one edge over many bars has no one honest answer yet, and the boundary is marked
+in the bar for the day testers reach for it.
+
+**The batching is not a new rule — it is K-523 finishing its own sentence.** K-523 said an
+action on a multi-selection applies to every selected layer; the Dart loop applied it as
+one committed op per layer, which made one click fifty-three undo steps. The plural writes
+now cross the seam once: `set_switch_on_layers(clicked, layers, switch, on)` (every switch
+the outline offers, the group broadcast's op-builder shared; a locked sibling silently
+drops out exactly as the loop's `try`/`catch` did, the clicked row keeps its own refusal
+rules) and `ungroup_selection(layer_ids)` (every band the selection touches, one batch,
+each restored to its slot by one undo). One click, one `Op::Batch`, one undo step.

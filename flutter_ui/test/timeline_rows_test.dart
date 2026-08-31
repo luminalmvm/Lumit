@@ -106,6 +106,14 @@ void main() {
       expect(keyShiftOf(barDragPreview('b', BarGrab.move, 12), 'a'), 0);
     });
 
+    test('a selection move carries every layer it lists (K-720)', () {
+      final move = barDragPreview('b', BarGrab.move, 12, moving: {'a', 'b'});
+      expect(keyShiftOf(move, 'a'), 12,
+          reason: 'a selection-mate\'s keys travel with the drag');
+      expect(keyShiftOf(move, 'b'), 12);
+      expect(keyShiftOf(move, 'c'), 0);
+    });
+
     test('nothing in flight is no shift', () {
       expect(keyShiftOf(null, 'a'), 0);
     });

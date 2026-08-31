@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
@@ -48,22 +49,33 @@ BarGrab barGrabAt(double dx, double width) {
 /// lane, so the transients travel with the bar rather than jumping on release
 /// (K-172). Null between gestures.
 class BarDragPreview {
+  /// The layer whose bar the hand is on.
   final String layerId;
+
+  /// Every layer the drag carries (K-720): [layerId] alone for a trim or a
+  /// single-layer move, the whole unlocked selection when a move drag starts
+  /// on a selected bar. Each travels by the same three deltas, because only a
+  /// move is ever plural and a move's three deltas are one number.
+  final Set<String> layers;
   final int deltaIn;
   final int deltaOut;
   final int offsetShift;
   const BarDragPreview(
-      this.layerId, this.deltaIn, this.deltaOut, this.offsetShift);
+      this.layerId, this.layers, this.deltaIn, this.deltaOut, this.offsetShift);
 }
 
 /// What a grab of [grab] moved by [delta] frames does to a layer's span.
 /// Moving carries the content with the bar, so the start offset travels too;
 /// a trim leaves the content where it is and moves one edge over it.
-BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta) =>
+/// [moving] is the selection travelling with a move (K-720), the grabbed
+/// layer included; trims stay single-layer whatever is selected.
+BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta,
+        {Set<String>? moving}) =>
     switch (grab) {
-      BarGrab.move => BarDragPreview(layerId, delta, delta, delta),
-      BarGrab.trimIn => BarDragPreview(layerId, delta, 0, 0),
-      BarGrab.trimOut => BarDragPreview(layerId, 0, delta, 0),
+      BarGrab.move =>
+        BarDragPreview(layerId, moving ?? {layerId}, delta, delta, delta),
+      BarGrab.trimIn => BarDragPreview(layerId, {layerId}, delta, 0, 0),
+      BarGrab.trimOut => BarDragPreview(layerId, {layerId}, 0, delta, 0),
     };
 
 /// How far a bar drag in flight moves [layerId]'s keyframes, in frames
@@ -71,10 +83,27 @@ BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta) =>
 ///
 /// The **start offset's** travel, not an edge's: a keyframe's time is the
 /// layer's own, carried onto the comp's clock by that offset (K-213), so a
-/// move slides every key with the bar and a trim slides none. Zero for a drag
-/// on some other layer, and zero between gestures.
+/// move slides every key with the bar and a trim slides none. Answered for
+/// **every** layer the drag carries (K-720), so a selection-mate's keys travel
+/// with its bar; zero for a layer outside the drag, and zero between gestures.
 int keyShiftOf(BarDragPreview? preview, String layerId) =>
-    preview != null && preview.layerId == layerId ? preview.offsetShift : 0;
+    preview != null && preview.layers.contains(layerId)
+        ? preview.offsetShift
+        : 0;
+
+/// The selection's share of a move drag (K-720): every **unlocked** selected
+/// layer — a locked layer sits still, exactly as it refuses its share of a
+/// switch batch — and the wall the set stops at.
+class SelectionMove {
+  /// In stack order; the grabbed layer is among them.
+  final List<UuidValue> layerIds;
+
+  /// The earliest in frame among them: the whole set's travel stops where
+  /// this one meets comp zero, so the set hits the wall with its shape
+  /// intact — the same clamp the group bar's slide has.
+  final int minIn;
+  const SelectionMove(this.layerIds, this.minIn);
+}
 
 /// How far a layer's ends may be dragged, in comp frames (K-211).
 ///
@@ -292,6 +321,12 @@ class Bar extends StatefulWidget {
   /// reaching for a settings object (K-184's spirit).
   final bool showName;
 
+  /// What a move drag on a **selected** bar carries (K-720): the unlocked
+  /// selection and its comp-zero wall. A callback rather than a value because
+  /// it is read once, at drag start, from a handler — the selection at the
+  /// moment the hand closes, not the one the panel last built with.
+  final SelectionMove Function()? selectionMove;
+
   const Bar({
     super.key,
     required this.comp,
@@ -312,6 +347,7 @@ class Bar extends StatefulWidget {
     this.snapTargets = const [],
     this.magnet = true,
     this.showName = false,
+    this.selectionMove,
   });
 
   @override
@@ -342,8 +378,48 @@ class _BarState extends State<Bar> {
   /// release, so abandoning it is simply not making that call.
   final DragEscape _escape = DragEscape();
 
+  /// The selection travelling with this bar's move drag (K-720), read once at
+  /// drag start; null for a trim or a single-layer move.
+  SelectionMove? _moving;
+
+  /// [_moving]'s ids as the preview publishes them, built once at drag start
+  /// rather than sixty times a second in [_publishPreview].
+  Set<String>? _movingIds;
+
+  /// How far a selection-mate's move drag says **this** bar travels (K-720):
+  /// non-zero only while another selected bar is being dragged and this layer
+  /// rides along. Fed by the shared preview notifier, so a drag repaints the
+  /// bars it carries and nothing else — the panel never hears a pointer move.
+  int _followShift = 0;
+
+  void _followSelectionDrag() {
+    final p = widget.dragPreview.value;
+    final id = widget.entry.layer.internallayerId.toString();
+    final shift =
+        p != null && p.layerId != id && p.layers.contains(id) ? p.offsetShift : 0;
+    if (shift != _followShift && mounted) {
+      setState(() => _followShift = shift);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.dragPreview.addListener(_followSelectionDrag);
+  }
+
+  @override
+  void didUpdateWidget(Bar old) {
+    super.didUpdateWidget(old);
+    if (old.dragPreview != widget.dragPreview) {
+      old.dragPreview.removeListener(_followSelectionDrag);
+      widget.dragPreview.addListener(_followSelectionDrag);
+    }
+  }
+
   @override
   void dispose() {
+    widget.dragPreview.removeListener(_followSelectionDrag);
     _escape.dispose();
     super.dispose();
   }
@@ -355,6 +431,8 @@ class _BarState extends State<Bar> {
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
+      _moving = null;
+      _movingIds = null;
       _caught = null;
       widget.dragPreview.value = null;
     });
@@ -364,6 +442,11 @@ class _BarState extends State<Bar> {
   /// drag-start: a drag's start position is where the slop was exceeded,
   /// which read a fast edge grab as a grab of the middle.
   double _downDx = 0;
+
+  /// The last press landed on an already-selected bar and left the selection
+  /// standing for a possible selection drag (K-720); the tap, if the gesture
+  /// turns out to be one, owes the select the down withheld.
+  bool _keptSelection = false;
 
   /// The pointer is over this bar's body (§4.1, polish 26). It lifts the
   /// leading edge and nothing else — no size change, no second outline — and
@@ -444,7 +527,9 @@ class _BarState extends State<Bar> {
       BarGrab.move => (inFrame + _delta, outFrame + _delta),
       BarGrab.trimIn => (inFrame + _delta, outFrame),
       BarGrab.trimOut => (inFrame, outFrame + _delta),
-      null => (inFrame, outFrame),
+      // Not necessarily at rest: while a selection-mate's bar is being moved,
+      // this bar rides along by the same frames (K-720).
+      null => (inFrame + _followShift, outFrame + _followShift),
     };
 
     final left = widget.axis.xOf(drawIn);
@@ -454,7 +539,8 @@ class _BarState extends State<Bar> {
     // timeline carries its start offset, so the media it can show moves with
     // it. Without this the marks and the ghost stayed behind while the bar
     // went, and a bar at its limit looked as though it had left the limit.
-    final shift = _grab == BarGrab.move ? _delta : 0;
+    // A bar riding a selection-mate's drag is being moved too (K-720).
+    final shift = _grab == BarGrab.move ? _delta : _followShift;
     final minIn =
         widget.bounds.minIn == null ? null : widget.bounds.minIn! + shift;
     final maxOut =
@@ -557,7 +643,22 @@ class _BarState extends State<Bar> {
               child: Listener(
                 onPointerDown: (event) {
                   if (event.buttons != kPrimaryButton) return;
-                  widget.onSelect();
+                  // A plain press on a bar **already in the selection** leaves
+                  // the selection standing (K-720): the gesture may be a move
+                  // drag of the whole set, and collapsing on the way down
+                  // threw the set away before the drag could carry it. A
+                  // press that turns out to be only a click still collapses —
+                  // in `onTap` below, which a won drag never reaches — so a
+                  // click on a selected bar means what it always has. A
+                  // modified press keeps its old manners (Ctrl toggles on the
+                  // down), and so does the razor, whose click is a cut.
+                  final keys = HardwareKeyboard.instance;
+                  _keptSelection = !widget.razor &&
+                      widget.selected &&
+                      !keys.isControlPressed &&
+                      !keys.isMetaPressed &&
+                      !keys.isShiftPressed;
+                  if (!_keptSelection) widget.onSelect();
                   // A Sequence layer's bar opens its view on a double-click, the
                   // same as its name does (K-248) — counted here rather than
                   // with an `onDoubleTap` below, because a double-tap recogniser
@@ -581,10 +682,19 @@ class _BarState extends State<Bar> {
                                 .round(),
                           )
                       : null,
-                  // Selection already happened on the down; the tap has nothing
-                  // left to do, but registering it keeps the click out of any
-                  // parent recogniser's hands.
-                  onTap: widget.razor && !held ? null : () {},
+                  // Selection usually happened on the down; registering the tap
+                  // keeps the click out of any parent recogniser's hands either
+                  // way. When the down kept a multi-selection standing (K-720)
+                  // and no drag claimed the gesture, the tap is the click it
+                  // turned out to be, and selects now — on the way up, exactly
+                  // what the down used to do.
+                  onTap: widget.razor && !held
+                      ? null
+                      : () {
+                          if (!_keptSelection) return;
+                          _keptSelection = false;
+                          widget.onSelect();
+                        },
                   onHorizontalDragDown: widget.razor || held
                       ? null
                       : (d) => _downDx = d.localPosition.dx,
@@ -598,6 +708,29 @@ class _BarState extends State<Bar> {
                             _delta = 0;
                             _deltaPx = 0;
                             _grab = barGrabAt(_downDx, width);
+                            // A move that starts on a selected bar carries the
+                            // whole unlocked selection (K-720); a real plural
+                            // only, and only while this bar is still in it — a
+                            // Ctrl press on the way down may have just toggled
+                            // it out. Trims stay single-layer whatever is
+                            // selected.
+                            // ponytail: no multi-trim — one edge over many
+                            // bars has no one honest answer yet; build it when
+                            // testers reach for it.
+                            _moving = null;
+                            _movingIds = null;
+                            if (_grab == BarGrab.move && widget.selected) {
+                              final move = widget.selectionMove?.call();
+                              final mine = widget.entry.layer.internallayerId;
+                              if (move != null &&
+                                  move.layerIds.length > 1 &&
+                                  move.layerIds.contains(mine)) {
+                                _moving = move;
+                                _movingIds = {
+                                  for (final id in move.layerIds) id.toString(),
+                                };
+                              }
+                            }
                           });
                           _escape.begin(_abandon);
                         },
@@ -622,6 +755,14 @@ class _BarState extends State<Bar> {
                               outFrame: outFrame,
                               bounds: widget.bounds,
                             );
+                            // The selection's wall (K-720): the earliest bar
+                            // in the set meeting comp zero stops all of them,
+                            // the same clamp the engine's slide applies — so
+                            // the preview and the commit agree to the frame.
+                            final moving = _moving;
+                            if (moving != null) {
+                              _delta = max(_delta, -moving.minIn);
+                            }
                             _publishPreview();
                           });
                         },
@@ -882,22 +1023,28 @@ class _BarState extends State<Bar> {
     );
   }
 
-  /// Publish where the gesture has the bar right now, for the waveform lane.
+  /// Publish where the gesture has the bar right now — and, on a selection
+  /// move (K-720), where it has every bar riding along — for the waveform
+  /// lanes, the key lanes and the mates' own bars to follow.
   void _publishPreview() {
     final grab = _grab;
     if (grab == null) return;
     widget.dragPreview.value = barDragPreview(
-        widget.entry.layer.internallayerId.toString(), grab, _delta);
+        widget.entry.layer.internallayerId.toString(), grab, _delta,
+        moving: _movingIds);
   }
 
-  /// One `set_span` for the whole gesture, so a move that shifted the in point
-  /// and the start offset together is a single undo step.
+  /// One write for the whole gesture, so a move that shifted the in point
+  /// and the start offset together is a single undo step — and a move that
+  /// carried the whole selection is **still one** (K-720): a single
+  /// `slide_layers` batch, not one `set_span` per layer.
   void _commit(int inFrame, int outFrame) {
     final grab = _grab;
+    final moving = _moving;
     // Clamped once more on the way out: a source length that arrived from its
     // probe part-way through the gesture only reaches the bar on the next
     // build, and what is committed must obey the bounds in force at release.
-    final delta = grab == null
+    var delta = grab == null
         ? 0
         : clampBarDelta(
             grab: grab,
@@ -906,14 +1053,23 @@ class _BarState extends State<Bar> {
             outFrame: outFrame,
             bounds: widget.bounds,
           );
+    if (moving != null) delta = max(delta, -moving.minIn);
     setState(() {
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
+      _moving = null;
+      _movingIds = null;
       _caught = null;
     });
     widget.dragPreview.value = null;
     if (grab == null || delta == 0) return;
+
+    if (grab == BarGrab.move && moving != null) {
+      widget.comp.slideLayers(layerIds: moving.layerIds, delta: delta);
+      widget.onChanged();
+      return;
+    }
 
     final span = widget.entry.info.span;
     var newIn = inFrame;

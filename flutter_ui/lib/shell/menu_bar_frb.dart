@@ -1079,7 +1079,6 @@ List<MenuSection> lumitMenus(
                 : () {
                     ungroupSelection(
                       comp: comp,
-                      groups: ui.model.groups,
                       layerIds: ui.selectedLayerIds,
                     );
                     app.notifyDocumentChanged();

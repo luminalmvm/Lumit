@@ -813,24 +813,28 @@ class _OutlineRowState extends State<OutlineRow> {
       onTap: onTap ??
           () {
             // **Every selected layer, not only this row** (K-523) — this is
-            // the one choke point all six switches pass through, so it is the
+            // the one choke point all the switches pass through, so it is the
             // one place the rule has to be written. They all take *this*
             // row's new state rather than each flipping its own, so a column
-            // of mixed eyes comes out even.
+            // of mixed eyes comes out even — and the whole click is **one**
+            // bridge call and one undo step (K-720): a Ctrl+A click used to
+            // commit one edit per layer, and undoing it walked back through
+            // all fifty-three.
             //
-            // The clicked row keeps its unguarded call: a locked layer refuses
-            // every switch but its own lock and shy, and what that refusal
-            // should look like is the outline's own open question. A locked
-            // *sibling* only refuses its share of the batch.
-            for (final target in _menuTargets()) {
-              if (target.layer.internallayerId == layer.internallayerId) {
-                target.layer.setSwitch(switch_: which!, on_: !on);
-              } else {
-                try {
-                  target.layer.setSwitch(switch_: which!, on_: !on);
-                } catch (_) {}
-              }
-            }
+            // The engine keeps the loop's manners: a locked *sibling* silently
+            // refuses its share of the batch, while the clicked row's own
+            // refusal is the whole call's — a locked layer refuses every
+            // switch but its own lock and shy, and what that refusal should
+            // look like on screen is still the outline's own open question.
+            widget.comp.setSwitchOnLayers(
+              clicked: layer.internallayerId,
+              layers: [
+                for (final target in _menuTargets())
+                  target.layer.internallayerId,
+              ],
+              switch_: which!,
+              on_: !on,
+            );
             widget.onChanged();
           },
       child: SizedBox(
@@ -1046,13 +1050,16 @@ class _OutlineRowState extends State<OutlineRow> {
           } catch (_) {}
         }
       case 'accepts-lights':
-        // This row's new state, for all of them, so a mixed set comes out even.
-        for (final target in targets) {
-          try {
-            target.layer
-                .setSwitch(switch_: BridgeLayerSwitch.acceptsLights, on_: !lit);
-          } catch (_) {}
-        }
+        // This row's new state, for all of them, so a mixed set comes out even
+        // — one batched call, one undo step, like the switch cells (K-720).
+        try {
+          widget.comp.setSwitchOnLayers(
+            clicked: layer.internallayerId,
+            layers: [for (final target in targets) target.layer.internallayerId],
+            switch_: BridgeLayerSwitch.acceptsLights,
+            on_: !lit,
+          );
+        } catch (_) {}
       case 'to-sequence':
         for (final target in targets) {
           if (target.info.kind != BridgeLayerKind.footage) continue;

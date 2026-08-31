@@ -7512,6 +7512,35 @@ void main() {
       expect(upper.getSwitches().visible, isFalse);
       expect(lower.getSwitches().visible, isFalse,
           reason: 'the six switches share one choke point, so all six do this');
+
+      // **One edit, not one per layer** (K-720 — the owner's Ctrl+A undo
+      // walked back through fifty-three separate steps): a single undo
+      // restores every layer at once.
+      p.state.project!.undo();
+      expect(upper.getSwitches().visible, isTrue);
+      expect(lower.getSwitches().visible, isTrue,
+          reason: 'one undo restored the whole selection (K-720)');
+    });
+
+    /// The batch keeps the loop's manners about locks: a locked *sibling*
+    /// silently sits its share out, and the rest of the selection still flips.
+    testWidgets('a locked sibling sits out of the switch batch',
+        (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      lower.setSwitch(switch_: BridgeLayerSwitch.locked, on_: true);
+      p.uiState.setSelection([upper, lower]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-visible-${upper.internallayerId}')));
+      await tester.pumpAndSettle();
+
+      expect(upper.getSwitches().visible, isFalse);
+      expect(lower.getSwitches().visible, isTrue,
+          reason: 'the locked sibling silently refused its share');
     });
 
     testWidgets('the row menu\'s Delete takes the whole selection',
@@ -7554,6 +7583,90 @@ void main() {
         for (final e in p.comp.getLayers()) e.internallayerId,
       ];
       expect(left, [picked.internallayerId]);
+    });
+
+    // ---------------------------------------------------------------------
+    // Dragging one selected bar drags the whole selection (K-720): every
+    // selected bar previews the travel live, and release commits ONE batched
+    // slide — so one undo puts the whole set back.
+    // ---------------------------------------------------------------------
+
+    testWidgets('dragging a selected bar moves the whole selection as one step',
+        (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      await mount(tester, p);
+      p.uiState.setSelection([upper, lower]);
+      await tester.pumpAndSettle();
+
+      int inOf(LayerReference l) =>
+          p.comp.frameAtTime(time: l.getSpan().inPoint);
+      final upperIn = inOf(upper);
+      final lowerIn = inOf(lower);
+
+      final bar = find
+          .byKey(ValueKey<String>('tl-bar-body-${upper.internallayerId}'));
+      final rect = tester.getRect(bar);
+      final mate = find
+          .byKey(ValueKey<String>('tl-bar-body-${lower.internallayerId}'));
+      final mateBefore = tester.getRect(mate);
+
+      final gesture = await tester
+          .startGesture(Offset(rect.left + rect.width / 2, rect.center.dy));
+      await tester.pump();
+      // In steps, as a hand moves — the arena needs real movement to give the
+      // bar's recogniser the gesture before anything previews.
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(20, 0));
+        await tester.pump();
+      }
+      // Mid-gesture, the selection-mate's bar travels live with the drag —
+      // not on release, and not only the grabbed bar.
+      expect(tester.getRect(mate).left, greaterThan(mateBefore.left + 60),
+          reason: 'the mate\'s bar previews the same travel (K-720)');
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final moved = inOf(upper) - upperIn;
+      expect(moved, greaterThan(0), reason: 'the drag moved the grabbed layer');
+      expect(inOf(lower) - lowerIn, moved,
+          reason: 'the mate moved by exactly the same frames');
+
+      // One undo puts the whole selection back: the release was one batched
+      // commit, never one write per layer.
+      p.state.project!.undo();
+      expect(inOf(upper), upperIn);
+      expect(inOf(lower), lowerIn,
+          reason: 'one undo restored the whole selection (K-720)');
+    });
+
+    /// The other half of the rule: grabbing a bar **outside** the selection
+    /// acts on that bar alone, exactly as it always has — the press makes it
+    /// the selection, and the drag carries only it.
+    testWidgets('dragging an unselected bar moves it alone', (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      await mount(tester, p);
+      p.uiState.setSelection([lower]);
+      await tester.pumpAndSettle();
+
+      int inOf(LayerReference l) =>
+          p.comp.frameAtTime(time: l.getSpan().inPoint);
+      final lowerIn = inOf(lower);
+
+      final bar = find
+          .byKey(ValueKey<String>('tl-bar-body-${upper.internallayerId}'));
+      final rect = tester.getRect(bar);
+      await tester.dragFrom(
+          Offset(rect.left + rect.width / 2, rect.center.dy),
+          const Offset(120, 0));
+      await tester.pumpAndSettle();
+
+      expect(inOf(upper), greaterThan(0), reason: 'the grabbed bar moved');
+      expect(inOf(lower), lowerIn,
+          reason: 'the previously selected layer sat still');
     });
   }, skip: !engineAvailable);
 }

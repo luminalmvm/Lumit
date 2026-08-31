@@ -51,21 +51,14 @@ bool groupSelectedLayers({
 ///
 /// Every group rather than one, so Ctrl+Shift+G on a band picked by its header
 /// row does the obvious thing without asking which of the layers in hand was
-/// meant.
+/// meant. A plain forward: the engine resolves the touched bands and commits
+/// them as **one** undo step (K-720) — one commit per band was one undo step
+/// per band, which is not what one keypress did.
 bool ungroupSelection({
   required CompositionReference comp,
-  required List<BridgeLayerGroup> groups,
   required Set<UuidValue> layerIds,
-}) {
-  final touched = [
-    for (final g in groups)
-      if (g.members.any(layerIds.contains)) g,
-  ];
-  for (final g in touched) {
-    comp.ungroup(group: g.id);
-  }
-  return touched.isNotEmpty;
-}
+}) =>
+    comp.ungroupSelection(layerIds: [...layerIds]);
 
 /// A group as one **carrier row** of the table sees it: the group itself, and
 /// whether its fold is shut.

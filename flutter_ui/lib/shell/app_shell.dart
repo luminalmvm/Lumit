@@ -497,7 +497,6 @@ class _LumitAppViewState extends State<LumitAppView> {
           handled = false;
         } else if (ungroupSelection(
           comp: comp,
-          groups: ui.model.groups,
           layerIds: ui.selectedLayerIds,
         )) {
           state.notifyDocumentChanged();

@@ -348,6 +348,14 @@ the members) and `shift_group` (likewise, for the combined bar's drag). Nothing 
 needed for *Pre-compose group*: it hands the group's members to the `precompose` call that
 already existed.
 
+Two of those grew **selection twins** (K-720), on the same reference and down the same
+roads: `ungroup_selection(layer_ids)` resolves every band the given layers touch and takes
+them away as one batch (one undo restores each in its old slot, which the op's inverse
+carries), and `slide_layers(layer_ids, delta)` is the same slide `shift_group` performs —
+same arithmetic, same comp-zero clamp as a unit — for the bars a multi-selection's move
+drag carries. Both are all-or-nothing batches; the Timeline hands `slide_layers` the
+unlocked share of the selection, so a locked layer sits still without refusing the rest.
+
 The **fold state is not on this boundary at all.** Whether a band is twirled open is
 session state in the Timeline panel, beside the layer twirls, for the same reason those are
 not in the document.
@@ -935,6 +943,17 @@ layer* makes) is not one op but a batch: that layer has no picture to give back,
 handed a fresh comp-sized white solid and normalised to a solid with the switch off — still
 one undo step. `set_switch` delegates to `set_adjustment(on)` rather than repeating any of
 that, so the Timeline's plural switch handler and the direct call cannot disagree.
+
+The plural write is `CompositionReference::set_switch_on_layers(clicked, layers, switch,
+on)` (K-720): one `Op::Batch` over the given layers, filtered to those that actually
+change, so a switch click on a multi-selection is **one** undo step rather than one per
+layer. It keeps the manners the old per-layer loop had: a locked *sibling* silently drops
+out of the batch (as does, for the adjustment switch, a sibling with no picture to set
+aside), while `clicked` — the row the click landed on — keeps its own refusal rules, and
+its refusal refuses the whole call with nothing committed. Adjustment layers born as
+adjustments and switched off share **one** fresh white solid across the batch.
+`set_group_switch` builds its ops through the same helper, so a group broadcast and a
+selection click cannot disagree about what one flip writes.
 
 ### The After Effects import crosses once, as a report
 

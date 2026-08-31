@@ -5,7 +5,7 @@ use flutter_rust_bridge::frb;
 use uuid::Uuid;
 
 use crate::api::effect::BridgeRational;
-use crate::api::layer::BridgeSpan;
+use crate::api::layer::{BridgeLayerSwitch, BridgeSpan};
 use crate::api::{
     effect::BridgeEffectInstance,
     footage::FootageReference,
@@ -2567,40 +2567,17 @@ impl CompositionReference {
             return Err(BridgeError::OpError(lumit_core::OpError::UnknownGroup));
         };
         let members = lumit_core::group::drawn_members(&stack, g);
+        let switch = match switch {
+            BridgeGroupSwitch::Visible => BridgeLayerSwitch::Visible,
+            BridgeGroupSwitch::Audible => BridgeLayerSwitch::Audible,
+            BridgeGroupSwitch::Solo => BridgeLayerSwitch::Solo,
+            BridgeGroupSwitch::Locked => BridgeLayerSwitch::Locked,
+        };
         let ops: Vec<lumit_core::Op> = comp
             .layers
             .iter()
             .filter(|l| members.contains(&l.id))
-            .filter(|l| {
-                on != match switch {
-                    BridgeGroupSwitch::Visible => l.switches.visible,
-                    BridgeGroupSwitch::Audible => l.switches.audible,
-                    BridgeGroupSwitch::Solo => l.switches.solo,
-                    BridgeGroupSwitch::Locked => l.switches.locked,
-                }
-            })
-            .map(|l| match switch {
-                BridgeGroupSwitch::Visible => lumit_core::Op::SetLayerVisible {
-                    comp: self.id,
-                    layer: l.id,
-                    visible: on,
-                },
-                BridgeGroupSwitch::Audible => lumit_core::Op::SetLayerAudible {
-                    comp: self.id,
-                    layer: l.id,
-                    audible: on,
-                },
-                BridgeGroupSwitch::Solo => lumit_core::Op::SetLayerSolo {
-                    comp: self.id,
-                    layer: l.id,
-                    solo: on,
-                },
-                BridgeGroupSwitch::Locked => lumit_core::Op::SetLayerLocked {
-                    comp: self.id,
-                    layer: l.id,
-                    locked: on,
-                },
-            })
+            .filter_map(|l| layer_switch_op(self.id, l, switch, on))
             .collect();
         if ops.is_empty() {
             return Ok(());
@@ -2611,6 +2588,129 @@ impl CompositionReference {
             .commit(lumit_core::Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
         Ok(())
+    }
+
+    /// Set one switch on **every given layer**, as one undo step (K-720) —
+    /// what a switch cell clicked on a multi-selection commits (K-523). Every
+    /// layer takes the same `on`, the clicked row's new state, so a column of
+    /// mixed eyes comes out even; a layer already there contributes no op, and
+    /// a batch with nothing to do commits nothing at all.
+    ///
+    /// `clicked` names the row the click landed on, and it alone keeps its
+    /// refusal rules: a locked *sibling* (or, for the adjustment switch, a
+    /// sibling with no picture to set aside) silently drops out of the batch —
+    /// exactly what the old one-call-per-layer loop's `try`/`catch` did — but
+    /// the clicked row's own refusal is the whole call's, and nothing commits.
+    #[frb(sync)]
+    pub fn set_switch_on_layers(
+        &self,
+        clicked: Uuid,
+        layers: Vec<Uuid>,
+        switch: BridgeLayerSwitch,
+        on: bool,
+    ) -> Result<(), BridgeError> {
+        use lumit_core::model::LayerKind;
+        let comp = self.composition()?;
+        let wanted: std::collections::HashSet<Uuid> = layers.into_iter().collect();
+        let mut ops = Vec::new();
+        // Layers *born* adjustments being switched off (K-537): each needs a
+        // picture back, so their ops are a batch-within-the-batch built below.
+        let mut born_off = Vec::new();
+        for l in comp.layers.iter().filter(|l| wanted.contains(&l.id)) {
+            // The lock's own list (`ops::lock_guards`): a locked layer still
+            // takes its lock and its shy, and refuses every other switch.
+            if l.switches.locked
+                && !matches!(switch, BridgeLayerSwitch::Locked | BridgeLayerSwitch::Shy)
+            {
+                if l.id == clicked {
+                    return Err(BridgeError::OpError(lumit_core::OpError::LayerLocked));
+                }
+                continue;
+            }
+            if matches!(switch, BridgeLayerSwitch::Adjustment) {
+                if !l.can_adjust() {
+                    if l.id == clicked {
+                        return Err(BridgeError::NotConvertible);
+                    }
+                    continue;
+                }
+                if !on && l.is_adjustment() && matches!(l.kind, LayerKind::Adjustment) {
+                    born_off.push(l.id);
+                    continue;
+                }
+            }
+            if let Some(op) = layer_switch_op(self.id, l, switch, on) {
+                ops.push(op);
+            }
+        }
+        if !born_off.is_empty() {
+            // One fresh white solid for the whole batch, shared by every layer
+            // that needs a picture back — a solid is an asset many layers may
+            // point at, and one click should leave one asset behind.
+            let (def, _, mut solid) = {
+                let proj = self.project()?;
+                let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+                crate::edits::white_solid_ops(&state.store.snapshot(), comp.width, comp.height)
+            };
+            ops.append(&mut solid);
+            for layer in born_off {
+                ops.push(lumit_core::Op::SetLayerKind {
+                    comp: self.id,
+                    layer,
+                    kind: Box::new(LayerKind::Solid { def }),
+                });
+                ops.push(lumit_core::Op::SetLayerAdjustment {
+                    comp: self.id,
+                    layer,
+                    adjustment: false,
+                });
+            }
+        }
+        if ops.is_empty() {
+            return Ok(());
+        }
+        // A single-layer click stays its own op, so the undo journal keeps the
+        // op's own name rather than a batch around one entry.
+        let op = if ops.len() == 1 {
+            ops.remove(0)
+        } else {
+            lumit_core::Op::Batch { ops }
+        };
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// Take away **every group the given layers touch**, as one undo step
+    /// (K-720) — what Ctrl+Shift+G on a multi-selection commits. Answers
+    /// whether anything went; one undo restores every band in its old slot,
+    /// because [`lumit_core::Op::UngroupLayers`]'s inverse carries it.
+    #[frb(sync)]
+    pub fn ungroup_selection(&self, layer_ids: Vec<Uuid>) -> Result<bool, BridgeError> {
+        let comp = self.composition()?;
+        let ids: std::collections::HashSet<Uuid> = layer_ids.into_iter().collect();
+        let mut ops: Vec<lumit_core::Op> = comp
+            .groups
+            .iter()
+            .filter(|g| g.members.iter().any(|m| ids.contains(m)))
+            .map(|g| lumit_core::Op::UngroupLayers {
+                comp: self.id,
+                group: g.id,
+            })
+            .collect();
+        if ops.is_empty() {
+            return Ok(false);
+        }
+        let op = if ops.len() == 1 {
+            ops.remove(0)
+        } else {
+            lumit_core::Op::Batch { ops }
+        };
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
+        Ok(true)
     }
 
     /// Slide every member of a group along the timeline by `delta` frames, as
@@ -2640,6 +2740,41 @@ impl CompositionReference {
             .iter()
             .filter(|l| members.contains(&l.id))
             .collect();
+        self.commit_slide(&comp, &moving, delta)
+    }
+
+    /// Slide the given layers along the timeline by `delta` frames, as one
+    /// `Op::Batch` (K-720) — what releasing a move drag on a multi-selection's
+    /// bar commits. The same arithmetic and the same wall as a group's
+    /// combined bar ([`Self::shift_group`], whose road this is): each layer's
+    /// in point, out point and start offset travel together, and a drag that
+    /// would carry the earliest in point before comp zero is clamped so the
+    /// set stops at the wall with its shape intact.
+    ///
+    /// The batch is all-or-nothing, so a locked layer in the list refuses the
+    /// whole slide; the Timeline hands over the unlocked share of the
+    /// selection, which is how a locked sibling sits still while the rest
+    /// move.
+    #[frb(sync)]
+    pub fn slide_layers(&self, layer_ids: Vec<Uuid>, delta: i64) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let ids: std::collections::HashSet<Uuid> = layer_ids.into_iter().collect();
+        let moving: Vec<&lumit_core::model::Layer> =
+            comp.layers.iter().filter(|l| ids.contains(&l.id)).collect();
+        self.commit_slide(&comp, &moving, delta)
+    }
+
+    /// The shared slide: clamp at comp zero as a unit, then move every layer's
+    /// three times by the same travel and commit one batch. Factored out of
+    /// [`Self::shift_group`] so the group bar and the selection drag cannot
+    /// come to different arithmetic.
+    #[frb(ignore)]
+    fn commit_slide(
+        &self,
+        comp: &lumit_core::model::Composition,
+        moving: &[&lumit_core::model::Layer],
+        delta: i64,
+    ) -> Result<(), BridgeError> {
         let Some(earliest) = moving
             .iter()
             .map(|l| comp.frame_rate.frame_at(l.in_point))
@@ -2663,7 +2798,7 @@ impl CompositionReference {
                 .0,
         );
         let mut ops = Vec::with_capacity(moving.len());
-        for l in &moving {
+        for l in moving {
             let at = |t: lumit_core::time::CompTime| {
                 t.add_dur(travel).map_err(|_| BridgeError::InvalidFrameRate)
             };
@@ -2682,6 +2817,106 @@ impl CompositionReference {
             .map_err(BridgeError::OpError)?;
         Ok(())
     }
+}
+
+/// One layer's op for `switch`, or `None` when the layer already stands at
+/// `on` — the one filter-and-build step behind the group broadcast
+/// ([`CompositionReference::set_group_switch`]) and the selection batch
+/// ([`CompositionReference::set_switch_on_layers`]), so the two cannot come to
+/// different ops for the same click.
+///
+/// The one write it does not build is the adjustment switch coming **off a
+/// layer born an adjustment** (K-537): that layer needs a picture back, which
+/// is a batch of its own, and the selection call assembles it beside this. For
+/// every other layer the adjustment switch is the plain flag op, exactly as
+/// [`LayerReference::set_adjustment`] writes it.
+fn layer_switch_op(
+    comp: Uuid,
+    l: &lumit_core::model::Layer,
+    switch: BridgeLayerSwitch,
+    on: bool,
+) -> Option<lumit_core::Op> {
+    use lumit_core::Op;
+    let layer = l.id;
+    let current = match switch {
+        BridgeLayerSwitch::Visible => l.switches.visible,
+        BridgeLayerSwitch::Audible => l.switches.audible,
+        BridgeLayerSwitch::Locked => l.switches.locked,
+        BridgeLayerSwitch::Solo => l.switches.solo,
+        BridgeLayerSwitch::ThreeD => l.switches.three_d,
+        BridgeLayerSwitch::Fx => l.switches.fx,
+        BridgeLayerSwitch::MotionBlur => l.switches.motion_blur,
+        BridgeLayerSwitch::Collapse => l.switches.collapse,
+        BridgeLayerSwitch::Shy => l.switches.shy,
+        BridgeLayerSwitch::AcceptsLights => l.switches.accepts_lights,
+        BridgeLayerSwitch::Guide => l.switches.guide,
+        BridgeLayerSwitch::Adjustment => l.is_adjustment(),
+    };
+    if current == on {
+        return None;
+    }
+    Some(match switch {
+        BridgeLayerSwitch::Visible => Op::SetLayerVisible {
+            comp,
+            layer,
+            visible: on,
+        },
+        BridgeLayerSwitch::Audible => Op::SetLayerAudible {
+            comp,
+            layer,
+            audible: on,
+        },
+        BridgeLayerSwitch::Locked => Op::SetLayerLocked {
+            comp,
+            layer,
+            locked: on,
+        },
+        BridgeLayerSwitch::Solo => Op::SetLayerSolo {
+            comp,
+            layer,
+            solo: on,
+        },
+        BridgeLayerSwitch::ThreeD => Op::SetLayerThreeD {
+            comp,
+            layer,
+            three_d: on,
+        },
+        BridgeLayerSwitch::Fx => Op::SetLayerFx {
+            comp,
+            layer,
+            fx: on,
+        },
+        BridgeLayerSwitch::MotionBlur => Op::SetLayerMotionBlur {
+            comp,
+            layer,
+            motion_blur: on,
+        },
+        BridgeLayerSwitch::Collapse => Op::SetLayerCollapse {
+            comp,
+            layer,
+            collapse: on,
+        },
+        BridgeLayerSwitch::Shy => Op::SetLayerShy {
+            comp,
+            layer,
+            shy: on,
+        },
+        BridgeLayerSwitch::AcceptsLights => Op::SetLayerAcceptsLights {
+            comp,
+            layer,
+            accepts_lights: on,
+        },
+        BridgeLayerSwitch::Guide => Op::SetLayerGuide {
+            comp,
+            layer,
+            guide: on,
+        },
+        BridgeLayerSwitch::Adjustment => Op::SetLayerAdjustment {
+            comp,
+            layer,
+            adjustment: on,
+        },
+    })
 }
 
 /// The comp's groups as the Timeline draws them — resolved once per read model
@@ -2724,8 +2959,9 @@ fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
         .collect()
 }
 
-/// The layer-group half of this surface (K-702): what `get_model` hands the
-/// Timeline for a group, and what the edits do.
+/// The layer-group half of this surface (K-702), and the selection twins that
+/// share its roads (K-720): what `get_model` hands the Timeline for a group,
+/// and what the edits do.
 ///
 /// The engine's own rules — contiguity, undo, a deleted member leaving quietly
 /// — are pinned in `crates/lumit-core/tests/layer_groups.rs`. These are about
@@ -2909,5 +3145,134 @@ mod group_tests {
         // nothing in the interface can reach it, so reaching it is a bug worth
         // hearing about.
         assert!(comp.ungroup(group).is_err());
+    }
+
+    /// One switch click on a multi-selection is **one** undo step (K-720 —
+    /// the owner's 53-layer Ctrl+A recorded 53), and a locked sibling sits its
+    /// share out while the clicked row's own refusal is the whole call's.
+    #[test]
+    fn a_selection_switch_is_one_step_and_a_locked_sibling_sits_out() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        layers[2]
+            .set_switch(crate::api::layer::BridgeLayerSwitch::Locked, true)
+            .expect("lock the sibling");
+
+        comp.set_switch_on_layers(
+            all[0],
+            all[0..3].to_vec(),
+            BridgeLayerSwitch::Visible,
+            false,
+        )
+        .expect("the batch lands");
+        let model = comp.get_model().expect("model");
+        let visible = |m: &BridgeCompModel, i: usize| m.layers[i].info.switches.visible;
+        assert!(!visible(&model, 0) && !visible(&model, 1));
+        assert!(
+            visible(&model, 2),
+            "the locked sibling silently kept its state"
+        );
+        assert!(visible(&model, 3), "the unpicked layer was never targeted");
+
+        // One undo restores every layer at once — the complaint this fixes.
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        assert!(back.layers.iter().all(|e| e.info.switches.visible));
+
+        // The clicked row is not exempted from its own refusal rules: a click
+        // that lands *on* the locked row refuses whole, committing nothing.
+        assert!(comp
+            .set_switch_on_layers(
+                all[2],
+                all[0..3].to_vec(),
+                BridgeLayerSwitch::Visible,
+                false
+            )
+            .is_err());
+        let held = comp.get_model().expect("model");
+        assert!(
+            held.layers.iter().all(|e| e.info.switches.visible),
+            "a refused call commits nothing at all"
+        );
+    }
+
+    /// Ctrl+Shift+G over several bands is one undo step, and the one undo puts
+    /// every band back in its old slot (the op's inverse carries it).
+    #[test]
+    fn ungrouping_a_selection_takes_every_touched_band_in_one_step() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        comp.group_layers(all[0..2].to_vec(), "Plates".into())
+            .expect("first group");
+        comp.group_layers(all[2..4].to_vec(), "Titles".into())
+            .expect("second group");
+
+        assert!(comp
+            .ungroup_selection(vec![all[1], all[3]])
+            .expect("both bands go"));
+        assert!(comp.get_model().expect("model").groups.is_empty());
+
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        assert_eq!(back.groups.len(), 2, "one undo restored both bands");
+        assert_eq!(
+            [back.groups[0].name.as_str(), back.groups[1].name.as_str()],
+            ["Plates", "Titles"],
+            "each in its old slot"
+        );
+
+        // A selection touching no group commits nothing and says so.
+        comp.ungroup(back.groups[0].id)
+            .expect("clear the first band");
+        comp.ungroup(back.groups[1].id).expect("and the second");
+        assert!(
+            !comp
+                .ungroup_selection(vec![all[0]])
+                .expect("nothing to do is not an error"),
+            "an untouched selection reported an ungroup"
+        );
+    }
+
+    /// Dragging one selected bar slides the whole selection as one step, and
+    /// the earliest bar hitting comp zero stops the set with its shape intact
+    /// — the same wall the group bar's drag has (K-720).
+    #[test]
+    fn a_selection_slide_moves_every_layer_as_one_step_and_clamps_as_a_unit() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let before = comp.get_model().expect("model");
+
+        comp.slide_layers(vec![all[0], all[1], all[2]], 12)
+            .expect("the selection slides");
+        let after = comp.get_model().expect("model");
+        for i in 0..3 {
+            assert_eq!(
+                span(&after, i),
+                (span(&before, i).0 + 12, span(&before, i).1 + 12),
+                "layer {i} moved whole"
+            );
+        }
+        assert_eq!(span(&after, 3), span(&before, 3), "the unpicked one held");
+
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        for i in 0..4 {
+            assert_eq!(span(&back, i), span(&before, i), "one undo took it all");
+        }
+
+        // Stagger two layers, then drive the pair at the wall: the earlier one
+        // stops at zero and the later one keeps its distance from it.
+        comp.slide_layers(vec![all[0]], 5).expect("stagger one");
+        comp.slide_layers(vec![all[2]], 12)
+            .expect("stagger the other");
+        comp.slide_layers(vec![all[0], all[2]], -1000)
+            .expect("clamped, not refused");
+        let walled = comp.get_model().expect("model");
+        assert_eq!(span(&walled, 0).0, 0, "the earliest bar sits on the wall");
+        assert_eq!(
+            span(&walled, 2).0,
+            7,
+            "and the set kept its shape rather than folding against it"
+        );
     }
 }

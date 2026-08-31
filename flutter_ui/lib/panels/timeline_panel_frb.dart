@@ -1429,6 +1429,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// only the waveform lanes redraw as the pointer moves, not the whole table.
   final ValueNotifier<BarDragPreview?> _barDrag = ValueNotifier(null);
 
+  /// What a move drag starting on a selected bar carries (K-720): every
+  /// **unlocked** selected layer — a locked one sits still, the way it sits
+  /// out a switch batch — and the earliest in frame among them, the wall the
+  /// whole set stops at. Asked from the drag's start handler, never from a
+  /// build, so it reads the selection of the moment the hand closed.
+  SelectionMove _selectionMove(LumitUiState ui) {
+    final picked = ui.selectedLayerIds;
+    final ids = <UuidValue>[];
+    int? minIn;
+    for (final entry in ui.model.layers) {
+      if (!picked.contains(entry.layer.internallayerId)) continue;
+      if (entry.info.switches.locked) continue;
+      ids.add(entry.layer.internallayerId);
+      final inFrame = entry.info.inFrame.toInt();
+      if (minIn == null || inFrame < minIn) minIn = inFrame;
+    }
+    return SelectionMove(ids, minIn ?? 0);
+  }
+
   /// The block stretch in flight (K-458), on the same terms and for the same
   /// reason: the box and every lane it crosses have to move together, and only
   /// they need to repaint while a handle is being dragged.
@@ -3875,6 +3894,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       cacheRevision: _cacheRevision!,
                       dragPreview: _barDrag,
                       bounds: _barBounds,
+                      selectionMove: () => _selectionMove(ui),
                     ),
                   ),
                 ),

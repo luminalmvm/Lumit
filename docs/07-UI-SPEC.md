@@ -1414,7 +1414,10 @@ off, the layer is itself again with everything — source, masks, transform, eff
 it was. It is drawn on **every row that shows something in the Viewer**, whatever its own
 visibility switch says, and left blank only on the four kinds with no picture to set aside
 (camera, light, null, audio). Lit `text_primary` on, `text_muted` off, one undo step each
-way, and applied to the whole selection like the switches beside it (K-523). The Modes
+way, and applied to the whole selection like the switches beside it (K-523) — **as one
+edit** (K-720): a switch click on a multi-selection commits one batch of per-layer ops, so
+a single undo restores every layer at once, a locked sibling silently sits its share out,
+and the clicked row itself keeps its own refusal rules. The Modes
 group is six cells wide on every row all the same.
 
 **The render-time column (K-276, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.1)**
@@ -1814,6 +1817,17 @@ two, and `Shift+=`.
   **Shipped (K-193):** dragging a layer's **bar** moves it in time, and dragging a layer's
   **name** in the outline moves it up or down the stack — drop it on a row and it takes
   that row's place, as one undo step. A locked layer neither drags nor accepts a drop.
+
+  **Dragging one selected bar drags the whole selection (K-720).** A move drag that starts
+  on a bar inside the current multi-selection carries every selected layer: each bar —
+  waveforms and keyframes travelling with it — previews the same frame travel live, and
+  release commits **one** batched slide, so one undo puts the whole set back. The set
+  clamps at comp zero as a unit, the group bar's own rule: the earliest bar meeting the
+  wall stops all of them with the set's shape intact. A locked selected layer sits still
+  while the rest move. Grabbing a bar *outside* the selection keeps its old manners — the
+  press makes it the selection and the drag moves it alone — and a plain click (no drag)
+  on a selected bar still collapses the selection to that layer, as it always has. Trims
+  stay single-layer whatever is selected.
 
   **What the lock means (K-291).** A locked layer refuses every edit to what it *is* — its
   transform, effects, masks, paint, art, text, clips, markers, blend, matte, parent, retime,

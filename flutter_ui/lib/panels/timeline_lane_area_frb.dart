@@ -289,6 +289,10 @@ class LayerArea extends StatelessWidget {
   /// bar's own build.
   final bool barNames;
 
+  /// What a move drag on a selected bar carries (K-720) — the panel's answer,
+  /// asked at drag start. See [Bar.selectionMove].
+  final SelectionMove Function() selectionMove;
+
   const LayerArea({
     super.key,
     required this.comp,
@@ -332,6 +336,7 @@ class LayerArea extends StatelessWidget {
     required this.fpsDen,
     required this.magnet,
     required this.onWheel,
+    required this.selectionMove,
   });
 
   /// Every keyframe the box caught, walking the same rows the lanes draw —
@@ -785,6 +790,7 @@ class LayerArea extends StatelessWidget {
                                             snapTargets: snap,
                                             magnet: magnet,
                                             showName: barNames,
+                                            selectionMove: selectionMove,
                                           ),
                                         ),
                                       // A Sequence layer's own clips and
@@ -959,7 +965,11 @@ class LayerArea extends StatelessWidget {
         builder: (context, _) => ValueListenableBuilder<BarDragPreview?>(
         valueListenable: dragPreview,
         builder: (context, preview, _) {
-          final p = preview?.layerId == id ? preview : null;
+          // Whether the drag in flight carries **this** layer — its own bar,
+          // or a selection-mate's move it rides along with (K-720). The three
+          // deltas are the mover's, which for the only plural grab (a move)
+          // are one number for the whole set.
+          final p = preview != null && preview.layers.contains(id) ? preview : null;
           final span = entry.info.span;
           // The span as drawn — the document's frames plus any drag in flight —
           // and where its source starts, so a bar being dragged or trimmed
