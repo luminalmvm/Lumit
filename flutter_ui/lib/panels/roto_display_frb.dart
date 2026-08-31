@@ -16,18 +16,15 @@
 // (`ParamKind::Action`), drawn by the ordinary parameter row; the scribbling is
 // the Viewer's (`panels/viewer_roto.dart`).
 
-import 'dart:async';
-
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
-import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart' show TrackSpanBar;
+import 'status_poller.dart';
 
 /// The sentence for a refusal.
 ///
@@ -105,13 +102,6 @@ int rotoCoveredFrames(BridgeRotoStatus status) {
   return (last - first + 1).clamp(0, status.clipFrames);
 }
 
-/// How often the reading is sampled while a propagation is moving — the Camera
-/// track's cadence, for the Camera track's reason (tracking.md §5c deviation 2):
-/// a press moves no document revision, so there is nothing to refresh against,
-/// and the engine keeps progress as a value precisely so nobody has to hold a
-/// subscription.
-const Duration _poll = Duration(milliseconds: 500);
-
 /// The line under the Roto brush's Propagate and Cancel buttons: how far the
 /// matte reaches, how the propagation is getting on, and which frame it is
 /// working outward from.
@@ -156,67 +146,32 @@ class RotoDisplayFrb extends StatefulWidget {
   State<RotoDisplayFrb> createState() => _RotoDisplayFrbState();
 }
 
-class _RotoDisplayFrbState extends State<RotoDisplayFrb> {
-  BridgeRotoStatus? _status;
-  Timer? _timer;
+class _RotoDisplayFrbState extends State<RotoDisplayFrb>
+    with StatusPoller<BridgeRotoStatus, RotoDisplayFrb> {
+  @override
+  BridgeRotoStatus fetchStatus() =>
+      widget.fetch?.call() ??
+      rotoStatus(layer: widget.layer, effect: widget.effectId);
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sample());
-  }
+  VoidCallback get onChanged => widget.onChanged;
+
+  // A press, and the card being pointed at another instance: both change what
+  // this says, and neither is a tick of the clock.
+  @override
+  bool shouldResample(RotoDisplayFrb old) =>
+      old.pressed != widget.pressed || old.effectId != widget.effectId;
 
   @override
-  void didUpdateWidget(RotoDisplayFrb old) {
-    super.didUpdateWidget(old);
-    // A press, and the card being pointed at another instance: both change what
-    // this says, and neither is a tick of the clock.
-    if (old.pressed != widget.pressed || old.effectId != widget.effectId) {
-      _sample();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  static bool _moving(BridgeRotoStatus? status) => switch (status?.stage) {
+  bool isMoving(BridgeRotoStatus? status) => switch (status?.stage) {
         BridgeRotoStage.queued || BridgeRotoStage.solving => true,
         _ => false,
       };
 
-  void _sample() {
-    if (!mounted) return;
-    final BridgeRotoStatus next;
-    try {
-      next = widget.fetch?.call() ??
-          rotoStatus(layer: widget.layer, effect: widget.effectId);
-    } catch (_) {
-      // The layer went away under the card; the line simply stops moving.
-      _timer?.cancel();
-      _timer = null;
-      return;
-    }
-    final was = _status;
-    if (next != was) setState(() => _status = next);
-    if (_moving(was) && !_moving(next)) {
-      widget.onChanged();
-      // A propagation landing moves nothing in the document, so nothing else
-      // has a reason to repaint — and the picture it changes is the one on
-      // screen. Told here, at the one place that knows (K-430).
-      final ui = Provider.of<LumitUiState>(context, listen: false);
-      ui.solveLanded.value++;
-      ui.requestFrame();
-    }
-    if (_moving(next)) {
-      _timer ??= Timer.periodic(_poll, (_) => _sample());
-    } else {
-      _timer?.cancel();
-      _timer = null;
-    }
-  }
+  // A cancelled propagation lands like a finished one: the frames it reached
+  // are kept, so the picture on screen has changed either way — which is why
+  // this takes the default reading (it was moving; it has stopped) rather than
+  // the tracks' *done*.
 
   /// Move the base frame to the frame on screen.
   ///
@@ -235,7 +190,7 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb> {
       instance.rotoSetBaseFrame(frame: source);
       widget.layer.setEffects(effects: staged);
       widget.onChanged();
-      _sample();
+      sample();
     } catch (_) {
       // Not a footage layer, or its media will not probe: there is no source
       // frame to move the base to, and the line above already says so.
@@ -245,7 +200,7 @@ class _RotoDisplayFrbState extends State<RotoDisplayFrb> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final status = _status;
+    final status = this.status;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(

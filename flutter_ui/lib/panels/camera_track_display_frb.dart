@@ -14,23 +14,14 @@
 // hold and nothing to unsubscribe. The sampling stops the moment the answer
 // stops moving.
 
-import 'dart:async';
-
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
-
-/// How often the reading is sampled while an analysis is moving. Twice a second
-/// is faster than anyone reads a number and slower than anything that could
-/// cost: the call is a lookup in a map behind a mutex, and it is made only
-/// while a Camera track's card is open **and** a job is actually in flight.
-const Duration _poll = Duration(milliseconds: 500);
+import 'status_poller.dart';
 
 /// The sentence for a refusal.
 ///
@@ -197,33 +188,22 @@ class CameraTrackDisplayFrb extends StatefulWidget {
   State<CameraTrackDisplayFrb> createState() => _CameraTrackDisplayFrbState();
 }
 
-class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
-  BridgeTrackStatus? _status;
-  Timer? _timer;
+class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb>
+    with StatusPoller<BridgeTrackStatus, CameraTrackDisplayFrb> {
+  @override
+  BridgeTrackStatus fetchStatus() => trackStatus(layer: widget.layer);
 
   @override
-  void initState() {
-    super.initState();
-    // The first reading after the frame is up, never from `build`.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sample());
-  }
+  VoidCallback get onChanged => widget.onChanged;
+
+  // A button was pressed: read once, which starts the sampling if the press
+  // started something.
+  @override
+  bool shouldResample(CameraTrackDisplayFrb old) =>
+      old.pressed != widget.pressed;
 
   @override
-  void didUpdateWidget(CameraTrackDisplayFrb old) {
-    super.didUpdateWidget(old);
-    // A button was pressed: read once, which starts the sampling if the press
-    // started something.
-    if (old.pressed != widget.pressed) _sample();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  /// Whether the reading is still moving, and so worth asking about again.
-  static bool _moving(BridgeTrackStatus? status) => switch (status?.stage) {
+  bool isMoving(BridgeTrackStatus? status) => switch (status?.stage) {
         BridgeTrackStage.queued ||
         BridgeTrackStage.tracking ||
         BridgeTrackStage.solving =>
@@ -231,46 +211,19 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
         _ => false,
       };
 
-  void _sample() {
-    if (!mounted) return;
-    final BridgeTrackStatus next;
-    try {
-      next = trackStatus(layer: widget.layer);
-    } catch (_) {
-      // The layer went away under the card; the line simply stops moving.
-      _timer?.cancel();
-      _timer = null;
-      return;
-    }
-    final was = _status;
-    if (next != was) setState(() => _status = next);
-    // A solve landing changes what every frame of this comp is *named* by, so
-    // the picture has to be asked for again — otherwise the frames banked
-    // before it would be served back after it.
-    if (was?.stage != BridgeTrackStage.done &&
-        next.stage == BridgeTrackStage.done) {
-      widget.onChanged();
-      // Re-reading is not enough on its own (K-430). A solve moves neither the
-      // playhead nor the document's revision, so the picture would still be
-      // the one banked before it, and the Viewer's point cloud — keyed by
-      // exactly those two — would have no reason to ask the engine again. Both
-      // are told here, at the one place that knows a solve has landed.
-      final ui = Provider.of<LumitUiState>(context, listen: false);
-      ui.solveLanded.value++;
-      ui.requestFrame();
-    }
-    if (_moving(next)) {
-      _timer ??= Timer.periodic(_poll, (_) => _sample());
-    } else {
-      _timer?.cancel();
-      _timer = null;
-    }
-  }
+  // A solve landing changes what every frame of this comp is *named* by, so the
+  // picture has to be asked for again — otherwise the frames banked before it
+  // would be served back after it. A run that stopped or failed named nothing,
+  // so it is reaching **done** that counts here, not merely stopping.
+  @override
+  bool hasLanded(BridgeTrackStatus? was, BridgeTrackStatus next) =>
+      was?.stage != BridgeTrackStage.done &&
+      next.stage == BridgeTrackStage.done;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final status = _status;
+    final status = this.status;
     final line = trackStatusSentence(status);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

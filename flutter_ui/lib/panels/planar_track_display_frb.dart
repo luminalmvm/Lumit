@@ -12,22 +12,15 @@
 // track's rule (K-417), for the same reason: the engine keeps the reading as a
 // value and a stream would be a second mechanism for the same fact.
 
-import 'dart:async';
-
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart';
-import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart';
-
-/// How often the reading is sampled while a track is moving — the Camera
-/// track's cadence, for the Camera track's reason.
-const Duration _poll = Duration(milliseconds: 500);
+import 'status_poller.dart';
 
 /// The sentence for one reading of a planar track.
 ///
@@ -92,29 +85,22 @@ class PlanarTrackDisplayFrb extends StatefulWidget {
   State<PlanarTrackDisplayFrb> createState() => _PlanarTrackDisplayFrbState();
 }
 
-class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb> {
-  BridgePlanarStatus? _status;
-  Timer? _timer;
+class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
+    with StatusPoller<BridgePlanarStatus, PlanarTrackDisplayFrb> {
+  @override
+  BridgePlanarStatus fetchStatus() =>
+      widget.fetch?.call() ??
+      planarStatus(layer: widget.layer, effect: widget.effectId);
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sample());
-  }
+  VoidCallback get onChanged => widget.onChanged;
 
   @override
-  void didUpdateWidget(PlanarTrackDisplayFrb old) {
-    super.didUpdateWidget(old);
-    if (old.pressed != widget.pressed) _sample();
-  }
+  bool shouldResample(PlanarTrackDisplayFrb old) =>
+      old.pressed != widget.pressed;
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  static bool _moving(BridgePlanarStatus? status) => switch (status?.stage) {
+  bool isMoving(BridgePlanarStatus? status) => switch (status?.stage) {
         BridgeTrackStage.queued ||
         BridgeTrackStage.tracking ||
         BridgeTrackStage.solving =>
@@ -122,41 +108,17 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb> {
         _ => false,
       };
 
-  void _sample() {
-    if (!mounted) return;
-    final BridgePlanarStatus next;
-    try {
-      next = widget.fetch?.call() ??
-          planarStatus(layer: widget.layer, effect: widget.effectId);
-    } catch (_) {
-      // The layer went away under the card; the line simply stops moving.
-      _timer?.cancel();
-      _timer = null;
-      return;
-    }
-    final was = _status;
-    if (next != was) setState(() => _status = next);
-    if (was?.stage != BridgeTrackStage.done &&
-        next.stage == BridgeTrackStage.done) {
-      widget.onChanged();
-      // A track landing moves nothing in the document, so nothing else has a
-      // reason to repaint. Told here, at the one place that knows (K-430).
-      final ui = Provider.of<LumitUiState>(context, listen: false);
-      ui.solveLanded.value++;
-      ui.requestFrame();
-    }
-    if (_moving(next)) {
-      _timer ??= Timer.periodic(_poll, (_) => _sample());
-    } else {
-      _timer?.cancel();
-      _timer = null;
-    }
-  }
+  // Reaching **done**, exactly as the Camera track counts it: a track that
+  // stopped or failed left no surface for anything else to redraw against.
+  @override
+  bool hasLanded(BridgePlanarStatus? was, BridgePlanarStatus next) =>
+      was?.stage != BridgeTrackStage.done &&
+      next.stage == BridgeTrackStage.done;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final status = _status;
+    final status = this.status;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
