@@ -813,6 +813,40 @@ void main() {
       expect(blanked.where((y) => (y - 22.5).abs() < 0.01), isNotEmpty);
     });
 
+    /// 10b-ter. **Both halves rule the same physical pixel at any scroll
+    /// offset** (owner, 2026-08-31: "adjust the timeline height made the
+    /// divider lines between the outline and lane area not match up").
+    ///
+    /// The outline's overlay is pinned to the panel and carries the scroll as
+    /// a phase; the lane's rides the scrolled content and is then translated
+    /// by the offset. Each rounds to its own pixel grid — so at a
+    /// *fractional* offset, which is exactly what clamping to a fractional
+    /// `maxScrollExtent` after a panel-height drag leaves behind, the two
+    /// grids disagreed by up to half a pixel and every seam split in two.
+    /// The lane painter now hands `rowSeamOffsets` its device origin, so both
+    /// halves round where the line will be seen.
+    test('the two halves rule the same pixel at any scroll offset', () {
+      const step = 23.0;
+      for (final scroll in [0.0, 7.5, 10.4, 22.9, 61.37, 287.3]) {
+        // The outline overlay: panel-pinned, phased, origin zero.
+        final outline = rowSeamOffsets(
+            step: step, height: 200, phase: -(scroll % step));
+        // The lane painter: content-riding, translated by the scroll on its
+        // way to the screen, rounding against its device origin.
+        final lanes = [
+          for (final y in rowSeamOffsets(
+              step: step, height: 200 + scroll, origin: -(scroll % 1.0)))
+            y - scroll,
+        ];
+        for (final y in lanes.where((y) => y > 0 && y <= 200 - step)) {
+          expect(
+              outline.where((o) => (o - y).abs() < 1e-6), isNotEmpty,
+              reason: 'at scroll $scroll a lane seam at $y has no outline '
+                  'seam on the same pixel: outline $outline');
+        }
+      }
+    });
+
     /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's table,
     /// K-451): matte, blend and parent are cells in a layer's row, not dialog
     /// controls, and the mockup draws all three at the shorter face with a
@@ -1491,6 +1525,60 @@ void main() {
         expect(found.left, greaterThan(bar.right),
             reason: '$key sits after the Parent toggle');
       }
+    });
+
+    /// 11. **Resizing the panel keeps the two halves one table** (owner,
+    /// 2026-08-31: "adjust the timeline height made the divider lines between
+    /// the outline and lane area not match up"). A height drag is a run of
+    /// relayouts with the table scrolled somewhere; every one of them clamps
+    /// both scroll positions, and any step that leaves the two offsets apart
+    /// leaves every row seam apart until the next scroll.
+    testWidgets('a panel-height change keeps the two halves level',
+        (tester) async {
+      final p = withComp();
+      final layers = [
+        for (var i = 0; i < 20; i++) p.comp.addSolidLayer(),
+      ];
+      p.uiState.model.refresh();
+      await mount(tester, p, height: 300);
+
+      // Scroll well into the stack, then to the bottom — the offsets a
+      // relayout has something to clamp against.
+      final laneAt = laneBar(tester, layers.last).center;
+      for (var i = 0; i < 4; i++) {
+        await wheel(tester, laneAt, 120);
+      }
+
+      void levelWherever(String why) {
+        var seen = 0;
+        for (final l in layers) {
+          final row = find.byKey(ValueKey<String>('tl-row-${idOf(l)}'));
+          final bar = find.byKey(ValueKey<String>('tl-bar-${idOf(l)}'));
+          if (row.evaluate().isEmpty || bar.evaluate().isEmpty) continue;
+          seen++;
+          expect(tester.getRect(bar).top, closeTo(tester.getRect(row).top, 0.5),
+              reason: 'layer ${idOf(l)} came apart $why');
+        }
+        expect(seen, greaterThan(0), reason: 'some rows are on screen $why');
+      }
+
+      // A divider drag passes through many heights, fractional ones included;
+      // taller frees scroll room, shorter takes it away, and the last step
+      // returns to where it began.
+      for (final h in [340.0, 260.0, 421.5, 287.3, 300.0]) {
+        await mount(tester, p, height: h);
+        await tester.pump();
+        levelWherever('after a resize to $h');
+      }
+
+      // And the table still scrolls as one afterwards.
+      final probe =
+          layers.firstWhere((l) => find
+              .byKey(ValueKey<String>('tl-row-${idOf(l)}'))
+              .evaluate()
+              .isNotEmpty);
+      await wheel(tester, laneBar(tester, probe).center, -120);
+      levelWherever('after scrolling again');
     });
   });
 }

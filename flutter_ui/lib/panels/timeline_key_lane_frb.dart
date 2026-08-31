@@ -618,6 +618,7 @@ List<double> rowSeamOffsets({
   required double step,
   required double height,
   double phase = 0,
+  double origin = 0,
   List<(double, double)> blanks = const [],
 }) {
   if (step <= 0) return const [];
@@ -628,7 +629,16 @@ List<double> rowSeamOffsets({
     // the row still has a top and a bottom, it simply has no rules through
     // its middle.
     if (blanks.any((b) => y > b.$1 + 0.5 && y < b.$2 - 0.5)) continue;
-    ys.add(y.roundToDouble() - 0.5);
+    // Rounded **where the seam will be seen**, not where it is drawn.
+    // [origin] is the painter's own top edge in the panel's pixels — the
+    // negated scroll offset for a painter riding the scrolled content, zero
+    // for one pinned to the panel. Both halves of the Timeline then put a
+    // seam on the same physical pixel for any offset: the lane side used to
+    // round in content space, so a fractional scroll offset — which is what
+    // clamping to a fractional maxScrollExtent after a panel-height drag
+    // leaves behind — slid its lines up to half a pixel off the outline's
+    // (owner, 2026-08-31: "the divider lines ... not match up").
+    ys.add((y + origin).roundToDouble() - origin - 0.5);
   }
   return ys;
 }
@@ -657,10 +667,16 @@ class RowDividerPainter extends CustomPainter {
   /// the scroll offset here instead.
   final double phase;
 
+  /// Where this painter's top edge sits in the panel's own pixels
+  /// ([rowSeamOffsets]'s rounding anchor): the negated scroll offset for the
+  /// lane side's content-riding overlay, zero for the outline's pinned one.
+  final double origin;
+
   const RowDividerPainter({
     required this.step,
     required this.colour,
     this.phase = 0,
+    this.origin = 0,
     this.blanks = const [],
   });
 
@@ -671,7 +687,11 @@ class RowDividerPainter extends CustomPainter {
       ..color = colour
       ..strokeWidth = 1;
     for (final y in rowSeamOffsets(
-        step: step, height: size.height, phase: phase, blanks: blanks)) {
+        step: step,
+        height: size.height,
+        phase: phase,
+        origin: origin,
+        blanks: blanks)) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
@@ -685,6 +705,7 @@ class RowDividerPainter extends CustomPainter {
       old.step != step ||
       old.colour != colour ||
       old.phase != phase ||
+      old.origin != origin ||
       !listEquals(old.blanks, blanks);
 
   /// Never absorbs a pointer: a background painter's default would eat the

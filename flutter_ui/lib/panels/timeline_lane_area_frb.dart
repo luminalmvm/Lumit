@@ -898,13 +898,32 @@ class LayerArea extends StatelessWidget {
                             // and they are drawn rather than given to each row as
                             // a border because a decorated box absorbs pointers —
                             // which would eat the marquee underneath.
+                            //
+                            // Anchored on the **panel's** pixel grid, not the
+                            // content's: this painter rides the scrolled
+                            // content, so it hands `rowSeamOffsets` the scroll
+                            // offset as its rounding origin and listens to the
+                            // scroll for the fractional part — a fractional
+                            // offset used to slide these lines up to half a
+                            // pixel off the outline overlay's, which rounds
+                            // where it is pinned (owner, 2026-08-31).
                             Positioned.fill(
                               child: IgnorePointer(
-                                child: CustomPaint(
-                                  painter: RowDividerPainter(
-                                    step: t.density.laneRow,
-                                    colour: t.hairline,
-                                    blanks: sequenceBlanks,
+                                child: AnimatedBuilder(
+                                  animation: vScroll,
+                                  builder: (context, _) => CustomPaint(
+                                    painter: RowDividerPainter(
+                                      step: t.density.laneRow,
+                                      colour: t.hairline,
+                                      // Only the fraction: rounding is
+                                      // invariant under whole-pixel shifts,
+                                      // so a whole-pixel scroll changes
+                                      // nothing and repaints nothing.
+                                      origin:
+                                          -((positionOf(vScroll)?.pixels ?? 0) %
+                                              1.0),
+                                      blanks: sequenceBlanks,
+                                    ),
                                   ),
                                 ),
                               ),
