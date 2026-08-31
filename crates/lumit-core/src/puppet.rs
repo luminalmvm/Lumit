@@ -1401,15 +1401,12 @@ pub fn solve(mesh: &PuppetMesh, pins: &[SolvePin], f: &Factorisation) -> PuppetS
             continue;
         };
         let wt = f.weights.get(t).copied().unwrap_or(1.0);
-        let step1: Vec<[f64; 2]> = cols
-            .iter()
-            .map(|&c| {
-                [
-                    v1.get(2 * c).copied().unwrap_or(0.0),
-                    v1.get(2 * c + 1).copied().unwrap_or(0.0),
-                ]
-            })
-            .collect();
+        let step1: [[f64; 2]; 3] = cols.map(|c| {
+            [
+                v1.get(2 * c).copied().unwrap_or(0.0),
+                v1.get(2 * c + 1).copied().unwrap_or(0.0),
+            ]
+        });
         let (cos, sin) = fitted_rotation(&r, &step1);
         for k in 0..3 {
             let (i0, i1) = (
