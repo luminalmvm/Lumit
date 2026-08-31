@@ -22575,3 +22575,36 @@ New arb keys (Crowdin owes translations): `rotoFailedBusy`, `rotoFailedFlowUnava
 overlay (strokes, the matte and boundary views, the span bar), and the effect panel's rows
 and status line. The **Boundary** view renders as Result at the stack seam until that overlay
 exists, which is where a line drawn over a picture belongs.
+
+## K-714 — RB2 measured the propagation's per-frame cost, and the classical CPU machine is fifteen times over the budget
+
+**Status:** DECIDED (a measurement, recorded rather than gated — [impl/roto.md](impl/roto.md)
+§7's own stance, and docs/13's for a number that is not yet real).
+
+`roto::tests::propagation_cost_per_frame`, `--ignored`, on the owner's machine, 1080p, the
+defaults, with the fixture's frames painted **before** the clock starts so what is timed is the
+propagation and not the test:
+
+**895 ms per propagated frame.** The §7 estimate was ≤ 60 ms — flow ~7, warp and seeding ~2,
+the geodesic transform's six raster passes ~25, the guided filter's box sums ~15, headroom the
+rest. The flow half is right; the CPU half is not, by more than an order of magnitude. A
+600-frame shot therefore propagates in about nine minutes rather than the "well under a minute"
+§7 claims, and the note's sentence is wrong until this number moves.
+
+**What the estimate missed**, in the order the profile would find them: fifty million geodesic
+relaxations at 1080p is not 25 ms of real arithmetic; the guided filter runs several O(N) box
+passes over six planes rather than one; the seed erosion reads a 5×5 window per pixel; and each
+frame converts RGBA8 to interleaved f32 RGB and the previous matte from gray8 to f32 before any
+of that starts. Every one of those is a constant-factor problem, not an algorithmic one, which
+is why the answer is not a different algorithm.
+
+**The upgrade path is the one §7 already names and no other:** WGSL ports of the two pass
+pyramids, which are fixed-count raster sweeps shaped exactly like the flow kernels already in
+`lumit-flow`. The conversions and the erosion fold into those kernels rather than surviving
+beside them. **Not** a convergence test, a band-limited solve, or a coarser default — the first
+two trade determinism for speed and the third would quietly change what a matte is.
+
+**Nothing is gated on it.** The one roto budget that *is* a gate is the render path's per-frame
+matte fetch, bounded at 1 ms because it sits inside the frame walk, and it is asserted
+(`the_store_answers_one_frame_quickly_and_forgets_on_clear`). Propagation is a background job
+the user watches a bar for; being slow costs patience, and the cache means it is paid once.

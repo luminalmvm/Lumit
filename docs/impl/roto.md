@@ -253,6 +253,18 @@ because it sits inside the frame walk. If the CPU halves blow the budget the upg
 is WGSL ports — both algorithms are fixed-count pass pyramids shaped exactly like the
 flow kernels — not an algorithm change.
 
+**Measured, and the CPU halves did blow it (K-714).** RB2's `--ignored` test reports **895 ms
+a frame at 1080p**, fifteen times the target above. The flow estimate holds; the two CPU
+estimates do not, by more than an order of magnitude — fifty million geodesic relaxations is
+not 25 ms of real arithmetic, the guided filter runs several box passes over six planes rather
+than one, the seed erosion reads a 5×5 window per pixel, and every frame converts RGBA8 to
+interleaved f32 and the previous matte from gray8 before any of that starts. So a 600-frame
+shot is about nine minutes rather than "well under a minute", and the sentence above is a
+target rather than a description until the WGSL ports land. They are therefore **owed, not
+optional**; the conversions and the erosion fold into those kernels rather than surviving
+beside them. Nothing else moves: a convergence test or a band-limited solve would trade
+determinism, or what a matte is, for the same speed the ports give honestly.
+
 ## 8. Determinism and refusals (docs/14)
 
 **Deterministic given (media bytes, strokes, settings, base):** the GDT and guided filter

@@ -399,19 +399,221 @@ fn the_store_answers_one_frame_quickly_and_forgets_on_clear() {
     assert!(propagated(instance).is_none());
 }
 
+/// The same shot at 1080p, for the `--ignored` measurement below: §7's target
+/// is stated at that raster, and a 96×72 fixture measures the flow dispatch's
+/// fixed cost rather than the arithmetic the budget is about.
+struct BigDisc {
+    /// Painted **before** the clock starts: a 2 Mpx nested loop per frame is
+    /// the test's own cost, not the propagation's, and leaving it inside the
+    /// measurement would report the fixture rather than the work.
+    painted: Vec<Vec<u8>>,
+}
+
+const BW: u32 = 1920;
+const BH: u32 = 1080;
+const BR: f32 = 220.0;
+
+impl BigDisc {
+    fn new(frames: usize) -> BigDisc {
+        BigDisc {
+            painted: (0..frames).map(BigDisc::paint).collect(),
+        }
+    }
+
+    fn paint(n: usize) -> Vec<u8> {
+        let (cx, cy) = (600.0 + 8.0 * n as f32, 540.0);
+        let mut out = vec![0u8; (BW * BH * 4) as usize];
+        for y in 0..BH {
+            for x in 0..BW {
+                let dx = x as f32 + 0.5 - cx;
+                let dy = y as f32 + 0.5 - cy;
+                let ground = 40 + ((x / 64 + y / 64) % 3) as u8 * 6;
+                let (r, g, b) = if dx * dx + dy * dy <= BR * BR {
+                    (235u8, 225u8, 210u8)
+                } else {
+                    (ground, ground + 4, ground + 8)
+                };
+                let i = ((y * BW + x) * 4) as usize;
+                out[i] = r;
+                out[i + 1] = g;
+                out[i + 2] = b;
+                out[i + 3] = 255;
+            }
+        }
+        out
+    }
+}
+
+impl RotoFrames for BigDisc {
+    fn info(&self) -> (usize, u32, u32, f64) {
+        (self.painted.len(), BW, BH, 24.0)
+    }
+
+    fn rgba(&mut self, n: usize) -> Option<Vec<u8>> {
+        // A memcpy stands in for the decode a real run pays; the copy is
+        // milliseconds and the decode is not the thing §7 budgets.
+        self.painted.get(n).cloned()
+    }
+}
+
 /// §10 item 9, `--ignored`: the per-frame propagation cost at the note's own
-/// target, printed rather than gated until the numbers are real.
+/// raster and target, printed rather than gated until the numbers are real
+/// (the tracker's stance, and docs/13's).
 #[test]
 #[ignore = "perf measurement, not a gate (docs/impl/roto.md §7)"]
 fn propagation_cost_per_frame() {
     let _guard = serially();
     set_test_cache_dir(None);
-    let frames = 12;
+    let frames = 6;
+    let block = RotoBlock {
+        base_frame: Some(0),
+        strokes: vec![stroke(
+            0,
+            RotoStrokeKind::Foreground,
+            (540.0, 540.0),
+            (660.0, 540.0),
+        )],
+    };
+    let mut j = job(block, frames);
+    let shot = BigDisc::new(frames);
+    j.open = Box::new(move || Some(Box::new(shot) as Box<dyn RotoFrames>));
     let started = std::time::Instant::now();
-    let (run, _) = propagate(job(block_at(0), frames), &never(), &|_| {}).expect("a run");
+    let (run, _) = propagate(j, &never(), &|_| {}).expect("a run");
     let ms = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
     println!(
-        "roto propagate: {ms:.1} ms/frame at {}×{} ({} frames); the §7 target is 60 ms at 1080p",
-        run.width, run.height, frames
+        "roto propagate: {ms:.1} ms/frame at {}×{} over {frames} frames          (the frames were painted before the clock started); the §7 target is 60 ms",
+        run.width, run.height
     );
+}
+
+/// §10 item 7's other half, and the whole point of the chain hash: **a stroke
+/// edit renames exactly the frames it invalidated**, through the real frame key
+/// the disk cache files pictures under.
+///
+/// Without this, a corrected shot would serve back the frames it banked before
+/// the correction — a wrong picture with a right name, which is the one failure
+/// a content-addressed cache exists to make impossible.
+#[test]
+fn a_correction_renames_exactly_the_frames_it_spoiled() {
+    use lumit_core::model::{
+        Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, ProjectItem,
+        Switches, TransformGroup,
+    };
+    use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+
+    // A comp at the media's own rate, so comp frame n is source frame n and the
+    // assertions below can talk about one number.
+    let build = |strokes: Vec<lumit_core::roto::RotoStroke>| {
+        let item = uuid::Uuid::from_u128(7);
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "clip.mp4".into(),
+            media: MediaRef {
+                relative_path: "clip.mp4".into(),
+                absolute_path: "/media/clip.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+        }));
+        let mut brush =
+            lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
+        brush.id = uuid::Uuid::from_u128(9);
+        brush.roto = Some(RotoBlock {
+            base_frame: Some(0),
+            strokes,
+        });
+        let mut layer = Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: uuid::Uuid::from_u128(8),
+            name: "clip".into(),
+            kind: LayerKind::Footage { item },
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(4, 1).expect("a duration")),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            adjustment: false,
+            retime: None,
+            interpolation: Default::default(),
+            parked_flow: None,
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        };
+        layer.effects = vec![brush];
+        let comp = Composition {
+            master_volume_db: 0.0,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: uuid::Uuid::from_u128(6),
+            name: "Scene".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(30, 1).expect("a rate"),
+            duration: Duration(Rational::new(4, 1).expect("a duration")),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![layer],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        doc.items.push(ProjectItem::Composition(comp.clone()));
+        (std::sync::Arc::new(doc), comp, item)
+    };
+
+    let base = stroke(0, RotoStrokeKind::Foreground, (10.0, 10.0), (20.0, 10.0));
+    let (doc_a, comp_a, item) = build(vec![base.clone()]);
+    let (doc_b, comp_b, _) = build(vec![
+        base,
+        stroke(10, RotoStrokeKind::Foreground, (30.0, 30.0), (40.0, 30.0)),
+    ]);
+
+    let mut probes = std::collections::HashMap::new();
+    probes.insert(
+        item,
+        crate::source::SourceProbe::Video {
+            fps: 30.0,
+            width: 64,
+            height: 64,
+            frames: 120,
+            audio: false,
+        },
+    );
+    let quality = crate::plan::Quality::default();
+    let key = |doc: &std::sync::Arc<lumit_core::model::Document>,
+               comp: &lumit_core::model::Composition,
+               frame: usize| {
+        crate::cache::frame_key(doc, comp, frame, quality, &probes).expect("a named frame")
+    };
+
+    for frame in 0..10 {
+        assert_eq!(
+            key(&doc_a, &comp_a, frame),
+            key(&doc_b, &comp_b, frame),
+            "frame {frame} was renamed by a correction it cannot depend on"
+        );
+    }
+    for frame in 10..20 {
+        assert_ne!(
+            key(&doc_a, &comp_a, frame),
+            key(&doc_b, &comp_b, frame),
+            "frame {frame} kept its name across a correction that changes it"
+        );
+    }
 }

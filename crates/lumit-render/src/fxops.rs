@@ -470,6 +470,10 @@ pub fn run_ops(
 /// test calls: the roto matte is the only side list whose *absence* is the
 /// overwhelmingly normal case, and `run_ops` forwarding an empty slice says so
 /// in one line instead of at twenty call sites.
+///
+/// ponytail: two entry points for one walk; fold them back into one parameter
+/// list the moment a *second* side list wants the same treatment, since three
+/// forwarding wrappers would cost more than the twenty edits do.
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops_with_roto(
     fx: &FxEngine,

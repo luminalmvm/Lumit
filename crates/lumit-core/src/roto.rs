@@ -27,6 +27,14 @@
 //! hash, keeps its cached matte, and keeps the name its rendered frame was
 //! filed under.
 //!
+//! There is deliberately **no roto-shaped op**: a stroke edit rides
+//! `Op::SetLayerEffects`, the coarse-and-exactly-invertible whole-stack commit
+//! every parameter edit already uses, so strokes undo, journal and replay with
+//! no second mechanism.
+//! ponytail: the History row therefore reads "Edit effects" rather than "Draw a
+//! roto stroke"; add a `SetRotoStrokes` with its own label the day that wording
+//! is worth an op arm, its serde and its tests.
+//!
 //! **Why the strokes are not effect parameters.** A parameter is a number the
 //! timeline animates and the frame key hashes whole. Strokes are neither: they
 //! are a growing table where the *position in time* of each entry decides who it
