@@ -10774,6 +10774,13 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "lower_left_y"),
             ("planar_track", "lower_right_x"),
             ("planar_track", "lower_right_y"),
+            // Its two search points and their box (K-735) are the same numbers
+            // asked the same question, one patch at a time.
+            ("planar_track", "point1_x"),
+            ("planar_track", "point1_y"),
+            ("planar_track", "point2_x"),
+            ("planar_track", "point2_y"),
+            ("planar_track", "region"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -11935,11 +11942,17 @@ fn every_mix_row_carries_a_blend() {
             Some(at) => {
                 let at_blend = blend
                     .unwrap_or_else(|| panic!("{} has a Mix and no Blend beside it", s.match_name));
-                assert!(s.blend(), "{}", s.match_name);
                 if s.match_name == "lens_flare" {
-                    // Its own, older row: a save is a save (K-065).
+                    // Its own, older row: a save is a save (K-065). And
+                    // therefore NOT the seam's — the flare's combine applies
+                    // its own menu, and a second blend out at the seam reads
+                    // that index into the layer modes and spends it against
+                    // the untouched input, which is how a fresh flare came
+                    // back black.
+                    assert!(!s.blend(), "the flare's own row is not the injected one");
                     continue;
                 }
+                assert!(s.blend(), "{}", s.match_name);
                 assert_eq!(
                     at_blend,
                     at + 1,
@@ -11977,10 +11990,13 @@ fn the_blend_seam_forces_mix_to_full_only_when_it_blends() {
         (mix, Value::Float(40.0)),
         (BLEND_ID, Value::Choice(0)),
     ];
-    assert!(cpu::blend_seam(Params::new(&normal)).is_none());
+    let blur = crate::fx::builtins::def("blur")
+        .expect("blur is a built-in")
+        .schema();
+    assert!(cpu::blend_seam(blur, Params::new(&normal)).is_none());
     let absent = [(other, Value::Float(1.0)), (mix, Value::Float(40.0))];
     assert!(
-        cpu::blend_seam(Params::new(&absent)).is_none(),
+        cpu::blend_seam(blur, Params::new(&absent)).is_none(),
         "a project saved before the row existed blends Normal (K-258)"
     );
 
@@ -11989,7 +12005,7 @@ fn the_blend_seam_forces_mix_to_full_only_when_it_blends() {
         (mix, Value::Float(40.0)),
         (BLEND_ID, Value::Choice(6)),
     ];
-    let (mode, k, forced) = cpu::blend_seam(Params::new(&add)).expect("Add blends");
+    let (mode, k, forced) = cpu::blend_seam(blur, Params::new(&add)).expect("Add blends");
     assert_eq!(mode, 6);
     assert!((k - 0.4).abs() < 1e-6);
     let forced = Params::new(&forced);
@@ -12179,7 +12195,7 @@ fn a_pre_k425_instance_reads_luminance_and_normal() {
     let op = ops.iter().next().unwrap();
     assert_eq!(op.params.choice(MATTE_CHANNEL_ID, 0), 0);
     assert_eq!(op.params.choice(BLEND_ID, 0), 0);
-    assert!(cpu::blend_seam(op.params).is_none());
+    assert!(cpu::blend_seam(op.def.schema(), op.params).is_none());
 }
 
 /// **The two that opted out still say the same words** (K-395).

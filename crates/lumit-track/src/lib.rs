@@ -84,8 +84,9 @@ pub use pairs::{
     estimate_pair, homography_ransac, select_keyframes, GeometrySettings, PairGeometry, PairVerdict,
 };
 pub use planar::{
-    quad_outline, solve_planar, solve_planar_cancellable, PlanarError, PlanarFrame, PlanarSettings,
-    PlanarTrack, Quad,
+    point_outlines, points_quad, quad_outline, solve_planar, solve_planar_cancellable,
+    solve_points, solve_points_cancellable, PlanarError, PlanarFrame, PlanarSettings, PlanarTrack,
+    PointSettings, Quad,
 };
 pub use segment::{
     detect_zoom, segment_dynamic_tracks, SegmentSettings, Segmentation, TrackSplit, ZoomBoundary,

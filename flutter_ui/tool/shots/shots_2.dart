@@ -186,17 +186,8 @@ Future<void> main() async {
   /// The whole Timeline panel: the ruler gives the seam between outline and
   /// lanes and the panel's right edge, the zoom slider is its floor, and the
   /// outline runs to the window's left edge.
-  Rect panelBox() {
-    final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(
-        2,
-        ruler.top - 28 - paneCardInset,
-        ruler.right + 4 + paneCardInset,
-        boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
-  }
-
   // ---- Shot: the Timeline, outline left and lanes right -------------------
-  await captureUi('timeline.png', scale: 2, crop: panelBox());
+  await captureUi('timeline.png', scale: 2, crop: timelinePanelBox());
 
   // ---- Shot: the outline columns, left to right ---------------------------
   // Cut at the seam: the caption is about the columns, so the lanes are not in
@@ -204,7 +195,7 @@ Future<void> main() async {
   await captureUi(
     'timeline-outline.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, panelBox().top, boxOf('tl-ruler')!.left - 2,
+    crop: Rect.fromLTRB(2, timelinePanelBox().top, boxOf('tl-ruler')!.left - 2,
         boxOf('tl-rowbody-$musicId')!.bottom + 10),
   );
 
@@ -262,7 +253,7 @@ Future<void> main() async {
       boxOf('kf-stopwatch-tl-tf-opacity')!.bottom + 6,
     ),
   );
-  await captureUi('timeline-lanes.png', scale: 2, crop: panelBox());
+  await captureUi('timeline-lanes.png', scale: 2, crop: timelinePanelBox());
 
   // ---- Shot: keyframes on a property lane ---------------------------------
   // The lanes half only, over the open property rows, so what fills the

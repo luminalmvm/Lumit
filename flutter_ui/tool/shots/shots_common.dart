@@ -32,6 +32,7 @@ import 'package:flutter/rendering.dart';
 import 'package:lumit_flutter/data/expressions_metadata.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
+import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -273,6 +274,196 @@ Rect? boxOfTypeNamed(String name, {String? under}) {
 Rect? openPopup({double margin = 12}) =>
     boxOfType(FloatSurface)?.inflate(margin);
 
+/// The full visual extent of a widget: the union of every attached [RenderBox]
+/// in its subtree, in the same logical pixels [boxOf] measures in.
+///
+/// [boxOfType] answers with the widget's *own* render object, and a widget that
+/// is not itself a render object has none — so `Element.renderObject` hands
+/// back whichever descendant box the walk reaches first. That is often an inner
+/// box: the Timeline panel's stops short of both the Export button and the
+/// strip along its foot, and a menu surface's stops short of its own width.
+/// Every crop that came out with a control sliced down the middle came out that
+/// way for this reason.
+///
+/// Unioning the subtree measures what is drawn instead. It is the wider
+/// answer, so it is used where a crop must *contain* a widget rather than sit
+/// tight against it — a shot cut short is a defect, a shot with a few spare
+/// pixels is not.
+///
+/// **Cut it to the window when the panel clips something bigger than itself.**
+/// A canvas that pans keeps render boxes for the things panned out of view, at
+/// coordinates outside the window, and this walk unions those too — so the node
+/// graph measured this way reaches out to wherever its furthest node happens to
+/// sit. `spanOfType(…)!.intersect(Offset.zero & frameSize)` is the whole answer
+/// there: everything the panel draws, bounded by what the window shows.
+/// [boxOfType] is not the fix — on that same panel it is an inner box that
+/// stops short of the last node.
+/// [under] narrows the search to the subtree of the first widget by that name,
+/// exactly as it does for [boxOfTypeNamed].
+Rect? spanOfTypeNamed(String name, {String? under}) {
+  Element? find(Element root, String wanted) {
+    Element? found;
+    void visit(Element el) {
+      if (found != null) return;
+      if (el.widget.runtimeType.toString() == wanted) {
+        found = el;
+        return;
+      }
+      el.visitChildren(visit);
+    }
+
+    root.visitChildren(visit);
+    return found;
+  }
+
+  var root = WidgetsBinding.instance.rootElement;
+  if (root != null && under != null) root = find(root, under);
+  final found = root == null ? null : find(root, name);
+  if (found == null) {
+    // ignore: avoid_print
+    print('SPAN MISS ${under == null ? name : '$name under $under'}');
+    return null;
+  }
+  return spanOfElement(found);
+}
+
+/// [spanOfTypeNamed] for a class the sweep can write down.
+Rect? spanOfType(Type type) => spanOfTypeNamed('$type');
+
+/// A **docked** panel's rectangle: everything it draws, bounded by the pane
+/// that clips it.
+///
+/// Reach for this whenever a docked panel clips something bigger than itself —
+/// a list that scrolls, a canvas that pans — because there [boxOfType] and
+/// [spanOfType] fail in opposite directions and each has produced a wrong
+/// picture. The box is an inner one that slices a control off the edge; the
+/// span runs out to wherever the clipped content goes. The Effects & presets
+/// panel is both at once, and photographed by its span it came out with the
+/// Timeline underneath it in the frame.
+///
+/// A panel whose content simply fits is measured by [spanOfType] in the sweeps
+/// that came first, and correctly — the Viewer and the two tree panels among
+/// them. Nothing is wrong with those; this is the safer default for new ones.
+///
+/// The pane is `_PaneChrome`, private to `dock_widget.dart`, one per docked
+/// panel: found by walking up from the panel rather than by name, so it is
+/// *this* panel's pane and not the first one in the tree. A panel that is not
+/// in the dock has none, and then the span stands on its own.
+Rect? dockedPanelBox(Type type) {
+  final el = elementOfTypeNamed('$type');
+  if (el == null) {
+    // ignore: avoid_print
+    print('PANEL MISS $type');
+    return null;
+  }
+  final span = spanOfElement(el);
+  Rect? pane;
+  el.visitAncestorElements((up) {
+    if (up.widget.runtimeType.toString() != '_PaneChrome') return true;
+    final render = up.renderObject;
+    if (render is RenderBox && render.attached && render.hasSize) {
+      pane = render.localToGlobal(Offset.zero) & render.size;
+    }
+    return false;
+  });
+  if (span == null || pane == null) return span;
+  return span.intersect(pane!);
+}
+
+/// The first widget of [name] in the tree, as an [Element].
+Element? elementOfTypeNamed(String name, {String? under}) {
+  Element? find(Element root, String wanted) {
+    Element? found;
+    void visit(Element el) {
+      if (found != null) return;
+      if (el.widget.runtimeType.toString() == wanted) {
+        found = el;
+        return;
+      }
+      el.visitChildren(visit);
+    }
+
+    root.visitChildren(visit);
+    return found;
+  }
+
+  var root = WidgetsBinding.instance.rootElement;
+  if (root != null && under != null) root = find(root, under);
+  return root == null ? null : find(root, name);
+}
+
+/// The union of every attached [RenderBox] in [root]'s subtree, [root]'s own
+/// included.
+Rect? spanOfElement(Element root) {
+  Rect? all;
+  void visit(Element el) {
+    final render = el.renderObject;
+    if (render is RenderBox && render.attached && render.hasSize) {
+      final box = render.localToGlobal(Offset.zero) & render.size;
+      all = all == null ? box : all!.expandToInclude(box);
+    }
+    el.visitChildren(visit);
+  }
+
+  visit(root);
+  return all;
+}
+
+/// Every popup on screen at once, as one box.
+///
+/// A menu with a category opened off it is *two* [FloatSurface]s, and
+/// [openPopup] answers with whichever the walk reaches first — so a crop aimed
+/// at it cuts the submenu in half down the side. This unions them instead, and
+/// keeps doing so however many the interface has open.
+Rect? openPopupsBox({double margin = 12}) {
+  Rect? all;
+  void visit(Element el) {
+    if (el.widget is FloatSurface) {
+      final span = spanOfElement(el);
+      if (span != null) all = all == null ? span : all!.expandToInclude(span);
+    }
+    el.visitChildren(visit);
+  }
+
+  WidgetsBinding.instance.rootElement?.visitChildren(visit);
+  return all?.inflate(margin);
+}
+
+/// The whole Timeline panel, tab strip to foot, pane card and all.
+///
+/// Taken as [spanOfType] — the union of everything the panel draws — and then
+/// widened again by three parts that have each been the panel's true edge at
+/// some point: the foot strip ([LaneBottomBar]: easing buttons in Graph mode,
+/// drawing tools in Layers mode), the ruler, and the zoom slider.
+///
+/// The proxies this replaces (`ruler.top - 28`, `zoomSlider.bottom + 8`) were
+/// each right when they were written and each went stale: the panel grew a
+/// header row between its tab strip and the ruler, and Graph mode grew its
+/// easing bar. A union goes stale only if the panel loses a part, which shows
+/// up as a smaller crop rather than a clipped one.
+///
+/// Clamped to the photographed boundary — the client area, not the window that
+/// was asked for. A crop poking one pixel past the frame is an ffmpeg refusal
+/// and a silent full-window shot.
+Rect timelinePanelBox() {
+  var b = spanOfType(TimelinePanelFrb)!;
+  for (final part in [
+    boxOfType(LaneBottomBar),
+    boxOf('tl-ruler'),
+    boxOf('tl-zoom-slider'),
+  ]) {
+    if (part != null) b = b.expandToInclude(part);
+  }
+  b = b.inflate(paneCardInset + 2);
+  final frame = shotRootKey.currentContext!.size!;
+  return Rect.fromLTRB(
+    b.left.clamp(0, frame.width),
+    b.top.clamp(0, frame.height),
+    b.right.clamp(0, frame.width),
+    b.bottom.clamp(0, frame.height),
+  );
+}
+
 /// Photograph the application's own render tree.
 ///
 /// Read straight out of Flutter rather than off the screen, which is the only
@@ -300,19 +491,56 @@ Future<void> captureUi(String name, {Rect? crop, double scale = 1}) async {
   if (Platform.environment['LUMIT_SHOTS_NOCROP'] == '1') crop = null;
   String? cut;
   if (crop != null) {
-    final box = Rect.fromLTRB(crop.left * scale, crop.top * scale,
+    // Kept inside the picture, because ffmpeg does not refuse a crop that runs
+    // off the edge — it **slides the whole rectangle back inside and crops
+    // there**, silently. A shot whose floor came from a row below the fold
+    // then photographs a region hundreds of pixels above the one it asked for,
+    // exits 0, and prints the numbers it wanted rather than the ones it used.
+    // That is how `shape-layer.png` came to be a picture of the Viewer.
+    //
+    // Intersecting instead truncates: the shot loses the part that was never
+    // on screen and keeps the part that was, which is a picture with a piece
+    // missing rather than a picture of somewhere else. The line says so, so a
+    // staging mistake is read off the log instead of spotted by eye.
+    final frame = Rect.fromLTWH(0, 0, image.width.toDouble(),
+        image.height.toDouble());
+    final asked = Rect.fromLTRB(crop.left * scale, crop.top * scale,
         crop.right * scale, crop.bottom * scale);
-    cut = '${box.width.round()}:${box.height.round()}'
-        ':${box.left.round().clamp(0, 1 << 20)}'
-        ':${box.top.round().clamp(0, 1 << 20)}';
-    final tmp = '${out.path}.crop.png';
-    final r = await Process.run(
-        'ffmpeg', ['-y', '-i', out.path, '-vf', 'crop=$cut', tmp]);
-    if (r.exitCode == 0) {
-      File(tmp).renameSync(out.path);
-    } else {
+    final box = asked.intersect(frame);
+    if (box.isEmpty) {
+      // Nothing of what was asked for is on screen. The whole window is a
+      // worse picture than the one wanted but a better one than a slid crop,
+      // and the line says which shot to go and stage properly.
       // ignore: avoid_print
-      print('CROP FAILED $name: ${r.stderr}');
+      print('CROP OFF-PICTURE $name: wanted $asked of $frame — shot whole');
+    } else {
+      // Only a loss worth knowing about is said out loud. A panel's shadow
+      // hangs a dozen pixels off the edge of the client area, so an exact
+      // comparison fires on shots that are perfectly fine — and a warning that
+      // cries wolf on every pass is one nobody reads on the pass that matters.
+      const slack = 8;
+      final lost = [
+        box.left - asked.left,
+        box.top - asked.top,
+        asked.right - box.right,
+        asked.bottom - box.bottom,
+      ].reduce((a, b) => a > b ? a : b);
+      if (lost > slack) {
+        // ignore: avoid_print
+        print('CROP CLAMPED $name: wanted $asked, took $box'
+            ' — ${lost.round()}px of it is not on screen');
+      }
+      cut = '${box.width.round()}:${box.height.round()}'
+          ':${box.left.round()}:${box.top.round()}';
+      final tmp = '${out.path}.crop.png';
+      final r = await Process.run(
+          'ffmpeg', ['-y', '-i', out.path, '-vf', 'crop=$cut', tmp]);
+      if (r.exitCode == 0) {
+        File(tmp).renameSync(out.path);
+      } else {
+        // ignore: avoid_print
+        print('CROP FAILED $name: ${r.stderr}');
+      }
     }
   }
   // ignore: avoid_print

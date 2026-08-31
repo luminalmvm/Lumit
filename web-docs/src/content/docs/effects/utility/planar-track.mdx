@@ -1,6 +1,6 @@
 ---
 title: Planar track
-description: "Follows a flat surface through a shot, and pins a layer to it."
+description: "Follows a surface, or one or two points, and moves another layer with it."
 ---
 
 Planar track is a **Utility** effect.
@@ -13,10 +13,11 @@ Planar track is a **Utility** effect.
 
 ## What it does
 
-Used to track a rectangle on an object
+Follows a flat surface, or one or two points, through a shot, and writes the movement onto
+another layer as a Corner pin or as transform keys.
 
-Where the surface stops being followable, the analysis stops there and keeps the part that
-worked.
+Where what is being followed stops being followable, the analysis stops there and keeps the
+part that worked.
 
 ## Parameters
 
@@ -27,6 +28,8 @@ worked.
 | **Analyse** | Button | - | - | - |
 | **Cancel** | Button | - | - | - |
 | **Create corner pin** | Button | - | - | - |
+| **Create transform keys** | Button | - | - | - |
+| **Follow** | Dropdown | Surface · One point · Two points | Surface | - |
 | **Upper left x** | Slider | -1920 to 3840; any value by typing | 660 | Pixels at composition size |
 | **Upper left y** | Slider | -1080 to 2160; any value by typing | 370 | Pixels at composition size |
 | **Upper right x** | Slider | -1920 to 3840; any value by typing | 1260 | Pixels at composition size |
@@ -35,6 +38,11 @@ worked.
 | **Lower left y** | Slider | -1080 to 2160; any value by typing | 710 | Pixels at composition size |
 | **Lower right x** | Slider | -1920 to 3840; any value by typing | 1260 | Pixels at composition size |
 | **Lower right y** | Slider | -1080 to 2160; any value by typing | 710 | Pixels at composition size |
+| **Point 1 x** | Slider | -1920 to 3840; any value by typing | 860 | Pixels at composition size |
+| **Point 1 y** | Slider | -1080 to 2160; any value by typing | 440 | Pixels at composition size |
+| **Point 2 x** | Slider | -1920 to 3840; any value by typing | 1060 | Pixels at composition size |
+| **Point 2 y** | Slider | -1080 to 2160; any value by typing | 640 | Pixels at composition size |
+| **Region size** | Slider | 16 to 400; any value by typing | 80 | Pixels at composition size |
 | **Pin layer** | Layer | Any layer in the composition | None | - |
 | **Feature density** | Dropdown | Low · Normal · High | Normal | - |
 | **Use masks** | Checkbox | On or off | On | - |
@@ -46,11 +54,19 @@ worked.
 - **Analyse**: start tracking.
 - **Cancel**: stop a track that is running.
 - **Create corner pin**: put a keyframed Corner pin on the layer named below.
+- **Create transform keys**: keyframe that layer's own Position, Rotation and Scale to the
+  movement instead. The keys are added to what the layer already had. Following one point
+  writes Position alone.
+- **Follow**: a flat surface as four corners, one point, or two points followed separately.
+  Two points need not be on one surface.
 - **Upper left**, **Upper right**, **Lower left** and **Lower right**: the four corners of
-  the surface.
-- **Pin layer**: which layer the Corner pin is put on.
-- **Feature density**: how many specks the tracker chases inside the quad. More is slower
-  but copes better with a plain or badly lit surface.
+  the surface. Read when **Follow** is *Surface*.
+- **Point 1** and **Point 2**: the points to follow. Read when **Follow** is one of the
+  point options; **Point 2** only for *Two points*.
+- **Region size**: how wide each point's search box is.
+- **Pin layer**: which layer the Corner pin, or the transform keys, are put on.
+- **Feature density**: how many specks the tracker chases. More is slower but copes better
+  with a plain or badly lit surface.
 - **Use masks**: masks on the layer are left out of the track.
 
 ## Related

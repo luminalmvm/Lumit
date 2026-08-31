@@ -65,3 +65,11 @@ until it does:
 
 Proxies, which were on this list beside it, are built: `project-panel.png` shows a
 row wearing the `proxy` badge.
+
+## Waiting on the machine
+
+`effects-presets-ofx.png` is the one shot a sweep cannot take by itself. It shows
+an OFX plugin's own heading in the panel, and sweep 5 photographs whatever the
+host actually loaded - so on a machine with no plugin installed it prints
+`NO OFX PLUGINS: effects-presets-ofx.png skipped` and moves on rather than
+staging a fake one. Install any OFX plugin and run sweep 5 again to refresh it.

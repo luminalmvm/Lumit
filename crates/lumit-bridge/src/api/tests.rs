@@ -10973,6 +10973,73 @@ fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
     assert!(create_corner_pin(shot, Uuid::now_v7()).is_err());
 }
 
+/// The other half of docs/08 §4's Tracker row (K-734): the same track pressed
+/// onto the target layer's own transform, through the one doorway a press
+/// crosses.
+#[test]
+fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
+    use crate::api::effect::{BridgeEffectValue, BridgeScalar};
+    use crate::api::track::fire_effect_action;
+
+    let (_project, _comp, shot, target, effect) = a_planar_tracked_layer();
+
+    fire_effect_action(shot, effect, "transform_keys".into()).expect("a track and a target layer");
+    let transform = target.get_transform().expect("the target's transform");
+
+    let keys = match transform.position_x {
+        BridgeScalar::Keyframed(keys) => keys,
+        other => panic!("position x is {other:?}, not a keyframed channel"),
+    };
+    assert_eq!(keys.len(), 50, "one key per comp frame of the target layer");
+    // The quad slides ten pixels a frame and the layer keeps where it was, so
+    // frame ten is a hundred pixels along from frame nought — added, not
+    // stamped.
+    assert!(
+        (keys[10].value - keys[0].value - 100.0).abs() < 1e-6,
+        "frame ten should sit a hundred pixels along, got {}",
+        keys[10].value - keys[0].value
+    );
+    // The whole movement was asked for, so the other three were written too —
+    // a pure slide, so they hold what the layer had.
+    assert!(matches!(transform.rotation, BridgeScalar::Keyframed(_)));
+    assert!(matches!(transform.scale_x, BridgeScalar::Keyframed(_)));
+
+    // One undo step takes the whole transform back.
+    let project = shot.project().expect("the project");
+    project
+        .read()
+        .expect("read")
+        .store
+        .undo()
+        .expect("the keys are one step");
+    let back = target.get_transform().expect("the target's transform");
+    assert!(matches!(back.position_x, BridgeScalar::Static(_)));
+
+    // Following one point: it can only say where it went, so two properties are
+    // written and the rest are left as they were.
+    let mut staged = shot.get_effects().expect("the stack");
+    staged[0]
+        .set_value(
+            lumit_core::track::FOLLOW_PARAM.to_owned(),
+            BridgeEffectValue::Choice(lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT),
+        )
+        .expect("the Follow row takes a choice");
+    shot.set_effects(staged).expect("committed");
+
+    fire_effect_action(shot, effect, "transform_keys".into()).expect("position alone still writes");
+    let narrow = target.get_transform().expect("the target's transform");
+    assert!(matches!(narrow.position_x, BridgeScalar::Keyframed(_)));
+    assert!(matches!(narrow.position_y, BridgeScalar::Keyframed(_)));
+    assert!(
+        matches!(narrow.rotation, BridgeScalar::Static(_)),
+        "rotation should not have been written"
+    );
+    assert!(
+        matches!(narrow.scale_x, BridgeScalar::Static(_)),
+        "scale should not have been written"
+    );
+}
+
 /// **Saving does not hold the project across the disk** (docs/14 §1, FP3.5).
 ///
 /// `save` used to take the write guard first and keep it over

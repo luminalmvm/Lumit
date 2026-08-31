@@ -5,14 +5,12 @@ sidebar:
   order: 3
 ---
 
-The [Roto brush](/effects/utility/roto-brush/) cuts a moving subject out of a shot
-from a few scribbles.
+The [Roto brush](/effects/utility/roto-brush/) cuts a moving subject out of a shot from a few scribbles.
 
 ## 1. Stroke the base frame
 
 1. Add a **Roto brush** effect to the footage layer.
-2. Pick the **Roto brush** tool (`Alt+W`). **Size** on the options bar sets the
-   scribble's width.
+2. Pick the **Roto brush** tool (`Alt+W`). **Size** on the options bar sets the scribble's width.
 3. Scrub to a frame where the subject separates well. It does not have to be the first
    frame.
 4. Drag through the subject. The stroke draws green, and the matte appears when you
@@ -22,7 +20,7 @@ from a few scribbles.
 
 The frame you stroked first becomes the **base frame**; the effect's card shows it,
 and **Set to current frame** moves it. If you draw no background stroke, the frame's
-border counts as background.
+border counts as the background.
 
 Set **View** on the card to **Boundary** to see the edge drawn over the picture, or
 **Matte** to see the matte itself.
@@ -35,10 +33,10 @@ The card shows how far the span reaches; **Cancel** keeps the frames already sol
 
 ## 3. Correct a frame
 
-Scrub the result. Where the matte leaks or drops a limb:
+Scrub the result. Where the matte leaks incorrectly rotoscopes:
 
-1. Scribble **across** the wrong region — foreground where it lost the subject, `Alt`
-   where it grabbed background.
+1. Scribble **across** the region where it lost the subject, `Alt`
+   where it added in the background.
 2. Propagate again. Only the frames from the correction outward are re-solved.
 
 Corrections carry forward, away from the base frame.

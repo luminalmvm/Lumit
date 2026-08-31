@@ -18,25 +18,25 @@ Two mode tabs sit at the far right of the panel's header, with the playhead's ti
 number at its far left. The outline is **the same in both modes**; switching mode changes
 what is drawn against time, and nothing else.
 
-<Shot file="layers-shut.png" caption="Layers mode with everything shut: a summary diamond on the bar for each keyframed moment." />
+<Shot file="layers-shut.png" caption="Layers mode with everything shut: a summary diamond on the bar for each keyframe." />
 
 **Layers** draws each layer as a bar, with a lane per property once the layer is twirled open.
-Shut, a layer's keys are summarised as small diamonds on its own bar.
+Shut, a layer's keys are summarised as diamonds within its own bar.
 
 <Shot file="layers-open.png" caption="Layers mode, a layer twirled open: keyframes on their own lanes, shaped by their interpolation." />
 
-<Shot file="graph-mode.png" caption="Graph mode: the curve of the selected property, running edge to edge." />
+<Shot file="graph-mode.png" caption="Graph mode: the curve of the selected property." />
 
 **Graph** draws the curves. A property's curves are on the pane while its row is
 **selected** in the outline. The curves share one value scale.
 
 ## The Animated filter
 
-**ANIMATED**, on the bottom bar, lists only properties that have keyframes, across every
-layer. `U` is the shortcut, and it works in both modes.
+**U**, the shortcut, lists only properties that have keyframes, across every
+layer.
 
 Beside it, the **shy filter** hides every layer with its shy switch on, and a master
-**motion blur** toggle governs the whole composition.
+**motion blur** toggles motion blur for all layers in the composition with the switch on.
 
 ## The ruler
 
@@ -64,8 +64,8 @@ times.
 | **Parent** | The parent picker. |
 
 Drag a column heading to reorder the groups, and drag a seam to resize one. Toggles on the
-bottom bar show and hide **Switches**, **Modes** and **Parent**; Compose answers to no
-toggle.
+bottom bar show and hide **Switches**, **Modes** and **Parent**, you can also manually adjust
+the column widths for several of these to hide items if they aren't needed.
 
 **Switches** is what the Timeline keeps about a layer, and **Modes** is how the layer is
 rendered. See [Layers](/use/layers/#switches).
@@ -93,10 +93,10 @@ badge reading how many keys it holds and how many frames it spans.
 - Drag the block's **body** to move every key together.
 - Drag an **end handle** to stretch the whole block — the keys inside keep their
   proportions.
-- The **magnet** on the bottom bar decides whether a dragged key lands on a whole frame.
+- The **magnet** on the bottom bar decides whether a dragged key snaps to whole frames.
 
 The strip along the bottom bar acts on whatever keys are selected: **Interpolation** —
-Linear, Hold, Ease, Bezier — then **Reverse**, **Copy** and **Paste at playhead**.
+Linear, Hold, Ease, Bezier.
 
 ## Render times
 

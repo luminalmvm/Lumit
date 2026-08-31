@@ -595,9 +595,9 @@ fn key(time: Rational, value: f64) -> Keyframe {
 /// spelling, here, for [`CAMERA_TRACK`]'s reason.
 pub const PLANAR_TRACK: &str = "planar_track";
 
-/// The parameter id of the Planar track's **Pin layer** row — which layer the
-/// corner-pin gesture writes to. Spelled once because the effect declares it and
-/// the gesture reads it, and a typo would be a button that quietly refused.
+/// The parameter id of the Planar track's **Pin layer** row — which layer both
+/// of its export gestures write to. Spelled once because the effect declares it
+/// and the gestures read it, and a typo would be a button that quietly refused.
 pub const PIN_LAYER_PARAM: &str = "pin_layer";
 
 /// The eight parameter ids of a Corner pin's four points, in [`Quad`] order:
@@ -708,57 +708,18 @@ pub fn corner_pin_from_track(
 ) -> Option<Op> {
     let c = doc.comp(comp)?;
     let layer = c.layers.iter().find(|l| l.id == target)?;
-    let range = store.planar_range(effect)?;
-    if !range.fps.is_finite() || range.fps <= 0.0 || range.last_frame < range.first_frame {
-        return None;
-    }
+    let samples = tracked_quads(doc, c, tracked, effect, layer, store)?;
 
-    let rate = c.frame_rate;
-    let first = rate.frame_at(layer.in_point);
-    let last = rate.frame_at(layer.out_point);
-    if last <= first {
-        return None;
-    }
-
-    // Eight tracks filled in one walk of the frames, so the quad is asked for
+    // Eight tracks filled in one walk of the samples, so the quad is unpacked
     // once per frame rather than eight times.
     let mut keys: [Vec<Keyframe>; 8] = Default::default();
-    let mut wrote = 0usize;
-    for n in first..last {
-        let Ok(ct) = rate.time_of_frame(n) else {
-            continue;
-        };
-        let t = ct.0.to_f64();
-        let Some((_, st)) = tracked_source_time(doc, c, tracked, t) else {
-            continue;
-        };
-        if !st.is_finite() {
-            continue;
-        }
-        let asked = (st * range.fps).round();
-        #[allow(clippy::cast_possible_truncation)]
-        let asked = asked.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
-        let Some(quad) =
-            store.planar_corners(effect, asked.clamp(range.first_frame, range.last_frame))
-        else {
-            continue;
-        };
-        // Keyframe times are **layer** time — the target layer's, since these
-        // keys live on the target layer's effect — which is what every property
-        // is evaluated at.
-        let Ok(time) = ct.0.checked_sub(layer.start_offset.0) else {
-            continue;
-        };
+    for (time, quad) in samples {
         for (slot, value) in keys
             .iter_mut()
             .zip(quad.into_iter().flat_map(|corner| [corner[0], corner[1]]))
         {
             slot.push(key(time, value));
         }
-        wrote += 1;
-    }
-    if wrote == 0 {
-        return None;
     }
 
     let mut pin = crate::fx::instantiate("corner_pin")?;
@@ -781,6 +742,204 @@ pub fn corner_pin_from_track(
         layer: target,
         effects,
     })
+}
+
+/// The tracked quad at every composition frame of `layer`'s own extent, each
+/// paired with the **layer** time a key on `layer` would carry it at.
+///
+/// One walk, shared by the two gestures below, because they differ only in what
+/// they do with the corners: which source moment a frame reads, how a frame
+/// outside the track clamps into it, and which time a key lands at are one
+/// answer, and two copies of it would be two chances to drift apart.
+///
+/// `None` when nothing has been tracked under `effect`, when the layer holds no
+/// frames, or when no frame of it could be read.
+fn tracked_quads(
+    doc: &Document,
+    c: &Composition,
+    tracked: Uuid,
+    effect: Uuid,
+    layer: &Layer,
+    store: &dyn PlanarTrackStore,
+) -> Option<Vec<(Rational, Quad)>> {
+    let range = store.planar_range(effect)?;
+    if !range.fps.is_finite() || range.fps <= 0.0 || range.last_frame < range.first_frame {
+        return None;
+    }
+
+    let rate = c.frame_rate;
+    let first = rate.frame_at(layer.in_point);
+    let last = rate.frame_at(layer.out_point);
+    if last <= first {
+        return None;
+    }
+
+    let mut out = Vec::with_capacity(usize::try_from(last - first).unwrap_or(0));
+    for n in first..last {
+        let Ok(ct) = rate.time_of_frame(n) else {
+            continue;
+        };
+        let t = ct.0.to_f64();
+        let Some((_, st)) = tracked_source_time(doc, c, tracked, t) else {
+            continue;
+        };
+        if !st.is_finite() {
+            continue;
+        }
+        let asked = (st * range.fps).round();
+        #[allow(clippy::cast_possible_truncation)]
+        let asked = asked.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
+        let Some(quad) =
+            store.planar_corners(effect, asked.clamp(range.first_frame, range.last_frame))
+        else {
+            continue;
+        };
+        // Keyframe times are **layer** time — the target layer's, since these
+        // keys live on the target layer — which is what every property is
+        // evaluated at.
+        let Ok(time) = ct.0.checked_sub(layer.start_offset.0) else {
+            continue;
+        };
+        out.push((time, quad));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The parameter id of the Planar track's **Follow** row — what the analysis
+/// follows, and therefore what [`transform_from_track`] can write. Spelled once
+/// because the effect declares it and both the job and the gesture read it, and
+/// a typo would be a button that quietly wrote the wrong half.
+pub const FOLLOW_PARAM: &str = "follow";
+
+/// One quad read as a *pose*: where its centre is, which way it lies, and how
+/// big it is.
+///
+/// The angle and the size come from the two horizontal edges — upper left to
+/// upper right, lower left to lower right — because a projective warp treats
+/// opposite edges differently and the pair together is the honest middle. The
+/// two edge vectors are **summed and one `atan2` taken of the sum**, rather than
+/// two angles averaged: adding vectors cannot wrap round ±180° and averaging
+/// angles can, which would be one wrong frame in the middle of an otherwise
+/// clean spin.
+///
+/// The angle is measured in composition space, where y runs down, so a positive
+/// angle turns clockwise on screen — which is exactly what a layer's Rotation
+/// means (`Mat4::from_rotation_z`, the same y-down space). No sign flip, and so
+/// no place for one to be forgotten.
+fn quad_pose(q: Quad) -> ([f64; 2], f64, f64) {
+    let centre = [
+        (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4.0,
+        (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4.0,
+    ];
+    let top = [q[1][0] - q[0][0], q[1][1] - q[0][1]];
+    let bottom = [q[3][0] - q[2][0], q[3][1] - q[2][1]];
+    let angle = (top[1] + bottom[1]).atan2(top[0] + bottom[0]);
+    let span = (top[0].hypot(top[1]) + bottom[0].hypot(bottom[1])) / 2.0;
+    (centre, angle, span)
+}
+
+/// **Create transform keys** (K-734): the movement `tracked` measured, written
+/// onto `target`'s own Position — and, when `scale_and_rotation`, its Rotation
+/// and Scale as well.
+///
+/// **The same four corners the corner pin uses.** Where their centre went is a
+/// position, how far the quad turned is a rotation, how much it grew is a scale;
+/// one analysis carries all three, so there is no second kind of track to run and
+/// no second answer that could disagree with the first. Asking for *position
+/// alone* is not a cheaper measurement, it is a narrower use of the one that was
+/// made — which is the honest reading of "one point, or two": a small, plain
+/// patch gives a position worth having long before it gives a rotation worth
+/// having.
+///
+/// **Added, not stamped.** Each key is the property's own value at that moment
+/// plus what the track moved by since its reference frame — times it, for scale —
+/// so the layer keeps where the user put it and gains the movement, and a layer
+/// that was already animated keeps that animation underneath. Stamping the
+/// tracked centre absolutely would teleport the layer onto the tracked feature,
+/// which is never what the gesture is for.
+///
+/// One key per composition frame of `target`'s own extent, linear both sides —
+/// [`corner_pin_from_track`]'s shape exactly, through the same walk, so a trimmed
+/// clip, a speed ramp, a reordered Sequence layer and a precomp all come out
+/// right for free.
+///
+/// `None` when the target is gone, when nothing has been tracked under `effect`,
+/// when the target holds no frames, or when the reference quad has no size for a
+/// scale to be measured against.
+#[must_use]
+pub fn transform_from_track(
+    doc: &Document,
+    comp: Uuid,
+    tracked: Uuid,
+    effect: Uuid,
+    target: Uuid,
+    scale_and_rotation: bool,
+    store: &dyn PlanarTrackStore,
+) -> Option<Op> {
+    use crate::model::TransformProp;
+
+    let c = doc.comp(comp)?;
+    let layer = c.layers.iter().find(|l| l.id == target)?;
+    let samples = tracked_quads(doc, c, tracked, effect, layer, store)?;
+
+    // The reference pose is the *track's* first frame, not the first frame this
+    // layer happens to show: it is the shape the quad was drawn as, and every
+    // delta below is measured from it.
+    let range = store.planar_range(effect)?;
+    let reference = store.planar_corners(effect, range.first_frame)?;
+    let (origin, origin_angle, origin_span) = quad_pose(reference);
+    if !origin_span.is_finite() || origin_span <= 0.0 {
+        return None;
+    }
+
+    // Position x, position y, rotation, scale x, scale y — filled in one walk so
+    // the quad is read once per frame rather than five times.
+    let mut keys: [Vec<Keyframe>; 5] = Default::default();
+    // The previous frame's *unwrapped* turn, so a spin past ±180° carries on
+    // counting instead of snapping back the way `atan2` would.
+    let mut turned = 0.0f64;
+    for (time, quad) in samples {
+        let (centre, angle, span) = quad_pose(quad);
+        let t = time.to_f64();
+        let raw = angle - origin_angle;
+        let tau = std::f64::consts::TAU;
+        turned = raw + ((turned - raw) / tau).round() * tau;
+        let base = |prop| layer.transform.get(prop).value_at(t);
+        let scale = span / origin_span;
+        for (slot, value) in keys.iter_mut().zip([
+            base(TransformProp::PositionX) + (centre[0] - origin[0]),
+            base(TransformProp::PositionY) + (centre[1] - origin[1]),
+            base(TransformProp::Rotation) + turned.to_degrees(),
+            base(TransformProp::ScaleX) * scale,
+            base(TransformProp::ScaleY) * scale,
+        ]) {
+            slot.push(key(time, value));
+        }
+    }
+
+    // Position always; the other three only when asked for, because writing a
+    // rotation of nought over one the user animated would be the button quietly
+    // deleting their work.
+    let props = [
+        TransformProp::PositionX,
+        TransformProp::PositionY,
+        TransformProp::Rotation,
+        TransformProp::ScaleX,
+        TransformProp::ScaleY,
+    ];
+    let wanted = if scale_and_rotation { props.len() } else { 2 };
+    let ops = props
+        .into_iter()
+        .zip(keys)
+        .take(wanted)
+        .map(|(prop, channel)| Op::SetTransformProperty {
+            comp,
+            layer: target,
+            prop,
+            animation: Animation::Keyframed(channel),
+        })
+        .collect();
+    Some(Op::Batch { ops })
 }
 
 #[cfg(test)]
@@ -1752,5 +1911,252 @@ mod tests {
             corner_pin_from_track(&doc, comp_id, tracked_id, effect, Uuid::now_v7(), &store)
                 .is_none()
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // The planar track's transform keys (K-734)
+    // -----------------------------------------------------------------------
+
+    /// A written-down planar track of a **rigid** rectangle, so the pose the
+    /// bake is supposed to recover is an exact formula rather than a
+    /// measurement: the quad slides by (2, 3) px a frame, turns 7° a frame and
+    /// grows 1 % a frame, all about its own centre.
+    ///
+    /// Seven degrees a frame is deliberate: over sixty frames it passes a whole
+    /// turn, so a bake that read `atan2` straight would snap back to −53° at the
+    /// end instead of carrying on to 413°.
+    struct MovingPlane {
+        track: Uuid,
+    }
+
+    impl MovingPlane {
+        const FPS: f64 = 30.0;
+        const FIRST: i64 = 0;
+        const LAST: i64 = 59;
+        /// Half the reference rectangle's width and height.
+        const HALF: (f64, f64) = (100.0, 50.0);
+
+        fn centre(n: i64) -> [f64; 2] {
+            [500.0 + 2.0 * n as f64, 400.0 + 3.0 * n as f64]
+        }
+
+        fn degrees(n: i64) -> f64 {
+            7.0 * n as f64
+        }
+
+        fn scale(n: i64) -> f64 {
+            1.0 + n as f64 / 100.0
+        }
+
+        fn quad(n: i64) -> Quad {
+            let (a, s, c) = (
+                Self::degrees(n).to_radians(),
+                Self::scale(n),
+                Self::centre(n),
+            );
+            let (sin, cos) = a.sin_cos();
+            let (hw, hh) = Self::HALF;
+            // Corner pin order: upper left, upper right, lower left, lower
+            // right.
+            let mut out = [[0.0f64; 2]; 4];
+            for (slot, (x, y)) in out
+                .iter_mut()
+                .zip([(-hw, -hh), (hw, -hh), (-hw, hh), (hw, hh)])
+            {
+                *slot = [
+                    c[0] + s * (x * cos - y * sin),
+                    c[1] + s * (x * sin + y * cos),
+                ];
+            }
+            out
+        }
+    }
+
+    impl PlanarTrackStore for MovingPlane {
+        fn planar_range(&self, track: Uuid) -> Option<SolvedRange> {
+            (track == self.track).then_some(SolvedRange {
+                fps: Self::FPS,
+                first_frame: Self::FIRST,
+                last_frame: Self::LAST,
+            })
+        }
+
+        fn planar_corners(&self, track: Uuid, frame: i64) -> Option<Quad> {
+            (track == self.track && (Self::FIRST..=Self::LAST).contains(&frame))
+                .then(|| MovingPlane::quad(frame))
+        }
+    }
+
+    /// One transform property of a layer, at a layer time.
+    fn tr_value(
+        doc: &Document,
+        comp: Uuid,
+        layer: Uuid,
+        prop: crate::model::TransformProp,
+        t: f64,
+    ) -> f64 {
+        layer_of(doc, comp, layer).transform.get(prop).value_at(t)
+    }
+
+    /// Whether a transform property was left as the constant it was.
+    fn is_static(
+        doc: &Document,
+        comp: Uuid,
+        layer: Uuid,
+        prop: crate::model::TransformProp,
+    ) -> bool {
+        matches!(
+            layer_of(doc, comp, layer).transform.get(prop).animation,
+            Animation::Static(_)
+        )
+    }
+
+    /// The whole movement, added to what the layer already held: the quad's
+    /// slide becomes Position, its turn becomes Rotation past a full circle, and
+    /// its growth becomes Scale — with the reference frame's keys landing on the
+    /// layer's own untouched numbers, which is what "added, not stamped" means.
+    #[test]
+    fn transform_keys_add_the_tracks_movement_to_what_the_layer_had() {
+        use crate::model::TransformProp as P;
+
+        let media = Uuid::now_v7();
+        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        let target = layer("logo", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let mut doc = document(vec![c]);
+        let store = MovingPlane { track: effect };
+
+        let base: Vec<f64> = [
+            P::PositionX,
+            P::PositionY,
+            P::Rotation,
+            P::ScaleX,
+            P::ScaleY,
+        ]
+        .into_iter()
+        .map(|p| tr_value(&doc, comp_id, target_id, p, 0.0))
+        .collect();
+
+        let op = transform_from_track(&doc, comp_id, tracked_id, effect, target_id, true, &store)
+            .expect("a track with an answer in it writes transform keys");
+        let inverse = apply(&mut doc, &op).unwrap();
+
+        for n in [0i64, 1, 20, 59] {
+            let t = n as f64 / 30.0;
+            let want = [
+                base[0] + 2.0 * n as f64,
+                base[1] + 3.0 * n as f64,
+                base[2] + MovingPlane::degrees(n),
+                base[3] * MovingPlane::scale(n),
+                base[4] * MovingPlane::scale(n),
+            ];
+            for (prop, want) in [
+                P::PositionX,
+                P::PositionY,
+                P::Rotation,
+                P::ScaleX,
+                P::ScaleY,
+            ]
+            .into_iter()
+            .zip(want)
+            {
+                let got = tr_value(&doc, comp_id, target_id, prop, t);
+                assert!(
+                    (got - want).abs() < 1e-6,
+                    "{prop:?} at frame {n}: wanted {want}, got {got}"
+                );
+            }
+        }
+        // The claim the unwrap exists for, said on its own: 413°, not −53°.
+        let far = tr_value(&doc, comp_id, target_id, P::Rotation, 59.0 / 30.0) - base[2];
+        assert!(
+            (far - 413.0).abs() < 1e-6,
+            "the turn should carry past a full circle, got {far}"
+        );
+
+        // One undo step, and every property goes back to the constant it was.
+        apply(&mut doc, &inverse).unwrap();
+        for prop in [
+            P::PositionX,
+            P::PositionY,
+            P::Rotation,
+            P::ScaleX,
+            P::ScaleY,
+        ] {
+            assert!(is_static(&doc, comp_id, target_id, prop), "{prop:?} undone");
+        }
+    }
+
+    /// *Position* alone writes two properties and touches nothing else. The
+    /// point of the row: a small, plain patch gives a position worth having long
+    /// before it gives a rotation worth having, and a rotation of nought written
+    /// over one the user animated would be the button deleting their work.
+    #[test]
+    fn position_alone_leaves_rotation_and_scale_as_they_were() {
+        use crate::model::TransformProp as P;
+
+        let media = Uuid::now_v7();
+        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        let target = layer("logo", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let mut doc = document(vec![c]);
+        let store = MovingPlane { track: effect };
+
+        let base_x = tr_value(&doc, comp_id, target_id, P::PositionX, 0.0);
+        let op = transform_from_track(&doc, comp_id, tracked_id, effect, target_id, false, &store)
+            .expect("position alone is still a track worth writing");
+        apply(&mut doc, &op).unwrap();
+
+        let moved = tr_value(&doc, comp_id, target_id, P::PositionX, 20.0 / 30.0);
+        assert!(
+            (moved - (base_x + 40.0)).abs() < 1e-6,
+            "position still follows the track, got {moved}"
+        );
+        for prop in [P::Rotation, P::ScaleX, P::ScaleY] {
+            assert!(
+                is_static(&doc, comp_id, target_id, prop),
+                "{prop:?} should not have been written"
+            );
+        }
+    }
+
+    /// The same two refusals the corner pin makes, for the same reasons: a store
+    /// holding the right shape of answer under a *different* effect id, and a
+    /// target that is not in the composition.
+    #[test]
+    fn transform_keys_are_refused_when_there_is_nothing_to_read() {
+        let media = Uuid::now_v7();
+        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        let target = layer("logo", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let doc = document(vec![c]);
+
+        let elsewhere = MovingPlane {
+            track: Uuid::now_v7(),
+        };
+        assert!(transform_from_track(
+            &doc, comp_id, tracked_id, effect, target_id, true, &elsewhere
+        )
+        .is_none());
+        let store = MovingPlane { track: effect };
+        assert!(transform_from_track(
+            &doc,
+            comp_id,
+            tracked_id,
+            effect,
+            Uuid::now_v7(),
+            true,
+            &store
+        )
+        .is_none());
     }
 }

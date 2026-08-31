@@ -3009,3 +3009,227 @@ fn a_planar_track_stops_between_frames_when_cancelled() {
     let never = solve_planar_cancellable(&set, 0, PLANE, (W, H), &settings, &|| false);
     assert_eq!(never, solve_planar(&set, 0, PLANE, (W, H), &settings));
 }
+
+// ---------------------------------------------------------------------------
+// Point tracking (K-735)
+// ---------------------------------------------------------------------------
+
+/// Two textured patches on a flat background, each moved by its **own**
+/// translation — which is the whole claim of point tracking against planar
+/// tracking. No single warp explains both, and none is asked for.
+///
+/// The patches are 48 px square, wide enough to hold texture at the noise
+/// scales [`texture`] mixes and narrow enough that a 40 px search radius round
+/// their centres sees one patch and no other.
+const PATCH: f64 = 24.0;
+
+/// The two patches' centres on the reference frame, far apart and at different
+/// heights, so the line between them has both a length and an angle to change.
+const P1: [f64; 2] = [80.0, 60.0];
+const P2: [f64; 2] = [230.0, 120.0];
+
+/// Render one frame: background 0.35, with a textured square round each of
+/// `centres`. Each square carries its **own** patch of texture, keyed to its
+/// reference centre, so the two are distinguishable and neither can be followed
+/// by mistake onto the other.
+fn render_patches(centres: &[[f64; 2]], reference: &[[f64; 2]]) -> Vec<f32> {
+    let mut out = vec![0.35f32; W * H];
+    for y in 0..H {
+        for x in 0..W {
+            let (fx, fy) = (x as f64, y as f64);
+            for (c, r) in centres.iter().zip(reference) {
+                if (fx - c[0]).abs() <= PATCH && (fy - c[1]).abs() <= PATCH {
+                    // Sampled in the patch's own frame-0 coordinates, so it
+                    // carries its texture with it as it slides.
+                    out[y * W + x] = texture(fx - c[0] + r[0], fy - c[1] + r[1]);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Follow `centres[frame]` through a rendered sequence and solve the points.
+fn run_points(paths: &[Vec<[f64; 2]>], radius: f64) -> Result<PlanarTrack, PlanarError> {
+    let reference = paths[0].clone();
+    // One region of several contours, exactly as the job builds it: two
+    // *inverted* regions would forbid everything outside either box, which is
+    // everything.
+    let masks = vec![ExclusionMask::from_contours(
+        point_outlines(&reference, radius),
+        true,
+    )];
+    let mut tracker = Tracker::new(TrackSettings {
+        // What the job does for a point track, and for the same reason: the
+        // boxes are small, so two features a bucket would leave a point
+        // standing on almost nothing.
+        per_bucket: 32,
+        ..TrackSettings::default()
+    })
+    .with_masks(masks);
+    for (i, centres) in paths.iter().enumerate() {
+        let frame = render_patches(centres, &reference);
+        let plane = FramePlane::new(&frame, W, H).unwrap();
+        tracker.push(i as i64, plane, None).unwrap();
+    }
+    let set = tracker.finish();
+    solve_points(
+        &set,
+        0,
+        &reference,
+        points_quad(&reference, radius),
+        &PointSettings {
+            radius,
+            ..PointSettings::default()
+        },
+    )
+}
+
+/// One point, sliding: the reported box is the reference box moved by exactly
+/// what the patch did, and nothing else — no turn, no growth, because one point
+/// has none to give.
+#[test]
+fn one_point_reports_the_slide_it_made() {
+    let paths: Vec<Vec<[f64; 2]>> = (0..10)
+        .map(|i| vec![[P1[0] + 1.6 * i as f64, P1[1] - 0.9 * i as f64]])
+        .collect();
+    let track = run_points(&paths, 40.0).expect("a textured patch is followable");
+    assert_eq!(track.frames.len(), paths.len(), "every frame was followed");
+    assert_eq!(track.reanchors, 0, "nothing thinned over ten frames");
+
+    for f in &track.frames {
+        let want = paths[f.frame as usize][0];
+        let d = [want[0] - P1[0], want[1] - P1[1]];
+        for (got, corner) in f.corners.iter().zip(track.reference_quad) {
+            let err = (got[0] - (corner[0] + d[0])).hypot(got[1] - (corner[1] + d[1]));
+            assert!(err < 0.5, "frame {} corner off by {err} px", f.frame);
+        }
+    }
+}
+
+/// Two points that are **not** on one surface: one slides right, the other
+/// slides down and left. No homography explains both, and none is fitted — each
+/// box is followed on its own, and the pair is read as the similarity between
+/// them.
+#[test]
+fn two_independent_points_give_a_turn_and_a_growth() {
+    let paths: Vec<Vec<[f64; 2]>> = (0..10)
+        .map(|i| {
+            let d = i as f64;
+            vec![[P1[0] + 1.5 * d, P1[1]], [P2[0] - 0.8 * d, P2[1] + 1.4 * d]]
+        })
+        .collect();
+    let track = run_points(&paths, 40.0).expect("two textured patches are followable");
+    assert_eq!(track.frames.len(), paths.len(), "every frame was followed");
+
+    // The truth is the similarity taking the two reference points to where the
+    // render actually put them — an exact formula, not a measurement.
+    for f in &track.frames {
+        let now = &paths[f.frame as usize];
+        let (ax, ay) = (P2[0] - P1[0], P2[1] - P1[1]);
+        let (bx, by) = (now[1][0] - now[0][0], now[1][1] - now[0][1]);
+        let d = ax * ax + ay * ay;
+        let (wr, wi) = ((bx * ax + by * ay) / d, (by * ax - bx * ay) / d);
+        for (got, corner) in f.corners.iter().zip(track.reference_quad) {
+            let (ex, ey) = (corner[0] - P1[0], corner[1] - P1[1]);
+            let want = [now[0][0] + wr * ex - wi * ey, now[0][1] + wi * ex + wr * ey];
+            let err = (got[0] - want[0]).hypot(got[1] - want[1]);
+            assert!(err < 1.5, "frame {} corner off by {err} px", f.frame);
+        }
+    }
+
+    // The pair really did turn and stretch, or the assertion above would be the
+    // translation test again wearing a longer formula.
+    let last = track.frames.last().unwrap();
+    let first = track.frames.first().unwrap();
+    let span = |q: &Quad| (q[1][0] - q[0][0]).hypot(q[1][1] - q[0][1]);
+    assert!(
+        (span(&last.corners) - span(&first.corners)).abs() > 4.0,
+        "the box should have changed size"
+    );
+    assert!(
+        (last.corners[1][1] - last.corners[0][1]).abs() > 4.0,
+        "the box's top edge should no longer be level"
+    );
+}
+
+/// A box over the flat background has nothing in it, and no arithmetic invents
+/// it. And two runs of the same footage are the same answer.
+#[test]
+fn a_point_on_nothing_is_refused_and_a_run_is_repeatable() {
+    let blank: Vec<Vec<[f64; 2]>> = (0..6).map(|_| vec![[16.0, 16.0]]).collect();
+    // The patches are rendered round P1 and P2; a box in the corner sees only
+    // the flat background.
+    let masks = vec![ExclusionMask::from_contours(
+        point_outlines(&blank[0], 20.0),
+        true,
+    )];
+    let mut tracker = Tracker::new(TrackSettings {
+        per_bucket: 32,
+        ..TrackSettings::default()
+    })
+    .with_masks(masks);
+    for i in 0..6 {
+        let frame = render_patches(&[P1], &[P1]);
+        let plane = FramePlane::new(&frame, W, H).unwrap();
+        tracker.push(i, plane, None).unwrap();
+    }
+    let set = tracker.finish();
+    assert_eq!(
+        solve_points(
+            &set,
+            0,
+            &blank[0],
+            points_quad(&blank[0], 20.0),
+            &PointSettings::default()
+        ),
+        Err(PlanarError::TooFewFeatures)
+    );
+
+    let paths: Vec<Vec<[f64; 2]>> = (0..8)
+        .map(|i| vec![[P1[0] + 1.2 * i as f64, P1[1] + 0.4 * i as f64]])
+        .collect();
+    assert_eq!(run_points(&paths, 40.0), run_points(&paths, 40.0));
+}
+
+/// The cancellation seam: refused part-way, with the flag consulted per frame,
+/// and bit-identical to the uncancelled run when it is never raised.
+#[test]
+fn a_cancelled_point_track_returns_nothing_partial() {
+    let paths: Vec<Vec<[f64; 2]>> = (0..10)
+        .map(|i| vec![[P1[0] + 1.5 * i as f64, P1[1]]])
+        .collect();
+    let reference = paths[0].clone();
+    let masks = vec![ExclusionMask::from_contours(
+        point_outlines(&reference, 40.0),
+        true,
+    )];
+    let mut tracker = Tracker::new(TrackSettings {
+        per_bucket: 32,
+        ..TrackSettings::default()
+    })
+    .with_masks(masks);
+    for (i, centres) in paths.iter().enumerate() {
+        let frame = render_patches(centres, &reference);
+        tracker
+            .push(i as i64, FramePlane::new(&frame, W, H).unwrap(), None)
+            .unwrap();
+    }
+    let set = tracker.finish();
+    let quad = points_quad(&reference, 40.0);
+    let settings = PointSettings {
+        radius: 40.0,
+        ..PointSettings::default()
+    };
+
+    let asked = std::cell::Cell::new(0u32);
+    let stopped = solve_points_cancellable(&set, 0, &reference, quad, &settings, &|| {
+        asked.set(asked.get() + 1);
+        asked.get() > 3
+    });
+    assert_eq!(stopped, Err(PlanarError::Cancelled));
+    assert!(asked.get() > 3, "the flag is consulted once a frame");
+
+    let never = solve_points_cancellable(&set, 0, &reference, quad, &settings, &|| false);
+    assert_eq!(never, solve_points(&set, 0, &reference, quad, &settings));
+}

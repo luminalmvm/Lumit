@@ -113,7 +113,7 @@ frame around it:
 | `timeline.png` | "Intuitively designed." |
 | `node-graph.png` | "Dynamic effects." |
 | `workspace.png` | Meet the interface, Timeline |
-| `graph-editor.png` | Meet the interface, Graph |
+| `graph-workspace.png` | Meet the interface, Graph |
 | `nodes-workspace.png` | Meet the interface, Nodes |
 | `audio-workspace.png` | Meet the interface, Audio |
 
@@ -124,8 +124,9 @@ To replace a picture, overwrite the file with a capture of the same shape - the
 two card pictures are cut to 580:260, the rest are whole windows or whole
 panels shown at their own aspect.
 
-`hero.png` is a placeholder: the owner's own capture of the application mid-edit
-belongs there, and a clip belongs there after that.
+The tab pictures are whole windows, one per workspace. `timeline.png` is two
+captures cut together on the diagonal, and `node-graph.png` is cut out of
+`nodes-workspace.png` - so replacing that one means recutting this one.
 
 ## The front page arrives
 

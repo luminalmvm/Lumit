@@ -23,7 +23,7 @@ use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
 /// second picture.
 pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack) {
     for fx in ops.iter() {
-        match blend_seam(fx.params) {
+        match blend_seam(fx.def.schema(), fx.params) {
             // The Blend row (K-425), the CPU half of the seam: the kernel runs
             // at Mix 100 into a copy, and the blend and the Mix are applied
             // here, once, exactly as `run_ops` does on the GPU.
@@ -54,8 +54,17 @@ pub type BlendSeam = (u32, f32, Vec<(super::ParamId, super::Value)>);
 /// lerping once here, after the blend, is the one order in which "Blend, then
 /// Mix" means what it says. Normal takes no pass at all, so an effect whose
 /// Blend row is unset renders byte for byte what it did (K-258).
+///
+/// **Only the injected row is the seam's** ([`EffectSchema::blend`]). The Lens
+/// flare declares a `blend` of its own — its own curated menu, applied inside
+/// its own combine — and an effect that owns the row keeps it: blending its
+/// result a second time out here would read that index into the wrong menu and
+/// spend it against the untouched input.
 #[must_use]
-pub fn blend_seam(p: super::Params<'_>) -> Option<BlendSeam> {
+pub fn blend_seam(schema: &super::EffectSchema, p: super::Params<'_>) -> Option<BlendSeam> {
+    if !schema.blend() {
+        return None;
+    }
     let mode = p.choice(super::BLEND_ID, 0);
     if mode == 0 {
         return None;

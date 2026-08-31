@@ -168,15 +168,6 @@ Future<void> main() async {
     await pause(2);
   }
 
-  Rect panelBox() {
-    final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(
-        2,
-        ruler.top - 28 - paneCardInset,
-        ruler.right + 4 + paneCardInset,
-        boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
-  }
-
   // ---- Shot: a Sequence layer, clips cut back-to-back ---------------------
   // Double-clicking the row is what opens a Sequence layer's view (K-248), so
   // the clips are shown the way the program shows them.
@@ -187,7 +178,7 @@ Future<void> main() async {
   await captureUi(
     'sequence-layer.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, panelBox().top, boxOf('tl-ruler')!.right + 4,
+    crop: Rect.fromLTRB(2, timelinePanelBox().top, boxOf('tl-ruler')!.right + 4,
         boxOf('tl-rowbody-${layers[3].internallayerId}')!.bottom + 12),
   );
 
@@ -211,7 +202,7 @@ Future<void> main() async {
   await pause(0.8);
   await tapKey('tl-graph', settle: 2);
   await tapKey('graph-lens-value', settle: 2);
-  await captureUi('graph-editor.png', scale: 2, crop: panelBox());
+  await captureUi('graph-editor.png', scale: 2, crop: timelinePanelBox());
 
   // ---- Shot: a speed ramp, through the Speed lens -------------------------
   // The Retime row of the retimed layer, read as speed rather than as value:
@@ -224,7 +215,7 @@ Future<void> main() async {
   await pause(1);
   await tapKey('tl-graph', settle: 2);
   await tapKey('graph-lens-speed', settle: 2);
-  await captureUi('speed-ramp.png', scale: 2, crop: panelBox());
+  await captureUi('speed-ramp.png', scale: 2, crop: timelinePanelBox());
 
   exit(0);
 }

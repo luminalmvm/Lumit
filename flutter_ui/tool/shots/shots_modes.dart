@@ -23,7 +23,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -115,25 +114,8 @@ Future<void> main() async {
   ui.workspace.touch();
   await pause(2);
 
-  // Inflate for the tab strip, then clamp inside the photographed boundary
-  // itself — the client area, not the window we asked for: a crop that pokes
-  // even one pixel past the frame is an ffmpeg refusal and a silent
-  // full-window shot.
-  Rect panel() {
-    // The panel's own box already starts at its tab strip, so only the pane
-    // card is outside it. Inflating by the tab strip as well pulls a band of
-    // the Viewer's bottom bar into every shot.
-    final b = boxOfType(TimelinePanelFrb)!.inflate(paneCardInset + 2);
-    final frame = shotRootKey.currentContext!.size!;
-    return Rect.fromLTRB(
-        b.left.clamp(0, frame.width),
-        b.top.clamp(0, frame.height),
-        b.right.clamp(0, frame.width),
-        b.bottom.clamp(0, frame.height));
-  }
-
   // 1 — Layers mode, everything shut: summary diamonds on both bars.
-  await captureUi('layers-shut.png', crop: panel());
+  await captureUi('layers-shut.png', crop: timelinePanelBox());
 
   // 2 — the Title layer twirled open: two lanes of shaped marks.
   final id = title.internallayerId;
@@ -144,12 +126,12 @@ Future<void> main() async {
   await tapKey('tl-twirl-$id/transform');
   await tapKey('tl-twirl-$id/effects');
   await pause(1);
-  await captureUi('layers-open.png', crop: panel());
+  await captureUi('layers-open.png', crop: timelinePanelBox());
 
   // 3 — a key selected: the second opacity key (the hourglass), clicked.
   // The opacity lane's row id is the transform-group path the fold builds.
   await tapKey('tl-key-$id/transform/opacity#1', settle: 1);
-  await captureUi('layers-selected.png', crop: panel());
+  await captureUi('layers-selected.png', crop: timelinePanelBox());
 
   // 4 — Graph mode: the opacity curve with its mixed segments. A key being
   // selected is not enough — Graph mode draws the curves of the *properties*
@@ -161,7 +143,7 @@ Future<void> main() async {
   await pause(0.8);
   await tapKey('tl-graph');
   await pause(1);
-  await captureUi('graph-mode.png', crop: panel());
+  await captureUi('graph-mode.png', crop: timelinePanelBox());
 
   exit(0);
 }

@@ -41,7 +41,7 @@ void main() {
       return (state: p.state, uiState: p.uiState, layer: layer);
     }
 
-    testWidgets('three buttons, and a press reaches the engine',
+    testWidgets('four buttons, and a press reaches the engine',
         (tester) async {
       final p = withPlanarLayer();
       await tester.pumpWidget(hostPanel(
@@ -57,6 +57,9 @@ void main() {
       expect(find.byKey(ValueKey<String>('fx-action-$effect-pin')),
           findsOneWidget,
           reason: 'the corner-pin gesture is a third Action row');
+      expect(find.byKey(ValueKey<String>('fx-action-$effect-transform_keys')),
+          findsOneWidget,
+          reason: 'the transform gesture is the fourth (K-734)');
       final cancel = find.byKey(ValueKey<String>('fx-action-$effect-cancel'));
       expect(cancel, findsOneWidget);
 
@@ -66,6 +69,8 @@ void main() {
       expect(find.text('Upper left'), findsOneWidget);
       expect(find.text('Lower right'), findsOneWidget);
       expect(find.text('Pin layer'), findsOneWidget);
+      // What the analysis is asked to follow (K-735).
+      expect(find.text('Follow'), findsOneWidget);
 
       expect(
           find.byKey(const ValueKey('fx-planar-track-status')), findsOneWidget);

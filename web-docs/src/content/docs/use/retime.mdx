@@ -72,11 +72,10 @@ Frame interpolation is a render setting either way. It does not change the retim
 Right-click the layer's row in the Timeline and choose **Stretch…**.
 
 The dialogue takes a **new speed** in per cent or a **new duration**, and editing either
-moves the other. The layer is anchored at its **in point**: it starts where it started,
-and its end moves.
+moves the other. The layer is anchored at its **in point**.
 
-Stretch rescales the Retime map itself, so an existing shape is kept — every key's time is
-scaled about the in point. It is one undo step.
+Stretch rescales the Retime map itself, so an existing Retime is kept — every key's time is
+scaled about the in point.
 
 A **clip** inside a Sequence layer has **Speed…** instead, and no duration field — a
 clip's place and length are fixed. **Reset speed** on the same menu puts it back to 100%.
@@ -91,11 +90,6 @@ overrun.
 The hold is two ordinary keyframes once it is made, so it drags and eases like anything
 else. It is refused on a Sequence layer, and at a moment on or outside the layer's own
 ends.
-
-## The razor through a ramp
-
-A [Sequence layer's](/use/sequence-layers/) razor cuts straight through an eased speed
-ramp. The two halves' maps, laid end to end, are exactly the curve that was there before.
 
 ## Related
 

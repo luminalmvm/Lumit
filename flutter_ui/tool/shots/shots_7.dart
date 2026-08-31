@@ -204,7 +204,10 @@ Future<void> main() async {
 Rect _window({bool tall = false}) {
   final root = shotRootKey.currentContext!.findRenderObject()! as RenderBox;
   final screen = Offset.zero & root.size;
-  final box = boxOfTypeNamed('Stack', under: '_MovableWindow');
+  // The span rather than the box: the dialogue's Stack has children wider than
+  // its own render object, so a margin measured off that box still landed
+  // inside the dialogue and sliced the close button down the middle.
+  final box = spanOfTypeNamed('Stack', under: '_MovableWindow');
   if (box == null) return screen;
   final margin = box.inflate(56);
   return (tall

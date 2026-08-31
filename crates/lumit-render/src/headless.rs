@@ -4522,6 +4522,58 @@ mod tests {
         );
     }
 
+    /// **A dropped-on Lens flare puts light on the frame** (K-256, K-425).
+    ///
+    /// The gate the flare never had: its kernels are checked against the CPU
+    /// reference and its bake against its cache, but nothing rendered a whole
+    /// comp through the real path and looked at the pixels. The regression it
+    /// pins is what that gap hid — the flare declares a `blend` of its own,
+    /// under the id K-425 injects its Blend row on, so the seam blended the
+    /// finished flare a second time by an index into the wrong menu: a fresh
+    /// flare's Add (index 1) came back as the layer modes' Darken against the
+    /// untouched input, and every flare on anything darker than itself
+    /// rendered nothing at all.
+    #[test]
+    fn a_default_lens_flare_lights_the_frame() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_solid(LinearColour([0.0, 0.0, 0.0, 1.0]), 256, 256);
+        let mut doc = (*store.snapshot()).clone();
+        let mut flare = lumit_core::fx::instantiate("lens_flare").expect("the flare is a builtin");
+        // Nothing else touched: the light in frame is the one thing a 256²
+        // comp needs that the 1080p schema default does not give it.
+        for p in &mut flare.params {
+            if p.id == "light_x" || p.id == "light_y" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(128.0));
+            }
+        }
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == comp_id {
+                    c.width = 256;
+                    c.height = 256;
+                    c.layers[0].effects.push(flare.clone());
+                }
+            }
+        }
+        let doc = Arc::new(doc);
+        let (rgba, w, h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let peak = rgba
+            .chunks(4)
+            .map(|p| p[0].max(p[1]).max(p[2]))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            peak > 0,
+            "a flare on a black comp must light it ({w}×{h}, brightest pixel {peak})"
+        );
+    }
+
     /// A lens baking somewhere **does not stop the rest of the project being
     /// named** (K-431, superseding the K-350 rule it replaces).
     ///

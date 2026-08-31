@@ -5,7 +5,7 @@ sidebar:
   order: 16
 ---
 
-An **expression** is a line of script on a property, worked out afresh on every frame.
+An **expression** is a line of script on a property, calculated every frame.
 
 ## Put one on a property
 
@@ -21,11 +21,6 @@ property keeps the number it was showing.
 
 Transform properties and effect parameters both take one. Anything made of several
 numbers — a point, a colour — does not yet, and the menu simply does not offer it there.
-
-A [driver on the node graph](/use/nodes/) is the other way to make a value come from
-somewhere else. Reach for an expression when the rule is arithmetic you can write down, and
-for a driver when it is something the composition already has — the loudness of the music, a
-wobble, another layer's points.
 
 ## What the script can read
 
@@ -48,17 +43,13 @@ noise(time * 2) * 50               // a smooth wander, the same on every run
 fit(layer().time, 0, 2, 0, 100)    // nought to a hundred over two seconds
 ```
 
-`noise` takes no seed and holds no state: the same project gives the same frames every
-time it is opened.
+## Notes
 
-## What it does not do
-
-- **No After Effects library.** `wiggle`, `loopOut`, `valueAtTime`, `linear` and `ease`
-  are not there. `noise` and `fit` cover much of what they were used for.
 - **An expression that fails reads as −1.** Nothing is reported yet, so a property
   sitting at −1 is worth a second look at the script.
-- **One property reading another that reads it back** stops rather than hanging, but it
-  stops after a hundred hops rather than at the first.
+
+- **One property reading another that reads it back** stops after a hundred cycles 
+  rather than at the first.
 
 ## In the graph editor
 

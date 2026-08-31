@@ -5,10 +5,32 @@ sidebar:
   order: 9.25
 ---
 
-Press **Ctrl+Space** anywhere, and the effects console opens on your mouse: a **ring 
-of choices** centred around the cursor, with a **search bar** floating above it.
+Press **Ctrl+Space** anywhere, and the effects console opens on your mouse: a **search bar**,
+and a **radial menu** centred around the cursor, below it (if enabled).
+
+## The search bar
+
+Type, and a dropdown appears under the bar with everything that matches:
+
+- **Effects first, compositions after a divider.**
+- Matching is loose: type `gau` and Gaussian blur is the top row. The letters
+  only have to appear in order, so `db` finds Directional blur.
+- **Enter applies the top match to every selected layer.**
+- The arrow keys move the selected option; Escape clears the search first and
+  closes second.
+
+## The snapshot button
+
+The camera button beside the search field saves the frame you are looking at
+as a PNG. Snapshots land in a `Snapshots` folder beside your saved project, or in your
+Pictures folder if the project has never been saved.
 
 ## The ring
+
+:::note[Not Complete]
+By default the radial menu is disabled, as it still requires development to fully
+flesh it out. However you can enable this in the settings.
+:::
 
 Every choice in the ring stays in a fixed **direction** from the centre.
 
@@ -42,23 +64,6 @@ row: Anchor point, Position, Scale, Rotation, Opacity. Choosing one adds a
 keyframe at the playhead holding the value the property currently has.
 
 A row driven by an expression is dimmed. See [Keyframes](/use/keyframes/).
-
-## The search bar
-
-Type, and a dropdown appears under the bar with everything that matches:
-
-- **Effects first, compositions after a divider.**
-- Matching is loose: type `gau` and Gaussian blur is the top row. The letters
-  only have to appear in order, so `db` finds Directional blur.
-- **Enter applies the top match to every selected layer.**
-- The arrow keys move the selected option; Escape clears the search first and
-  closes second.
-
-## The snapshot button
-
-The camera button beside the search field saves the frame you are looking at
-as a PNG. Snapshots land in a `Snapshots` folder beside your saved project, or in your
-Pictures folder if the project has never been saved.
 
 ## Not the command palette
 

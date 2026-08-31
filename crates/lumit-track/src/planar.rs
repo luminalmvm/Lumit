@@ -342,3 +342,305 @@ fn warp_quad(h: &Mat3, quad: Quad) -> Option<Quad> {
 pub fn quad_outline(quad: Quad) -> Vec<[f64; 2]> {
     vec![quad[0], quad[1], quad[3], quad[2]]
 }
+
+// ---------------------------------------------------------------------------
+// Point tracking (K-735)
+// ---------------------------------------------------------------------------
+
+/// What a point track was asked for.
+///
+/// # In plain terms
+///
+/// A planar track asks "which eight numbers is this frame", and it can only ask
+/// that of something flat. Sometimes there is nothing flat to ask about — a
+/// light on a car, a badge on a moving shoulder, two marks on opposite sides of
+/// a room. Then the honest question is much smaller: **where did this speck
+/// go**, asked of one small patch at a time.
+///
+/// Each patch is followed on its own, so two of them need no relation to each
+/// other whatever — different depths, different objects, opposite corners of
+/// the shot. One patch gives a position. Two give a position, a turn and a
+/// growth, from the line between them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PointSettings {
+    /// How far from a point a feature may sit and still be counted as part of
+    /// it, in source raster pixels — half the search box's side.
+    pub radius: f64,
+    /// How many agreeing features a point's move must stand on. Three, so the
+    /// median that decides it has a middle rather than an average of two.
+    pub min_inliers: usize,
+    /// Below this many, the run re-anchors to the previous frame rather than
+    /// carrying on against a thinning set — [`PlanarSettings::reanchor_below`]'s
+    /// reasoning at a point track's smaller scale.
+    pub reanchor_below: usize,
+}
+
+impl Default for PointSettings {
+    fn default() -> Self {
+        PointSettings {
+            radius: 40.0,
+            min_inliers: 3,
+            reanchor_below: 6,
+        }
+    }
+}
+
+/// Follow one or two **points** — not a surface — through every frame of `set`,
+/// and report the answer as the same [`PlanarTrack`] a planar run produces.
+///
+/// `points` are on `reference_frame`, in source raster pixels; `quad` is the
+/// shape the answer is reported as, warped by whatever the points did. One point
+/// can only say where it went, so the warp is a **translation**; two can also
+/// say how the line between them turned and stretched, so it is a
+/// **similarity**. Neither is ever a perspective warp, and that is the point:
+/// the two patches are not assumed to lie on one plane, or on one object.
+///
+/// The answer being a `PlanarTrack` is deliberate. Downstream — the store, the
+/// sidecar, the status row, the Corner pin, the transform keys — a track is a
+/// quad per frame, and a point track that invented a second answer shape would
+/// make every one of those a union to unwrap before it could be read.
+#[must_use = "a point track that is thrown away cost a whole analysis"]
+pub fn solve_points(
+    set: &TrackSet,
+    reference_frame: i64,
+    points: &[[f64; 2]],
+    quad: Quad,
+    settings: &PointSettings,
+) -> Result<PlanarTrack, PlanarError> {
+    solve_points_cancellable(set, reference_frame, points, quad, settings, &|| false)
+}
+
+/// [`solve_points`], asked between frames whether to stop — the crate's one
+/// cancellation shape (docs/14 §1.4), and a stopped run returns nothing partial.
+pub fn solve_points_cancellable(
+    set: &TrackSet,
+    reference_frame: i64,
+    points: &[[f64; 2]],
+    quad: Quad,
+    settings: &PointSettings,
+    stop: &dyn Fn() -> bool,
+) -> Result<PlanarTrack, PlanarError> {
+    if points.is_empty() || points.len() > 2 {
+        return Err(PlanarError::TooFewFeatures);
+    }
+    let (first, last) = set.frame_range().ok_or(PlanarError::TooFewFeatures)?;
+    let reference = reference_frame.clamp(first, last);
+
+    // Where each point is on the frame everything is currently measured against,
+    // and where it was on the reference frame. Positions are absolute, so a
+    // re-anchor composes nothing — it simply starts measuring from a nearer
+    // frame, which is the whole of the drift argument met a second time.
+    let mut anchor = reference;
+    let mut at_anchor: Vec<[f64; 2]> = points.to_vec();
+    let mut anchors = 0u32;
+    let mut previous: Option<(i64, Vec<[f64; 2]>)> = None;
+
+    let mut frames: Vec<PlanarFrame> = Vec::with_capacity(
+        usize::try_from(last.saturating_sub(first).saturating_add(1)).unwrap_or(0),
+    );
+    frames.push(PlanarFrame {
+        frame: reference,
+        corners: quad,
+        // The reference frame is where the points *are*, by definition; a count
+        // here would be claiming a measurement nobody made.
+        inliers: 0,
+        reanchored: false,
+    });
+
+    for frame in (reference + 1)..=last {
+        if stop() {
+            return Err(PlanarError::Cancelled);
+        }
+        let mut moved = follow(set, anchor, frame, &at_anchor, settings.radius);
+
+        // Thinning against the current anchor: adopt the previous frame and try
+        // again, once, for [`solve_planar_cancellable`]'s reason.
+        let thin = moved.as_ref().is_none_or(|m| m.1 < settings.reanchor_below);
+        if thin {
+            if let Some((prev_frame, prev_at)) = &previous {
+                if *prev_frame != anchor {
+                    let retry = follow(set, *prev_frame, frame, prev_at, settings.radius);
+                    if retry.as_ref().is_some_and(|r| {
+                        r.1 >= settings.min_inliers && r.1 > moved.as_ref().map_or(0, |m| m.1)
+                    }) {
+                        anchor = *prev_frame;
+                        at_anchor.clone_from(prev_at);
+                        anchors += 1;
+                        moved = retry;
+                    }
+                }
+            }
+        }
+
+        let Some((now, inliers)) = moved.filter(|m| m.1 >= settings.min_inliers) else {
+            // The points stopped being followable. The span that worked is a
+            // whole answer about a real stretch of shot (docs/impl/tracking.md
+            // §5d), and the frames after it are no answer rather than a poor one.
+            break;
+        };
+        let Some(warp) = warp_between(points, &now) else {
+            break;
+        };
+        let Some(corners) = warp_quad(&warp, quad) else {
+            break;
+        };
+        frames.push(PlanarFrame {
+            frame,
+            corners,
+            inliers: u32::try_from(inliers).unwrap_or(u32::MAX),
+            reanchored: anchor != reference,
+        });
+        previous = Some((frame, now));
+    }
+
+    if frames.len() < 2 {
+        // One refusal, not the surface's two. "Not one flat surface" is a
+        // statement about a plane, and a point track never asked for one: a box
+        // that could not be followed had too little in it to follow, whether the
+        // features were absent or merely useless.
+        return Err(PlanarError::TooFewFeatures);
+    }
+
+    Ok(PlanarTrack {
+        reference_frame: reference,
+        reference_quad: quad,
+        frames,
+        reanchors: anchors,
+    })
+}
+
+/// Where each point of `at_anchor` has got to on `to`, and how many features the
+/// weakest of them stood on.
+///
+/// Each point takes the **median** step of the features that were within
+/// `radius` of it on the anchor frame. A median rather than a fit: two numbers
+/// is all a point has to give, and the median is already the robust estimate of
+/// them — a feature that crawled onto a passing hand is outvoted, not weighted.
+fn follow(
+    set: &TrackSet,
+    from: i64,
+    to: i64,
+    at_anchor: &[[f64; 2]],
+    radius: f64,
+) -> Option<(Vec<[f64; 2]>, usize)> {
+    let pts = set.correspondences(from, to);
+    if pts.is_empty() {
+        return None;
+    }
+    let r2 = radius * radius;
+    let mut out = Vec::with_capacity(at_anchor.len());
+    let mut weakest = usize::MAX;
+    let (mut dx, mut dy) = (Vec::new(), Vec::new());
+    for centre in at_anchor {
+        dx.clear();
+        dy.clear();
+        for c in &pts {
+            let (ex, ey) = (c.from[0] - centre[0], c.from[1] - centre[1]);
+            if ex * ex + ey * ey <= r2 {
+                dx.push(c.to[0] - c.from[0]);
+                dy.push(c.to[1] - c.from[1]);
+            }
+        }
+        if dx.is_empty() {
+            return None;
+        }
+        weakest = weakest.min(dx.len());
+        out.push([centre[0] + median(&mut dx), centre[1] + median(&mut dy)]);
+    }
+    Some((out, weakest))
+}
+
+/// The middle value of `v`, which this reorders. Even counts take the mean of
+/// the two middles; `total_cmp` so the order — and therefore the answer — does
+/// not depend on how the compiler feels about a NaN.
+fn median(v: &mut [f64]) -> f64 {
+    v.sort_by(|a, b| a.total_cmp(b));
+    let n = v.len();
+    if n == 0 {
+        return 0.0;
+    }
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
+}
+
+/// The warp taking the reference points to where they are now: a translation
+/// from one pair, a similarity from two.
+///
+/// The similarity is one complex division. Writing the plane as complex numbers,
+/// the map that takes `a₀ → b₀` and `a₁ → b₁` while keeping angles is
+/// `z ↦ b₀ + w·(z − a₀)` with `w = (b₁ − b₀) / (a₁ − a₀)` — `w`'s argument is
+/// the turn and its modulus the growth, which is exactly what two points can
+/// say and all they can say. `None` when the two reference points are the same
+/// point, where there is no line between them to turn.
+fn warp_between(reference: &[[f64; 2]], now: &[[f64; 2]]) -> Option<Mat3> {
+    let (r0, n0) = (*reference.first()?, *now.first()?);
+    let (Some(r1), Some(n1)) = (reference.get(1), now.get(1)) else {
+        return Some([
+            [1.0, 0.0, n0[0] - r0[0]],
+            [0.0, 1.0, n0[1] - r0[1]],
+            [0.0, 0.0, 1.0],
+        ]);
+    };
+    let (ax, ay) = (r1[0] - r0[0], r1[1] - r0[1]);
+    let (bx, by) = (n1[0] - n0[0], n1[1] - n0[1]);
+    let d = ax * ax + ay * ay;
+    if !d.is_finite() || d <= 0.0 {
+        return None;
+    }
+    let (wr, wi) = ((bx * ax + by * ay) / d, (by * ax - bx * ay) / d);
+    if !wr.is_finite() || !wi.is_finite() {
+        return None;
+    }
+    Some([
+        [wr, -wi, n0[0] - wr * r0[0] + wi * r0[1]],
+        [wi, wr, n0[1] - wi * r0[0] - wr * r0[1]],
+        [0.0, 0.0, 1.0],
+    ])
+}
+
+/// The axis-aligned box round `points`, grown by `radius`, in [`Quad`] order —
+/// what a point track reports as its shape, and what the tracker is confined to.
+#[must_use]
+pub fn points_quad(points: &[[f64; 2]], radius: f64) -> Quad {
+    let r = if radius.is_finite() && radius > 0.0 {
+        radius
+    } else {
+        1.0
+    };
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for p in points {
+        x0 = x0.min(p[0] - r);
+        y0 = y0.min(p[1] - r);
+        x1 = x1.max(p[0] + r);
+        y1 = y1.max(p[1] + r);
+    }
+    if points.is_empty() {
+        (x0, y0, x1, y1) = (0.0, 0.0, r, r);
+    }
+    [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]
+}
+
+/// One search box per point, each as its own closed outline in drawing order —
+/// the contours a two-point track's single exclusion region is made of.
+#[must_use]
+pub fn point_outlines(points: &[[f64; 2]], radius: f64) -> Vec<Vec<[f64; 2]>> {
+    let r = if radius.is_finite() && radius > 0.0 {
+        radius
+    } else {
+        1.0
+    };
+    points
+        .iter()
+        .map(|p| {
+            vec![
+                [p[0] - r, p[1] - r],
+                [p[0] + r, p[1] - r],
+                [p[0] + r, p[1] + r],
+                [p[0] - r, p[1] + r],
+            ]
+        })
+        .collect()
+}

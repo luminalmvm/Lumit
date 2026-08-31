@@ -66,10 +66,11 @@ use lumit_core::track::{
     CameraSolveStore, LinkedPose, PlanarTrackStore, Quad, SolvedRange, CAMERA_TRACK, PLANAR_TRACK,
 };
 use lumit_track::{
-    detect_zoom, quad_outline, segment_dynamic_tracks, select_keyframes, solve_camera_cancellable,
-    solve_planar_cancellable, CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3,
-    PlanarError, PlanarSettings, PlanarTrack, SegmentSettings, SolveError, SolveSettings,
-    SolvedPose, TrackError, TrackSettings, Tracker, ZoomSettings,
+    detect_zoom, point_outlines, points_quad, quad_outline, segment_dynamic_tracks,
+    select_keyframes, solve_camera_cancellable, solve_planar_cancellable, solve_points_cancellable,
+    CameraSolve, ExclusionMask, FramePlane, GeometrySettings, Mat3, PlanarError, PlanarSettings,
+    PlanarTrack, PointSettings, SegmentSettings, SolveError, SolveSettings, SolvedPose, TrackError,
+    TrackSettings, Tracker, ZoomSettings,
 };
 use uuid::Uuid;
 
@@ -88,6 +89,12 @@ pub struct AnalysisSettings {
     pub density: u32,
     /// Whether the layer's masks exclude regions from tracking.
     pub use_masks: bool,
+    /// A Planar track's **Follow** index (K-735); zero — the surface — for a
+    /// Camera track, which has no such row. It is a setting rather than a field
+    /// of [`JobKind`] because it changes what the analysis *finds*, so it
+    /// belongs in the cache key: two runs over the same boxes asking different
+    /// questions are two answers.
+    pub follow: u32,
 }
 
 impl Default for AnalysisSettings {
@@ -95,6 +102,7 @@ impl Default for AnalysisSettings {
         AnalysisSettings {
             density: lumit_core::fx::effects::camera_track::DENSITY_DEFAULT,
             use_masks: true,
+            follow: lumit_core::fx::effects::planar_track::FOLLOW_DEFAULT,
         }
     }
 }
@@ -115,7 +123,16 @@ impl AnalysisSettings {
                 Some(EffectValue::Bool(v)) => *v,
                 _ => d.use_masks,
             },
+            follow: match fx.param(lumit_core::track::FOLLOW_PARAM) {
+                Some(EffectValue::Choice(v)) => *v,
+                _ => d.follow,
+            },
         }
+    }
+
+    /// Whether this is one of the point options rather than the surface.
+    fn points(self) -> bool {
+        self.follow != lumit_core::fx::effects::planar_track::FOLLOW_DEFAULT
     }
 
     fn tracker(self) -> TrackSettings {
@@ -123,7 +140,20 @@ impl AnalysisSettings {
             lumit_core::fx::effects::camera_track::density(self.density);
         TrackSettings {
             grid: (across, down),
-            per_bucket,
+            // A point track is confined to one or two small boxes, and the
+            // detection grid is over the whole frame: a box the size of a badge
+            // lands inside a bucket or two, so the ordinary two-per-bucket would
+            // leave a point standing on two features. Everything outside the
+            // boxes is excluded, so raising the count costs nothing anywhere
+            // else — the buckets the boxes do not touch have nothing to detect.
+            //
+            // ponytail: one number rather than a grid sized to the region; a
+            // per-region detector is the upgrade if a very small box starves.
+            per_bucket: if self.points() {
+                per_bucket.max(32)
+            } else {
+                per_bucket
+            },
             ..TrackSettings::default()
         }
     }
@@ -155,12 +185,17 @@ pub struct MaskTrack {
     /// Layer pixels → analysis pixels. One for footage; the render scale for a
     /// Precomp layer analysed at a reduced raster.
     to_analysis: f64,
-    /// A **Planar track's** quad, as the outline the tracker must stay inside
-    /// (K-579). It belongs here and not in [`AnalysisSettings`] because it is
-    /// exactly what an exclusion region is — a shape deciding where features may
-    /// live — and putting it here means it is hashed into the analysis key with
-    /// the rest of the geometry rather than needing its own arrangement.
-    bounds: Option<Vec<[f64; 2]>>,
+    /// A **Planar track's** quad, or a point track's one or two search boxes,
+    /// as the outlines the tracker must stay inside (K-579, K-735). They belong
+    /// here and not in [`AnalysisSettings`] because they are exactly what an
+    /// exclusion region is — a shape deciding where features may live — and
+    /// putting them here means they are hashed into the analysis key with the
+    /// rest of the geometry rather than needing their own arrangement.
+    ///
+    /// Several outlines are **one** region with several contours, never several
+    /// regions: regions are unioned as exclusions, so two inverted boxes would
+    /// forbid everything outside either of them.
+    bounds: Vec<Vec<[f64; 2]>>,
 }
 
 impl Default for MaskTrack {
@@ -168,7 +203,7 @@ impl Default for MaskTrack {
         MaskTrack {
             masks: Vec::new(),
             to_analysis: 1.0,
-            bounds: None,
+            bounds: Vec::new(),
         }
     }
 }
@@ -186,7 +221,7 @@ impl MaskTrack {
                 Vec::new()
             },
             to_analysis,
-            bounds: None,
+            bounds: Vec::new(),
         }
     }
 
@@ -195,8 +230,17 @@ impl MaskTrack {
     /// inside this shape" already means (K-408), so the quad needs no mechanism
     /// of its own.
     #[must_use]
-    pub fn within(mut self, outline: Vec<[f64; 2]>) -> Self {
-        self.bounds = Some(outline);
+    pub fn within(self, outline: Vec<[f64; 2]>) -> Self {
+        self.within_all(vec![outline])
+    }
+
+    /// The same, for a boundary made of several disjoint pieces — a two-point
+    /// track's search boxes (K-735). They become one region of several contours,
+    /// tested even-odd together, which for disjoint boxes reads as "inside any
+    /// of them".
+    #[must_use]
+    pub fn within_all(mut self, outlines: Vec<Vec<[f64; 2]>>) -> Self {
+        self.bounds = outlines;
         self
     }
 
@@ -204,16 +248,22 @@ impl MaskTrack {
     #[must_use]
     pub fn at(&self, t: f64) -> Vec<ExclusionMask> {
         // The boundary first, so a run with no masks at all still has it.
-        let bounds = self.bounds.iter().map(|outline| {
-            ExclusionMask::from_points(
-                outline
+        let bounds = (!self.bounds.is_empty()).then(|| {
+            ExclusionMask::from_contours(
+                self.bounds
                     .iter()
-                    .map(|p| [p[0] * self.to_analysis, p[1] * self.to_analysis])
+                    .map(|outline| {
+                        outline
+                            .iter()
+                            .map(|p| [p[0] * self.to_analysis, p[1] * self.to_analysis])
+                            .collect()
+                    })
                     .collect(),
                 true,
             )
         });
         bounds
+            .into_iter()
             .chain(
                 self.masks
                     .iter()
@@ -265,12 +315,14 @@ impl MaskTrack {
 
 /// One flattened region's contribution to the key.
 fn feed_region(h: &mut blake3::Hasher, region: &ExclusionMask) {
-    let (points, inverted) = region.outline();
+    let (contours, inverted) = region.outlines();
     h.update(b"mask/");
     h.update(&[u8::from(inverted)]);
-    for point in points {
-        h.update(&point[0].to_le_bytes());
-        h.update(&point[1].to_le_bytes());
+    for points in contours {
+        for point in points {
+            h.update(&point[0].to_le_bytes());
+            h.update(&point[1].to_le_bytes());
+        }
     }
 }
 
@@ -320,6 +372,14 @@ impl AnalysisKey {
         h.update(fingerprint.head_tail_hash.as_bytes());
         h.update(&settings.density.to_le_bytes());
         h.update(&[u8::from(settings.use_masks)]);
+        // Fed only when it is not the surface, so every answer already in a
+        // sidecar keeps the name it was filed under. What it guards against is
+        // narrow but real: a one-point box and a quad drawn to the same outline
+        // are the same geometry asked two different questions.
+        if settings.follow != 0 {
+            h.update(b"follow/");
+            h.update(&settings.follow.to_le_bytes());
+        }
         masks.feed(&mut h);
         AnalysisKey(*h.finalize().as_bytes())
     }
@@ -373,6 +433,42 @@ pub enum JobKind {
     /// the reference shape, in the analysis's own pixels; the tracker is already
     /// confined to it by the job's [`MaskTrack`].
     Planar { quad: Quad },
+    /// Where one or two small patches are (K-735), each followed on its own and
+    /// assumed to be on nothing in particular. The answer is the same
+    /// [`PlanarTrack`] shape: the region box under whatever warp the points can
+    /// honestly support — a slide from one, a similarity from two.
+    Points { regions: PointRegions },
+}
+
+/// A point track's search regions, in the analysis's own pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PointRegions {
+    /// The two points, of which only the first is read when `two` is false.
+    pub points: [[f64; 2]; 2],
+    /// Whether the second point is in use.
+    pub two: bool,
+    /// Half a search box's side.
+    pub radius: f64,
+}
+
+impl PointRegions {
+    /// The points actually in use — one or two.
+    #[must_use]
+    pub fn used(&self) -> &[[f64; 2]] {
+        &self.points[..if self.two { 2 } else { 1 }]
+    }
+
+    /// The shape the answer is reported as: the box round the points in use.
+    #[must_use]
+    pub fn quad(&self) -> Quad {
+        points_quad(self.used(), self.radius)
+    }
+
+    /// One search box per point, as the contours the tracker is confined to.
+    #[must_use]
+    pub fn outlines(&self) -> Vec<Vec<[f64; 2]>> {
+        point_outlines(self.used(), self.radius)
+    }
 }
 
 /// One analysis, as handed to the worker.
@@ -1218,6 +1314,26 @@ fn analyse(
 
     // K-579's one branch, and it is here rather than anywhere earlier: every
     // line above this point is the same work whichever question is being asked.
+    if let JobKind::Points { regions } = kind {
+        let first = set.frame_range().map_or(0, |(f, _)| f);
+        let mut track = solve_points_cancellable(
+            &set,
+            first,
+            regions.used(),
+            regions.quad(),
+            &PointSettings {
+                radius: regions.radius,
+                ..PointSettings::default()
+            },
+            &stop,
+        )
+        .map_err(|e| match e {
+            PlanarError::Cancelled => AnalysisError::Cancelled,
+            other => AnalysisError::Planar(other),
+        })?;
+        rescale_planar(&mut track, scale);
+        return Ok((fps, clip_frames, Answer::Planar(Box::new(track))));
+    }
     if let JobKind::Planar { quad } = kind {
         let first = set.frame_range().map_or(0, |(f, _)| f);
         let mut track = solve_planar_cancellable(
@@ -1489,6 +1605,27 @@ pub fn planar_quad(fx: &EffectInstance) -> Quad {
     ]
 }
 
+/// The point rows off a Planar track instance, read statically at layer time
+/// zero exactly as the quad is and for the same reason: they are where the
+/// things being followed are on the reference frame (K-735).
+#[must_use]
+pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
+    let at = |id: &str, fallback: f64| match fx.param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => fallback,
+    };
+    PointRegions {
+        points: [
+            [at("point1_x", 0.0), at("point1_y", 0.0)],
+            [at("point2_x", 0.0), at("point2_y", 0.0)],
+        ],
+        two: follow == lumit_core::fx::effects::planar_track::FOLLOW_TWO_POINTS,
+        // A region of nothing would exclude the whole frame and refuse; the
+        // schema's own default is the answer to a row that is not there.
+        radius: (at("region", 80.0) * 0.5).max(1.0),
+    }
+}
+
 /// Build the job for a layer wearing a Planar track (K-579).
 ///
 /// Filed under the **effect instance**, not the media: what was tracked is the
@@ -1510,13 +1647,24 @@ pub fn planar_job_for(
     };
     let fx = planar_track_effect(layer)?;
     let settings = AnalysisSettings::of(fx);
-    let quad = planar_quad(fx);
-    let masks = MaskTrack::of(layer, settings, 1.0).within(quad_outline(quad));
+    let (kind, masks) = if settings.points() {
+        let regions = planar_points(fx, settings.follow);
+        (
+            JobKind::Points { regions },
+            MaskTrack::of(layer, settings, 1.0).within_all(regions.outlines()),
+        )
+    } else {
+        let quad = planar_quad(fx);
+        (
+            JobKind::Planar { quad },
+            MaskTrack::of(layer, settings, 1.0).within(quad_outline(quad)),
+        )
+    };
     Some(Job {
         media: fx.id,
         key: Some(AnalysisKey::new(fingerprint, settings, &masks)),
         settings,
-        kind: JobKind::Planar { quad },
+        kind,
         masks,
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
         analyse,
@@ -2638,7 +2786,7 @@ mod tests {
             &fingerprint("cache"),
             AnalysisSettings {
                 density: 0,
-                use_masks: true,
+                ..AnalysisSettings::default()
             },
             &MaskTrack::default(),
         );
@@ -3535,6 +3683,180 @@ mod tests {
             planar(effect).is_none(),
             "a refusal must leave nothing in the store"
         );
+        clear();
+    }
+
+    // -----------------------------------------------------------------------
+    // The point track (K-735)
+    // -----------------------------------------------------------------------
+
+    /// Two textured squares on a flat background, each sliding its **own** way.
+    /// Deliberately not [`PlaneShot`]: the whole claim of a point track is that
+    /// the two things it follows need not be on one surface, and a fixture where
+    /// they were would prove nothing the planar test does not already.
+    struct PatchShot;
+
+    impl PatchShot {
+        const FRAMES: usize = 12;
+        /// Half a patch's side.
+        const HALF: f64 = 26.0;
+        const P1: [f64; 2] = [110.0, 90.0];
+        const P2: [f64; 2] = [290.0, 200.0];
+
+        /// Where each patch's centre is on frame `n` — two unrelated slides.
+        fn centres(n: usize) -> [[f64; 2]; 2] {
+            let d = n as f64;
+            [
+                [Self::P1[0] + 1.8 * d, Self::P1[1] + 0.4 * d],
+                [Self::P2[0] - 1.1 * d, Self::P2[1] + 1.6 * d],
+            ]
+        }
+    }
+
+    impl LumaFrames for PatchShot {
+        fn info(&self) -> (usize, u32, u32, f64) {
+            (Self::FRAMES, W as u32, H as u32, FPS)
+        }
+
+        fn luma(&mut self, n: usize) -> Option<Vec<f32>> {
+            if n >= Self::FRAMES {
+                return None;
+            }
+            let now = Self::centres(n);
+            let home = Self::centres(0);
+            let mut out = vec![0.35f32; W * H];
+            for y in 0..H {
+                for x in 0..W {
+                    let (fx, fy) = (x as f64, y as f64);
+                    for (c, r) in now.iter().zip(home) {
+                        if (fx - c[0]).abs() <= Self::HALF && (fy - c[1]).abs() <= Self::HALF {
+                            // Sampled in the patch's own frame-0 coordinates, so
+                            // each carries its texture along with it.
+                            out[y * W + x] = texture(fx - c[0] + r[0], fy - c[1] + r[1]);
+                        }
+                    }
+                }
+            }
+            Some(out)
+        }
+    }
+
+    fn point_job(track: Uuid, tag: &str, two: bool) -> Job {
+        let home = PatchShot::centres(0);
+        let regions = PointRegions {
+            points: home,
+            two,
+            radius: 40.0,
+        };
+        let settings = AnalysisSettings {
+            follow: if two {
+                lumit_core::fx::effects::planar_track::FOLLOW_TWO_POINTS
+            } else {
+                lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT
+            },
+            ..AnalysisSettings::default()
+        };
+        let masks = MaskTrack::default().within_all(regions.outlines());
+        Job {
+            media: track,
+            key: Some(AnalysisKey::new(&fingerprint(tag), settings, &masks)),
+            settings,
+            kind: JobKind::Points { regions },
+            masks,
+            open: Box::new(|| Some(Box::new(PatchShot) as Box<dyn LumaFrames>)),
+            analyse: true,
+        }
+    }
+
+    /// The whole point path, end to end: a real analysis of two independently
+    /// moving patches, the reported box against the similarity the render
+    /// actually applied, and the answer reaching the store.
+    #[test]
+    fn a_two_point_analysis_follows_both_patches_and_reaches_the_store() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+
+        let effect = Uuid::now_v7();
+        let cancel = AtomicBool::new(false);
+        let (out, _) = run_here_answer(point_job(effect, "points", true), &cancel);
+        let (fps, clip_frames, answer) = out.expect("two textured patches are followable");
+        assert_eq!(fps, FPS);
+        assert_eq!(clip_frames, PatchShot::FRAMES);
+        let Answer::Planar(track) = answer else {
+            panic!("a point job answers with a track");
+        };
+        assert_eq!(
+            track.frames.len(),
+            PatchShot::FRAMES,
+            "every frame was followed"
+        );
+        assert_eq!(track.reanchors, 0, "nothing thinned over twelve frames");
+
+        // The truth is the similarity taking the two reference centres to where
+        // the fixture actually put them — an exact formula, not a measurement.
+        let home = PatchShot::centres(0);
+        let mut worst = 0.0f64;
+        for f in &track.frames {
+            let now = PatchShot::centres(f.frame as usize);
+            let (ax, ay) = (home[1][0] - home[0][0], home[1][1] - home[0][1]);
+            let (bx, by) = (now[1][0] - now[0][0], now[1][1] - now[0][1]);
+            let d = ax * ax + ay * ay;
+            let (wr, wi) = ((bx * ax + by * ay) / d, (by * ax - bx * ay) / d);
+            for (got, corner) in f.corners.iter().zip(track.reference_quad) {
+                let (ex, ey) = (corner[0] - home[0][0], corner[1] - home[0][1]);
+                let want = [now[0][0] + wr * ex - wi * ey, now[0][1] + wi * ex + wr * ey];
+                worst = worst.max((got[0] - want[0]).hypot(got[1] - want[1]));
+            }
+        }
+        assert!(worst < 2.0, "worst corner error {worst} px");
+
+        // And into the store, under the effect instance, readable the way the
+        // Corner pin and the transform keys read it.
+        publish_planar(effect, fps, clip_frames, *track);
+        let range = Store.planar_range(effect).expect("filed under the effect");
+        assert_eq!(range.first_frame, 0);
+        assert_eq!(
+            range.last_frame,
+            PatchShot::FRAMES as i64 - 1,
+            "the whole clip was followed"
+        );
+        assert!(Store.planar_corners(effect, 5).is_some());
+        clear();
+    }
+
+    /// One point can only report a slide: the box moves, and its edges keep
+    /// their length and their angle however the *other* patch behaves.
+    #[test]
+    fn a_one_point_analysis_reports_a_slide_and_nothing_else() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+
+        let effect = Uuid::now_v7();
+        let cancel = AtomicBool::new(false);
+        let (out, _) = run_here_answer(point_job(effect, "one-point", false), &cancel);
+        let (_, _, answer) = out.expect("one textured patch is followable");
+        let Answer::Planar(track) = answer else {
+            panic!("a point job answers with a track");
+        };
+
+        let home = PatchShot::centres(0)[0];
+        let edge = |q: &Quad| (q[1][0] - q[0][0], q[1][1] - q[0][1]);
+        let (rx, ry) = edge(&track.reference_quad);
+        for f in &track.frames {
+            let now = PatchShot::centres(f.frame as usize)[0];
+            let d = [now[0] - home[0], now[1] - home[1]];
+            for (got, corner) in f.corners.iter().zip(track.reference_quad) {
+                let err = (got[0] - (corner[0] + d[0])).hypot(got[1] - (corner[1] + d[1]));
+                assert!(err < 1.0, "frame {} corner off by {err} px", f.frame);
+            }
+            let (ex, ey) = edge(&f.corners);
+            assert!(
+                (ex - rx).abs() < 1e-9 && (ey - ry).abs() < 1e-9,
+                "a slide must not turn or stretch the box"
+            );
+        }
         clear();
     }
 }

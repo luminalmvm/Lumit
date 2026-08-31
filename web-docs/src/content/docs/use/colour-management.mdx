@@ -8,7 +8,7 @@ sidebar:
 Lumit composites in **scene-linear Rec. 709**, in floating point, whatever your footage
 arrived in.
 
-Without a configuration Lumit reads what the file says about itself and shows the working
+Without a configuration Lumit reads what footage files contain and shows the working
 space encoded to sRGB. An **OpenColorIO configuration** is for when that is not enough.
 
 ## Choose a configuration
@@ -16,15 +16,12 @@ space encoded to sRGB. An **OpenColorIO configuration** is for when that is not 
 **File ▸ Project settings… ▸ Colour** holds one row, **Configuration**, with *Choose…* and
 *Clear* beside it.
 
-Under the row is a line saying what happened — what was loaded, or why the configuration
-could not be used. A configuration asking for something unimplemented is refused.
+Under the row explains what happened, what was loaded, or why the configuration
+could not be used.
 
-*Choose…* is also how you point at a configuration that moved.
+Below it, **Working space** states what the arithmetic runs in.
 
-Below it, **Working space** states what the arithmetic runs in. It is a reading, not a
-choice: v1 fixes it at linear Rec. 709.
-
-The configuration is a property of the **project**, saved in the `.lum` and undoable. A
+The configuration is a property of the **project**, saved in the `.lum`. A
 missing or unusable configuration never stops a project opening: the preview falls back to
 the built-in handling and every assigned colour-space name is kept.
 
@@ -33,37 +30,33 @@ the built-in handling and every assigned colour-space name is kept.
 Right-click a footage row in the [Project panel](/panels/project/) and open the **Colour
 space** submenu.
 
-- **As the file says** is where every item starts.
+- **As the file says** is the default.
 - Under **From the configuration** are the configuration's own colour-space names. Pick
   the one the footage was shot or graded in.
 
-This changes pixels, so it is saved in the project.
-
 ## Look at it through a view
 
-The Viewer bar carries a **colour-pipeline picker**. Its closed face names what you are
-looking through.
+The Viewer bar carries a **colour-pipeline picker**. What it reads is the current view/face.
 
 | Face | Means |
 | --- | --- |
 | **Linear → sRGB** | The built-in transform. |
 | ***view* — *display*** | A view out of the configuration, on one of its displays. |
-| **Config not in force** | The project names a configuration that cannot be used; the built-in transform is standing in. |
+| **Config not in force** | The project names a configuration that cannot be used; the built-in transform is used. |
 
-Open it and the built-in transform is the first row, then one heading per display with
-that display's views beneath it. **Tone mapping** sits at the foot, if enabled in Settings.
+Open it and the built-in transform is the first row, then one heading per display. 
+**Tone mapping** sits at the foot, if enabled in Settings.
 
-Tone mapping and the Viewer's exposure box never reach an export; while either is engaged
-the badge says *preview*.
+The Viewer's exposure and tone mapping settings never reach an export; while either is engaged
+the badge says *preview*. These are both solely for helping viewing while compositing.
 
 ## Writing it out
 
 The export dialogue's **Colour** section gains the configuration's spaces in its **Colour
 space** list, under a *From the configuration* heading. **Managed by** reads the
-configuration's path; Project settings is where it changes.
+configuration's path.
 
-- A file written through the configuration's transform is left **untagged** rather than
-  mis-tagged.
+- A file written through the configuration's transform is left **untagged**.
 - An export naming a space this build cannot transform to is **refused**.
 
 :::note[Not built yet]

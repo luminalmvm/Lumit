@@ -108,7 +108,6 @@ Future<void> main() async {
   await sizeWindow(1720, 1000);
   await pause(6);
 
-  final titleId = title.internallayerId.toString();
   final cardId = card.internallayerId.toString();
   final gameplayId = gameplay.internallayerId.toString();
 
@@ -151,7 +150,7 @@ Future<void> main() async {
   }
 
   /// The Viewer panel, bar and all.
-  Rect viewerBox() => boxOfType(ViewerPanelFrb)!;
+  Rect viewerBox() => spanOfType(ViewerPanelFrb)!;
 
   // ---- Shot: the toolbar --------------------------------------------------
   // The brush in hand, so the strip shows both halves of what it is: the tools
@@ -165,14 +164,21 @@ Future<void> main() async {
   // the workspace buttons. A 45:1 picture is scaled down by the page until
   // nothing on it can be read. Clamped to the window all the same — a crop one
   // pixel wider than the picture is a crop ffmpeg refuses outright.
+  //
+  // Where the options *end* is asked of the options themselves. A fixed reach
+  // past the last tool cut the brush's Hardness field in half the moment the
+  // options row grew a control, and would do it again; `_ToolOptions` is
+  // private to `tool_bar_frb.dart`, which is what the `Named` span is for.
   final windowWidth = shotRootKey.currentContext!.size!.width;
+  final options = spanOfTypeNamed('_ToolOptions');
   await captureUi(
     'toolbar.png',
     scale: 3,
     crop: Rect.fromLTRB(
       firstTool.left - 4,
       firstTool.top - 5,
-      math.min(boxOf('tool-camera')!.right + 350, windowWidth - 1),
+      math.min((options?.right ?? boxOf('tool-camera')!.right) + 12,
+          windowWidth - 1),
       firstTool.bottom + 5,
     ),
   );
@@ -326,7 +332,11 @@ Future<void> main() async {
       2,
       boxOf('tl-ruler')!.top,
       boxOf('tl-ruler')!.left + 420,
-      (boxOf('tl-rowbody-$titleId') ?? boxOf('tl-rowbody-$badgeId')!).bottom,
+      // The panel's own floor. It used to end under the Title layer's row —
+      // but Contents twirled open pushes that row below the fold, where its box
+      // is hundreds of pixels past the bottom of the window, and the crop then
+      // asked for a rectangle that is not in the picture at all.
+      timelinePanelBox().bottom,
     ),
   );
   await tapKey('tl-twirl-$badgeId');

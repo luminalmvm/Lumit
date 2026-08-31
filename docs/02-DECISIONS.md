@@ -23203,3 +23203,123 @@ frames (§4.3's entering-row re-record); absent at any human pace. Also recorded
 §6: a leftover `lumit_flutter.exe` from an earlier probe run occludes the new
 window and halves the whole table — one contaminated run cost this diagnosis an
 hour, and the run script now kills strays first.
+
+## K-734 — The point track is a row on the Planar track, not a second tracker
+
+**Date:** 2026-08-31 · **Status:** DECIDED · **Scope:** docs/08 §3.87 and §4, docs/impl/tracking.md §6, lumit-core, lumit-bridge
+
+docs/08 §4's Tracker row named two 2D deliverables and K-579 shipped one of them. The
+second — "one or two points baked into position, rotation and scale on a layer" — is now
+built, and it needed no second tracker, no second job kind, no second store and no second
+panel. **Create transform keys** reads the planar track already in hand and writes
+`Op::SetTransformProperty` keys onto the **Pin layer**: Position x and y always, Rotation
+and Scale x and y unless the new **Transform** row says *Position*.
+
+**A surface already carries all three.** The corners' centroid is the position, the
+direction of their horizontal edges is the turn, the length of those edges is the growth, so
+a surface track needs nothing extra to become a transform. Whether *following* one or two
+small points is also worth having is a separate question, and K-735 answers it yes.
+
+**Added, not stamped.** Each key is the property's own value at that moment plus the delta
+since the track's reference frame — multiplied, for scale. A layer therefore keeps where the
+user put it and gains the movement, and one already animated keeps that animation underneath
+(the base is sampled per frame, which costs nothing over sampling it once). Stamping the
+tracked centre absolutely would teleport the layer onto the tracked feature, which is never
+what the gesture is for. An answer that carries no turn — K-735's one-point option — writes
+Position alone and truncates the op list rather than writing zeros: a rotation of nought over
+one the user animated would be the button quietly deleting their work.
+
+**No version bump.** The Planar track renders identity, the new rows change no picture, and
+every existing instance reads the schema's defaults — the surface, which is what the only
+gesture there was already implied.
+
+What changed: one action on `PlanarTrack`; `transform_from_track`, `quad_pose` and
+`FOLLOW_PARAM` in `lumit-core/src/track.rs`, with
+`corner_pin_from_track`'s frame walk lifted into a shared `tracked_quads` so the two gestures
+cannot disagree about which source moment a frame reads; `create_transform_keys` in the
+bridge, reached through `fire_effect_action` like every other Action and deliberately off the
+frb surface, since nothing in Dart calls it. Flutter needed no code: an Action row is
+generic. Four tests (three in core, one in the bridge) pin the arithmetic against a rigid
+synthetic quad — including the turn carrying past a full circle — the narrowing, the undo and
+both refusals.
+
+Still owed on this effect, unchanged: on-canvas quad handles, a keyframed quad, and a Planar
+track on a Precomp layer. Recorded rather than fixed: the layer turns and scales about its
+own anchor point, not about the tracked feature — the ordinary compositing gesture, and
+moving the anchor as well would be the bake editing a property nobody asked it to.
+
+## K-735 — One and two point tracking, as a Follow row on the Planar track
+
+**Date:** 2026-08-31 · **Status:** DECIDED · **Scope:** docs/08 §3.87 and §4, docs/impl/tracking.md §7, lumit-track, lumit-core, lumit-render, lumit-bridge
+
+K-734 made a surface track write a transform, and argued that "one point or two" reduced to
+how much of that one answer to trust. That is true of a *surface*, and it is not the whole
+ask: sometimes there is genuinely nothing flat to follow. A light on a car, a badge on a
+moving shoulder, two marks on opposite walls of a room — no surface, and a surface track
+would refuse or lie. So the Planar track gains a **Follow** row — Surface (default), One
+point, Two points — with Point 1, Point 2 and **Region size** beside the quad.
+
+**Each point is followed on its own, and that is the whole difference.** The surface track's
+power comes from assuming flatness: one homography explains every feature inside the quad at
+once. A point track assumes nothing. Each box takes the **median step** of the features
+inside it, independently, so the two boxes may sit at different depths, on different objects,
+at opposite corners of the frame. One box gives a position and cannot give more — a single
+patch sliding across the frame looks the same whether the object spun or not — so *One point*
+writes Position alone. Two boxes give the line between them, whose angle is a turn and whose
+length is a growth, so *Two points* writes all three.
+
+**The answer stays a `PlanarTrack`.** A point track's per-frame answer is the region box
+under a translation or a similarity: still a quad per frame. Downstream — the store, the
+sidecar, the status row, the span bar, the Corner pin, the transform keys — a track *is* a
+quad per frame, and a second answer shape would have made every one of them a union to
+unwrap before it could be drawn, in order to say something the first shape already carries.
+A point track is a planar track whose warp is constrained, and saying so costs one enum
+variant on `JobKind` and nothing else.
+
+**A median, not a robust fit.** A homography is eight numbers and needs LO-RANSAC to find
+them among outliers. A point is two, and the median already *is* the robust estimator of
+two: a feature that crawled onto a passing hand is outvoted rather than weighted. Three
+agreeing features is the floor, so the median has a middle rather than an average of two.
+Re-anchoring, likewise, composes nothing here — the positions are absolute, so a re-anchor
+simply starts measuring from a nearer frame.
+
+**Two search boxes are one region with two contours, not two regions.** Exclusion regions are
+unioned as *exclusions*, so two inverted boxes would forbid everything outside either of them
+— which is everything, and the run would refuse with nothing to follow. `ExclusionMask`
+therefore holds `Vec<Vec<[f64; 2]>>` and tests even-odd across all its contours, which for
+disjoint boxes reads as "inside either". One mechanism, and the single-contour constructors
+are unchanged.
+
+**Detection is denser inside a point's box.** The bucket grid is over the whole frame, so a
+box the size of a badge lands inside a bucket or two and the ordinary two-per-bucket would
+leave a point standing on almost nothing. A point job raises `per_bucket` to 32; everything
+outside the boxes is excluded, so the buckets the boxes do not touch have nothing to detect
+and the change costs nothing anywhere else. Marked `ponytail:` where it sits, with a
+per-region detector named as the upgrade if a very small box ever starves.
+
+**The Follow index rides in `AnalysisSettings`, fed into the cache key only when it is not
+the surface.** It changes what the analysis finds, so it belongs in the key — a one-point box
+and a quad drawn to the same outline are the same geometry asked two different questions.
+Feeding it unconditionally would have renamed every answer already in a sidecar, camera
+solves included, for a collision nobody has hit.
+
+**No version bump**, for K-734's reason: the effect renders identity and every existing
+instance reads Surface, which is what it was.
+
+What changed: `solve_points`, `solve_points_cancellable`, `PointSettings`, `points_quad` and
+`point_outlines` in `lumit-track/src/planar.rs`; multi-contour `ExclusionMask`;
+`JobKind::Points`, `PointRegions`, `MaskTrack::within_all`, `planar_points` and the
+`AnalysisSettings::follow` field in `lumit-render`; the **Follow**, Point 1, Point 2 and
+Region size rows on the effect, with `FOLLOW_PARAM` read by both the job and the transform
+gesture. Flutter needed no code again. Six tests: four in `lumit-track` over two
+independently moving patches (the slide, the similarity with a second assertion that it
+really turned and stretched, the refusal with determinism, the cancellation seam) and two in
+`lumit-render` over the whole job path including the store.
+
+Nine new English strings across K-734 and this — Create transform keys, Follow, Surface, One
+point, Two points, Point 1 x, Point 1 y, Point 2 x, Point 2 y, Region size — listed in the
+commit for the translation page.
+
+Owed: on-canvas handles for the points, as for the quad. A third point, which would make an
+affine fit possible — refused for now because two is what was asked and a row nobody uses is
+a row to keep working. And one **Region size** for both boxes rather than one each.

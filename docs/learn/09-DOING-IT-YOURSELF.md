@@ -533,6 +533,28 @@ own, and closing, with new PNG files in the output folder.
   `Title card.mp4`, `Music.wav` and `Logo.png`. They are not committed, for the
   same reason the plate footage is not. Make them once with ffmpeg; any short video
   with those names will do.
+- *`CROP CLAMPED <shot>: … Npx of it is not on screen.`* The sweep asked for a
+  region that runs off the edge of the window, and the shot was cut short at the
+  edge rather than moved. Usually the floor of the crop came from a row that the
+  staging has since pushed below the fold. The picture is of the right place with
+  a piece missing, so it is worth fixing but it is not misleading.
+
+  **This one used to be silent, and that is the trap worth knowing about.**
+  ffmpeg does not refuse a crop that runs off the picture — it slides the whole
+  rectangle back inside and crops *there*, exits 0, and says nothing. A shot
+  could therefore be of somewhere else entirely while every log line looked
+  right; `shape-layer.png` was a picture of the Viewer for exactly this reason.
+  `captureUi` now intersects the crop with the picture and prints the line above,
+  so the failure announces itself.
+- *`CROP OFF-PICTURE <shot>`.* The same thing, all the way: nothing the crop
+  asked for is on screen, so the whole window was photographed instead. Always a
+  staging mistake — go and look at what the shot is aiming at.
+- *A control is sliced down the middle at the edge of a panel shot.* Nearly
+  always `boxOfType` rather than `spanOfType`. A widget that is not itself a
+  render object has no box of its own, so `Element.renderObject` hands back the
+  first descendant box it finds — often an inner one, short of both the panel's
+  real width and its foot. `spanOfType` unions the whole subtree instead, and is
+  what every whole-panel crop should use.
 
 ## The two websites
 

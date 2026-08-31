@@ -9,6 +9,18 @@
 //! pin** puts a Corner pin on whichever layer you name, with its four corners
 //! keyframed to sit exactly where the surface is on every frame.
 //!
+//! **The same four corners are also a transform.** Where their centre went is a
+//! position, how far they turned is a rotation, how much they grew is a scale —
+//! so **Create transform keys** writes that movement onto the named layer's own
+//! Position, Rotation and Scale instead, added to whatever it already had.
+//!
+//! **And not everything worth following is flat.** A light on a car, a badge on
+//! a shoulder, two marks on opposite walls of a room: [`Follow`](PlanarTrack::follow)
+//! turns the effect to **one point** or **two points**, each a small box
+//! followed on its own. One box gives a position; two give a position, a turn
+//! and a growth from the line between them — and being separate boxes, they need
+//! no relation to each other at all (K-735).
+//!
 //! **Why it is not a mode on Camera track.** The two effects share their first
 //! step and nothing after it. A Camera track answers *where the camera was* —
 //! one answer for a whole clip, keyed to the media file, read by a Camera
@@ -32,6 +44,26 @@ use lumit_fx_macros::Effect;
 /// Feature density's option labels, in index order — the Camera track's own
 /// three, meaning the same three things to the same tracker.
 pub use super::camera_track::{density, DENSITY, DENSITY_DEFAULT, DENSITY_OPTIONS};
+
+/// The **Follow** row's option labels, in index order: what the analysis is
+/// asked to follow, and therefore what shape of answer it can give.
+///
+/// *Surface* is a homography over the quad — eight numbers, and the only one of
+/// the three that can produce a real Corner pin. *One point* is one small box,
+/// followed as a slide. *Two points* is two boxes, each followed on its own,
+/// read together as a slide, a turn and a growth. Neither point option assumes
+/// the boxes are on one plane, or on one object.
+pub const FOLLOW_OPTIONS: &[&str] = &["Surface", "One point", "Two points"];
+
+/// The default **Follow** index — the surface, which is what the effect was.
+pub const FOLLOW_DEFAULT: u32 = 0;
+
+/// The **Follow** index meaning one point: the only one whose answer carries no
+/// turn and no growth, and so the only one that writes Position alone.
+pub const FOLLOW_ONE_POINT: u32 = 1;
+
+/// The **Follow** index meaning two points.
+pub const FOLLOW_TWO_POINTS: u32 = 2;
 
 /// The Planar track effect's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -57,6 +89,21 @@ pub struct PlanarTrack {
     /// tracked surface. Refused until there is a track to read.
     #[action(label = "Create corner pin")]
     pub pin: (),
+    /// Keyframe [`pin_layer`](Self::pin_layer)'s own Position — and, unless
+    /// [`follow`](Self::follow) is one point, its Rotation and Scale — to the
+    /// movement the track measured. Refused until there is a track to read.
+    #[action(label = "Create transform keys")]
+    pub transform_keys: (),
+
+    /// What the analysis follows: [`FOLLOW_OPTIONS`]. *Surface* reads the four
+    /// corner rows below; the two point options read
+    /// [`point1_x`](Self::point1_x), [`point2_x`](Self::point2_x) and
+    /// [`region`](Self::region) instead, and the corner rows are left alone
+    /// rather than repurposed — the two geometries mean different things and a
+    /// row that changed its meaning under a dropdown is the kind of control
+    /// nobody trusts twice.
+    #[choice(options = FOLLOW_OPTIONS, default = FOLLOW_DEFAULT, label = "Follow")]
+    pub follow: u32,
 
     /// px@comp (K-260): the tracked quad's upper-left corner on the reference
     /// frame. The four corners are the *reference* shape — where the surface is
@@ -91,14 +138,45 @@ pub struct PlanarTrack {
     #[slider(label = "Lower right y", min = -1080.0, max = 2160.0, default = 710.0, unit = Px)]
     pub lower_right_y: f32,
 
-    /// Which layer **Create corner pin** puts its Corner pin on. Unset offers
-    /// nothing to press: a pin with no layer to sit on would be a button that
-    /// silently did nothing.
+    /// px@comp (K-260): the first tracked point on the reference frame, read
+    /// when [`follow`](Self::follow) is one of the point options.
+    #[slider(label = "Point 1 x", min = -1920.0, max = 3840.0, default = 860.0, unit = Px)]
+    pub point1_x: f32,
+    /// px@comp; see [`point1_x`](Self::point1_x).
+    #[slider(label = "Point 1 y", min = -1080.0, max = 2160.0, default = 440.0, unit = Px)]
+    pub point1_y: f32,
+    /// px@comp: the second tracked point, read only when
+    /// [`follow`](Self::follow) is *Two points*. It is followed entirely on its
+    /// own, so it need not be on the same surface — or the same object — as the
+    /// first.
+    #[slider(label = "Point 2 x", min = -1920.0, max = 3840.0, default = 1060.0, unit = Px)]
+    pub point2_x: f32,
+    /// px@comp; see [`point2_x`](Self::point2_x).
+    #[slider(label = "Point 2 y", min = -1080.0, max = 2160.0, default = 640.0, unit = Px)]
+    pub point2_y: f32,
+
+    /// How wide each point's search box is, in px@comp: the box is this across,
+    /// centred on the point.
+    ///
+    /// Wide enough to hold some texture, narrow enough to hold only the thing
+    /// being followed — a box that reaches past the badge onto the moving
+    /// shoulder behind it is asking two objects the same question.
+    #[slider(label = "Region size", min = 16.0, max = 400.0, default = 80.0, unit = Px)]
+    pub region: f32,
+
+    /// Which layer **Create corner pin** puts its Corner pin on, and which
+    /// layer **Create transform keys** keyframes. Unset offers nothing to
+    /// press: a pin with no layer to sit on would be a button that silently did
+    /// nothing.
     ///
     /// `self_default` is off, deliberately. Pinning the tracked layer to its own
     /// surface is a corner pin that does very nearly nothing, and it is never
     /// what the gesture is for — the picture that goes on the phone is a
     /// different layer.
+    ///
+    /// One row for both gestures rather than two: it names the layer the track
+    /// is being spent on, and a second row would be a second place for the same
+    /// answer to be wrong.
     ///
     /// The resolved field is a `bool` — whether the row names a layer at all —
     /// exactly as every other `#[layer]` row's is. The *identity* is read off

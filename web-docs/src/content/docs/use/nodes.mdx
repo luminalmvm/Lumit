@@ -8,8 +8,8 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 The **Node graph** draws the selected layer's [effect stack](/use/effects/) as boxes
-joined left to right by wires. It is the same stack the Effect Controls panel lists, plus
-one thing the list cannot do: wire a **driver** into a parameter.
+joined left to right by wires. It is the same stack the Effect Controls panel lists, 
+with the ability to wire a **driver** into parameters.
 
 <Shot file="graph-panel.png" caption="The Node graph: a layer's image chain wired left to right, with a driver feeding one of its parameters." eager/>
 
@@ -18,9 +18,7 @@ follows the layer selected in the Timeline.
 
 ## The image chain
 
-Every graph starts with **Source**, one box per effect in stack order, and **Layer out**.
-An effect's **Input** takes exactly one wire — the effect above it — so nothing here can
-branch the picture, skip a stage, or merge two chains.
+Every graph starts with **Source**, one box per effect in order, and **Layer out**.
 
 | Gesture | What it does |
 | --- | --- |
@@ -38,12 +36,11 @@ hand as it lands. **Heal** reconnects the neighbours of a deleted box.
 - **Frame all** fits every box on screen.
 - A **primary drag on empty canvas** sweeps a selection box. Click replaces the selection,
   `Ctrl`-click toggles one, `Shift`-click adds, and `Ctrl+A` selects everything.
-- **`Tab`** opens the node search. With a wire in hand the results are filtered to the
+- **`ctrl+space`** opens the node search. With a wire in hand the results are filtered to the
   kinds that wire can join, and picking one connects it.
 
-Each box carries two small badges. **B** bypasses it — the box draws with a dashed border
-and the picture passes through untouched. **E** exposes it, growing a hollow socket for
-every parameter; a socket that already has a wire is drawn either way.
+Each box carries two small badges. the checkbox enables or disables a specific node and the 
+picture passes through untouched. Twirl exposes the node, displaying all parameters sockets.
 
 ## Drivers
 
@@ -52,7 +49,7 @@ parameter's socket makes that parameter follow the value.
 
 | Driver | Hands out |
 | --- | --- |
-| [**Wiggle**](/effects/drivers/wiggle/) | A number wandering by an Amount at a Frequency. |
+| [**Wiggle**](/effects/drivers/wiggle/) | A random continuous number changing by an Amount at a Frequency. |
 | [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment. |
 | [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate. |
 | [**Math**](/effects/drivers/math/) | Two numbers and an operation. |
@@ -61,10 +58,10 @@ parameter's socket makes that parameter follow the value.
 | [**Points sample**](/effects/drivers/points-sample/) | Reads a points stream: how many points are alive, and how far the nearest one is from a position. |
 | [**Layer points**](/effects/drivers/layer-points/) | Another layer's points, brought into this graph. |
 
-Add one from the `Tab` search — they are grouped under **Drivers** — and wire its output to
+Add one from the effect console "`ctrl+space`", they are grouped under **Drivers** — and wire its output to
 a parameter's socket.
 
-Wires never cross between layers. The two drivers that read another layer name it instead:
+Wires don't cross between layers. The two drivers that read another layer name it instead:
 Audio level has an **Audio** row and Layer points a **Points layer** row, both ordinary
 layer pickers.
 
@@ -73,8 +70,7 @@ keyframes are overridden while the wire is there, and come back when it is pulle
 
 ## Wires and their colours
 
-A wire's colour is the kind of value it carries; the **Types** legend in the corner of the
-canvas lists them. Seven kinds share five colours, grouped as the legend groups them:
+A wire's colour is the type of value it carries:
 
 - **image · matte**
 - **number**
@@ -86,33 +82,30 @@ A wire dropped on a socket of another kind is refused.
 
 ## Mattes and points
 
-An effect's **Matte** socket takes a wire as well as the layer picker on its row. Only the
-graph can feed an effect the layer's **own** masked picture at that point in the chain —
-the Source box's matte output.
+An effect's **Matte** socket takes a wire as well as the layer picker on its row. 
 
-**Particulate** and the rest of the points family hand their points out on a socket of their
-own, for another box to read. A box whose Points socket has nothing in it draws a **No
-stream** mark and behaves as if it had been given an empty one.
+**Particulate** and the rest of the points family have a socket of their own, for another 
+box to read the point stream.
 
 ## Seeing the picture at a box
 
 Selecting exactly one effect — a box here, or a heading in Effect Controls — puts an **at
 &lt;effect&gt;** chip over the Viewer's picture. Turn it on and the Viewer renders the
-composition with that layer's stack stopping there. A driver offers no chip: it makes no
-picture.
+composition with that layer's stack stopping there.
 
 ## The Nodes workspace
 
 <Shot file="nodes-workspace.png" caption="The Nodes workspace: the graph across most of the window, a small Viewer and the Node panel down the right." />
 
-The **Nodes** workspace puts the graph where the Timeline usually is, with a short
-Timeline underneath and a right-hand column carrying a small Viewer over the **Node
-panel**, which lists the picked box's parameter rows. There is no Project panel.
+The **Nodes** workspace puts the node graph in the centre of your view, to allow for work
+dedicated to nodes. It also keeps the timeline visible to change the selected layer or the 
+current frame. As well as the viewer to the right and the **Node panel**, which lists the 
+picked box's parameter rows.
 
 :::note[What the graph does not draw]
 There are no branching image chains and no merge node: joining two pictures is what layers
 and [blend modes](/use/blend-modes/) already do. The Layer out box draws an **Audio**
-input that takes no wire — a layer's sound comes from its own footage.
+input that currently takes no input, this is planned to be changed.
 :::
 
 ## Related

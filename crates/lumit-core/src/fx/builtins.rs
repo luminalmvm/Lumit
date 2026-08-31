@@ -197,6 +197,13 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             ("planar_track", "upper_right_x" | "lower_right_x") => w * 0.66,
             ("planar_track", "upper_left_y" | "upper_right_y") => h * 0.34,
             ("planar_track", "lower_left_y" | "lower_right_y") => h * 0.66,
+            // The two search points (K-735) are px@comp for the same reason,
+            // and start apart in the middle third so a fresh two-point track has
+            // a line between them to measure a turn along.
+            ("planar_track", "point1_x") => w * 0.44,
+            ("planar_track", "point1_y") => h * 0.44,
+            ("planar_track", "point2_x") => w * 0.56,
+            ("planar_track", "point2_y") => h * 0.56,
             // Wave 2's Transitions batch (docs/08 §3.71) joins them: an Iris
             // wipe's centre is px@comp for the same reason; its two radii
             // are lengths, not positions, so they need no centring.

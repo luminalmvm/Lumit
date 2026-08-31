@@ -31,7 +31,7 @@ Mixed styling within a single layer is planned.
 
 ## Run it along a path
 
-A line of type can follow one of the layer's **own masks**.
+Text can follow one of the layer's **own masks**.
 
 1. With the text layer selected, draw a path on it with the pen. Leave its mode as **None**
    if you only want the curve.
@@ -68,20 +68,15 @@ on the baseline, and everything an animator does happens inside the letter's own
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
 opacities multiply.
 
-An animated line is given one text size of room a side so a letter can drop in from above.
-A letter thrown further than that is clipped at the layer's edge.
-
 ## Convert it
 
 **Layer ▸ Create** turns a selected text layer into something else, as a **copy directly
-above it**. The original stays a text layer, still typeable, still keyed.
+above it**. The original stays a text layer.
 
 - **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines, taken
-  from the font, with counters as holes. Masks and paint do not come across.
+  from the font. Masks and paint do not come across.
 - **Points from text** makes a copy that emits a stream of points in the shape of the
   words, through [Emit from image](/effects/generate/emit-from-image/).
-
-Both are one undo step, and both are offered only on a text layer. An empty line refuses.
 
 :::note[Not built yet]
 Converting a *styled* line, per-character layers, and creating masks from text are not

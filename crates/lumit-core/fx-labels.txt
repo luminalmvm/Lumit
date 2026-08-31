@@ -129,6 +129,7 @@ Core radius
 Corner pin
 Count
 Create corner pin
+Create transform keys
 Curves
 Custom
 Custom shader
@@ -256,6 +257,7 @@ Focus map
 Focus point x
 Focus point y
 Focus range
+Follow
 Force on all layers
 Forces
 Forking
@@ -452,6 +454,7 @@ Offset y
 Omni
 On original
 On transparent
+One point
 Opacity
 Opacity %
 Opacity over life
@@ -493,6 +496,10 @@ Placement
 Planar track
 Planes
 Point
+Point 1 x
+Point 1 y
+Point 2 x
+Point 2 y
 Point control
 Point x
 Point y
@@ -536,6 +543,7 @@ Reds
 Reduce brightness
 Reduce saturation
 Refine radius
+Region size
 Relief
 Remainder
 Remap
@@ -685,6 +693,7 @@ Sub influence
 Sub scaling
 Sub settings
 Subtract
+Surface
 Symmetric
 Taper
 Technique
@@ -726,6 +735,7 @@ Turbulent displace
 Twirl
 Twist
 Two layer, magenta
+Two points
 Two-way strike
 Type
 Ultra

@@ -198,7 +198,7 @@ Future<void> main() async {
   // The Viewer is a bare pane — it carries no tab strip — so the crop grows to
   // its pane card and no further.
   await captureUi('viewer.png',
-      crop: boxOfType(ViewerPanelFrb)!.inflate(paneCardInset + 2));
+      crop: spanOfType(ViewerPanelFrb)!.inflate(paneCardInset + 2));
 
   exit(0);
 }

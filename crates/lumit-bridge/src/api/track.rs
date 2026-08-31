@@ -36,6 +36,9 @@ const ANALYSE: &str = "analyse";
 const CANCEL: &str = "cancel";
 /// The Planar track's third Action: write the Corner pin (K-579).
 const PIN: &str = "pin";
+/// The Planar track's fourth: write the movement onto the target layer's own
+/// transform instead (K-734).
+const TRANSFORM_KEYS: &str = "transform_keys";
 
 // ---------------------------------------------------------------------------
 // What the status row reads
@@ -367,12 +370,12 @@ pub fn fire_effect_action(
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
     // The Roto brush's two go the same way (K-713), and so do the Planar
-    // track's three: one doorway, so a press is one crossing whichever effect
+    // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
         return crate::api::roto::press(&layer, fx, &param);
     }
-    // The Planar track's three buttons go the same way as the Camera track's
+    // The Planar track's four buttons go the same way as the Camera track's
     // two: one doorway, so a press is one crossing whichever effect made it.
     if fx.effect.match_name == lumit_core::track::PLANAR_TRACK {
         return match param.as_str() {
@@ -381,6 +384,7 @@ pub fn fire_effect_action(
                 Ok(())
             }
             PIN => create_corner_pin(layer, effect),
+            TRANSFORM_KEYS => create_transform_keys(layer, effect),
             ANALYSE => {
                 let media = match item.kind {
                     LayerKind::Footage { item } => item,
@@ -850,6 +854,61 @@ pub fn create_corner_pin(tracked: LayerReference, effect: Uuid) -> Result<(), Br
         tracked.layer_id,
         effect,
         target,
+        &lumit_render::track::Store,
+    )
+    .ok_or(BridgeError::NoSolve)?;
+    tracked.commit(op)
+}
+
+/// **Create transform keys** (K-734): the movement the Planar track measured,
+/// written onto the *Pin layer*'s own Position — and, unless the **Transform**
+/// row says position alone, its Rotation and Scale as well.
+///
+/// The corner pin's sibling, sharing its analysis, its target row and its
+/// refusals. One undoable edit, and ordinary keyframes from the moment they
+/// land.
+///
+/// Not on the frb surface: nothing in Dart calls it, the press arrives through
+/// [`fire_effect_action`] like every other Action, and a generated binding
+/// nobody uses is a codegen run nobody needed.
+pub(crate) fn create_transform_keys(
+    tracked: LayerReference,
+    effect: Uuid,
+) -> Result<(), BridgeError> {
+    let item = tracked.item()?;
+    let fx = item
+        .effects
+        .iter()
+        .find(|e| e.id == effect)
+        .ok_or(BridgeError::InvalidEffect)?;
+    if fx.effect.match_name != lumit_core::track::PLANAR_TRACK {
+        return Err(BridgeError::InvalidParam);
+    }
+    let target = match fx.param(lumit_core::track::PIN_LAYER_PARAM) {
+        Some(lumit_core::model::EffectValue::Layer(Some(id))) => *id,
+        _ => return Err(BridgeError::InvalidLayer),
+    };
+    // One point can only say where it went, so only that is written. An index
+    // this build does not know reads as the whole movement, which is the row's
+    // own default — never a fault (docs/14 §4).
+    let scale_and_rotation = !matches!(
+        fx.param(lumit_core::track::FOLLOW_PARAM),
+        Some(lumit_core::model::EffectValue::Choice(
+            lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT
+        ))
+    );
+    let doc = {
+        let proj = tracked.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        state.store.snapshot()
+    };
+    let op = lumit_core::track::transform_from_track(
+        &doc,
+        tracked.comp_id,
+        tracked.layer_id,
+        effect,
+        target,
+        scale_and_rotation,
         &lumit_render::track::Store,
     )
     .ok_or(BridgeError::NoSolve)?;

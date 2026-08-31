@@ -153,7 +153,7 @@ Future<void> main() async {
   await pause(2);
 
   await tapKey('project-row-${gameplay.internalid}', settle: 2.5);
-  final tree = boxOfType(ProjectPanelFrb)!;
+  final tree = spanOfType(ProjectPanelFrb)!;
   // The whole panel, tab strip to footer. The tail below the last row is empty,
   // but the bar under it is not — the import and new-folder buttons and the
   // item count live there, and a page about the Project panel that cuts them
@@ -170,9 +170,10 @@ Future<void> main() async {
       ));
 
   // ---- Shot: the Hierarchy panel, a precomp twirled open -------------------
-  // Hierarchy is the third tab of the left group in the default arrangement, so
-  // it is fronted the way the Window menu fronts it.
-  activatePanelTab(ui.workspace.dock, Panel.hierarchy);
+  // Hierarchy is not in the default arrangement, so fronting its tab finds
+  // nothing: it is opened the way Window ▸ Hierarchy opens it, which stacks it
+  // into the first tab group already fronted.
+  setPanelVisible(ui.workspace.dock, Panel.hierarchy, true);
   ui.activePanel.value = Panel.hierarchy;
   ui.workspace.touch();
   await pause(2);
@@ -186,7 +187,7 @@ Future<void> main() async {
   await captureUi(
     'hierarchy.png',
     scale: 3,
-    crop: _panelCrop(boxOfType(HierarchyPanelFrb)!,
+    crop: _panelCrop(spanOfType(HierarchyPanelFrb)!,
         'hierarchy-row-${layers.last.internallayerId}'),
   );
 

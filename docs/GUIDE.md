@@ -12243,14 +12243,61 @@ these four corners, this frame".
 ### What you do
 
 Drop a **Planar track** onto the footage. It draws nothing — it is a set of buttons and a
-readout, like the Camera track. Put its four points round the flat thing as it appears on the
-clip's **first frame**. Choose which layer the result should land on in the **Pin layer** row.
-Press **Analyse**, and carry on working while it runs.
+readout, like the Camera track. Leave **Follow** on *Surface* and put its four points round
+the flat thing as it appears on the clip's **first frame**. Choose which layer the result
+should land on in the **Pin layer** row. Press **Analyse**, and carry on working while it
+runs.
 
 When it is done, press **Create corner pin**. A Corner pin appears on the layer you named,
 with its four corners keyframed to follow the surface — one keyframe per frame, real ones,
 which the graph editor draws and undo takes back. From that moment it is an ordinary effect
 you own: soften a corner, ease a hit, trim the tail, delete it and start again.
+
+### Or onto the layer's own transform
+
+Sometimes you do not want a picture stretched onto a surface — you want something to *ride
+along* with a thing in the shot. A name tag over a moving face, a spark on a flying car, a
+label on a passing van.
+
+**Create transform keys** does that. It keyframes the named layer's own Position, Rotation
+and Scale rather than adding an effect: where the tracked shape's centre went becomes the
+position, how far it turned becomes the rotation, how much it grew becomes the scale.
+
+Two things about it are worth knowing. The keys are **added** to what the layer already had,
+so your layer stays where you put it and simply gains the movement — and if you had already
+animated it, that animation stays underneath. And the layer turns about its **anchor point**,
+as it always does, so if you want it to pivot round a particular spot, move the anchor there
+first.
+
+### When there is nothing flat to follow
+
+A phone screen is flat. A light on a car is not; nor is a badge on a moving shoulder, or two
+marks on opposite walls of a room. There is no surface there to ask about, and asking for one
+would get you a refusal.
+
+The **Follow** row is for that. Set it to **one point** and you place a single small box over
+the thing you want followed; set it to **two points** and you place two. The tracker still
+does what it always does — finds specks, follows them frame to frame — but now it does it
+inside each box separately and asks a much smaller question of each: *where did this patch
+go*.
+
+One box can tell you a position and nothing else. It has no way to know whether the thing
+turned: a single patch sliding across the frame looks exactly the same whether the object
+spun or not. So a one-point track writes Position, and leaves Rotation and Scale alone.
+
+Two boxes can tell you more, because the **line between them** is something to measure. If
+that line gets longer, the thing grew. If it tilts, the thing turned. So a two-point track
+writes all three.
+
+The part worth understanding is that the two boxes are followed **completely separately**.
+Nothing anywhere assumes they are on the same surface, or even on the same object — you can
+put one on a lamp post and the other on a passing car and the answer will honestly describe
+the line between them. That is exactly why this is not the same feature as the surface track:
+the surface track's whole power comes from assuming flatness, and this one assumes nothing.
+
+**Region size** sets how wide each box is. Wide enough to hold some texture, narrow enough to
+hold only the thing you meant — a box that reaches past the badge onto the shoulder behind it
+is asking two objects the same question, and will get an unhappy average of both.
 
 ### How it follows the surface
 
@@ -12309,8 +12356,8 @@ is worth having.
 
 ### What it does not do yet
 
-The four points are numbers in the panel; dragging them on the picture itself is not built.
-The quad is read as it stands at the start — you cannot keyframe it, and that is deliberate
+The four points, and the two search points, are numbers in the panel; dragging them on the
+picture itself is not built. The geometry is read as it stands at the start — you cannot keyframe it, and that is deliberate
 rather than missing: it describes where the surface *is on the reference frame*, and a moving
 starting shape would be asking the tracker to chase a target from a moving chair. And it works
 on footage layers, not on precomps.

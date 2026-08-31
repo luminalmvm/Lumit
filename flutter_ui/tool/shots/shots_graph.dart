@@ -97,7 +97,24 @@ Future<void> main() async {
   await pause(5);
 
   await captureUi('nodes-workspace.png');
+  // Framed before the close-up, the way anybody working in a graph frames it:
+  // four nodes laid out for a wide workspace sit in the top-left sixth of the
+  // panel, and a picture whose subject is a wired chain should not be mostly
+  // empty canvas. The button is the one on the graph's own toolbar.
+  await tapKey('graph-frame-all', settle: 1.5);
+  // The span, cut to the window — neither half of that is optional here.
+  //
+  // The box alone is an inner one, short of the Layer out node and the Heal
+  // toggle. The span alone overshoots the other way: this panel clips a canvas
+  // that pans, so a node sitting off the left of the view still has a render
+  // box at a negative coordinate and drags the crop out there with it. What is
+  // wanted is everything the panel draws, bounded by what the window shows.
+  //
+  // No tab-strip inset: in the Nodes workspace the graph fills its pane alone,
+  // so there is no tab above it to make room for, and inflating anyway takes a
+  // band of the toolbar off the top and a sliver of the Timeline off the foot.
+  final frame = Offset.zero & shotRootKey.currentContext!.size!;
   await captureUi('graph-panel.png',
-      crop: boxOfType(GraphPanelFrb)?.inflate(dockTabInset));
+      crop: spanOfType(GraphPanelFrb)!.intersect(frame));
   exit(0);
 }

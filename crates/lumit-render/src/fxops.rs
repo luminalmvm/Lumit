@@ -716,7 +716,7 @@ pub fn run_ops_with_roto(
             // once — the same decision `cpu::apply_stack` makes, read from
             // the same function. Normal leaves the kernel's own Mix alone and
             // runs no pass.
-            let blend = lumit_core::fx::cpu::blend_seam(resolved.params);
+            let blend = lumit_core::fx::cpu::blend_seam(schema, resolved.params);
             let params = match &blend {
                 Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
                 None => resolved.params,

@@ -5,7 +5,7 @@ sidebar:
   order: 2.6
 ---
 
-A folder of numbered stills imports as **one footage item**, and behaves like any other
+A folder of numbered still images can import as **one footage item**, and behaves like any other
 footage from then on.
 
 ## Import a run
@@ -14,7 +14,7 @@ footage from then on.
 2. Pick **any one file** of the run.
 
 Lumit reads the folder round the file you picked and imports the whole run as a single
-item. Picking a different frame of the same run imports the same item.
+item.
 
 What is recognised as a run:
 
@@ -24,39 +24,30 @@ What is recognised as a run:
   43 of version 2, not frame 2.
 - **Padding has to match.** `%04d` does not name `frame7.png`, so a differently-padded
   neighbour is a different run.
-- **A numbered still with no numbered neighbours** stays the single still it is.
-- **A `%` anywhere in the path** refuses the run outright.
+- **A numbered still with no numbered neighbours** stays as a single still.
 
 ## Gaps end a run
 
 Given `0001` to `0100` with `0050` missing, picking `0007` imports `0001`–`0049`, and
-picking `0060` imports `0051`–`0100`. A gap is never bridged.
+picking `0060` imports `0051`–`0100`.
 
 ## The rate
 
-Stills carry no frame rate of their own, so the project has to say. Every sequence starts at
-**25 fps**.
+Every sequence starts at **25 fps**.
 
 :::note[Not built yet]
-There is nowhere to change a sequence's rate yet, so a 24 fps render conforms at 25 and
-runs a little short.
+There is nowhere to change a sequence's rate yet. However this is planned for all footage
+items to allow changing framerate inside the project.
 :::
 
-## The files are the truth
-
 Where a run starts, how long it is and which files are in it are **read from the folder
-every time the project opens** — none of it is stored. Add frames to the folder and the
-item is that much longer next time.
+every time the project opens**. Adding frames to the folder makes the item that much longer next time.
 
 The project stores the path of the run's **first file**.
 
 ## Relinking
 
 Relink a sequence by pointing at **any frame** of it.
-
-## From After Effects
-
-Sequences in an imported After Effects project come across as sequences.
 
 ## Related
 

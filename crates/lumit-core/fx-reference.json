@@ -11766,6 +11766,25 @@
           "unit": "raw"
         },
         {
+          "id": "transform_keys",
+          "label": "Create transform keys",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "follow",
+          "label": "Follow",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Surface",
+            "One point",
+            "Two points"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "upper_left_x",
           "label": "Upper left x",
           "kind": "float",
@@ -11836,6 +11855,51 @@
           "default": 710.0,
           "slider_min": -1080.0,
           "slider_max": 2160.0
+        },
+        {
+          "id": "point1_x",
+          "label": "Point 1 x",
+          "kind": "float",
+          "unit": "px",
+          "default": 860.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "point1_y",
+          "label": "Point 1 y",
+          "kind": "float",
+          "unit": "px",
+          "default": 440.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "point2_x",
+          "label": "Point 2 x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1060.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "point2_y",
+          "label": "Point 2 y",
+          "kind": "float",
+          "unit": "px",
+          "default": 640.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "region",
+          "label": "Region size",
+          "kind": "float",
+          "unit": "px",
+          "default": 80.0,
+          "slider_min": 16.0,
+          "slider_max": 400.0
         },
         {
           "id": "pin_layer",

@@ -67,7 +67,7 @@ beside the project, or always the same folder, with a filename template.
 
 ## What each format can hold
 
-A control the chosen format cannot honour is drawn **disabled**.
+A control the chosen format cannot use is **disabled**.
 
 | Format | Picture | Sound | Alpha | Depth | Bit rate | Colour space | Metadata |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -91,27 +91,21 @@ to mono).
 ## Colour space
 
 The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
-Linear, Rec. 709, Rec. 2020 or Display P3. A still sequence, which states no space in its
-files, is offered only the space an untagged file is taken to be.
+Linear, Rec. 709, Rec. 2020 or Display P3.
 
 Where the project names a colour configuration, that configuration's own output spaces
 appear under a heading of their own. A file written through one of those is left
-**untagged** rather than mis-tagged. A space the configuration cannot deliver is listed
-and disabled, with the reason on hover.
-
-An export asking for a space this build cannot transform to is refused.
+**untagged**. A space the configuration cannot use is listed and disabled, with the reason on hover.
 
 ## The render settings
 
-Two rows in the Composition group decide what the export reads, and both default to the
-delivery answer whatever the project is set to:
+Two rows in the Composition group decide what the export reads:
 
 - **Proxies** — *Use no proxies*. See [Proxies](/use/proxies/).
 - **Guide layers** — *All off*.
 
 **Motion blur** and **Retime blend** in the Time section are overrides on the export's own
-copy of the composition: leave them at *Current settings* to get what you see, or force
-them off for a fast check. Neither touches the project.
+copy of the composition.
 
 ## The queue
 
@@ -121,23 +115,20 @@ Both buttons put the item in the queue, and the queue window opens on top. **Win
 Export queue** reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
-from, what it is writing, and how it is getting on — *Waiting*, the frame it is on,
-*Done*, or the failure. **START** sets a stopped queue running.
+from, what it is writing, and how it is progressing: *Waiting*, the frame it is on,
+*Done*, or the failure.
 
 - **Drag a waiting row** to move it up or down. A row that is running, has run, or has
   failed cannot be picked up.
-- **The × on a row** cancels it while it is writing, and forgets it once it has stopped.
+- **The × on a row** cancels it while it is writing.
 
-An item's settings are captured the moment it is queued, so it writes what you asked for
-however much you change the project afterwards.
+An item's settings are captured the moment it is queued, so working on the project 
+afterwards does not impact the export.
 
 ## Export does not block
 
 You can carry on editing while an export writes. The status strip at the bottom of the
-window says which frame it is on, and carries a Cancel.
-
-[Adaptive degradation](/use/preview/) and preview resolution touch the preview alone: an
-export always runs at the quality the dialogue asks for.
+window says which frame it is on, and has a Cancel.
 
 :::note[Not built yet]
 ProRes and DNxHR intermediate codecs, and an export priority control. The **Managed by**

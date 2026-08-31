@@ -5542,12 +5542,14 @@ written down rather than left to be improvised
 
 ---
 
-### 3.87 Planar track — one flat surface, followed onto a Corner pin
+### 3.87 Planar track — a surface or a point or two, followed onto a Corner pin or a transform
 
 **Parameters:** **Analyse** (action), **Cancel** (action), **Create corner pin** (action),
-Upper left / Upper right / Lower left / Lower right (px@comp — the quad, four point rows),
-**Pin layer** (a layer reference), **Feature density** (Low / Normal / High, default
-Normal), **Use masks** (default on).
+**Create transform keys** (action), **Follow** (Surface / One point / Two points, default
+Surface), Upper left / Upper right / Lower left / Lower right (px@comp — the quad, four
+point rows), Point 1 / Point 2 (px@comp, two point rows), **Region size** (px@comp,
+16–400, default 80), **Pin layer** (a layer reference), **Feature density** (Low / Normal /
+High, default Normal), **Use masks** (default on).
 
 Applied to a footage layer, this effect **renders identity**, exactly as the Camera track
 above it does and for the same reason: it is a handle holding a job. The four points enclose
@@ -5558,6 +5560,44 @@ names, with its eight numbers keyframed to those corners: one key per compositio
 px@comp, ordinary keyframes the graph editor draws and the user owns from the moment they
 land. That is the whole screen-replacement gesture, and it is the reason the Corner pin's
 Tier-2 row has always said "export target for the tracker".
+
+**The same four corners are also a transform** (K-734). Where their centre went is a
+position, how far the quad turned is a rotation, how much it grew is a scale — so **Create
+transform keys** writes that movement onto the **Pin layer**'s own Position, Rotation and
+Scale instead of onto a Corner pin, one key per composition frame, in the same walk and with
+the same clamping.
+
+**And not everything worth following is flat** (K-735). **Follow** turns the effect to *One
+point* or *Two points*: a search box **Region size** across, centred on Point 1 and — for
+two — on Point 2, each followed entirely on its own. A light on a car, a badge on a moving
+shoulder, two marks on opposite walls of a room: nothing in the two-point case assumes the
+boxes are on one plane, or on one object, and nothing about them is fitted together beyond
+the line between them.
+
+What each option can honestly say is what it says. A surface gives a homography — the only
+one of the three that can produce a real Corner pin. One box gives a **slide**, and so
+writes Position alone; writing a rotation of nought over one the user had animated would be
+the button quietly deleting their work. Two boxes give a **similarity**: the line between
+them turns and stretches, which is a rotation and a scale, and one complex division is the
+whole of the arithmetic. Every one of the three answers is still a quad per frame — the
+region box under whatever warp its option supports — so the store, the status row, the
+Corner pin and the transform keys read one shape of answer and never a union.
+
+Each box takes the **median** step of the features inside it. Two numbers is all a point has
+to give, and a median is already the robust estimate of them: a feature that crawled onto a
+passing hand is outvoted rather than weighted. Detection is denser inside a point's box than
+a surface's quad, because a box the size of a badge lands inside a bucket or two of the
+frame-wide detection grid and the ordinary two-per-bucket would leave a point standing on
+almost nothing.
+
+The keys are **added** to what the layer already had — the property's own value at that
+moment plus what the track moved by since the reference frame, times it for scale — so the
+layer keeps where it was put, gains the movement, and any animation already on those
+properties stays underneath. Stamping the tracked centre absolutely would teleport the layer
+onto the tracked feature, which is never the gesture. Rotation accumulates past a full
+circle rather than snapping back the way `atan2` would, and the turn is measured from the
+quad's two horizontal edges together, since a projective warp treats opposite edges
+differently.
 
 **Why a second effect and not a mode on the Camera track** (K-579). The two share their
 first step — the same detector, the same pyramidal KLT, the same exclusion masks — and
@@ -5598,11 +5638,13 @@ clip. A track can stop part-way exactly as a camera solve can, and says so rathe
 inventing the rest. A refusal is a plain sentence — too little inside the quad to follow, or
 contents that are not one flat surface — and nothing about the shot has changed.
 
-**Known limits, stated.** The quad is read **statically**, at layer time zero: it is the
-shape the surface has on the reference frame, and animating it would be asking the tracker
-to follow a moving target from a moving start. The four points are edited as rows in the
+**Known limits, stated.** The quad and the two points are read **statically**, at layer time
+zero: they are where the thing is on the reference frame, and animating them would be asking
+the tracker to follow a moving target from a moving start. The four points are edited as rows in the
 panel rather than dragged on the picture; on-canvas handles are owed
-([TODO.md](TODO.md)). And the effect analyses a **footage** layer only — a Camera track on a
+([TODO.md](TODO.md)), and the two points are rows in the same way. A layer given transform
+keys turns and scales about its own anchor point rather than about the tracked feature —
+move the anchor where it should pivot. And the effect analyses a **footage** layer only — a Camera track on a
 Precomp layer renders the nested comp to track it (K-577), and the same for a planar track
 is owed rather than pretended.
 
@@ -6184,10 +6226,10 @@ roughly by demand.
 | Posterise | Value quantisation (plus posterise-time as a separate temporal utility) |
 | Turbulent displace | Noise-driven UV displacement |
 | Wave warp | Parametric sinusoidal displacement |
-| ~~Corner pin~~ | **Shipped** as §3.48, and it is the Planar track's export target (§3.87, K-579) |
+| ~~Corner pin~~ | **Shipped** as §3.48, and it is one of the Planar track's two export targets (§3.87, K-579; the other is a layer's own transform, K-734) |
 | Mesh warp | Grid-based freeform warp |
 | Stabiliser | Flow-engine-backed smoothing of unwanted camera motion (warp-stabiliser class) |
-| Tracker | ~~Planar~~ tracking **shipped** as §3.87 **Planar track** (K-579): a quad followed as four corners, with Create corner pin writing them onto another layer. Still Tier 2: **point** tracking producing a keyframed *transform* — one or two points baked into position, rotation and scale on a layer — and the on-canvas quad handles the panel rows stand in for |
+| Tracker | ~~Planar~~ tracking **shipped** as §3.87 **Planar track** (K-579), ~~the keyframed *transform*~~ with it (K-734) and ~~one- and two-point~~ tracking beside it (K-735): **Follow** picks a surface, one point or two, and **Create transform keys** writes the answer onto a layer's Position, Rotation and Scale. Still Tier 2: the on-canvas handles the geometry rows stand in for |
 
 Tier 2 effects follow every rule in §1–2; nothing in Tier 1's architecture may assume the
 suite stays small.

@@ -153,7 +153,7 @@ Future<void> main() async {
 
   /// The whole of a docked panel, chrome and all — grown out to the pane card
   /// it sits in, which under Round is the rounded edge the design is made of.
-  Rect panel(Type type) => boxOfType(type)!.inflate(paneCardInset);
+  Rect panel(Type type) => dockedPanelBox(type)!.inflate(paneCardInset);
 
   /// The same, with the dock's tab strip above it — for the shots whose caption
   /// is about *this panel*, which is a thing the reader finds by the name on
@@ -204,10 +204,14 @@ Future<void> main() async {
   // six headings alone would not show that.
   await tapKey('menu-Effect', settle: 1.2);
   await tapKey('menu-sub-Colour', settle: 1.4);
+  // From the corner, because the bar the menu drops out of is half the subject.
+  // The far edges are measured off the two open surfaces rather than fixed: a
+  // category added to the menu, or an effect added to a category, moves them.
+  final menus = openPopupsBox()!;
   await captureUi(
     'effect-menu.png',
     scale: 2,
-    crop: const Rect.fromLTWH(0, 0, 810, 380),
+    crop: Rect.fromLTRB(0, 0, menus.right, menus.bottom),
   );
   await tapAt(const Offset(1500, 700), settle: 1);
 

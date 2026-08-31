@@ -888,9 +888,26 @@ impl EffectSchema {
 
     /// Whether this effect carries the injected Blend row (K-425): every
     /// effect with a Mix slider that does not declare a `blend` of its own.
+    ///
+    /// **The options are the test, not the id.** The Lens flare declares a
+    /// `blend` under the same id, holding its own curated light-combine set
+    /// (`lens_flare::BLEND_OPTIONS`) which its combine kernel applies itself.
+    /// Reading the id alone made the seam blend the flare a second time, by an
+    /// index into the wrong menu — a fresh flare (its Add, index 1) came back
+    /// as the layer modes' Darken against the untouched input, which on any
+    /// picture darker than the flare is black. So the row counts only when it
+    /// is the injected one, and the injected one is the row offering the layer
+    /// modes verbatim.
     #[must_use]
     pub fn blend(&self) -> bool {
-        self.params.iter().any(|p| p.id == BLEND_PARAM)
+        self.params.iter().any(|p| {
+            p.id == BLEND_PARAM
+                && matches!(
+                    p.kind,
+                    ParamKind::Choice { options, .. }
+                        if options == crate::model::BlendMode::NAMES
+                )
+        })
     }
 
     /// This effect's **vector pairs**: the `foo_x` / `foo_y` runs the panel

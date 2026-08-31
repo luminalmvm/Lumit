@@ -3,6 +3,8 @@
 **Decision:** K-415 (classical, global, zoom-aware; learned trackers are a plugin
 road). **Related:** K-248 (the tracker runs on full, unaltered footage), K-408 (mask
 geometry reaches the engine), K-579 (the planar tracker and its Corner pin, §6),
+K-734 (the same track onto a layer's transform, §6), K-735 (one- and two-point
+tracking, §7),
 docs/08 §4's Tracker and Corner pin rows, docs/16-ROADMAP Phase 5. This note pins the algorithms, the crate shape, and the test
 plan so they are not re-derived per phase.
 
@@ -36,7 +38,8 @@ between frames.
 | **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
 | **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | **Built** (see §4's "As built") |
 | **4 — surface** | K-417's shape: the Camera track *effect* (identity render, Analyse/Cancel actions, status), the background analysis job keyed to (media, settings) with the sidecar `track/` cache, the solve-linked dynamic Camera layer reading through the comp→clip→source time chain, Convert to keyframes, the point-cloud overlay with select → Null/Solid, and `ParamKind::Action`. 2D track → keyframed transform / corner-pin export rides the same store. | **Built** (§5a, §5b, §5c) |
-| **4b — planar** | K-579's shape: the Planar track *effect*, a quad followed as a homography per frame against the reference frame, filed under the effect instance in the same store and sidecar, with **Create corner pin** writing the four corner pairs onto another layer as keyframes. | **Built** (§6) |
+| **4b — planar** | K-579's shape: the Planar track *effect*, a quad followed as a homography per frame against the reference frame, filed under the effect instance in the same store and sidecar, with **Create corner pin** writing the four corner pairs onto another layer as keyframes — and **Create transform keys** writing the same corners as Position, Rotation and Scale (K-734). | **Built** (§6) |
+| **4c — points** | K-735's shape: the same effect's **Follow** row turned to one or two small boxes, each followed on its own by the median step of the features inside it, reported as the same `PlanarTrack` under a translation or a similarity. | **Built** (§7) |
 
 Phase 1 first and alone: every later phase's quality is decided by track quality.
 
@@ -1326,6 +1329,55 @@ The panel is `PlanarTrackDisplayFrb`: the Camera track's polling shape exactly �
 second, only while the reading is moving, never subscribed to — the same `TrackSpanBar`
 above the line, and one extra line when the run re-anchored.
 
+### The transform it writes (K-734)
+
+docs/08 §4's Tracker row names two 2D deliverables, and the second one — a **point** track
+baked into a layer's transform — needed no second tracker. A quad's four corners already
+carry the whole of it: their centroid is a position, the direction of their two horizontal
+edges is a turn, the length of those edges is a growth.
+
+`lumit_core::track::transform_from_track(doc, comp, tracked, effect, target,
+scale_and_rotation, store)` builds one `Op::Batch` of `Op::SetTransformProperty` — Position
+x and y always, Rotation and Scale x and y when asked for — keyframed one key per
+composition frame of the target's own extent. It shares `corner_pin_from_track`'s frame walk
+outright: `tracked_quads` was lifted out of the pin so that which source moment a frame
+reads, how a frame past the track clamps into it, and which layer time a key lands at are one
+answer rather than two that could drift apart. `TRANSFORM_PARAM` and `TRANSFORM_POSITION` are
+the row and the narrow option; the bridge reads them in `create_transform_keys`, which is
+`create_corner_pin`'s sibling down to its refusals and is *not* on the frb surface (nothing in
+Dart calls it — the press arrives through `fire_effect_action`, and a generated binding
+nobody uses is a codegen run nobody needed).
+
+Five things are decisions rather than transcription:
+
+1. **"One point or two" is a row, not a mode.** A per-patch tracker needs two points before
+   it can speak about rotation or scale, and that is where the user's mental model comes
+   from. This tracker fits a warp over every feature inside the quad, so one analysis carries
+   position, rotation and scale together — a second, narrower kind of track would be a second
+   answer that could disagree with the first, over a smaller region, for less. What survives
+   of the distinction is real and is what the row says: *how much of the answer to trust*.
+2. **Added, not stamped.** Each key is the property's own value at that moment plus the
+   delta since the reference frame (times it, for scale). Stamping the tracked centre
+   absolutely would teleport the layer onto the tracked feature, which is never the gesture,
+   and sampling per frame rather than once means an already-animated property keeps its
+   animation underneath for free.
+3. **Position alone writes two properties and touches nothing else.** Writing a rotation of
+   nought over one the user animated would be the button quietly deleting their work, so the
+   op list is truncated rather than filled with no-ops.
+4. **The pose comes from both horizontal edges, summed as vectors.** A projective warp treats
+   opposite edges differently, so the pair together is the honest middle; and adding two
+   vectors then taking one `atan2` cannot wrap round ±180°, where averaging two angles can —
+   one wrong frame in the middle of an otherwise clean spin. The turn is then unwrapped
+   across frames, so a shot that spins past a full circle keeps counting.
+5. **The angle needs no sign flip.** Composition space runs y down, so `atan2` there is
+   clockwise-positive — which is exactly what `Mat4::from_rotation_z` means in the same
+   space. Nothing to forget.
+
+Recorded rather than fixed: the layer turns and scales about its **own anchor point**, not
+about the tracked feature. That is the ordinary compositing gesture (move the anchor to where
+the pin should pivot) and making the bake move the anchor as well would be it editing a
+property the user did not ask about.
+
 ### Stage 6's tests
 
 **Seven in `lumit-track`**, and unlike phases 2 and 3 they *draw*, for phase 1's reason: the
@@ -1362,6 +1414,16 @@ over a blank patch refusing and leaving nothing in the store. Its fixture is del
 *not* §5b's `Shot`: that one is two planes at different depths so the camera solve has
 parallax to find, and parallax is exactly what a planar track has no use for.
 
+**Three more in `lumit-core` for the transform half** (K-734): a rigid quad that slides by
+(2, 3) px a frame, turns 7° a frame and grows 1 % a frame — an exact formula, so the bake's
+Position, Rotation and Scale are checked against arithmetic rather than against a
+measurement, including the turn reaching 413° at frame 59 rather than snapping back to −53°,
+and the reference frame's keys landing on the layer's own untouched numbers; *position alone*
+leaving Rotation and Scale static; and both refusals. **One more in `lumit-bridge`**: the
+press crossing `fire_effect_action`, the target layer moving a hundred pixels over ten
+frames, one undo taking the whole transform back, and the Transform row narrowing the next
+press to two properties.
+
 **One in `lumit-bridge`** (the status crossing, the pin written through the read model, and
 both refusals) and **three in Flutter** (the three Action rows with a press proved to reach
 the engine, the partial sentence leading with its span, and the span bar and re-anchor line
@@ -1373,10 +1435,105 @@ appearing only when earned — the last through the display's optional `fetch`, 
 On-canvas handles for the quad: the four corners are panel rows today, and dragging them on
 the picture is what a compositor expects. A **keyframed** quad, so the reference shape can
 move — refused for now, and the refusal is a real one rather than an omission (§6's opening:
-the quad is the shape the surface has on the reference frame). A Planar track on a **Precomp**
-layer, which K-577 already built the machinery for on the camera side. And the point track →
-keyframed transform half of docs/08 §4's Tracker row, which is the other 2D deliverable that
-row names.
+the quad is the shape the surface has on the reference frame), and the same for the point
+boxes of §7. And a Planar track on a **Precomp** layer, which K-577 already built the
+machinery for on the camera side.
+
+## 7. Point tracking, as built (K-735)
+
+`crates/lumit-track/src/planar.rs` again — the same file, because the answer is the same
+type — with the job's branch in `crates/lumit-render/src/track.rs` and the row in
+`crates/lumit-core/src/fx/effects/planar_track.rs` (2026-08-31).
+
+### In plain terms
+
+§6 can only ask its question of something flat. A light on a car, a badge on a moving
+shoulder, two marks on opposite walls of a room: there is no surface there to ask about, and
+the honest question is much smaller — **where did this speck go** — asked of one small patch
+at a time.
+
+One patch gives a position. Two give a position, a turn and a growth, from the line between
+them. Because each patch is followed entirely on its own, two of them need no relation to
+each other whatever: different depths, different objects, opposite corners of the shot.
+
+### The recipe
+
+1. **Follow** says one point or two. The user puts Point 1 — and, for two, Point 2 — on the
+   clip's first frame, with **Region size** setting how wide each search box is.
+2. The tracker is confined to those boxes, by the same inverted `ExclusionMask` the quad
+   uses. Two boxes are **one region of two contours**, not two regions: regions are unioned
+   as *exclusions*, so two inverted boxes would forbid everything outside either of them,
+   which is everything. `ExclusionMask` therefore holds `Vec<Vec<[f64; 2]>>` and tests
+   even-odd across all of them, which for disjoint boxes reads as "inside either".
+3. For each later frame, each box takes the **median** step of the correspondences that were
+   within `radius` of it on the anchor frame. Two numbers is all a point has to give, and a
+   median is already the robust estimate of them.
+4. One point's positions make a translation; two points' make a similarity, by one complex
+   division: the map taking `a₀ → b₀` and `a₁ → b₁` while keeping angles is
+   `z ↦ b₀ + w·(z − a₀)` with `w = (b₁ − b₀) / (a₁ − a₀)`, whose argument is the turn and
+   whose modulus is the growth.
+5. That warp is applied to the region box, and the box's corners are the answer.
+
+The surface is `solve_points(&TrackSet, reference_frame, points, quad, &PointSettings)`,
+with `solve_points_cancellable` taking the crate's usual per-frame `stop`. `points_quad` and
+`point_outlines` build the region box and the search boxes.
+
+Five things are decisions rather than transcription:
+
+1. **The answer is a `PlanarTrack`.** Downstream — the store, the sidecar, the status row,
+   the span bar, the Corner pin, the transform keys — a track is a quad per frame. A second
+   answer shape would have made every one of those a union to unwrap before it could be
+   drawn, to say something the first shape can already carry: a point track is a planar
+   track whose warp is constrained, and saying so costs nothing.
+2. **A median, not a RANSAC.** §6 fits eight numbers and needs a robust search to do it.
+   A point fits two, and the median *is* the robust estimator of two — a feature that
+   crawled onto a passing hand is outvoted rather than weighted. `min_inliers` is three, so
+   the median has a middle rather than an average of two.
+3. **Re-anchoring composes nothing.** §6 must remember the homography from the reference
+   frame to its anchor and multiply. Here the positions are absolute, so a re-anchor simply
+   starts measuring from a nearer frame; the drift argument is met a second time and more
+   cheaply.
+4. **Detection is denser inside a point's box.** The bucket grid is over the whole frame, so
+   a box the size of a badge lands inside a bucket or two and the ordinary two-per-bucket
+   would leave a point standing on almost nothing. A point job raises `per_bucket` to 32.
+   Everything outside the boxes is excluded, so this costs nothing anywhere else — the
+   buckets the boxes do not touch have nothing to detect. A per-region detector is the
+   upgrade if a very small box ever starves; the number is marked `ponytail:` where it sits.
+5. **The Follow index is an `AnalysisSettings` field, fed into the key only when it is not
+   the surface.** It changes what the analysis *finds*, so it belongs in the key — a
+   one-point box and a quad drawn to the same outline are the same geometry asked two
+   different questions. Feeding it unconditionally would have renamed every answer already
+   in a sidecar, camera solves included, for a collision nobody has hit.
+
+### Stage 7's tests
+
+**Four in `lumit-track`**, and they draw, for §6's reason. The fixture is deliberately *not*
+§6's warped plane: two textured squares on a flat background, each moved by its **own**
+translation, so no single warp explains both and the claim is that none is asked for. In
+order: one point's slide, with every corner of the reported box within 0.5 px of the
+reference box moved by exactly what the patch did; two independent points, checked against
+the similarity the render actually applied, with a second assertion that the box really did
+turn and stretch so the test cannot silently become the first one; a box over the flat
+background refused as `TooFewFeatures`, and two runs compared with `assert_eq!`; and the
+cancellation seam, refused part-way with the flag provably consulted per frame and
+bit-identical to `solve_points` when never raised.
+
+**Two in `lumit-render`**: a real analysis of two independently sliding patches through a
+`JobKind::Points` job — the multi-contour confinement, the raised bucket count and the branch
+— checked on the corners against the fixture's own similarity (worst under 2 px), on
+`reanchors == 0`, and on the answer reaching the store through `PlanarTrackStore`; and the
+one-point case, where the box slides and its edges provably keep their length and their
+angle.
+
+**One in `lumit-bridge`**, folded into K-734's: the **Follow** row set to one point, and the
+next press writing Position alone.
+
+### Owed
+
+On-canvas handles for the two points, exactly as for the quad. A third point, which would
+make an affine fit possible — refused for now because two is what the ask was and a third
+row nobody uses is a row to keep working. And the region box is one size for both points;
+two boxes of different sizes would be a second row for a second thing.
 
 ## Open questions
 

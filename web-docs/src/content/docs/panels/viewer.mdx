@@ -22,41 +22,30 @@ The panel's name sits at the left. Three pickers sit at the right.
 | **Preview quality** | The **preview resolution** — full, half, third, quarter or auto — and the **playback** behaviour, every frame or adaptive. |
 | **Colour pipeline** | The display transform the picture is shown through. Where the project loads a colour configuration it grows a section per display, each of its views a row. |
 
-The colour picker turns to the accent and adds **· preview** whenever exposure or the tone
-map is engaged — neither reaches an export. **Tone mapping** is a row in the same menu; it
-appears once you switch it on in **Edit ▸ Settings ▸ Viewer**.
-
 ## The strip below
 
 <Shot file="viewer-bar.png" caption="The Viewer's bottom bar: the ways of looking, the snapshot pair, the transport, and the composition's own reading."/>
-
-Left to right: the ways of looking, then a hairline and the snapshot pair, the transport
-with its clock in the middle, and the composition's own reading at the far right.
 
 | Control | Does |
 | --- | --- |
 | **Transparency board** | Draws a chequerboard behind alpha. |
 | **Guides** | One menu for everything drawn over the picture: the grid, title and action safe, layer controls, the region of interest, and the composition background. |
 | **Channel** | RGB, red, green, blue, or alpha. |
-| **Exposure** | Drag the number, ten stops either way; click the mark to go back to zero. |
+| **Exposure** | Drag the number; click the mark to go back to zero. |
 | **Take snapshot** | Photographs the picture. |
 | **Show snapshot** | Puts the photograph back over the live picture while it is held. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
-| **Clock** | The playhead's time. Click it to type one; a time past either end lands on that end. |
+| **Clock** | The playhead's time. Click it to type one; a time past either end clamps. |
 | **Reading** | The composition, the time, the source size, the size the preview was made at, and the magnification. |
 
-A **region of interest** is swept out with a drag once it is armed from the Guides menu.
-Only that rectangle is rendered.
-
 The snapshot photographs **what is on screen**, at the resolution it is drawn at. Holding
-Show puts it back over exactly the part of the picture it came from, however you have
-zoomed or panned since.
+Show puts it back over exactly the part of the picture it came from.
 
 ### When the Viewer is narrow
 
 A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in order
 — the reading, the ways of looking, the clock — and the five transport buttons are the
-last things standing.
+last items remaining.
 
 The two strips can also be gathered into one, at the top or at the bottom, under
 **Edit ▸ Settings ▸ Appearance ▸ Viewer**.
@@ -74,13 +63,11 @@ in the [node graph](/use/nodes/) — and a chip appears at the top right saying 
 effect's name. Click it and the Viewer shows the composition with that layer's effect
 stack stopping there. Click it again for the finished picture.
 
-Nothing is soloed, bypassed or switched off by this, and the document is not touched.
-
 ### The dropper
 
 Some parameters are picked off the picture rather than typed — a colour, or a point. Arm
 the dropper from the parameter and a magnifier follows the pointer, with an outline round
-the pixels that will be taken.
+the pixels that will be sampled.
 
 - **Shift+scroll** grows the sampled region — one pixel, then 3×3 up to 9×9.
 - **The pick is a drag.** The value is previewed as you sweep; the release commits it, as

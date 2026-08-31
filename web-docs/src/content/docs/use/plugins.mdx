@@ -7,8 +7,9 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Lumit is an **OpenFX host**. Plugins you have installed for other applications are found on
-start-up and offered beside the built-in effects, and behave exactly like them.
+Lumit is an **OpenFX host**. Plugins you have installed for other applications 
+that use OFX are found on start-up and offered beside the built-in effects, 
+and behave in the same way.
 
 <Shot file="effects-presets-ofx.png" caption="A plugin's own heading in the Effects & presets panel, under the built-in categories." eager/>
 
@@ -26,7 +27,7 @@ Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too.
 The scan runs in the background. Install a plugin while Lumit is running and it appears
 the next time you launch.
 
-A plugin Lumit cannot drive is one line in the scan report. The other plugins in the
+A plugin Lumit cannot use is reported. The other plugins in the
 folder are unaffected.
 
 ## Where they appear
@@ -34,8 +35,7 @@ folder are unaffected.
 In the [Effects & presets](/panels/effects-presets/) panel, under the plugin's own declared
 grouping as a heading of its own. A plugin declaring no grouping goes under **Plugins**.
 
-From there it groups, folds, searches, stars and drags exactly like a built-in. The one
-difference is a provenance line at the top of its right-click menu: *From an OpenFX plugin*.
+From there it groups, folds, searches, stars and drags exactly like a built-in effect.
 
 ## Switch one off
 
@@ -59,13 +59,10 @@ happened:
 
 | Badge | Means |
 | --- | --- |
-| **This plugin did not render this frame** | It crashed, hung, or refused. The plugin's own words about it are printed underneath. |
+| **This plugin did not render this frame** | It crashed, hung, or refused. |
 | **This plugin is switched off** | You switched it off. |
-| **This plugin is not installed on this machine** | The project uses it and this machine has no plugin for it. Nothing is lost. |
-| **This build does not know this effect** | The project names something this build of Lumit has never heard of. |
-
-A plugin that wants to say something gets a **notice on the status line**, never a modal
-window.
+| **This plugin is not installed on this machine** | The project uses it and this machine has no plugin for it. |
+| **This build does not know this effect** | The project names something the used version of Lumit has never heard of. |
 
 :::note[Not built yet]
 Lumit's own native plugin interface. There is no Settings page listing what is installed,

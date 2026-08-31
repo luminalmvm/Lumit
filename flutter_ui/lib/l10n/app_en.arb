@@ -352,6 +352,10 @@
   "@fxCreateCornerPin": {
     "description": "Effect controls — a button on Planar track: puts a Corner pin effect on the chosen layer, keyframed to the tracked surface."
   },
+  "fxCreateTransformKeys": "Create transform keys",
+  "@fxCreateTransformKeys": {
+    "description": "Effect controls — a button on Planar track: keyframes the chosen layer's own Position, and optionally Rotation and Scale, to the movement the track measured."
+  },
   "fxDown": "Down",
   "@fxDown": {
     "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
@@ -436,9 +440,45 @@
   "@fxPillowEmboss": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
   },
+  "fxFollow": "Follow",
+  "@fxFollow": {
+    "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points."
+  },
+  "fxSurface": "Surface",
+  "@fxSurface": {
+    "description": "Option of a Planar track's Follow control: the four corners are followed as one flat surface."
+  },
+  "fxOnePoint": "One point",
+  "@fxOnePoint": {
+    "description": "Option of a Planar track's Follow control: one small region is followed, giving a position and nothing else."
+  },
+  "fxTwoPoints": "Two points",
+  "@fxTwoPoints": {
+    "description": "Option of a Planar track's Follow control: two small regions are followed separately, giving a position, a rotation and a scale."
+  },
+  "fxPoint1X": "Point 1 x",
+  "@fxPoint1X": {
+    "description": "Effect controls — a control on Planar track: the horizontal position of the first followed point."
+  },
+  "fxPoint1Y": "Point 1 y",
+  "@fxPoint1Y": {
+    "description": "Effect controls — a control on Planar track: the vertical position of the first followed point."
+  },
+  "fxPoint2X": "Point 2 x",
+  "@fxPoint2X": {
+    "description": "Effect controls — a control on Planar track: the horizontal position of the second followed point."
+  },
+  "fxPoint2Y": "Point 2 y",
+  "@fxPoint2Y": {
+    "description": "Effect controls — a control on Planar track: the vertical position of the second followed point."
+  },
+  "fxRegionSize": "Region size",
+  "@fxRegionSize": {
+    "description": "Effect controls — a control on Planar track: how wide each followed point's search box is."
+  },
   "fxPinLayer": "Pin layer",
   "@fxPinLayer": {
-    "description": "Effect controls — a control on Planar track: which layer the Create corner pin button puts its Corner pin on."
+    "description": "Effect controls — a control on Planar track: which layer the Create corner pin and Create transform keys buttons write to."
   },
   "fxPlanarTrack": "Planar track",
   "@fxPlanarTrack": {
@@ -8884,18 +8924,18 @@
   "@trackFailedNotPlanar": {
     "description": "Planar track status line when the track was refused: the four points enclose something that is not flat, or whose parts move against each other."
   },
-  "planarSolvingSurface": "Working out the surface",
+  "planarSolvingSurface": "Working out the movement",
   "@planarSolvingSurface": {
-    "description": "Planar track status line in Effect controls: the frames are in and the surface's four corners are being computed."
+    "description": "Planar track status line in Effect controls: the frames are in and the movement is being computed."
   },
-  "planarTracked": "Surface tracked over {frames} frames",
+  "planarTracked": "Tracked over {frames} frames",
   "@planarTracked": {
     "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
     "placeholders": { "frames": { "type": "int" } }
   },
-  "planarPartial": "Tracked {frames} of {total} frames — the surface could not be followed further",
+  "planarPartial": "Tracked {frames} of {total} frames — it could not be followed further",
   "@planarPartial": {
-    "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the surface and the rest of the clip does not. Both numbers are frame counts.",
+    "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the movement and the rest of the clip does not. Both numbers are frame counts.",
     "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
   },
   "planarReanchored": "{count, plural, =1{Re-anchored once, so the far end may drift a little} other{Re-anchored {count} times, so the far end may drift a little}}",
