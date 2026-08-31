@@ -672,8 +672,30 @@ fn triangulate(
 /// The triangle containing `p` and its barycentric coordinates there, or `None`
 /// when the point falls outside the mesh — which is how a pin goes inert.
 pub fn locate(mesh: &PuppetMesh, p: [f64; 2]) -> Option<(usize, [f64; 3])> {
-    for (i, tri) in mesh.triangles.iter().enumerate() {
-        let Some([a, b, c]) = tri_positions(mesh, tri) else {
+    locate_in(&mesh.vertices, &mesh.triangles, p)
+}
+
+/// [`locate`] over loose vertices, so the same walk can be run over the
+/// **deformed** positions rather than the rest ones.
+///
+/// That is what a click on the picture needs (docs/impl/puppet.md §5): the user
+/// aims at the puppet where it is now, and the pin has to be stored where that
+/// spot sits in the rest mesh — the same barycentric coordinates, read off the
+/// rest triangle. `triangles` indexes `vertices`; an index past the end is
+/// skipped rather than a panic (docs/14 §4).
+pub fn locate_in(
+    vertices: &[[f64; 2]],
+    triangles: &[[u32; 3]],
+    p: [f64; 2],
+) -> Option<(usize, [f64; 3])> {
+    for (i, tri) in triangles.iter().enumerate() {
+        let Some(a) = vertices.get(tri[0] as usize).copied() else {
+            continue;
+        };
+        let Some(b) = vertices.get(tri[1] as usize).copied() else {
+            continue;
+        };
+        let Some(c) = vertices.get(tri[2] as usize).copied() else {
             continue;
         };
         if let Some(bary) = barycentric(a, b, c, p) {

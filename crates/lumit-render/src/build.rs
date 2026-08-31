@@ -69,7 +69,10 @@ fn warp_puppet(
     let (rgba, w, h, natural) = pixels;
     let (w, h, natural) = (*w, *h, *natural);
     let pins = block.pins_at(lt);
-    if pins.is_empty() {
+    // Nothing pinned warps nothing — unless a puppet tool is armed on this
+    // layer, in which case the overlay still wants the mesh to aim the next pin
+    // at, and the block's own reference time is where it is cut from.
+    if pins.is_empty() && crate::puppet::previewing(layer.id).is_none() {
         return;
     }
     let nw = natural.0.round().max(1.0) as u32;
@@ -94,8 +97,21 @@ fn warp_puppet(
     };
     let alpha = lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh);
     let Ok(mesh) = PUPPET.mesh(&alpha, nw, nh, block.density, block.expansion) else {
+        crate::puppet::forget(layer.id);
         return;
     };
+    if pins.is_empty() {
+        let deformed = mesh.vertices.clone();
+        crate::puppet::publish(
+            layer.id,
+            crate::puppet::Ghost {
+                mesh,
+                deformed,
+                inert: Vec::new(),
+            },
+        );
+        return;
+    }
     let factorisation = PUPPET.factorisation(&mesh, &pins);
     let solution = lumit_core::puppet::solve(&mesh, &pins, &factorisation);
     // What the Viewer's wireframe draws is the mesh that drew the pixels, not a
