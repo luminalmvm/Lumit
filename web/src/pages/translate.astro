@@ -51,7 +51,9 @@ for (const { code } of LANGUAGES) {
     const have = arb[key];
     // A key whose "translation" is the English is not translated: the exports these
     // files came from wrote the source text through wherever nobody had answered.
-    if (have === undefined || have === en[key]) {
+    // Unless the sidecar says someone answered it deliberately - sRGB is sRGB in
+    // German too, and an ingested identical answer is an answer.
+    if (have === undefined || (have === en[key] && seen[key] === undefined)) {
       need.push(i);
       return;
     }
@@ -100,36 +102,30 @@ const AUTH = {
   <section class="pt-16 sm:pt-20">
     <div class="wrap">
       <p class="kicker">Translate</p>
-      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Say it in your language.</h2>
+      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Lumit in your language.</h2>
       <p class="mt-4 max-w-[620px]">
-        Every word Lumit shows comes from one file, and this page is that file with a box
-        beside each phrase. Fill in as many as you like - what you type stays in this
-        browser until you send it, so you can stop and come back. When you are done, the
-        Download button hands you a file to attach to a GitHub issue, and a maintainer
-        reads it in.
+        Translations for Lumit are completely community-sourced. All help to make Lumit 
+        more accessible is greatly appreciated. When you are done, the Download button 
+        hands you a file to attach to a GitHub issue.
       </p>
       <p class="mt-3 max-w-[620px] text-fg-3 text-[14px]">
-        Nothing to install, and the only account is the Discord one you already have.
         Placeholders like <code class="font-mono text-fg-2">{"{count}"}</code> stand for a
-        number or a name the application fills in - keep them exactly as they are, anywhere
-        in your sentence that reads well.
+        variable the application fills in, DO NOT translate them, keep them exactly as 
+        they are, but you can adjust their position in the sentence to make sense in your 
+        language.
       </p>
 
       <div id="gate" class="card mt-8 max-w-[620px]">
         <p id="gate-line" class="text-fg-2">
-          Sign in with Discord to fill these in. The boxes open for anyone holding the
-          translator role in the Lumit server, and the file you send back carries your name
-          so a maintainer knows whose work they are reading.
+          Sign in with Discord to fill these in. You must have the translator role in the 
+          Lumit server to allow typing.
         </p>
         <div class="mt-4 flex flex-wrap gap-2.5">
           <button id="signin" class="btn" type="button">Sign in with Discord</button>
           <a id="join" class="btn btn-ghost hidden" href={DISCORD}>Open the Lumit Discord</a>
         </div>
         <p class="mt-4 text-[13.5px] leading-[1.55] text-fg-3">
-          This is a courtesy rather than a lock - it puts a name on a submission, and
-          submissions are reviewed before they ship. Signing in tells us your Discord name
-          and which roles you hold in this one server; the sign-in itself lives in this tab
-          and goes when you close it.
+          This is only a way to help make translating easier, and submissions are reviewed before they ship.
         </p>
       </div>
     </div>
