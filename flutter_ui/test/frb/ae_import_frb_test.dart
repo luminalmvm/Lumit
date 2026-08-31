@@ -235,7 +235,10 @@ void main() {
       expect(itemNames(p.state),
           containsAll(<String>['Fixture', 'Fixture inner', 'Solids']));
 
-      expect(find.text(l10n.aeSummary(62, 52, 2, 1)), findsOneWidget,
+      // 62·52·2·1 until the layer-styles map landed (K-706): the two
+      // placeholders and the one skipped chunk were the fixture's styles,
+      // which now import as real instances with three adjusted rows.
+      expect(find.text(l10n.aeSummary(63, 55, 0, 0)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
       await tester.tap(find.text(l10n.close.toUpperCase()));
