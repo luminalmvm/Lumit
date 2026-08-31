@@ -315,6 +315,13 @@ fit it.
 
 ### 4.1 The backend is Impeller, and what is left of the gap is the backend's own
 
+**Reversed on the shipping question, 2026-08-31 (K-732): the runner now pins Skia.**
+`flutter_ui/windows/runner/main.cpp` sets `ImpellerSwitch::Disabled` on the `DartProject`
+before the engine is created, so the pin holds in the shipped binary rather than in a
+launch flag. Everything below stays the record of what Impeller was measured to cost and
+why the cost is the backend's — that reading is what the reversal rests on — but the two
+sentences saying the shipped runner carries no pin are superseded. §7.2 has the ruling.
+
 The owner's ruling of 2026-08-30 settles what §2.4's table opened: *"we do not want skia
 imo at all. we need to get impeller working at these high framerates no matter what."*
 Skia is **not** a shipping backend for Lumit at any number. `--no-enable-impeller` keeps
@@ -911,6 +918,24 @@ the partial-repaint diagnosis is now tested and in.
 
 ### 7.2 WP-7 — the Impeller gap, still open
 
+**The ruling, 2026-08-31: Lumit ships on Skia, pinned in the runner (K-732).** Two
+attempts to close the gap inside the engine ran out below — single-sample was ~5 ms
+worse, and partial repaint lifted the scrub to ~50 fps while making playback slower —
+so the choice came down to the numbers §2.4 has held all along: Impeller 20–36 fps and
+~25 ms of raster per maximised frame, Skia 99–146 fps and ~5 ms, against a 60 fps merge
+gate. `flutter_ui/windows/runner/main.cpp` sets `ImpellerSwitch::Disabled` on the
+`DartProject`, which is the Windows embedding's own knob and holds in the shipped binary
+however it was launched. Confirmed the same day by a `flutter run --profile` carrying **no
+backend flag**, owner's conditions: the embedder's `Using the Impeller rendering backend
+(OpenGLESSDF)` line is absent from the run, and the probe reads 88–132 fps at 5.5–6.9 ms
+of raster across the zoom, both playhead sweeps and the work-area drag — §2.4's Skia
+column, reproduced from a launch that asked for nothing. This reverses K-677's shipping
+clause only; **the rest of this
+section stands as the record and the package stays open**, because the pin is a
+workaround with a flip-back condition: re-run the §2.4 A/B per Flutter upgrade, and the
+day Impeller clears the mandate in the owner's conditions the line becomes
+`ImpellerSwitch::Default`.
+
 **Reconciled against the community 120fps guidance the owner supplied (2026-08-30;
 the Shinde piece).** Its checklist and this note agree rather than argue: repaint
 boundaries around what animates (landed, WP-2/3), fixed-extent lazy lists (LazyBlocks
@@ -1028,8 +1053,10 @@ responsible for, and each is measured against the backend that ships.
   API on desktop; until then the cap is "fit in 8.3 ms and draw nothing at rest".
 - **When Impeller reaches the mandate on Windows** (WP-1, §7.2): unanswered, and the
   answer is not in Lumit's tree — re-run the §2.4 A/B per Flutter upgrade and read the
-  Windows embedder's compositor for a Vulkan backend or partial repaint. Skia stays a
-  reference measurement, never a shipping backend (K-677).
+  Windows embedder's compositor for a Vulkan backend or partial repaint. Until it is
+  answered the shipped runner is **pinned to Skia** (K-732, superseding K-677's
+  shipping clause); the answer arriving is what flips the pin back to
+  `ImpellerSwitch::Default`.
 - **Why a republishing texture costs Impeller ~18 ms** (§2.2) is left undiagnosed on
   purpose: the pin removes it, and the upstream issue is where the diagnosis belongs.
   If the pin ever comes off, re-measure live-vs-empty before believing the new

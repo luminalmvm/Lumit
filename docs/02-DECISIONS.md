@@ -23115,3 +23115,62 @@ in the note with its upgrade: the unit is uncached (K-421 stance),
 temporal/flow effects on a header are inert or passthrough, and group params
 take no node-graph wires. The Effect controls panel edits the stack; the
 Timeline shows an fx tick on the header and lanes for its keyframes.
+
+## K-732 — Lumit ships on Skia, pinned in the runner, until Impeller meets the mandate on Windows
+
+**Status: DECIDED (2026-08-31, owner).** Supersedes the shipping clause of **K-677**, which
+ruled that the Windows runner takes Flutter's default backend, carries no pin, and that
+Skia is "a reference measurement, never a shipping backend". Everything else K-677
+established — that the gap is the backend's and not Lumit's paint, that Vulkan is
+unreachable on Windows in 3.47, that our texture transport is already minimal — stands
+unchanged and is the reason this entry exists. The pursuit of Impeller (the note's §7.2)
+also stands; what changes is what ships while that pursuit runs.
+
+**The numbers that forced it** (Flutter 3.47.1, the owner's conditions per
+docs/impl/ui-performance.md §2.1 — maximised 2560×1369, live preview, the *Set me Free*
+Clips comp, the parked probe): Impeller's OpenGLES path costs ~25 ms of raster thread per
+maximised frame against Skia's ~5 ms, and measures **20–36 fps** across the gesture table
+where Skia measures **99–146 fps**. The 60 fps mandate (docs/13 §7, docs/impl §1) is a
+merge gate, and one backend clears it with 6–8× headroom while the other cannot reach it
+at all. Two further attempts inside the engine closed the argument rather than the gap:
+a local engine build with Impeller's 4× MSAA backing store forced single-sample measured
+~5 ms **worse**, and the partial-repaint spike lifted only the scrub (~50 fps) while
+leaving playback — the case it exists for — slower than stock, because the rasteriser
+hands the embedder one bounding rect and the Viewer's always-dirty texture unions it to
+window size (§7.2).
+
+**The pin is the embedder's own knob, one line in the runner.**
+`flutter_ui/windows/runner/main.cpp` sets `project.set_impeller_switch(
+flutter::ImpellerSwitch::Disabled)` before the engine is created — the supported
+`FlutterDesktopEngineProperties::impeller_switch` field on the Windows embedding, not an
+environment variable and not a launch flag. It therefore holds in the **shipped binary**,
+however it was started; `--no-enable-impeller` is no longer needed to reproduce the fast
+configuration, and `--enable-impeller` on a `flutter run` no longer overrides it. K-677's
+"the smallest runner is the one with nothing to say about backends" was true of a runner
+whose default was acceptable; a default that misses a merge gate has to be said out loud.
+
+**The flip-back condition, written into the comment beside the pin:** re-run the §2.4 A/B
+and the §2.3 table on each Flutter upgrade, unchanged method, one run each; the day
+Impeller clears the mandate in the owner's conditions, the line becomes
+`ImpellerSwitch::Default` and this entry is superseded in turn. The watches that would
+predict it are §7.2's: a Vulkan compositor in `shell/platform/windows/BUILD.gn`, or
+per-layer damage regions rather than one bounding rect.
+
+Regression tests: none — the change is one line of C++ in the runner, outside the Dart and
+Rust suites, and CI's widget tests raster through Skia regardless. Its check is the probe
+run and the engine's own startup line: the embedder prints `Using the Impeller rendering
+backend (OpenGLESSDF)` when Impeller starts, and on the pinned build that line is absent
+while the gesture table reads Skia-class raster. **Verified 2026-08-31 12:22**, `flutter
+run --profile -d windows` with **no backend flag of any kind**, owner's conditions
+(`window physical=2560x1369 dpr=1.0`, `media beside project: resolves`, 57 rows, Clips):
+the startup line does not appear anywhere in the run's output, and the probe reads
+
+| Gesture | pinned run (fps / raster med / span med) | Impeller, §2.4 |
+|---|---|---|
+| Zoom fly | 88.2 / 6.8 / 13.8 | 19.7 / 48.8 / 94.2 |
+| Playhead drag, fresh | 105.7 / 6.9 / 11.9 | 19.9 / 47.7 / 93.6 |
+| Playhead drag, revisited | 111.2 / 6.9 / 12.0 | 22.5 / 41.7 / 81.4 |
+| Work-area drag | 125.1 / 6.8 / 11.7 | 30.2 / 30.3 / 59.5 |
+| Playhead drag, measuring off | 132.2 / 5.5 / 10.1 | frames > 17 ms: 72 of 72 |
+
+— the Skia column of §2.4 reproduced from a launch that asked for nothing.

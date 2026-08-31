@@ -5900,6 +5900,35 @@ still exists — so the Swift side is two lines and no file. Linux gets the
 maximised default only: GTK has no equivalent, and following window moves by
 hand there can wait until somebody is running Lumit on Linux to ask.
 
+### Which drawing engine Flutter uses, and why we say so out loud
+
+Flutter does not paint pixels itself; it hands a description of the frame to a
+drawing engine underneath. It ships two. **Skia** is the older one, the same
+library Chrome draws with. **Impeller** is the newer one, written to remove the
+stutter Skia gets when it has to compile a shader mid-animation, and it is the
+default on Windows.
+
+On this machine the newer one is the slower one, by a lot. On Windows, Impeller
+does not talk to the graphics card directly: it goes through OpenGL ES, which is
+itself translated to Direct3D, and it redraws the **whole** window every frame
+whether one pixel changed or ten million. That works out at roughly 25
+milliseconds of drawing per maximised frame, where a frame has to finish in 8.3
+to hit our target — so a scrub in the Timeline runs at about 25 frames a second.
+The same build on Skia does the same work in about 5 milliseconds and runs at
+100 to 145. None of that difference is Lumit's painting: it was measured with a
+single painter on screen and with 57 rows of widgets, and both cost the same.
+
+So the runner tells the engine which to use, in one line of
+`flutter_ui/windows/runner/main.cpp`. It is a **pin**, not a preference — a
+deliberate hold on a choice that would otherwise drift with whatever Flutter
+version we upgrade to, put in the runner rather than in a command-line flag so
+it holds in the copy of Lumit you install, not just in the one a developer
+launches. The comment beside it names the condition for taking it out: when a
+Flutter upgrade makes Impeller fast enough on Windows, the line changes back and
+Lumit follows the default again. `docs/impl/ui-performance.md` keeps the
+measurements, and re-running them after each upgrade is a standing job in
+`docs/TODO.md`.
+
 ### The first second: the boot splash
 
 Lumit opens on a small centred card that lists what came up, then gives way to

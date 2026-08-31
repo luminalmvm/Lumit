@@ -89,11 +89,15 @@ gesture table taken in the owner's own conditions (window maximised, live previe
 the small-window empty-preview test trap flatters by 4×), the architecture, and six
 ordered work packages, each gated by a probe re-run in those conditions:
 
-- **WP-1 - LANDED as K-677 (supersedes this row's Skia pin)**: the owner ruled
-    Impeller ships, no Skia; the unmet gap is the Windows embedder's own (4x MSAA
-    whole-window resolve, no partial repaint - ~8 ms/megapixel) and WP-7 in the note
-    pursues it (per-upgrade re-measure, the drafted upstream issue, the local-engine
-    MSAA test).
+- **WP-1 - LANDED as K-677, then reversed on shipping by K-732**: the unmet gap is the
+    Windows embedder's own (4x MSAA whole-window resolve, no partial repaint - ~8
+    ms/megapixel) and WP-7 in the note pursues it (the drafted upstream issue, the
+    local-engine MSAA test); the runner meanwhile pins Skia.
+- **Per Flutter upgrade: re-run the §2.4 backend A/B** in the owner's conditions
+    (docs/impl/ui-performance.md §2.1/§6, one run each backend) and flip
+    `ImpellerSwitch::Disabled` back to `Default` in
+    `flutter_ui/windows/runner/main.cpp` the day Impeller clears the 60 fps mandate
+    (K-732). Standing, not one-off - delete only when the flip lands.
 - **WP-2 — the select click**: layer selection becomes listenable row state; a
     first-visit click's worst build < 8.3 ms (was 39–67 ms).
 - **WP-3 — incremental scroll**: `LazyBlocks` reuses identical children across window
