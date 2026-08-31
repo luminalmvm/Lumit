@@ -5,15 +5,13 @@ sidebar:
   order: 2.7
 ---
 
-Lumit composites in **scene-linear Rec. 709**, in floating point, and it does so whatever
-your footage arrived in. Colour management is the two edges either side of that: reading a
-a footage item into the working space, and writing the result back out for a screen or a file.
+Lumit composites in **scene-linear Rec. 709**, in floating point, whatever your footage
+arrived in.
 
 Without a configuration Lumit uses its own built-in handling — it reads what the file says
-about itself, and shows you the working space encoded to sRGB. That is enough for a great
-deal of work. An **OpenColorIO configuration** is what you reach for when it is not: log
-footage from a camera, a show with its own looks, a delivery that has to match somebody
-else's.
+about itself, and shows you the working space encoded to sRGB. An **OpenColorIO
+configuration** is for when that is not enough: log footage, a show with its own looks, a
+delivery that has to match somebody else's.
 
 ## Choose a configuration
 
@@ -21,10 +19,8 @@ else's.
 *Clear* beside it.
 
 Under the row is a line saying what happened. Read and in use, it counts what it found —
-*Loaded: 42 colour spaces, 3 displays*. Named but not usable, it says why in one sentence:
-the file could not be read, it needs a transform Lumit does not support yet, it uses context
-variables, it is written for a profile version Lumit does not read. Nothing is approximated.
-A configuration asking for something unimplemented is refused by name rather than guessed at.
+*Loaded: 42 colour spaces, 3 displays*. Named but not usable, it says why in one sentence.
+A configuration asking for something unimplemented is refused rather than approximated.
 
 There is no separate relink. *Choose…* is also how you point at a configuration that moved.
 
@@ -65,8 +61,7 @@ configuration knows about with that display's views beneath it. **Tone mapping**
 foot, if you have turned its button on in Settings.
 
 Tone mapping and the Viewer's exposure box are **ways of looking**. They never reach an
-export, and while either is engaged the badge says *preview* so the Viewer cannot quietly
-show you something the file will not contain.
+export, and while either is engaged the badge says *preview*.
 
 ## Writing it out
 
@@ -78,18 +73,15 @@ changes.
 Two things worth knowing before you deliver:
 
 - A file written through the configuration's transform is left **untagged** rather than
-  mis-tagged. There is no reliable header to state for it, and a wrong one is worse than
-  none.
+  mis-tagged.
 - An export naming a space this build cannot transform to is **refused**, not written
-  wrongly. A colour space you find out about after delivery is the expensive kind of
-  mistake.
+  wrongly.
 
 :::note[Not built yet]
 A configuration whose own working space Lumit adopts, context variables, the grading
-transforms, inverting a 3D look-up table, and a standalone looks picker are all listed and
-none is built. Lumit's own perceptual work — the blend modes and the tone-map curve — reads
-pixels as Rec. 709 whatever the configuration's primaries are, which is what colour-managed
-hosts of this generation have always done, and is stated on the Project settings page.
+transforms, inverting a 3D look-up table, and a standalone looks picker are not built.
+Lumit's own perceptual work — the blend modes and the tone-map curve — reads pixels as
+Rec. 709 whatever the configuration's primaries are.
 :::
 
 ## Related

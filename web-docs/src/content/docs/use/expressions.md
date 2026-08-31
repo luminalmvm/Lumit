@@ -5,9 +5,7 @@ sidebar:
   order: 16
 ---
 
-An **expression** is a line of script on a property. It is worked out afresh on every
-frame, so the property follows whatever the script says rather than sitting between
-keyframes.
+An **expression** is a line of script on a property, worked out afresh on every frame.
 
 ## Put one on a property
 

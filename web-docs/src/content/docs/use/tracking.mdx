@@ -18,14 +18,11 @@ carry on editing.
 ## Camera track
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Camera track**.
-2. Press **Analyse**.
-3. Wait. The status row under the buttons counts the frames as they go, and **Cancel**
-   stops it.
+2. Press **Analyse**. The status row counts the frames as they go, and **Cancel** stops it.
 
-The analysis is of the **whole source footage**, not of the layer you applied it to, and it
-is kept beside the project. Every layer using that footage shares the one solve, so trimming
-a layer, moving it, reordering it or [retiming](/use/retime/) it never tracks anything again.
-Re-analysing is only needed when you change one of the settings.
+The analysis is of the **whole source footage**, not of the layer, and every layer using
+that footage shares the one solve — trimming, moving or [retiming](/use/retime/) a layer
+never tracks anything again. Re-analyse only after changing a setting.
 
 | Control | What it does |
 | --- | --- |
@@ -35,14 +32,11 @@ Re-analysing is only needed when you change one of the settings.
 
 ### A track that stops part-way
 
-A shot can stop being followable. The lens racks, the frame whites out, there is a cut in
-the middle of the file — and past that point there is nothing that can be tied to anything
-before it. Lumit stops there and solves the part that worked rather than inventing the rest.
+A shot can stop being followable — the lens racks, the frame whites out, there is a cut in
+the middle of the file. Lumit stops there and solves the part that worked.
 
-A thin bar above the status line shows the analysed span against the length of the footage, and
-the line reads *Analysed 180 of 400 frames — the shot could not be followed further*. It
-appears once the work is over and does not move: it measures how far the answer reaches, not
-how far the work has got.
+A thin bar above the status line shows the analysed span against the length of the footage,
+and the line reads *Analysed 180 of 400 frames — the shot could not be followed further*.
 
 A camera following a partial track moves inside the span and holds its last position past
 the end. Mask out whatever broke the shot and analyse again, or treat the two halves as two
@@ -64,33 +58,23 @@ and the camera holds where it was — never a silent freeze.
 
 ### Nudging it
 
-A solve is a measurement, and measurements are a little wrong. A ground plane half a degree
-off is normal, and re-solving is not a fix for it.
-
-So a linked camera's own transform and zoom rows still take edits, and what you type there
-is a **correction**: the difference from where the rows sat when the link was made, added on
-top of the solved motion, on every frame. Ordinary rows, ordinary keyframes, ordinary undo —
-you already know how to key a camera.
+A linked camera's own transform and zoom rows still take edits, and what you type there is a
+**correction**: the difference from where the rows sat when the link was made, added on top
+of the solved motion on every frame. Ordinary rows, ordinary keyframes, ordinary undo.
 
 A small dot beside the badge, and on the Camera track's own status row, says the camera has
 been nudged. **Clear corrections** puts the seven rows back where they started and leaves the
-link alone. **Convert to keyframes** bakes the whole thing — solve and correction together,
-which is the motion that was on screen — into one key per frame and ends the link. From then
-on it is an ordinary camera.
+link alone. **Convert to keyframes** bakes solve and correction together into one key per
+frame and ends the link — from then on it is an ordinary camera.
 
 ### The point cloud
 
 With **Show points** on, the solved points draw over the picture on the tracked layer, cued
 by depth. Select some — singly, or by sweeping a box round them — and two buttons appear
 over the picture: **Create null** and **Create solid**, each placed at the average position
-of what you picked and facing the camera. That is how you get something into the scene at
-the right depth.
+of what you picked and facing the camera.
 
 ## Planar track
-
-A flat surface filmed by a moving camera always warps the same way, however the camera moves
-and however the surface turns. Four corners describe it completely, which is why the answer
-to a planar track is a Corner pin.
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Planar track**.
 2. Put the effect's four points round the flat thing, on the source's **first frame**. That
@@ -100,11 +84,9 @@ to a planar track is a Corner pin.
 4. Press **Analyse**.
 5. Set **Pin layer** to the layer you want pinned, and press **Create corner pin**.
 
-The Corner pin is appended to that layer's stack with one keyframe per frame of its own
-extent. They are ordinary keyframes: the [graph editor](/panels/graph-editor/) draws them,
-undo takes them back, and you can soften a corner or trim the last ten frames afterwards
-without anything resolving behind you. A layer that already carries a Corner pin keeps it —
-you asked for a pin, not for a tidy-up.
+The Corner pin is appended to that layer's stack with one keyframe per frame. They are
+ordinary keyframes — edit or trim them afterwards and nothing resolves behind you. A layer
+that already carries a Corner pin keeps it.
 
 **Feature density** and **Use masks** work as they do on the Camera track.
 
@@ -114,24 +96,20 @@ you asked for a pin, not for a tidy-up.
 surface stopped being followable, and the span bar shows how far it reached.
 
 A second line may read *Re-anchored twice, so the far end may drift a little*. Every frame
-is measured against the reference frame rather than against the frame before it, which is
-what stops a planar track walking off its surface. When too few of the reference frame's
-features survive to trust the fit, the measurement adopts a recent frame instead and carries
-a little error forward. Zero re-anchors is a track with no accumulated drift in it at all,
-and the count is the one number that says how much to trust the far end.
+is measured against the reference frame, not the frame before it; when too few of the
+reference's features survive, the measurement adopts a recent frame instead and carries a
+little error forward. The count says how much to trust the far end.
 
 *What is inside the shape is not one flat surface* means the four points enclose something
 that is not flat, or whose parts move against each other.
 
 :::note[Limitations]
-The quad is four rows in the panel; dragging its corners on the picture is not built. The
-quad cannot be keyframed — it is the shape the surface has on the reference frame, and
-animating it would be asking the tracker to follow a moving target from a moving start. And
-the Planar track analyses a footage layer only, where the Camera track will also analyse a
+The quad is four rows in the panel; dragging its corners on the picture is not built, and
+the quad cannot be keyframed — it is the shape the surface has on the reference frame. The
+Planar track analyses a footage layer only, where the Camera track will also analyse a
 Precomp layer by rendering it.
 
-Point tracking that produces a keyframed transform — the third thing a tracker is usually
-asked for — is not built either.
+Point tracking that produces a keyframed transform is not built either.
 :::
 
 ## Related

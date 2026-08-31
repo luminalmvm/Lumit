@@ -20,7 +20,7 @@ Picking a different frame of the same run imports the same item, not a second on
 What is recognised as a run:
 
 - **Still-image formats only.** A folder of `clip0001.mp4`…`clip0100.mp4` is a hundred
-  footage items, and gluing them together would be a destructive guess.
+  footage items.
 - **The frame number is the longest run of digits in the name.** `shot_v2_0043.exr` is frame
   43 of version 2, not frame 2.
 - **Padding has to match.** `%04d` does not name `frame7.png`, so a differently-padded
@@ -31,12 +31,7 @@ What is recognised as a run:
 ## Gaps end a run
 
 Given `0001` to `0100` with `0050` missing, picking `0007` imports `0001`–`0049`, and
-picking `0060` imports `0051`–`0100`.
-
-A gap is never bridged. Closing it silently would show the wrong picture at the wrong time
-with nothing on screen to say so, and refusing the whole thing would let one deleted frame
-reject a shot. Clamping is the only one of the three that cannot lie about which frame you
-are looking at.
+picking `0060` imports `0051`–`0100`. A gap is never bridged.
 
 ## The rate
 
@@ -44,9 +39,8 @@ Stills carry no frame rate of their own, so the project has to say. Every sequen
 **25 fps**.
 
 :::note[Not built yet]
-There is nowhere to change a sequence's rate. The value is per item and the engine already
-carries it; the control is the gap. Until it exists, a 24 fps render conforms at 25 and runs
-a little short.
+There is nowhere to change a sequence's rate yet, so a 24 fps render conforms at 25 and
+runs a little short.
 :::
 
 ## The files are the truth
@@ -60,15 +54,11 @@ moving the project, fingerprinting and relinking all work the ordinary way.
 
 ## Relinking
 
-Relink a sequence by pointing at **any frame** of it. Lumit resolves whatever you picked back
-to the run's first frame before anything else reads it, which is also what stops a folder of
-two thousand stills confusing the sweep that offers to relink the siblings beside it.
+Relink a sequence by pointing at **any frame** of it.
 
 ## From After Effects
 
-Sequences in an imported After Effects project come across as sequences. After Effects
-stores the folder and the name either side of the frame number, which is enough to rebuild
-the run.
+Sequences in an imported After Effects project come across as sequences.
 
 ## Related
 

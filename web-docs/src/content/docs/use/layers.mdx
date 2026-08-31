@@ -60,41 +60,34 @@ The **switches** column holds what the Timeline keeps about a layer: visibility,
 lock, shy, and guide. The **modes** column holds how the layer is rendered: collapse, flow,
 disable effects, motion blur, 3D, and adjustment.
 
-A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no 
-visibility switch, and a layer that can never be heard — a solid, text, a shape, or footage 
-with no sound — has no mute switch. Guide, on the other hand, is drawn on every row, because
-any layer at all can be reference-only.
+A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no
+visibility switch, and a layer that can never be heard has no mute switch. Guide is drawn
+on every row.
 
-The **motion blur switch** smears a layer from its own transformations; you'll only
-notice this if you have keyframed properties on the layer. The Motion blur
+The **motion blur switch** blurs a layer from its own animated transform. The Motion blur
 effect is different, see [Effects](/use/effects/).
 
 ## Adjustment
 
-**Adjustment is a switch**, on any layer that draws something. Turn it on and the layer's own
-picture is set aside; its effect stack runs on the composite of everything below it instead.
-Turn it off and the layer is itself again, having forgotten nothing.
-
-Where the layer sits and how big it is still matter: effects on it apply only to the area it
-covers, so scaling it down is how you confine a grade to part of the frame.
+**Adjustment is a switch**, on any layer that draws something — turn it on and any layer's
+effect stack runs on the composite of everything below it; turn it off and the layer is
+itself again. Effects apply only to the area the layer covers, so scaling it down confines
+a grade to part of the frame.
 
 **Layer ▸ New ▸ Adjustment** makes a comp-sized layer with the switch already on, which is
-the usual way in. Turn the switch off on one of those and it becomes an ordinary white solid
-that you can turn back on whenever you like.
+the usual way in. Turn the switch off on one of those and it becomes an ordinary white
+solid.
 
-The four kinds with no picture to set aside — Camera, Light, Null and an Audio layer — cannot
-be adjustment layers, and the cell is left out on their rows.
+Camera, Light, Null and Audio layers cannot be adjustment layers, and the cell is left out
+on their rows.
 
 ## Guide layers
 
-**Guide** marks a layer *for reference only*: a match photograph, a grid, a title-safe
-rectangle, an animatic. The Viewer draws it like any other layer and **no exported file
-contains it**, picture or sound.
+**Guide** marks a layer *for reference only*: a match photograph, a grid, an animatic. The
+Viewer draws it like any other layer and **no exported file contains it**, picture or sound.
 
-Guide-ness beats solo. Soloing a guide layer changes what you are looking at and changes
-nothing about what you deliver — a switch that means *look at this* must never quietly change
-what a client receives. A locked layer refuses the guide switch, unlike shy, because guide
-decides what leaves the building.
+Guide beats solo: soloing a guide layer changes what you are looking at, never what you
+deliver. A locked layer refuses the guide switch, unlike shy.
 
 The export dialogue can be told to write them anyway, for a review copy.
 
@@ -105,9 +98,8 @@ a cone aimed by the layer's own rotation; and an **Area light**, a rectangle of 
 a softbox, a window, a strip light — which starts at a tenth of the composition.
 
 A light is placed by its ordinary transform, so it animates and parents like anything else.
-Which layers it shades is per layer: **Accepts lights**, a ticked entry on the layer's
-right-click menu in the Timeline, on by default and doing nothing at all in a composition
-with no lights.
+Which layers it shades is per layer: **Accepts lights**, on the layer's right-click menu in
+the Timeline, on by default.
 
 :::note[Partly built]
 A light's own properties — its colour, intensity, cone angle, size and falloff — have no rows

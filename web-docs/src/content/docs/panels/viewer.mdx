@@ -23,13 +23,9 @@ different question.
 | **Preview quality** | How much quality this preview may spend. It carries two things: the **preview resolution** — full, half, third, quarter or auto — and the **playback** behaviour, every frame or adaptive. |
 | **Colour pipeline** | What you are looking at. It names the display transform the picture is shown through, and where the project loads a colour configuration it grows a section per display, each of its views a row. |
 
-Preview resolution and playback used to be asked in two places, which is how a soft picture
-and a slow transport came to look like two unrelated faults. They are one question now.
-
 The colour picker turns to the accent and adds **· preview** whenever exposure or the tone
-map is engaged, because both live inside the display transform and neither reaches an
-export. **Tone mapping** is a row in the same menu; it appears once you switch it on in
-**Edit ▸ Settings ▸ Viewer**.
+map is engaged — neither reaches an export. **Tone mapping** is a row in the same menu; it
+appears once you switch it on in **Edit ▸ Settings ▸ Viewer**.
 
 ## The strip below
 
@@ -51,22 +47,18 @@ with its clock in the middle, and the composition's own reading at the far right
 | **Reading** | The composition, the time, the source size, the size the preview was made at, and the magnification. |
 
 A **region of interest** is swept out with a drag once it is armed from the Guides menu.
-Only that rectangle is rendered, which is the quickest way to keep a heavy shot responsive
-while you work on one corner of it.
+Only that rectangle is rendered.
 
 The snapshot photographs **what is on screen**, at the resolution it is drawn at. Panned
-into a corner of a comp at 400%, the photograph is that corner rather than a shrunken copy
-of the whole frame — and holding Show puts it back over exactly the part of the picture it
-came from, however you have zoomed or panned since. A picture panned entirely off the panel
-is not photographed at all.
+into a corner of a comp at 400%, the photograph is that corner — and holding Show puts it
+back over exactly the part of the picture it came from, however you have zoomed or panned
+since.
 
 ### When the Viewer is narrow
 
-A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in order,
-and the transport is the last to go: the two gaps close, the reading sheds its own
-statements and then goes entirely, the ways of looking fold into one overflow mark, the
-clock goes, and finally the five transport buttons stand alone. Nothing is ever clipped
-into unreadability.
+A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in order
+— the reading, the ways of looking, the clock — and the five transport buttons are the last
+things standing. Nothing is ever clipped into unreadability.
 
 The two strips can also be gathered into one, at the top or at the bottom, under
 **Edit ▸ Settings ▸ Appearance ▸ Viewer**.
@@ -91,16 +83,13 @@ costs one render, the same as stepping a frame.
 ### The dropper
 
 Some parameters are picked off the picture rather than typed — a colour, or a point such as
-a focal distance. Arm the dropper from the parameter and a magnifier follows the pointer: a
-nine-by-nine block of the pixels under it, each blown up to a square you can aim at, with a
-solid outline round the ones that will actually be taken and a strip underneath saying what
-would be picked.
+a focal distance. Arm the dropper from the parameter and a magnifier follows the pointer,
+with an outline round the pixels that will be taken and a strip saying what would be picked.
 
-- **Shift+scroll** grows the sampled region — one pixel, then 3×3, 5×5, 7×7, 9×9 — so a
-  noisy patch averages out instead of grabbing one grainy pixel.
-- **The pick is a drag.** Pressing writes nothing. Sweep across the picture and the value
-  is previewed as you go; the release commits it, as one undo step. `Esc` puts back what
-  the drag started from.
+- **Shift+scroll** grows the sampled region — one pixel, then 3×3 up to 9×9 — so a noisy
+  patch averages out.
+- **The pick is a drag.** The value is previewed as you sweep; the release commits it, as
+  one undo step. `Esc` puts back what the drag started from.
 
 ## Related
 

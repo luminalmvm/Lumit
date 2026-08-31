@@ -7,23 +7,17 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Most animation work is not putting keyframes down. It is moving twenty of them a little
-later, or making a move that takes a second take three quarters of one, or giving forty
-keys across six rows the same ease. Lumit treats a selection of keyframes as one thing — a
-**block** — so all of that is a drag or a press rather than forty of them.
+Lumit treats a selection of keyframes as one thing — a **block** — so sliding a run,
+stretching its timing or easing the lot is one drag or one press.
 
-Work in the Timeline's **Layers** mode. Everything below is the same in Graph mode, because
-both draw the same outline and the same selection.
+Work in the Timeline's **Layers** mode. Everything below is the same in Graph mode.
 
 ## 1. Get the keyframes on screen
 
-Twirling a layer open shows every property it has, most of which are not animated. Two
-things narrow that down.
-
 - Select the layer and press `U`. It opens showing only the rows that carry keyframes.
   Press it again to shut the layer.
-- **ANIMATED** on the Timeline's toolbar is the same idea as a standing filter: while it is
-  lit, the outline draws animated rows and nothing else, for every layer at once.
+- **ANIMATED** on the Timeline's toolbar is the same as a standing filter: while it is lit,
+  the outline draws animated rows and nothing else, for every layer at once.
 
 <Shot file="layers-selected.png" caption="Two layers, one twirled open, with keyframes on Position and Opacity." eager/>
 
@@ -63,8 +57,6 @@ The dragged end snaps to the same things a single key does — a whole frame, a 
 the playhead, a key on another row — so a run can be pulled onto a beat and stick to it. A
 block cannot be squeezed below one frame; two keys cannot share a time.
 
-This is the gesture for "that whole sequence needs to be a bit quicker".
-
 ## 5. Shape the movement
 
 Click the block's **badge**, or **EASE** on the bar under the lanes, and the Ease popover
@@ -98,16 +90,14 @@ The bar under the lanes carries the commands that act on whatever keys are selec
 ## 7. When one axis needs its own timing
 
 Position and Anchor point come as one row with a box per axis, and one stopwatch: keying
-the row keys both axes together. That is usually what you want, and sometimes exactly not
-— a bounce needs the vertical to hit the floor while the horizontal carries on evenly.
+the row keys both axes together.
 
 Right-click the property's **name** in the outline and choose **Separate axes**. The row
 becomes a row per axis, each with its own stopwatch, its own keyframes and its own curve in
 the graph editor. **Combine axes** on the same menu puts them back.
 
-Scale starts **linked** instead, because a scale that quietly stops being proportional is
-nearly always a mistake. **Unlink axes** gives it two boxes on one row; **Separate axes**
-goes the whole way to two rows.
+Scale starts **linked** instead. **Unlink axes** gives it two boxes on one row; **Separate
+axes** goes the whole way to two rows.
 
 ## Related
 

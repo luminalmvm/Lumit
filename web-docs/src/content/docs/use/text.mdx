@@ -37,14 +37,11 @@ A line of type can follow one of the layer's **own masks**.
    if you only want the curve — that mode is geometry and gates nothing.
 2. In the **Source** section of Effect Controls, set **Path** to that mask.
 
-**Path offset** appears beside it and slides the whole line along the curve, in pixels — the
-same unit the curve is measured in, so *20 px along* means the same thing on a circle and on
-a scrawl. A closed path wraps, so a ring of type runs round for ever. An open one drops the
-letters that fall off either end, which is what running out of curve should look like.
+**Path offset** appears beside it and slides the whole line along the curve, in pixels. A
+closed path wraps; an open one drops the letters that fall off either end.
 
-The mask stays an ordinary mask: drag its points, keyframe it, and the words follow. Deleting
-it lays the line straight again and the row reads *Missing mask* — a deleted mask never empties
-a layer.
+The mask stays an ordinary mask: drag its points, keyframe it, and the words follow.
+Deleting it lays the line straight again and the row reads *Missing mask*.
 
 :::note[Limitation]
 The Source rows are not keyable, so the path offset holds one value. Animating a line along a
@@ -53,11 +50,9 @@ curve waits on that.
 
 ## Animators
 
-An **animator** offsets the letters of a line, and a **range selector** says which letters it
-reaches. Sweeping the range over time is the cascade every title sequence is made of.
-
-**Add animator**, at the foot of the **Animators** section in Effect Controls, gives you one
-with every row already there, defaulted to values that change nothing.
+An **animator** offsets the letters of a line, and a **range selector** says which letters
+it reaches. **Add animator**, at the foot of the **Animators** section in Effect Controls,
+gives you one with every row already there, defaulted to values that change nothing.
 
 | Row | What it does |
 | --- | --- |
@@ -69,14 +64,12 @@ with every row already there, defaulted to values that change nothing.
 | **Fill offset** | Three numbers added to the layer's fill colour, so a letter can tint one way or the other. |
 
 A letter half inside the range gets half the offset. A letter turns about its own middle on
-the baseline, not about the pen point, so tall letters do not swing out of the line — and
-everything an animator does happens inside the letter's own frame, so a line on a path is
-pushed along and away from the curve rather than across the picture.
+the baseline, not about the pen point, and everything an animator does happens inside the
+letter's own frame, so a line on a path is pushed along and away from the curve rather than
+across the picture.
 
-Several animators on one layer **compose**: pushes, turns and tints add, scales and opacities
-multiply. That is what lets a fade animator and a drop animator be written separately and
-still read as "and also". It is also why the colour row is an offset rather than a second
-colour — a replacement cannot compose.
+Several animators on one layer **compose**: pushes, turns and tints add, scales and
+opacities multiply.
 
 An animated line is given one text size of room a side so a letter can drop in from above.
 A letter thrown further than that is clipped at the layer's edge.
@@ -86,22 +79,20 @@ A letter thrown further than that is clipped at the layer's edge.
 **Layer ▸ Create** turns a selected text layer into something else, as a **copy directly
 above it**. The original stays a text layer, still typeable, still keyed.
 
-- **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines. They are
-  real curves taken from the font, as editable as anything drawn with the pen, and a counter
-  — the ring of an `o`, the eyes of an `8` — comes out as a hole. The copy lands on the words
-  it came from, path and all. Its masks and paint do not come across, because both are
-  measured from a corner that has moved.
+- **Shapes from text** makes a [shape layer](/use/shapes/) of the letters' outlines — real
+  curves taken from the font, as editable as anything drawn with the pen, with counters as
+  holes. The copy lands on the words it came from, path and all. Its masks and paint do not
+  come across.
 - **Points from text** makes a copy that emits a stream of points in the shape of the words,
   through [Emit from image](/effects/generate/emit-from-image/) reading the layer's own
-  picture. A word as a thinning crowd in the shape of itself, rather than a wire frame of its
-  outline.
+  picture.
 
-Both are one undo step, and both are offered only on a text layer. A line with no ink in it —
-empty, or only spaces — refuses rather than leaving an empty layer behind.
+Both are one undo step, and both are offered only on a text layer. A line with no ink in it
+— empty, or only spaces — refuses rather than leaving an empty layer behind.
 
 :::note[Not built yet]
-Converting a *styled* line, per-character layers, and creating masks from text are all the
-same outline walk with a different destination, and none of them is built.
+Converting a *styled* line, per-character layers, and creating masks from text are not
+built.
 :::
 
 ## Related

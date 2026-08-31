@@ -47,8 +47,7 @@ in the Window menu.
 
 :::note[Not built yet]
 Panels cannot be torn off into their own operating-system window. The **Pop out** row is
-drawn greyed out rather than hidden, because it is coming: it waits on multi-window support
-in the toolkit Lumit is built on.
+drawn greyed out rather than hidden, because it is coming.
 :::
 
 ## The shipped workspaces
@@ -66,33 +65,29 @@ first and then your own.
 | **Audio** | A taller Timeline with waveforms open, Viewer reduced. |
 | **Retiming** | The Easing panel taking the right-hand column outright, so it stays on screen while the selection changes under it. |
 
-Rearranging under a preset moves the panels and leaves the preset alone — a factory layout
-is not yours to overwrite. **Window ▸ Workspace ▸ Reset workspace** puts the preset you are
-on back to how it shipped, without touching any of your own.
+Rearranging under a preset moves the panels and leaves the preset alone. **Window ▸
+Workspace ▸ Reset workspace** puts the preset you are on back to how it shipped, without
+touching any of your own.
 
 ## Save your own
 
 **Window ▸ Workspace ▸ Save as new workspace…** asks for a name and writes the arrangement
-out. It joins the strip beside the presets, drawn the same way — a workspace somebody saved
-is a workspace, not a lesser kind of one.
+out. It joins the strip beside the presets, drawn the same way.
 
 The same menu carries **Rename workspace…**, **Delete workspace**, **Export workspace…** and
 **Import workspace…**, each live only on one of your own. Export writes a `.lumworkspace`
-file you can send to somebody; Import reads one. The stored file and the exported file are
-the same file, so there is nothing to keep in step.
+file you can send to somebody; Import reads one.
 
 Your workspaces are listed alphabetically, which is what makes `Alt+Shift+7` reach the same
 one on the next launch. A name is taken only once: saving a second *Grading* gives you
-*Grading 2*, and the status line says so, so an import can never overwrite an arrangement you
-made.
+*Grading 2*, and the status line says so.
 
 **A workspace of your own keeps what you drag into it.** Move a panel while one is in force
 and the change is written back to its file. Deleting one leaves the panels on screen exactly
 where they are — it forgets the name, not the layout.
 
-After a restart the strip ticks nothing. What persists is the arrangement, which you are free
-to drag about; a name ticked over a layout the panels no longer match would be a lie. Click a
-name and both the tick and the write-back come back.
+After a restart the strip ticks nothing; what persists is the arrangement. Click a name and
+both the tick and the write-back come back.
 
 :::note[Not built yet]
 **Assign shortcut to this workspace** is in the Window menu and does nothing yet. The nine
@@ -101,8 +96,8 @@ positional chords work.
 
 ## What the project keeps, and what you keep
 
-The two are deliberately separate, so a project opened on another machine looks like the same
-*edit* under somebody else's panel arrangement.
+The two are separate, so a project opened on another machine looks like the same *edit*
+under somebody else's panel arrangement.
 
 | Yours, per user | The project's |
 | --- | --- |
@@ -118,13 +113,10 @@ session.
 ## How large everything draws
 
 **Settings ▸ Appearance ▸ Interface ▸ Scale** runs from 75 % to 200 % in steps of 5, with a
-field beside the slider for typing an exact number. Use it for a dense laptop screen or a
-monitor across the room.
+field beside the slider for typing an exact number.
 
-Three more settings sit under it. **Tooltips** is on or off, with nothing in between — a
-tooltip is a name, not a lesson. **Motion** decides how much controls animate as they change.
-**Compact** tightens the row spacing throughout, which buys back a surprising amount of a
-small screen.
+Three more settings sit under it: **Tooltips**, on or off; **Motion**, how much controls
+animate as they change; and **Compact**, which tightens the row spacing throughout.
 
 ## The command palette
 

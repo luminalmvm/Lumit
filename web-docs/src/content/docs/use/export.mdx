@@ -26,10 +26,9 @@ queue** leaves the item waiting for you to start it.
 
 ## One page, and the tabs say where you are
 
-The dialogue is a single scrolling page rather than a stack of them. The tab row at the
-top — **Output**, **Time**, **Picture**, **Colour**, **Audio**, **Metadata** — follows
-whichever section you have scrolled to, and clicking a tab scrolls that section into view
-and lights it for a moment. Nothing is hidden behind a tab you did not open.
+The dialogue is a single scrolling page. The tab row at the top — **Output**, **Time**,
+**Picture**, **Colour**, **Audio**, **Metadata** — follows whichever section you have
+scrolled to, and clicking a tab scrolls that section into view.
 
 | Section | What it holds |
 | --- | --- |
@@ -41,9 +40,8 @@ and lights it for a moment. Nothing is hidden behind a tab you did not open.
 | **Audio** | Whether sound is written, at what sample rate, sample width, channel layout and bit rate. |
 | **Metadata** | Title, author, copyright, comment and created, plus any field of your own. |
 
-Every field starts at the truth rather than at a number. The frame rate starts as the
-composition's own; the span starts as the work area where one is set and the whole
-composition where it is not.
+The frame rate starts as the composition's own; the span starts as the work area where one
+is set and the whole composition where it is not.
 
 The footer states what pressing the button would produce — frames, length, size, rate, and
 an estimate of the file. When a setting is one the format cannot carry, the footer says so
@@ -51,8 +49,8 @@ there instead, and both buttons go quiet until it is fixed.
 
 ## Presets
 
-A **preset** is the whole settings payload under a name, not a stamp on three fields of
-it. Picking one fills in every section at once.
+A **preset** is the whole settings payload under a name: picking one fills in every section
+at once.
 
 | Preset | What it is |
 | --- | --- |
@@ -62,16 +60,13 @@ it. Picking one fills in every section at once.
 | **YouTube 4K60** | 3840×2160, HEVC, 45 Mb/s target. |
 | **Vertical 1080×1920p60** | H.264 for shorts and reels. |
 
-Those five ship with Lumit and cannot be changed — a project that says "YouTube 1080p60"
-has to mean the same thing on someone else's machine. **Save as…** stores the settings in
+Those five ship with Lumit and cannot be changed. **Save as…** stores the settings in
 force under a name of your own; **Edit** renames the one showing, and offers to delete it.
-Your presets live with the application rather than with the project, so they follow you
-between files.
+Your presets live with the application rather than with the project.
 
 **Set as default** remembers the preset and format showing as what the dialogue opens on
-next time. Where the export is always written is a separate question, and it lives in
-**Edit ▸ Settings ▸ Export**: ask each time, beside the project, or always the same
-folder, with a filename template.
+next time. Where exports are written lives in **Edit ▸ Settings ▸ Export**: ask each time,
+beside the project, or always the same folder, with a filename template.
 
 ## What each format can hold
 
@@ -87,9 +82,8 @@ rather than left out or left live, so a setting never quietly does nothing.
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
 | **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
 
-An image sequence writes one numbered file per frame beside the name you chose. The
-`image2` muxer it goes through has nowhere to keep container metadata, which is why that
-whole section is dead for a sequence.
+An image sequence writes one numbered file per frame beside the name you chose. A sequence
+has no container to carry metadata, which is why that whole section is dead for one.
 
 ## Audio only
 
@@ -102,14 +96,13 @@ forms; stereo, or the finished stereo mix folded down to mono once.
 
 The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
 Linear, Rec. 709, Rec. 2020 or Display P3. A container that can state its space says which
-one in its own header, and a still sequence — which states none — is offered only the
-space an untagged file is universally taken to be.
+one in its own header; a still sequence, which states none, is offered only the space an
+untagged file is taken to be.
 
 Where the project names a colour configuration, that configuration's own output spaces
 appear under a heading of their own. A file written through one of those is left
-**untagged** rather than mis-tagged, because there is no reliable set of primaries to
-state. A space the configuration cannot actually deliver is listed and dead, with the
-reason on hover, rather than left out for you to hunt for.
+**untagged** rather than mis-tagged. A space the configuration cannot actually deliver is
+listed and dead, with the reason on hover.
 
 An export asking for a space this build cannot transform to is refused rather than written
 wrongly.
@@ -119,8 +112,7 @@ wrongly.
 Two rows in the Composition group decide what the export reads rather than how it is
 encoded, and both default to the delivery answer whatever the project is set to:
 
-- **Proxies** — *Use no proxies*. A stand-in switched on to keep previews fast is not a
-  picture anybody meant to ship. See [Proxies](/use/proxies/).
+- **Proxies** — *Use no proxies*. See [Proxies](/use/proxies/).
 - **Guide layers** — *All off*.
 
 **Motion blur** and **Retime blend** in the Time section are overrides on the export's own
@@ -131,8 +123,8 @@ or force them off for a fast check. Neither touches the project.
 
 <Shot file="export-queue.png" caption="The export queue, with one composition waiting."/>
 
-Both buttons put the item in the queue, and the queue window opens on top so nothing is
-started somewhere you cannot see it. **Window ▸ Export queue** reopens it later.
+Both buttons put the item in the queue, and the queue window opens on top. **Window ▸
+Export queue** reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
 from, what it is writing, and how it is getting on — *Waiting*, the frame it is on and the
@@ -148,14 +140,12 @@ however much you change the project afterwards.
 
 ## Export does not block, and it does not cut corners
 
-Export runs apart from the interface. You can carry on editing while it writes. The status
-strip at the bottom of the window says which frame it is on and which encoder is writing
-it, and carries a Cancel that works whether the queue window is open or not.
+Export runs apart from the interface, so you can carry on editing while it writes. The
+status strip at the bottom of the window says which frame it is on, and carries a Cancel
+that works whether the queue window is open or not.
 
-[Adaptive degradation](/use/preview/) and preview resolution touch the preview alone. An
-export always runs at the quality the dialogue asks for. To go faster it may **bake**
-internally — flattening retimes, rasterising, pre-compositing — inside the export pipeline
-only. Your project is never altered by it.
+[Adaptive degradation](/use/preview/) and preview resolution touch the preview alone: an
+export always runs at the quality the dialogue asks for.
 
 :::note[Not built yet]
 ProRes and DNxHR intermediate codecs are not offered, and there is no export priority

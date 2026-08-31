@@ -35,10 +35,9 @@ which is Flat, Linear or Radial. Choose a ramp and three more rows appear: the
 **Gradient colour** it ends at, and the two points that aim it.
 
 Linear ramps along the line between the points; radial ramps outwards from the first,
-with the second on the outer edge. Switching a ramp on aims it at the shape's own box
-to start with, so there is always something to see. The points are animatable, so a
-gradient can sweep; the two colours are not, and there are two of them rather than a
-stop list.
+with the second on the outer edge. Switching a ramp on aims it at the shape's own box to
+start with. The points are animatable; the two colours are not, and there are two of them
+rather than a stop list.
 
 ## Combine two shapes
 
@@ -50,25 +49,21 @@ A run of shapes all set to something other than Apart folds top to bottom, so th
 read as the first joined to the second and that result joined to the third. The first item of
 a run has nothing in front of it and draws alone.
 
-**The run wears the first item's paint and modifiers** — it has to wear somebody's, and the
-first item is the shape you started with. The ones after it lend their path and nothing else,
-so their own fill, stroke and dash rows are left off the panel.
+**The run wears the first item's paint and modifiers.** The ones after it lend their path
+and nothing else, so their own fill, stroke and dash rows are left off the panel.
 
-A shape fills the same way after a combine as before it, so a five-pointed star drawn in one
-stroke keeps its hollow middle rather than filling in when you union something to it.
+A shape fills the same way after a combine as before it, so a five-pointed star keeps its
+hollow middle when you union something to it.
 
 ## Animate the shape itself
 
 A shape group's **Path** row carries the shape, and its stopwatch animates it. Key one path,
 move the playhead, drag a vertex, and the shape morphs between the two.
 
-Vertices are paired by **order**, not by feature. Equal point counts run one for one; where
-one path has fewer points, it is cut into as many pieces as the denser one has first, so
-nothing bulges or flattens on the way. A triangle morphing into a square pairs point one with
-point one and the flat side grows wherever that puts it — rotating a path's start point is
-the lever for making it grow somewhere else.
-
-Whether a path is open or closed is held across the morph rather than tweened.
+Vertices are paired by **order**, not by feature; where one path has fewer points, it is
+subdivided to match the denser one first. Rotating a path's start point is the lever for
+steering where new geometry grows. Whether a path is open or closed is held across the
+morph.
 
 :::note[Limitation]
 A shape row's keyframes appear as diamonds on its Timeline lane but have no curve in the
@@ -85,7 +80,7 @@ path in degrees, and 360 is one full lap of a closed shape.
 
 Key **Trim end** from 0 to 100 and the shape draws itself on. The fill is trimmed
 with the outline — a half-trimmed circle fills as a half circle — and an end below
-the start draws nothing, which is what the first frame of a write-on looks like.
+the start draws nothing.
 
 ## Dashed outlines
 
@@ -97,9 +92,7 @@ dashes on. Key the offset and the dashes march along the path.
 ## Offset paths
 
 The first row under a shape group is **Offset path**, one number in pixels. Positive
-pushes the outline outwards and the shape gets fatter; negative pulls it in. Corners
-come out round, and the shape keeps its character — unlike scaling, which changes the
-proportions of everything at once.
+pushes the outline outwards; negative pulls it in. Corners come out round.
 
 Pull the outline in by more than the shape is thick somewhere and it can cross itself,
 leaving a small loop. The fill rule hides most of that; where it shows, use a smaller
@@ -113,16 +106,14 @@ appear to describe the step: **Repeater position x** and **y**, **Repeater rotat
 **Repeater scale**, the **Repeater anchor** the turn and the scale happen about, and
 **Start opacity** and **End opacity**, which the copies fade evenly between.
 
-A position step gives a row of ticks; a rotation step about an anchor gives a clock
-face; both together with a scale under 100% give a spiral. **Copy offset** says which
-copy the original art is, so a negative number puts copies behind it. A copy is a
-scaled drawing, not a scaled path — halve the scale and the outline and the dashes
-halve with it.
+**Copy offset** says which copy the original art is, so a negative number puts copies
+behind it. A copy is a scaled drawing, not a scaled path — halve the scale and the outline
+and the dashes halve with it.
 
-The layer's box grows to hold the copies, and the layer's position stays pinned to
-that box's corner, so a repeater keyed to grow upwards or leftwards moves the art as
-it plays. Step down and to the right, or key the layer's position to match. The count
-stops at 100 copies.
+The layer's box grows to hold the copies, and the layer's position stays pinned to that
+box's corner, so a repeater keyed to grow upwards or leftwards moves the art as it plays.
+Step down and to the right, or key the layer's position to match. The count stops at 100
+copies.
 
 ## Related
 

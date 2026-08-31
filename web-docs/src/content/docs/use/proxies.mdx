@@ -21,13 +21,11 @@ a second reference with its own switch.
 Right-click a footage row in the [Project panel](/panels/project/) and choose **Make proxy**.
 
 Lumit reads every frame of the source and writes it out at half width, as a `.mov` named
-after the original with `_proxy` on the end, **beside the original file**. A proxy belongs
-to the footage rather than to the project — one item used by three projects wants one proxy,
-and a folder of them carries its proxies when it moves.
+after the original with `_proxy` on the end, **beside the original file** — so one item used
+by three projects wants one proxy, and a folder of footage carries its proxies when it moves.
 
-It runs in the background. The status line counts the frames as they are written and carries
-a Cancel that works from wherever you are; a cancelled job removes the half-written file
-rather than leaving a trap that looks finished. When it lands it attaches itself to the item.
+It runs in the background. The status line counts the frames and carries a Cancel; a
+cancelled job removes the half-written file. When it lands it attaches itself to the item.
 
 **Set proxy…** on the same menu attaches a file you already have.
 
@@ -48,29 +46,25 @@ rather than rendering them again.
 ## What does not change
 
 The **original's numbers govern**. Size, rate and duration come from the original file
-whichever one is being read, so a transform, a mask, a paint stroke or an effect parameter
-means exactly what it meant before — a proxy changes the pixel count and nothing else, in
-the same way a lower preview resolution does.
+whichever one is being read, so every transform, mask, stroke and parameter means what it
+meant before — a proxy changes the pixel count and nothing else.
 
 **Sound always comes from the original.** A proxy carries no audio that Lumit reads.
 
 ## When Lumit ignores a proxy
 
 A proxy is quietly ignored, and the original read instead, when it is missing, unreadable,
-or **disagrees about the footage** — a different frame count or a different frame rate.
-Its frame 300 would not be the original's frame 300, and putting the wrong moment on the
-timeline with nothing on screen to say so is worse than being slow.
+or **disagrees about the footage** — a different frame count or a different frame rate. Its
+frame 300 would not be the original's frame 300.
 
-A **missing original** still shows the colour-bar slate whatever proxy is attached. The
-layer is the original, and playing on from the stand-in would hide a lost file from the one
-person who needs to know about it.
+A **missing original** still shows the colour-bar slate whatever proxy is attached, so a
+lost file is never hidden by its stand-in.
 
 ## Delivery
 
 The export dialogue's **Proxies** row reads *Use no proxies*, and it opens that way whatever
-the project is switched to. Turning proxies on to work with therefore cannot quietly ship
-the small picture. If you genuinely want the stand-ins in the file — a quick review copy —
-*Use all proxies* is there.
+the project is switched to, so working with proxies on cannot quietly ship the small
+picture. For a quick review copy, *Use all proxies* is there.
 
 ## Related
 

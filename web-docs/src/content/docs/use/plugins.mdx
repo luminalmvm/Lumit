@@ -8,8 +8,7 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 Lumit is an **OpenFX host**. Plugins you have installed for other applications are found on
-start-up and offered beside the built-in effects, with the same rows, the same keyframes and
-the same [matte](/use/effects/) as anything Lumit ships.
+start-up and offered beside the built-in effects, and behave exactly like them.
 
 <Shot file="effects-presets-ofx.png" caption="A plugin's own heading in the Effects & presets panel, under the built-in categories." eager/>
 
@@ -24,13 +23,11 @@ The standard OpenFX locations, scanned once at start-up:
 
 Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too.
 
-The scan happens off to one side, so a machine with a large suite installed does not open
-any slower. Install a plugin while Lumit is running and it appears the next time you launch.
+The scan runs in the background, so a machine with a large suite installed does not open any
+slower. Install a plugin while Lumit is running and it appears the next time you launch.
 
-A plugin Lumit cannot drive is **one line in the scan report, never a dialogue**: a bundle
-that will not load, a plugin whose only mode this host does not host, a plugin whose
-parameters collide on a name. The scan carries on, and the other plugins in the folder are
-unaffected.
+A plugin Lumit cannot drive is one line in the scan report, never a dialogue. The scan
+carries on, and the other plugins in the folder are unaffected.
 
 ## Where they appear
 
@@ -43,13 +40,10 @@ difference is a provenance line at the top of its right-click menu: *From an Ope
 ## Switch one off
 
 **Switch this plugin off**, on the plugin's right-click menu in that panel. It stops being
-offered and stops rendering, and the choice is remembered between sessions — there is no
-Settings page for this, on the reasoning that the panel is where you already are when you
-wonder what a plugin is doing in your list.
+offered and stops rendering, and the choice is remembered between sessions.
 
-Switching one off takes effect immediately, with no restart. Switching one back on may need
-a restart before it is offered again, because a plugin that was off at start-up was never
-opened.
+Switching one off takes effect immediately. Switching one back on may need a restart before
+it is offered again, because a plugin that was off at start-up was never opened.
 
 Any effect already in a project using a switched-off plugin is **kept exactly as it was
 saved**, values and all, and renders as if it were not there.
@@ -71,14 +65,11 @@ happened, calmly, at the top:
 | **This build does not know this effect** | The project names something this build of Lumit has never heard of. |
 
 A plugin that wants to say something — an error, a warning, a question — gets a **notice on
-the status line**, never a modal window. A vendor's dialogue appearing in the middle of
-playback is the worst possible answer, and OpenFX already defines what a host that cannot
-ask a question should reply.
+the status line**, never a modal window.
 
 :::note[Not built yet]
-Lumit's own native plugin interface is specified and not built; OpenFX is the only way in
-today. There is no Settings page listing what is installed, and no command to rescan without
-relaunching.
+Lumit's own native plugin interface is specified and not built. There is no Settings page
+listing what is installed, and no command to rescan without relaunching.
 :::
 
 ## Related

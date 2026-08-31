@@ -20,19 +20,18 @@ out, frame by frame, how the camera is stretching the surface. Then set **Pin la
 press **Create corner pin**: a [Corner pin](/effects/distortion/corner-pin/) appears on the
 layer you named, with its four corners keyframed to sit on the surface at every frame.
 
-The corners you drag are the surface as it is on the frame you drew them on, and every other
-frame is measured against that one rather than against the frame before it. That is what
-stops the quad drifting off the phone over a long shot.
+The corners you set are the surface as it is on the frame you set them on, and every other
+frame is measured against that one rather than against the frame before it, which is what
+stops the quad drifting over a long shot.
 
 The track belongs to this effect and not to the footage, so two Planar tracks on one shot
-are two separate answers and neither overwrites the other. That is the difference from
+are two separate answers. That is the difference from
 [Camera track](/effects/utility/camera-track/), which solves one camera for a whole source
 footage item.
 
-Where the surface stops being followable — it turns away, someone walks in front, the shot
-whites out — the analysis stops there and keeps the part that worked. A quad drawn over a
-blank wall has nothing in it to follow, and is refused rather than guessed at. Mask out
-whatever crossed the surface and analyse again.
+Where the surface stops being followable, the analysis stops there and keeps the part that
+worked. A quad drawn over a blank wall has nothing to follow, and is refused rather than
+guessed at. Mask out whatever crossed the surface and analyse again.
 
 You can keep working while an analysis runs.
 

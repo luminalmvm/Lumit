@@ -7,8 +7,8 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The Project panel is the shelf the project's things live on: everything imported, every
-composition, and everything else made outside a timeline.
+The Project panel holds everything imported, every composition, and everything else made
+outside a timeline.
 
 <Shot file="project-panel.png" caption="The Project panel, holding a folder of compositions, sound, footage with a proxy attached, and a still." eager/>
 
@@ -39,15 +39,13 @@ channels; a folder reads how many items it holds.
   one image-sequence item.
 - **Double-click empty space** in the tree to open the import dialogue.
 
-A `.lum` project, or an After Effects `.aep` or `.zip`, is *not* opened by dropping it.
-Opening a project throws away the one on screen and importing an After Effects project is a
-long conversion with a report at the end; neither should happen because something landed on
-a panel. The status line names the menu road instead.
+A `.lum` project, or an After Effects `.aep` or `.zip`, is *not* opened by dropping it —
+the status line names the menu road instead.
 
 ## Clicking and opening
 
-A click selects the moment the button goes down. A click on the row that is *already* the
-lone selection **opens** it — so a double-click is "select, then open" in one motion.
+A click selects. A click on the row that is *already* the lone selection **opens** it — so
+a double-click is "select, then open" in one motion.
 
 | Item | What opening does |
 | --- | --- |
@@ -69,8 +67,7 @@ rather than adding a dot beside it, so the tree stays a tight list of names.
 
 **A folder hands its colour down.** A row with no tag of its own wears the colour of the
 nearest tagged folder above it, and only an item with neither falls back to the plain
-per-type tint. An explicit tag always wins over an inherited one, which is what makes
-tagging one item inside a tagged folder mean something.
+per-type tint. An explicit tag always wins over an inherited one.
 
 The dots beside the search well filter by colour: tap one to narrow the tree to the items
 wearing it, tap the neutral dot — or the held colour again — to show everything.
