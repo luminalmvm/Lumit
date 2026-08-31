@@ -14245,6 +14245,56 @@ engine will build is some eighteen million multiplications. The design already n
 two upgrades — do the warp on the graphics card, and store the big matrix sparsely — and
 these measurements are what says when they are worth doing.
 
+### Putting a pin in, and the wireframe you aim at
+
+Picking up one of the four Puppet tools puts a thin wireframe over the selected layer: that
+is the net. Click on it and a pin goes in; drag the pin and that spot of the picture comes
+with it. Delete takes out whichever pin is under the pointer, and every one of those is one
+step of undo — including the very first pin, which quietly creates the whole puppet along
+with itself, so one press of `Ctrl+Z` puts the layer back to having no puppet at all.
+
+**The wireframe is not a drawing of the net; it is the net.** Nothing about the triangles is
+in the project file or crosses into the interface as part of the document — the design is
+deliberate about that, so a better tracer later changes nothing anybody saved. So instead of
+working the net out a second time on the interface's side, the render *leaves the one it just
+used* in a small pigeonhole, one per layer, and the interface reads it out of there. Two
+things follow. The wireframe can never disagree with the pixels, because it is the same net.
+And the interface only has to ask for it when the layer, the frame or the document changes —
+so moving the pointer over the picture, which happens hundreds of times a second, asks for
+nothing at all. That last part is a standing rule here rather than an optimisation: work done
+per movement of the mouse is what makes an application feel heavy.
+
+There is a chicken and an egg in that arrangement, and it is worth naming because the fix
+looks odd otherwise. The net only exists for a layer that has a puppet, and a layer only gets
+a puppet when the first pin goes in — but you cannot aim the first pin without a net. So
+picking up a puppet tool *asks* for one: the render is told "this layer wants a net, at this
+fineness", and the next frame it draws, it traces one from the picture it already had in hand
+and leaves it in the pigeonhole unbent. It costs no extra drawing, because those are the
+pixels the layer was going to make anyway. Put the tool away and the request is withdrawn.
+
+**Two refusals, and neither is a dialogue box.** Aim at a layer with nothing solid on it at
+that moment and there is no net to hold a pin, so the click is refused with a line in the
+status area and no puppet is created. Aim outside the net — past the edge of the character —
+and the click is refused the same way, because a pin floating in space would hold on to
+nothing and could never be got rid of by aiming at it. Both refusals are the engine's answer
+rather than the interface's guess, which matters because the interface can only see the net
+where it is *now*, bent by the pins, and the engine is the thing that knows where that spot
+sits on the unbent net. That translation is the whole of what happens when you click: find
+the triangle under the pointer in the bent net, note where in that triangle you were, and
+store the pin at the matching place in the unbent one.
+
+The pins themselves show as dots on the picture, with a small mark for the three kinds that
+are not plain position pins, and a faint circle while one is being dragged to show how far it
+reaches. A pin drawn hollow rather than filled is **inert**: the picture changed underneath
+it, the net was re-traced, and that pin's spot is no longer on it. It is not deleted — it
+comes back by itself if the shape grows back — and drawing it hollow is how you find out
+rather than wondering why one pin stopped working.
+
+In the Timeline the puppet appears as a heading under the layer, exactly like the masks, with
+a row per pin and a row per number under each pin. There is deliberately no puppet timeline
+and no special animation editor: a pin is an ordinary animated property, so it keys, eases and
+graphs with everything else.
+
 ## 52. Layer styles, or the wardrobe a layer wears, in plain terms
 
 Photoshop has a trick every title designer leans on: right-click a layer, add a
@@ -14526,3 +14576,56 @@ use, Lumit refuses the job rather than falling back to the slow path it keeps fo
 That path takes seconds per frame pair, so a shot would look like it had hung, and mixing the
 two would mean the same strokes produced different mattes on different runs — which would
 quietly break the promise that deleting the cache costs nothing.
+
+## 56. Scribbling a subject out, in plain terms
+
+Sections 53 to 55 are about the arithmetic and where its answers are kept. This one is about
+the part you touch: the two tools on the strip, what a drag on the picture actually does, and
+why one number has to come back from the engine before a scribble can be stored at all.
+
+**Two tools, one key.** `Alt+W` arms the **Roto brush**; pressing it again steps to **Refine
+edge** and again comes back. That is the same walk every grouped tool on the strip does. With
+one of them in hand the pointer becomes a ring the size of the scribble it will leave, and the
+strip grows one setting beside it: **Size**. There is no colour to choose, because a roto
+scribble does not put colour on the picture — it makes a *claim* about the pixels it covers.
+
+**Three claims.** Dragging with the Roto brush says *this is the subject*. Holding `Alt` while
+you drag says *this is not* — the background. Dragging with Refine edge says *let the edge be
+soft here*, which is what hair, motion blur and smoke need. Green for the subject, red for the
+background, the accent for refine; those are the colours every rotoscoping tool has used since
+the technique had a name, and they come out of the theme rather than being written into the
+drawing code.
+
+**Where a scribble is stored, and why it is not where you drew it.** The picture on screen has
+been through a lot on its way to your eyes: the layer has a position, an anchor, a scale and a
+rotation, and the Viewer has fitted the whole composition into a panel at whatever
+magnification you are at. A scribble is stored at the far end of all that — in the *file's own
+pixels*, as if you had drawn it on the untouched footage. So the cut-out survives moving the
+layer, scaling it, rotating it, switching to a coarser preview, and being used in a second
+composition entirely. Every one of those would break a scribble stored where the pointer was.
+
+**And one number has to come from the engine.** A scribble also has to say *which frame* of the
+file it was drawn on — again the file's own numbering, not the composition's. The two are often
+the same and sometimes are not: a layer can start part-way along the timeline, and it can be
+retimed, which is a curve saying which moment of the file each moment of the composition shows.
+Following that curve is arithmetic the frontend cannot do, so it simply asks: *at this
+composition frame, which frame of the file is this layer showing?* Getting that wrong would be
+the worst kind of wrong — silent. The scribble would land on a frame nobody had looked at, the
+matte would come out mysteriously unlike the picture, and nothing would say why.
+
+**What is drawn over the picture.** This frame's scribbles, at the width they were made, faded
+— they are what the answer was made *from*, not the answer, and they must not shout over it.
+And in the Roto brush's **Boundary** view, the edge of the matte itself: a line of dots tracing
+where the cut-out stops. That comes from the engine too, but not as a picture — a full matte is
+two megabytes a frame, and it is already being read by the part of the program that draws the
+layer. What crosses is just the edge: a few thousand coordinates, thinned to a fixed ceiling so
+a busy matte draws a sparser outline rather than a heavier one. It is asked for once when the
+frame changes, and not again however much the pointer moves.
+
+**And the card.** The Roto brush's own panel carries Propagate and Cancel, the settings, a thin
+two-tone bar saying how much of the shot the matte reaches so far, a line of words underneath
+saying what is happening, and the **base frame** — the frame the propagation works outward from
+— with one button that moves it to wherever the playhead is. While a propagation is running the
+line refreshes twice a second, and the moment it stops, so does the refreshing: a button press
+changes nothing in the project, so there is no edit for the panel to notice, and asking twice a
+second forever would be asking a question whose answer had stopped changing.

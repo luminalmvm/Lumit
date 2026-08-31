@@ -1,8 +1,8 @@
 # Roto brush and Refine edge: flow-propagated segmentation (K-705)
 
-**RB1 is built (K-708: `crates/lumit-roto`); RB2 and RB3 are design until they are.**
+**Built: RB1 (K-708, `crates/lumit-roto`), RB2 (K-710, K-713, K-714) and RB3 (K-717).**
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1 puts the Roto pair on the
-tool strip (Alt+W, disabled since K-228); [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
+tool strip (Alt+W, armed since K-717) and §2.3.7 the tools themselves; [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
 rotoscoping; this note is the binding *how*: the algorithms (pinned, with their ceilings
 named), the stroke model, the propagation and correction loop, the sidecar cache and its
 invalidation rules, determinism, budgets, refusals, the test plan, and the ordered work
@@ -355,12 +355,17 @@ frame-key stamp, the matte applied in `build.rs`; the bridge surface (strokes do
 Propagate/Cancel actions, span and progress up) with its docs/17 section. Engine labels
 into `engine_labels.dart` + arb, GUIDE.md's plain-English section, tests 3–8.
 
-**RB3 — the tools, the overlay and the panel.** Arm `tool.roto` (`ToolMode.ready` — the
-strip, flyout and Alt+W chord all wake together, K-228's gate); the brush and refine-edge
-gestures on the viewer writing source-pixel strokes through the comp→layer chain; the
-overlay (strokes, matte and boundary views, the K-540-style span bar); the effect panel's
-rows and status line; arb keys. Test 9's Flutter halves: gestures land as document
-strokes, the overlay draws from the store's answer once per frame and not per rebuild.
+**RB3 — the tools, the overlay and the panel. Built (K-717).** `tool.roto` armed
+(`ToolMode.ready` — the strip, flyout and Alt+W chord all wake together, K-228's gate); the
+brush and refine-edge gestures on the viewer writing source-pixel strokes through the
+comp→layer chain, `Alt` claiming background, samples thinned at paint's two screen pixels and
+pressures ignored; the overlay (this frame's strokes in theme colours, and the Boundary view's
+matte edge); the effect card's K-540 span bar, status line and base-frame row; arb keys.
+**Two bridge calls were owed and landed with it**, because the frontend could answer neither:
+`roto_source_frame` (the decode planner's own comp→source frame arithmetic — a Retime is a
+property curve) and `roto_boundary` (the matte's outline, thinned to a fixed cap; the matte
+itself still never crosses). §10 item 9's Flutter halves are in
+`flutter_ui/test/frb/roto_tools_frb_test.dart`.
 
 ## 12. Traps, collected
 

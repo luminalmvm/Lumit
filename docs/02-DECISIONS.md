@@ -22608,3 +22608,115 @@ two trade determinism for speed and the third would quietly change what a matte 
 matte fetch, bounded at 1 ms because it sits inside the frame walk, and it is asserted
 (`the_store_answers_one_frame_quickly_and_forgets_on_clear`). Propagation is a background job
 the user watches a bar for; being slow costs patience, and the cache means it is paid once.
+
+## K-716 — PU3: the four Puppet tools armed, and the mesh the render already built is what the overlay draws
+
+**Status:** DECIDED (supersedes K-228's listing of the Puppet pins among the disabled tools, and
+only that; K-228's rule itself stands).
+
+The four Puppet pins arm, place, drag, key and delete
+([impl/puppet.md](impl/puppet.md) §5, [07-UI-SPEC.md](07-UI-SPEC.md) §1.7). Density and
+Expansion sit in the tool options area, session state like every other option §1.7 lists, and
+a change with a puppeted layer selected re-meshes that layer — one way: the block takes what
+the strip says, and the strip never reads a block back. A pin is placed by a click, moved by a
+drag through the ordinary property rules (stopwatch on, a keyframe lands), removed by `Delete`
+over it, and every one of those is one op and one undo step. The Timeline grows a **Puppet**
+group under the layer with a row per pin and a row per animatable number, renamed inline as a
+mask is.
+
+**The overlay's mesh is the render's own, published rather than recomputed.** No triangle is in
+the document or in a project file (§1.4, and the forward-compatibility pin behind it), so there
+was a choice between working the mesh out a second time on the frontend's side and handing over
+the one that just drew the pixels. The second: `lumit_render::puppet` is a pigeonhole per layer
+that `warp_puppet` fills with the rest mesh, the deformed vertices and the inert pin ids, and
+`LayerReference::puppet_ghost` reads it. Three consequences, all wanted. The wireframe cannot
+disagree with the picture, because it is the same mesh. Nothing is computed for the overlay
+that was not computed for the frame. And the frontend holds it against the layer, the engine's
+frame counter and the document revision, exactly as it holds an animated mask's path — so a
+hover crosses the bridge zero times (K-184, K-681).
+
+**Arming a tool arms a mesh preview**, which the plan did not name and the build needed: a mesh
+exists only for a layer that has a block, a block exists only once the first pin is placed, and
+the first pin can only be aimed at a mesh. `lumit_render::puppet::arm` names one layer and the
+density and expansion to build at; the seam then traces the mesh from the alpha it already has
+in hand at that frame and publishes it unwarped. No second render — those are the pixels the
+layer was going to draw regardless — and the request is withdrawn when the tool is put away.
+
+**The two refusals of §6 are the bridge's, as values.** `add_puppet_pin_at` looks the click up
+in the *deformed* mesh, which is what the user aimed at, and carries it back to rest through the
+same barycentric coordinates; no ghost answers `PuppetNoMesh`, a point outside it answers
+`PuppetOutsideMesh`. Neither makes a block, so a refused click leaves nothing to undo. The
+first pin and the block it creates commit together as one `SetLayerPuppet`.
+
+**Two ceilings taken, both marked with their triggers.** A pin placed on an already-deformed
+puppet is stored at rest and so pulls that spot back rather than holding it where it was
+clicked — the upgrade is two keys on x/y, and the trigger is a pin added part-way through an
+animation making the puppet jump. And a pin drag deforms the picture on release rather than
+under the pointer: there is no puppet-preview render call beside the transform one the gizmo
+drags through, and the trigger is drags reading as blind on a real character.
+
+**Also fixed in passing, because a test and a paragraph had gone stale:** §1.7's "there is no
+snapping switch" was K-230, and K-689 put the magnet back with the snapping it governs. The
+paragraph and `tool_bar_frb_test`'s assertion now say what the strip does.
+
+## K-717 — RB3: the Roto pair armed, and the two numbers a scribble cannot work out for itself
+
+**Status:** DECIDED (2026-08-31). Implements [docs/impl/roto.md](impl/roto.md) §6 and §11 RB3,
+docs/07 §1.7 and the new §2.3.7. Builds on K-708 (the engine crate), K-710 and K-713 (the
+document, the job, the cache and the bridge).
+
+**`ToolMode.ready` is the whole of arming a tool** (K-228's gate read from the other side). The
+Roto pair's two flags flip and the strip button, the flyout row and the `Alt+W` chord all wake
+together, because there is one flag and three ways in. `builtMembersOf` is what the chord walks,
+so the cycle is Roto brush → Refine edge → Roto brush without ever opening the flyout. With
+puppet armed by K-716 alongside, **no group on the strip is wholly unbuilt any more**, and the
+test that used to stand a group in for that case now asserts the rule where it lives.
+
+**`Alt` is the background claim, not a third tool.** After Effects' modifier, and for its
+reason: the subject and the background are claimed in one continuous act of scribbling, and
+reaching for another tool between them would break the rhythm the correction loop depends on.
+Refine edge stays a tool because it is a different *kind* of claim — a band, not a side.
+
+**A stroke is thinned exactly as a paint stroke is** (two screen pixels, `thinStroke` reused
+rather than re-derived) and **carries no pressure**. A roto stroke says what a region *is*, and
+how hard the pen was pressed says nothing about that; the paint brush's own pressure setting is
+about the width of a mark, which this has no equivalent of.
+
+**Two bridge calls were owed and are built here**, because the frontend could not have answered
+either honestly:
+
+- `roto_source_frame(layer, frame)`. A stroke's frame is a **source** frame (K-248), and between
+  the composition's ruler and the file's sit the layer's start offset and its Retime map — a
+  property curve Dart cannot evaluate. The call runs the decode planner's own arithmetic
+  (`layer_time` → `source_time_at` → `frame_pick`) so the interface and the render cannot
+  disagree about which frame is on screen. Guessing the composition frame would have been silent
+  and invisible: the scribble would seed a frame nobody looked at.
+- `roto_boundary(effect, frame)`. The Roto brush's **Boundary** view keeps the picture and hands
+  the edge to the overlay (`roto_brush::VIEW_OPTIONS` says so); the matte itself deliberately
+  never crosses the seam (docs/17), being two megabytes a frame the render path already reads.
+  Its **outline** does — edge pixels in source coordinates, counted before anything is
+  allocated and thinned to a fixed 12 000-point cap, so the answer never grows with the picture
+  and a busy matte draws a sparser outline rather than half an outline.
+
+**A layer with no Roto brush is told, not helped.** Scribbling on one adds nothing behind the
+user's back: `add_effect` plus the stroke would be two ops and so two undo steps for one
+gesture, and one gesture is one undo step everywhere else in the Viewer. The clone stamp's
+"set a source first" is the same shape of refusal.
+
+**The overlay's three reads are held against the frame, the document revision and the
+propagation counter**, which are the only three things that move what is drawn — so a pointer
+travelling across the picture crosses the bridge exactly zero times (K-681), and a test counts
+it: twelve rebuilds ask nothing, a new frame asks once.
+
+**The card is the two tracking cards' shape**, deliberately: the K-540 two-weight span bar
+(`TrackSpanBar` reused), a status line whose words are Dart's from an enum with no English in
+it (K-303), and polling twice a second **only while the propagation is moving** — a press moves
+no document revision, so there is nothing to refresh against (tracking.md §5c deviations 1–2).
+Its one control is the base frame, which is neither a parameter nor a stroke: it is *which
+frame* the strokes are read from, and moving it retires the run.
+
+**One ceiling taken, with its trigger.** The boundary is a full-plane scan per frame change
+emitting edge pixels rather than a traced contour, so a hairline edge draws as dots rather than
+as a line. The upgrade is a contour traced once and filed with the run; the trigger is the
+boundary reading as dotted at ordinary magnification, or a scrub with the overlay up dropping
+frames.

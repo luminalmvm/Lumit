@@ -194,6 +194,16 @@ enum ToolOptions {
   /// The brush: the colour it lays down, and its size, hardness and opacity
   /// (K-227). All four live — painting is built.
   paint,
+
+  /// The puppet mesh: **Density** and **Expansion** (K-225, K-704). No fill —
+  /// a pin lays no colour down, it takes hold of pixels that are already there.
+  puppet,
+
+  /// The roto scribble: **Size**, and nothing else (K-717). No fill and no
+  /// hardness — a roto stroke lays no colour down and has no edge to soften; it
+  /// says "this is the subject" over the pixels it covers, and how wide it
+  /// covers is the whole of what there is to set.
+  roto,
 }
 
 /// The options [tool] shows on the toolbar.
@@ -201,6 +211,8 @@ ToolOptions toolOptionsFor(ToolMode tool) => switch (tool.group) {
       ToolGroup.type => ToolOptions.type,
       ToolGroup.paint => ToolOptions.paint,
       ToolGroup.shape || ToolGroup.pen => ToolOptions.shape,
+      ToolGroup.puppet => ToolOptions.puppet,
+      ToolGroup.roto => ToolOptions.roto,
       _ => ToolOptions.none,
     };
 
@@ -214,6 +226,49 @@ class _ToolOptions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // The scribble's width, on its own, for the mesh's reason: a roto stroke
+    // lays no colour down either.
+    if (shows == ToolOptions.roto) {
+      return Row(
+        children: [
+          _Number(
+            label: l10n.toolSize,
+            tip: l10n.tipRotoSize,
+            value: tools.rotoSize,
+            min: 1,
+            max: 2000,
+            suffix: ' px',
+            onChanged: (v) => tools.rotoSize = v,
+          ),
+        ],
+      );
+    }
+    // The mesh, on its own: a pin lays no colour down, so the fill swatch every
+    // other drawing tool opens with would be a control governing nothing.
+    if (shows == ToolOptions.puppet) {
+      return Row(
+        children: [
+          _Number(
+            label: l10n.toolPuppetDensity,
+            tip: l10n.tipPuppetDensity,
+            value: tools.puppetDensity,
+            min: 2,
+            max: 500,
+            suffix: ' px',
+            onChanged: (v) => tools.puppetDensity = v,
+          ),
+          _Number(
+            label: l10n.toolPuppetExpansion,
+            tip: l10n.tipPuppetExpansion,
+            value: tools.puppetExpansion,
+            min: 0,
+            max: 100,
+            suffix: ' px',
+            onChanged: (v) => tools.puppetExpansion = v,
+          ),
+        ],
+      );
+    }
     return Row(
       children: [
         _Swatch(
@@ -771,7 +826,8 @@ MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
       // this is the fallback underneath, and the nearest system pointer to it.
       _ => tool.group == ToolGroup.shape ||
               tool.group == ToolGroup.pen ||
-              tool.group == ToolGroup.paint
+              tool.group == ToolGroup.paint ||
+              tool.group == ToolGroup.roto
           ? SystemMouseCursors.precise
           : SystemMouseCursors.basic,
     };

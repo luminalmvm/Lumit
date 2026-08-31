@@ -64,6 +64,7 @@ import 'graph_panel.dart' show drivenParamsOf;
 import 'camera_track_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
+import 'roto_display_frb.dart';
 import 'shader_editor.dart';
 import 'fx_section.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
@@ -2103,6 +2104,18 @@ Widget? customEffectDisplay(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+        ),
+      // The Roto brush's is a status too (K-717), with one control in it: the
+      // base frame the propagation runs outward from, which is the one thing
+      // about a matte that is neither a parameter nor a stroke — it is *which
+      // frame* the strokes are read from, and moving it retires the run.
+      'roto_brush' => RotoDisplayFrb(
+          key: ValueKey<String>('fx-roto-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          playheadFrame: playheadFrame,
           onChanged: onChanged,
           pressed: pressed,
         ),

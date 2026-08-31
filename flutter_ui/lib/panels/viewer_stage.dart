@@ -34,8 +34,10 @@ import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
 import 'viewer_prefix_chip.dart';
+import 'viewer_puppet.dart';
 import 'viewer_region.dart';
 import 'viewer_rotate.dart';
+import 'viewer_roto.dart';
 import 'viewer_rulers.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
@@ -141,6 +143,33 @@ class ViewerStage extends StatelessWidget {
           layer: entry.layer,
           selecting: picked.contains(entry.layer.internallayerId),
         );
+      }
+    }
+    return null;
+  }
+
+  /// The Roto brush on the **selected** layer, and which picture it is drawing
+  /// (K-717). Null when the selection carries none, which is what makes the
+  /// Roto tools say so rather than swallowing a scribble.
+  ///
+  /// From the read model (K-184), which already carries every layer's every
+  /// effect with its values — so the overlay's target costs no bridge call, and
+  /// the first enabled instance wins because a second Roto brush on one layer is
+  /// two mattes and the scribble has to belong to one of them.
+  RotoTarget? _roto() {
+    final picked = uiState.selectedLayerIds;
+    for (final entry in uiState.model.heldLayers) {
+      if (!picked.contains(entry.layer.internallayerId)) continue;
+      for (final fx in entry.info.effects) {
+        if (fx.name != 'roto_brush' || !fx.enabled) continue;
+        var view = 0;
+        for (final v in fx.values) {
+          if (v.id != 'view') continue;
+          if (v.value case BridgeEffectValue_Choice(:final field0)) {
+            view = field0;
+          }
+        }
+        return (effect: fx.id, view: view);
       }
     }
     return null;
@@ -254,6 +283,9 @@ class ViewerStage extends StatelessWidget {
             shapeContentsRect(entry.info.shapeContents, t: playheadSeconds)
                     ?.topLeft ??
                 Offset.zero,
+        // The pins the puppet tools draw and aim at (K-704), from the same read
+        // as everything else on the box.
+        puppet: entry.info.puppet,
       ));
     }
     return out;
@@ -481,6 +513,47 @@ class ViewerStage extends StatelessWidget {
                         viewScale: compSize.width == 0
                             ? 1.0
                             : fitted.width / compSize.width,
+                        onChanged: onChanged,
+                      ),
+                      // The Roto tools: a scribble that claims what the
+                      // subject is (and, with `Alt`, what it is not), the
+                      // strokes already made, and — in the Boundary view — the
+                      // propagated matte's edge (K-717).
+                      //
+                      // Under the same builder as the rest, and following the
+                      // playhead through its own listenable: the scribbles are
+                      // filed against a *source* frame, so what is drawn has to
+                      // change when the frame does, and the playhead moving
+                      // does not rebuild this panel by itself.
+                      ValueListenableBuilder<int>(
+                        valueListenable: uiState.playheadFrame,
+                        builder: (context, frame, _) => ViewerRotoLayer(
+                          active:
+                              uiState.tools.tool.group == ToolGroup.roto,
+                          tool: uiState.tools.tool,
+                          state: state,
+                          uiState: uiState,
+                          boxes: boxes,
+                          target: _roto(),
+                          viewScale: compSize.width == 0
+                              ? 1.0
+                              : fitted.width / compSize.width,
+                          playheadFrame: frame,
+                          revision: uiState.model.heldRevision,
+                          generation: uiState.solveLanded.value,
+                          onChanged: onChanged,
+                        ),
+                      ),
+                      // The Puppet tools: the mesh ghost over the selected
+                      // layer, a click that drives a pin into it and a drag
+                      // that takes that spot of the picture with it (K-704).
+                      ViewerPuppetLayer(
+                        active: uiState.tools.tool.group == ToolGroup.puppet,
+                        tool: uiState.tools.tool,
+                        state: state,
+                        uiState: uiState,
+                        comp: comp,
+                        boxes: boxes,
                         onChanged: onChanged,
                       ),
                       // The Anchor point tool: its own pointer, and a drag

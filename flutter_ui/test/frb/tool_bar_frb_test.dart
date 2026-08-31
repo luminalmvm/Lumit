@@ -126,9 +126,19 @@ void main() {
     // The switch that used to sit here governed nothing (K-230), so it is not
     // on the strip. This is the guard against it drifting back on before there
     // is snapping for it to govern.
-    testWidgets('there is no snapping switch', (tester) async {
-      await mount(tester);
-      expect(find.byKey(const ValueKey('tool-snapping')), findsNothing);
+    /// **The magnet is back** (K-689, superseding K-230's removal of it): it
+    /// was taken off the strip when nothing in the application read it, and it
+    /// returned with the snapping it governs — the Viewer's layer drags reach
+    /// for the guides and the grid through exactly this switch.
+    testWidgets('the snapping switch is on the strip', (tester) async {
+      final p = await mount(tester);
+      final magnet = find.byKey(const ValueKey('tool-snapping'));
+      expect(magnet, findsOneWidget);
+
+      expect(p.uiState.tools.snapping, isTrue, reason: 'on by default');
+      await tester.tap(magnet);
+      await tester.pump();
+      expect(p.uiState.tools.snapping, isFalse);
     });
 
     /// **A button you cannot read is a button you cannot use** (K-236). The
@@ -349,34 +359,55 @@ void main() {
       expect(find.text('Fill'), findsNothing);
     });
 
-    /// A group with nothing built in it is on the strip and cannot be pressed
-    /// (K-228): the gap should be visible rather than remembered.
-    testWidgets('a group with nothing built cannot be armed', (tester) async {
+    /// The Roto pair arms together (K-717, K-228's gate read from the other
+    /// side): the strip button, the flyout row and the chord all wake off one
+    /// flag, so pressing the button arms the brush and the flyout offers Refine
+    /// edge beside it.
+    testWidgets('the roto group arms and opens its flyout', (tester) async {
       final p = await mount(tester);
 
       final roto = find.byKey(const ValueKey('tool-roto'));
       await tester.ensureVisible(roto);
       await tester.pumpAndSettle();
-      await tester.tap(roto);
-      await tester.pump();
-      expect(p.uiState.tools.tool, ToolMode.select,
-          reason: 'the Roto tools have no engine behind them yet');
+
+      // The flyout first, while the strip is still laid out as it was: arming
+      // a roto tool brings its Size option onto the bar, which moves the
+      // buttons.
+      await tester.tapAt(
+        tester.getCenter(roto),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      final refine = find.byKey(const ValueKey('tool-flyout-refineEdge'));
+      expect(refine, findsOneWidget, reason: 'both are built (K-717)');
+
+      await tester.tap(refine);
+      await tester.pumpAndSettle();
+      expect(p.uiState.tools.tool, ToolMode.refineEdge);
+    });
+
+    /// The other side of the same rule (K-704): the four Puppet pins have an
+    /// engine behind them now, so the button arms and the flyout lists them.
+    testWidgets('the puppet group arms and opens its flyout', (tester) async {
+      final p = await mount(tester);
 
       final puppet = find.byKey(const ValueKey('tool-puppet'));
       await tester.ensureVisible(puppet);
       await tester.pumpAndSettle();
-      await tester.tap(puppet);
-      await tester.pump();
-      expect(p.uiState.tools.tool, ToolMode.select);
 
-      // And the button offers no flyout to get in by the side door.
+      // The flyout first, while the strip is still laid out as it was: arming
+      // a puppet tool brings its options onto the bar, which moves the buttons.
       await tester.tapAt(
         tester.getCenter(puppet),
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('tool-flyout-puppetPosition')),
-          findsNothing);
+      final bend = find.byKey(const ValueKey('tool-flyout-puppetBend'));
+      expect(bend, findsOneWidget, reason: 'all four are built (K-704)');
+
+      await tester.tap(bend);
+      await tester.pumpAndSettle();
+      expect(p.uiState.tools.tool, ToolMode.puppetBend);
     });
 
     testWidgets('an unbuilt member of a mixed group is listed but inert',

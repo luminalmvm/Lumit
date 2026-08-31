@@ -189,10 +189,11 @@ is kept *across* the row, which is what the strip is read and aimed by, and give
 page: the strip runs the full width of the window, so a 44px band of mostly empty chrome is
 height taken from the panels underneath for nothing.
 
-**There is no snapping switch** (K-230). One was here, and nothing in the application read it.
-A toggle that governs nothing is worse than a missing one — it makes the reader doubt what
-snapping *is* here rather than what it is set to — so it returns with the snapping it governs
-(§4.5).
+**The snapping switch is here** (K-689, superseding K-230's removal of it). One was here, and
+nothing in the application read it; a toggle that governs nothing is worse than a missing one,
+so it went. It came back with the snapping it governs (§4.5): the Viewer's layer drags reach
+for the guides and the grid through this switch, `Ctrl` suspends it for the length of a gesture,
+and the Viewer's own guides menu shows it under a second name.
 
 **Tool options** (K-225). The armed tool's own settings, where After Effects puts them, and
 empty for the tools that draw nothing:
@@ -202,6 +203,8 @@ empty for the tools that draw nothing:
 | Type | **Fill** swatch, **size** in pixels |
 | Brush, Clone stamp, Eraser | **Fill** swatch, brush **size**, **hardness**, **opacity** (K-227) |
 | Shape, Pen | **Fill** swatch, **Stroke** swatch, **stroke width** in pixels — all live (K-237) |
+| The four Puppet pins | **Density** and **Expansion** of the mesh, in pixels (K-704, K-716) — no fill: a pin lays no colour down |
+| Roto brush, Refine edge | **Size** in source pixels (K-717) — no fill and no hardness: a scribble lays no colour down and has no edge to soften, it says *this is the subject* over the pixels it covers |
 
 Every option is session state, like the armed tool itself, and every one is live: fill and size
 say what the next thing drawn is made with, and the stroke pair outlines a new shape layer's art
@@ -235,12 +238,14 @@ say what the next thing drawn is made with, and the stroke pair outlines a new s
   nothing reads as a broken application; shown, disabled and labelled is the honest version of
   showing it.
 
-**Implementation status (2026-07-31).** The strip, the groups, the flyouts, the shortcuts,
+**Implementation status (2026-08-31).** The strip, the groups, the flyouts, the shortcuts,
 the tool options area and the workspace strip are built. Built tools:
 Selection (§2.3), Hand, Zoom (§2.2), Rotation, Anchor point, Razor (§4.4), the five shape
-tools and the Pen (§2.3.1), Horizontal type (§2.3.2), the three painting tools (§2.3.4) and the
-three camera tools (§2.3.5). **Disabled** (K-228 — shown, not armable): vertical type, the Pen's
-four editing siblings, the Roto tools and the Puppet pins. Each tool's behaviour is tracked
+tools and the Pen (§2.3.1), Horizontal type (§2.3.2), the three painting tools (§2.3.4), the
+four Puppet pins (K-704, K-716, [docs/impl/puppet.md](impl/puppet.md)), the Roto pair
+(§2.3.7, K-717, [docs/impl/roto.md](impl/roto.md)) and the
+three camera tools (§2.3.5). **Disabled** (K-228 — shown, not armable): vertical type and the
+Pen's four editing siblings. Each tool's behaviour is tracked
 separately in [TODO.md](TODO.md).
 
 ### 1.8 The menu bar (K-244)
@@ -938,6 +943,48 @@ only: no tool gains a gesture on a button it did not already handle.
   something to clear.
 - Not built: hiding points behind the shot's geometry, a point count or filter, deleting a
   point from the cloud, and setting the ground plane and origin from a selection.
+
+### 2.3.7 The Roto tools (K-717)
+
+The pair the strip already carries under `Alt+W` — **Roto brush** and **Refine edge** — cut a
+subject out of a shot, one scribble at a time
+([docs/impl/roto.md](impl/roto.md) §6 is the binding *how*).
+
+- With a Roto tool armed, a drag over the picture leaves a **stroke on the selected layer's Roto
+  brush**. A plain drag claims **foreground** — this is the subject; **`Alt`** held claims
+  **background** — this is not. **Refine edge** claims the band where the edge is allowed to be
+  soft. `Alt` rather than a third tool because the two claims are made in one continuous act of
+  scribbling, and it is After Effects' own modifier.
+- **A stroke is stored in source raster pixels** (K-248), carried there through the whole
+  comp→layer chain, and against the frame of the **file** on screen — which the engine answers,
+  because a layer's start offset and its Retime map both live in the document. A stroke filed
+  against a composition frame would seed a frame of a retimed layer that nobody looked at.
+- Samples are **thinned at two screen pixels**, exactly as a paint stroke's are (§2.3.4): a
+  stroke is a record of a gesture, not a designed shape. **Pressure is ignored** — a roto stroke
+  says what a region *is*, and how hard the pen was pressed says nothing about that.
+- **The first stroke sets the base frame**, the frame propagation runs outward from; a stroke on
+  any other frame is a **correction** and leaves the base where it is.
+- One drag is **one stroke and one undo step**, committed on release through the ordinary
+  whole-stack effect commit. `Escape` abandons a scribble in flight.
+- With no layer selected, with a selected layer that carries no Roto brush, or with media that
+  will not read, the tool MUST **say so** rather than swallowing the press. It MUST NOT add the
+  effect behind the user's back: that would make one gesture two undo steps.
+- **The overlay** draws this frame's strokes in theme colours — the subject in the success role,
+  the background in the error one, refine in the accent — at the width they were made, faded, so
+  they read as what the answer was made *from* rather than as the answer.
+- The Roto brush's **View** row chooses the picture: *Result* and *Matte* are drawn by the
+  effect where it stands in the stack; **Boundary** keeps the picture and the **overlay** draws
+  the matte's edge over it, in theme colours with a halo so it is legible over a light subject
+  and a dark one alike. The edge is read from the propagated run **once per frame change**,
+  never per rebuild (K-681), and only in that view.
+- **The effect's own card** carries Propagate and Cancel (ordinary Action rows), the value rows,
+  a **span bar** in the K-540 two-weight form — the frames the matte covers in the accent, the
+  rest of the clip in the surface tone — the status line beneath it, and the **base frame** with
+  one button that moves it to the frame on screen. The status is **polled twice a second while a
+  propagation is moving and not otherwise**, the Camera track's arrangement (K-417).
+- Not built: a scribble that adjusts its own width by dragging, per-stroke deletion from the
+  overlay, and the neural seed proposal
+  ([docs/impl/roto.md](impl/roto.md) §9).
 
 ### 2.4 Motion paths
 

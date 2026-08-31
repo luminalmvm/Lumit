@@ -91,13 +91,23 @@ enum ToolMode {
   cloneStamp(ToolGroup.paint, LumitIcon.cloneStamp, ready: true),
   eraser(ToolGroup.paint, LumitIcon.eraser, ready: true),
 
-  rotoBrush(ToolGroup.roto, LumitIcon.rotoBrush),
-  refineEdge(ToolGroup.roto, LumitIcon.refineEdge),
+  // Cutting a subject out of a shot (K-717, docs/impl/roto.md §6). The
+  // **Roto brush** scribbles what is subject and what is not — `Alt` says "not"
+  // — and **Refine edge** paints the band where the edge is allowed to be soft.
+  // Both are live: a scribble is an edit to the Roto brush effect on the layer,
+  // and the propagation carries it through the shot.
+  rotoBrush(ToolGroup.roto, LumitIcon.rotoBrush, ready: true),
+  refineEdge(ToolGroup.roto, LumitIcon.refineEdge, ready: true),
 
-  puppetPosition(ToolGroup.puppet, LumitIcon.puppetPin),
-  puppetStarch(ToolGroup.puppet, LumitIcon.puppetStarch),
-  puppetOverlap(ToolGroup.puppet, LumitIcon.puppetOverlap),
-  puppetBend(ToolGroup.puppet, LumitIcon.puppetBend),
+  // The four Puppet pins (K-704): a click places a pin of that kind on the
+  // selected layer's mesh, and a drag moves it at the playhead. All four are
+  // live — the position pin moves a spot, and the other three season the move
+  // (docs/impl/puppet.md §2.2), which is a value on the pin rather than a
+  // second gesture.
+  puppetPosition(ToolGroup.puppet, LumitIcon.puppetPin, ready: true),
+  puppetStarch(ToolGroup.puppet, LumitIcon.puppetStarch, ready: true),
+  puppetOverlap(ToolGroup.puppet, LumitIcon.puppetOverlap, ready: true),
+  puppetBend(ToolGroup.puppet, LumitIcon.puppetBend, ready: true),
 
   // Moving the composition's active camera by dragging on the picture
   // (K-229): orbit round what it is looking at, track across, dolly in.
@@ -371,6 +381,52 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(0.0, 100.0);
     if (_brushOpacity == next) return;
     _brushOpacity = next;
+    notifyListeners();
+  }
+
+  /// **How wide a roto scribble is**, in source pixels (K-717).
+  ///
+  /// Its own number rather than the paint brush's [brushSize]: a roto stroke is
+  /// not a mark on the picture but a claim about what the subject is, and it is
+  /// drawn far broader than anyone paints — widening the brush to scribble
+  /// through a person and then having to narrow it again to retouch one would
+  /// be two settings pretending to be one.
+  double _rotoSize = 40;
+  double get rotoSize => _rotoSize;
+  set rotoSize(double value) {
+    final next = value.clamp(1.0, 2000.0);
+    if (_rotoSize == next) return;
+    _rotoSize = next;
+    notifyListeners();
+  }
+
+  /// **The puppet mesh** (K-704, docs/impl/puppet.md §1.1): the triangle edge
+  /// the mesh aims for, and how far the opaque region is grown before its
+  /// outline is walked — both in the layer's own pixels at natural size.
+  ///
+  /// Session state, like every other tool option §1.7 lists: these are what the
+  /// *next* puppet is meshed at. Changing one with a puppeted layer selected
+  /// re-meshes that layer too, which is the "live" half of K-225 — but the
+  /// numbers are not read back off the block, so they say what you last asked
+  /// for rather than what the layer under the pointer happens to hold.
+  ///
+  /// Smaller density is suppler and dearer; the engine clamps both, and coarsens
+  /// by itself rather than building a mesh past its vertex cap.
+  double _puppetDensity = 24;
+  double get puppetDensity => _puppetDensity;
+  set puppetDensity(double value) {
+    final next = value.clamp(2.0, 500.0);
+    if (_puppetDensity == next) return;
+    _puppetDensity = next;
+    notifyListeners();
+  }
+
+  double _puppetExpansion = 3;
+  double get puppetExpansion => _puppetExpansion;
+  set puppetExpansion(double value) {
+    final next = value.clamp(0.0, 100.0);
+    if (_puppetExpansion == next) return;
+    _puppetExpansion = next;
     notifyListeners();
   }
 

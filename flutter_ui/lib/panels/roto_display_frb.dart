@@ -7,14 +7,27 @@
 // again, and how much of the shot the matte actually covers. When it cannot be
 // done, it says why, calmly, and nothing about the shot has changed.
 //
-// **Only the words are here.** The rows, the buttons and the overlay are the
-// Roto brush's panel (RB3); what this file owns is the mapping from what the
-// engine says to what a person reads, so it can be asserted directly instead of
-// through a mounted widget.
+// **The words are separable from the row.** [rotoStatusSentence] and
+// [rotoFailureSentence] are free functions so what a status *says* can be
+// asserted directly: that is a decision about wording, and testing it through a
+// mounted widget would be testing the mounting. [RotoDisplayFrb] is the row
+// itself (K-717) — the span bar, the sentence, and the base frame with the one
+// button that moves it. The buttons above it are the effect's own Action rows
+// (`ParamKind::Action`), drawn by the ordinary parameter row; the scribbling is
+// the Viewer's (`panels/viewer_roto.dart`).
 
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../widgets/controls.dart';
+import 'camera_track_display_frb.dart' show TrackSpanBar;
 
 /// The sentence for a refusal.
 ///
@@ -78,4 +91,214 @@ String _span(BridgeRotoStatus status) {
   return covered >= status.clipFrames
       ? l10n.rotoSpanWhole(covered)
       : l10n.rotoSpanPartial(first, last);
+}
+
+/// How many source frames the matte covers — the accent half of the span bar.
+///
+/// Zero before anything is propagated, which draws the bar entirely in the
+/// surface tone: an honest "none of this shot is cut yet" rather than no bar at
+/// all.
+int rotoCoveredFrames(BridgeRotoStatus status) {
+  final first = status.firstFrame;
+  final last = status.lastFrame;
+  if (first == null || last == null) return 0;
+  return (last - first + 1).clamp(0, status.clipFrames);
+}
+
+/// How often the reading is sampled while a propagation is moving — the Camera
+/// track's cadence, for the Camera track's reason (tracking.md §5c deviation 2):
+/// a press moves no document revision, so there is nothing to refresh against,
+/// and the engine keeps progress as a value precisely so nobody has to hold a
+/// subscription.
+const Duration _poll = Duration(milliseconds: 500);
+
+/// The line under the Roto brush's Propagate and Cancel buttons: how far the
+/// matte reaches, how the propagation is getting on, and which frame it is
+/// working outward from.
+class RotoDisplayFrb extends StatefulWidget {
+  /// The layer the effect sits on — what the base frame is written through.
+  final LayerReference layer;
+
+  /// Which instance on that layer: a matte is filed under the effect, because
+  /// what was cut out is the subject this instance's strokes describe.
+  final UuidValue effectId;
+
+  /// The composition frame on screen — what "assign the base to here" means.
+  /// Passed rather than read: the panel is rebuilt when it moves, and asking
+  /// the engine per rebuild is exactly the traffic K-681 forbids.
+  final int playheadFrame;
+
+  /// Something changed that the rest of the interface should re-read.
+  final VoidCallback onChanged;
+
+  /// Bumped by the panel every time one of the effect's Action buttons is
+  /// pressed. A press changes nothing in the document — there is no revision to
+  /// compare and no event to subscribe to — so the panel says so with a number.
+  final int pressed;
+
+  /// Where the reading comes from. The engine's own answer by default; a test
+  /// hands one in, which is the seam the two tracking displays already are — a
+  /// propagation cannot be produced from Dart, so what this side *does* with one
+  /// is asserted by handing one over.
+  final BridgeRotoStatus Function()? fetch;
+
+  const RotoDisplayFrb({
+    super.key,
+    required this.layer,
+    required this.effectId,
+    required this.playheadFrame,
+    required this.onChanged,
+    required this.pressed,
+    this.fetch,
+  });
+
+  @override
+  State<RotoDisplayFrb> createState() => _RotoDisplayFrbState();
+}
+
+class _RotoDisplayFrbState extends State<RotoDisplayFrb> {
+  BridgeRotoStatus? _status;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sample());
+  }
+
+  @override
+  void didUpdateWidget(RotoDisplayFrb old) {
+    super.didUpdateWidget(old);
+    // A press, and the card being pointed at another instance: both change what
+    // this says, and neither is a tick of the clock.
+    if (old.pressed != widget.pressed || old.effectId != widget.effectId) {
+      _sample();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  static bool _moving(BridgeRotoStatus? status) => switch (status?.stage) {
+        BridgeRotoStage.queued || BridgeRotoStage.solving => true,
+        _ => false,
+      };
+
+  void _sample() {
+    if (!mounted) return;
+    final BridgeRotoStatus next;
+    try {
+      next = widget.fetch?.call() ??
+          rotoStatus(layer: widget.layer, effect: widget.effectId);
+    } catch (_) {
+      // The layer went away under the card; the line simply stops moving.
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+    final was = _status;
+    if (next != was) setState(() => _status = next);
+    if (_moving(was) && !_moving(next)) {
+      widget.onChanged();
+      // A propagation landing moves nothing in the document, so nothing else
+      // has a reason to repaint — and the picture it changes is the one on
+      // screen. Told here, at the one place that knows (K-430).
+      final ui = Provider.of<LumitUiState>(context, listen: false);
+      ui.solveLanded.value++;
+      ui.requestFrame();
+    }
+    if (_moving(next)) {
+      _timer ??= Timer.periodic(_poll, (_) => _sample());
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  /// Move the base frame to the frame on screen.
+  ///
+  /// A real edit and not a preference: every cached matte depends on the base,
+  /// so moving it retires the run — which is exactly what "decide this shot from
+  /// somewhere else" means. Through the ordinary whole-stack commit, so it is
+  /// one undo step like every other effect edit.
+  void _assignBase() {
+    try {
+      final source =
+          rotoSourceFrame(layer: widget.layer, frame: widget.playheadFrame);
+      final staged = widget.layer.getEffects();
+      final instance =
+          staged.where((e) => e.id() == widget.effectId).firstOrNull;
+      if (instance == null) return;
+      instance.rotoSetBaseFrame(frame: source);
+      widget.layer.setEffects(effects: staged);
+      widget.onChanged();
+      _sample();
+    } catch (_) {
+      // Not a footage layer, or its media will not probe: there is no source
+      // frame to move the base to, and the line above already says so.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final status = _status;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The same bar the two tracking displays draw, measuring the same
+          // thing in the same two weights: how much of the shot the answer
+          // reaches, in the accent, against how much it does not (K-540).
+          if (status != null && status.clipFrames > 0)
+            TrackSpanBar(
+              key: const ValueKey('fx-roto-span'),
+              analysed: rotoCoveredFrames(status),
+              total: status.clipFrames,
+            ),
+          Text(
+            rotoStatusSentence(status),
+            key: const ValueKey('fx-roto-status'),
+            style: t.small.copyWith(color: t.textMuted),
+            overflow: TextOverflow.ellipsis,
+          ),
+          // The frame the propagation runs outward from, and the one gesture
+          // that moves it. Offered only once there is something to move: before
+          // the first scribble the base is set *by* that scribble, and a button
+          // that assigned a base to a brush with no strokes would aim a
+          // propagation at nothing.
+          if (status != null && status.strokes > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      status.baseFrame == null
+                          ? l10n.rotoNoBaseFrame
+                          : l10n.rotoBaseFrame(status.baseFrame!),
+                      key: const ValueKey('fx-roto-base'),
+                      style: t.small.copyWith(color: t.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  HouseButton(
+                    key: const ValueKey('fx-roto-assign-base'),
+                    small: true,
+                    frameless: true,
+                    onPressed: _assignBase,
+                    child: Text(l10n.rotoAssignBase, style: t.small),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

@@ -220,6 +220,14 @@
       }
     }
   },
+  "deletePuppetPin": "Delete pin",
+  "@deletePuppetPin": {
+    "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."
+  },
+  "foldPuppet": "Puppet",
+  "@foldPuppet": {
+    "description": "Heading in a layer's fold-out, over its puppet pins."
+  },
   "fxAddGrain": "Add grain",
   "@fxAddGrain": {
     "description": "Effect name in the Add effect menu — lays film grain on the picture."
@@ -1294,6 +1302,51 @@
   "@laneModeTooltip": {
     "description": "Tooltip on the lane-mode chip that cycles Wave, Stack, Spectral."
   },
+  "puppetAmount": "Amount",
+  "@puppetAmount": {
+    "description": "Row label under a puppet pin: how much a starch pin stiffens, or how far in front an overlap pin draws."
+  },
+  "puppetNoMesh": "Nothing opaque here to build a mesh from",
+  "@puppetNoMesh": {
+    "description": "Status line when a puppet pin is placed on a layer that has no visible pixels at this frame."
+  },
+  "puppetOutsideMesh": "That point is outside the puppet's mesh",
+  "@puppetOutsideMesh": {
+    "description": "Status line when a puppet pin is placed away from the layer's picture."
+  },
+  "puppetPinBend": "Bend pin",
+  "@puppetPinBend": {
+    "description": "The name a new bend pin is given, and the word its Timeline row is headed with."
+  },
+  "puppetPinOverlap": "Overlap pin",
+  "@puppetPinOverlap": {
+    "description": "The name a new overlap pin is given, and the word its Timeline row is headed with."
+  },
+  "puppetPinPosition": "Position pin",
+  "@puppetPinPosition": {
+    "description": "The name a new position pin is given, and the word its Timeline row is headed with."
+  },
+  "puppetPinStarch": "Starch pin",
+  "@puppetPinStarch": {
+    "description": "The name a new starch pin is given, and the word its Timeline row is headed with."
+  },
+  "rotoAddTheEffect": "Add a Roto brush to this layer to stroke on it",
+  "@rotoAddTheEffect": {
+    "description": "Status-area line when the Roto brush tool is used on a layer that carries no Roto brush effect."
+  },
+  "rotoAssignBase": "Set to current frame",
+  "@rotoAssignBase": {
+    "description": "Button beside the Roto brush's base-frame reading that moves the base frame to the frame on screen."
+  },
+  "rotoBaseFrame": "Base frame {frame}",
+  "@rotoBaseFrame": {
+    "description": "Roto brush reading of the frame the propagation runs outward from. {frame} is a source frame number.",
+    "placeholders": {
+      "frame": {
+        "type": "int"
+      }
+    }
+  },
   "rotoFailedBusy": "Another propagation is already running",
   "@rotoFailedBusy": {
     "description": "Roto brush status line when Propagate was refused: only one propagation runs at a time."
@@ -1322,9 +1375,17 @@
   "@rotoFailedUnreadable": {
     "description": "Roto brush status line when the propagation was refused: the file would not open, or carries no video."
   },
+  "rotoNoBaseFrame": "No base frame",
+  "@rotoNoBaseFrame": {
+    "description": "Roto brush reading when the brush has strokes but no frame to propagate outward from."
+  },
   "rotoNoMatte": "No matte yet",
   "@rotoNoMatte": {
     "description": "Roto brush status line when a propagation finished without producing any frames."
+  },
+  "rotoNoSourceFrame": "This layer shows no footage frame to stroke on",
+  "@rotoNoSourceFrame": {
+    "description": "Status-area line when the Roto brush tool is used on a layer whose media cannot be read, so there is no frame of a file for the stroke to belong to."
   },
   "rotoNoStrokes": "Not stroked yet",
   "@rotoNoStrokes": {
@@ -1342,6 +1403,10 @@
         "type": "int"
       }
     }
+  },
+  "rotoSelectALayer": "Select a layer to stroke on",
+  "@rotoSelectALayer": {
+    "description": "Status-area line when the Roto brush tool is used with no layer selected."
   },
   "rotoSolving": "Frame {done} of {total}",
   "@rotoSolving": {
@@ -1390,6 +1455,10 @@
         "type": "int"
       }
     }
+  },
+  "selectALayerToPin": "Select a layer to pin",
+  "@selectALayerToPin": {
+    "description": "Status line when a puppet tool is used with no layer selected."
   },
   "spectralRange": "0–12 kHz",
   "@spectralRange": {
@@ -6033,6 +6102,18 @@
     "description": "Tooltip on the chain between an effect point's x and y fields while they are separate. Clicking ties them, so dragging one scales the other by the same factor.",
     "type": "text"
   },
+  "tipPuppetDensity": "Mesh density",
+  "@tipPuppetDensity": {
+    "description": "Tooltip on the Density field in the puppet tools' options."
+  },
+  "tipPuppetExpansion": "Mesh expansion",
+  "@tipPuppetExpansion": {
+    "description": "Tooltip on the Expansion field in the puppet tools' options."
+  },
+  "tipPuppetExtent": "Pin extent",
+  "@tipPuppetExtent": {
+    "description": "Tooltip on the Extent field on a starch, overlap or bend pin's Timeline row."
+  },
   "tipUnlinkPair": "Unlink",
   "@tipUnlinkPair": {
     "description": "Tooltip on the chain between an effect point's x and y fields while they are tied together. Clicking lets each move on its own again.",
@@ -6163,6 +6244,10 @@
   "tipResetQualityTier": "Reset quality",
   "@tipResetQualityTier": {
     "description": "Tooltip on the button that restarts the quality controller. One or two words."
+  },
+  "tipRotoSize": "Scribble size",
+  "@tipRotoSize": {
+    "description": "Tooltip on the Size field in the Roto tools' options: how wide a roto scribble claims. One or two words."
   },
   "tipSampleFromViewer": "Sample colour",
   "@tipSampleFromViewer": {
@@ -6751,6 +6836,14 @@
   "strokeEnd": "End",
   "@strokeEnd": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark ends, as a percentage."
+  },
+  "toolPuppetDensity": "Density",
+  "@toolPuppetDensity": {
+    "description": "Label of the Density field in the puppet tools' options on the toolbar."
+  },
+  "toolPuppetExpansion": "Expansion",
+  "@toolPuppetExpansion": {
+    "description": "Label of the Expansion field in the puppet tools' options on the toolbar."
   },
   "toolShape": "Shape",
   "@toolShape": {

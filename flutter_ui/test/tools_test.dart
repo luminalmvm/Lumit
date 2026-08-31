@@ -119,8 +119,10 @@ void main() {
       // point pans behind and the Razor cuts (K-220), the five shape tools
       // draw masks and the Pen builds one (K-222, K-223), horizontal type makes
       // and edits text layers (K-225), the three painting tools paint, erase and
-      // clone (K-227), and the three camera tools move the active camera
-      // (K-229); everything else is on the strip and disabled (K-228).
+      // clone (K-227), the Roto pair scribbles what a subject is and where its
+      // edge may be soft (K-717), the four puppet pins place and drag pins on
+      // the layer's mesh (K-704), and the three camera tools move the active
+      // camera (K-229); everything else is on the strip and disabled (K-228).
       expect(ToolMode.values.where((t) => t.ready).toSet(), {
         ToolMode.select,
         ToolMode.hand,
@@ -138,6 +140,12 @@ void main() {
         ToolMode.brush,
         ToolMode.cloneStamp,
         ToolMode.eraser,
+        ToolMode.rotoBrush,
+        ToolMode.refineEdge,
+        ToolMode.puppetPosition,
+        ToolMode.puppetStarch,
+        ToolMode.puppetOverlap,
+        ToolMode.puppetBend,
         ToolMode.cameraOrbit,
         ToolMode.cameraPan,
         ToolMode.cameraDolly,
@@ -215,7 +223,7 @@ void main() {
       var notices = 0;
       tools.addListener(() => notices++);
 
-      tools.select(ToolMode.rotoBrush);
+      tools.select(ToolMode.typeVertical);
       expect(tools.tool, ToolMode.select, reason: 'nothing changed');
       expect(notices, 0, reason: 'and nobody was told anything had');
 
@@ -223,12 +231,38 @@ void main() {
       expect(tools.tool, ToolMode.hand);
     });
 
+    /// Every group on the strip now has something built in it, so the guard
+    /// against arming a group that has nothing is asserted where it lives
+    /// rather than through a group standing in for the case (K-228). The rule
+    /// is the same one: an empty built set arms nothing.
     test('a chord on a group with nothing built does nothing', () {
+      for (final group in ToolGroup.values) {
+        expect(ToolMode.builtMembersOf(group), isNotEmpty,
+            reason: 'the strip has no wholly unbuilt group left');
+      }
       final tools = ToolsState();
-      tools.cycleGroup(ToolGroup.puppet);
-      expect(tools.tool, ToolMode.select);
       tools.cycleGroup(ToolGroup.roto);
-      expect(tools.tool, ToolMode.select);
+      expect(tools.tool, ToolMode.rotoBrush,
+          reason: 'and a group that does have members arms the first');
+    });
+
+    /// The Roto pair arms together (K-717): the strip button, the flyout row
+    /// and the `Alt+W` chord all wake off one flag, and the chord walks the two
+    /// built members and round.
+    test('the Roto chord cycles its two built members', () {
+      final tools = ToolsState();
+      tools.cycleGroup(ToolGroup.roto);
+      expect(tools.tool, ToolMode.rotoBrush);
+      tools.cycleGroup(ToolGroup.roto);
+      expect(tools.tool, ToolMode.refineEdge);
+      tools.cycleGroup(ToolGroup.roto);
+      expect(tools.tool, ToolMode.rotoBrush, reason: 'and round');
+
+      // The same flag the chord reads is the one the button and the flyout
+      // read, which is why there is one of it (K-228).
+      expect(tools.handleAction('tool.roto'), isTrue);
+      tools.select(ToolMode.refineEdge);
+      expect(tools.tool, ToolMode.refineEdge);
     });
 
     test('a chord cycles only the built members of a mixed group', () {
@@ -249,9 +283,11 @@ void main() {
 
     test('a group whose first member is unbuilt opens on one that works', () {
       final tools = ToolsState();
-      expect(ToolMode.builtMembersOf(ToolGroup.roto), isEmpty);
       expect(tools.memberOf(ToolGroup.type), ToolMode.typeHorizontal);
-      // A group with nothing built still names a member for its button to draw.
+      expect(tools.memberOf(ToolGroup.pen), ToolMode.pen);
+      // A group whose members are all built opens on its first, as it always
+      // did.
+      expect(tools.memberOf(ToolGroup.roto), ToolMode.rotoBrush);
       expect(tools.memberOf(ToolGroup.puppet), ToolMode.puppetPosition);
     });
   });
