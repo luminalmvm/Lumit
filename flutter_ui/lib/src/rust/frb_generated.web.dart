@@ -25,6 +25,7 @@ import 'api/layer.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/retime.dart';
+import 'api/roto.dart';
 import 'api/shell.dart';
 import 'api/solid.dart';
 import 'api/state.dart';
@@ -225,6 +226,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRenderedFrame dco_decode_box_autoadd_bridge_rendered_frame(dynamic raw);
+
+  @protected
+  BridgeRotoFailure dco_decode_box_autoadd_bridge_roto_failure(dynamic raw);
 
   @protected
   BridgeSampledPixels dco_decode_box_autoadd_bridge_sampled_pixels(dynamic raw);
@@ -642,6 +646,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeRevealKind dco_decode_bridge_reveal_kind(dynamic raw);
 
   @protected
+  BridgeRotoFailure dco_decode_bridge_roto_failure(dynamic raw);
+
+  @protected
+  BridgeRotoStage dco_decode_bridge_roto_stage(dynamic raw);
+
+  @protected
+  BridgeRotoStatus dco_decode_bridge_roto_status(dynamic raw);
+
+  @protected
+  BridgeRotoStroke dco_decode_bridge_roto_stroke(dynamic raw);
+
+  @protected
+  BridgeRotoStrokeKind dco_decode_bridge_roto_stroke_kind(dynamic raw);
+
+  @protected
   BridgeSampledPixels dco_decode_bridge_sampled_pixels(dynamic raw);
 
   @protected
@@ -913,6 +932,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeRational> dco_decode_list_bridge_rational(dynamic raw);
 
   @protected
+  List<BridgeRotoStroke> dco_decode_list_bridge_roto_stroke(dynamic raw);
+
+  @protected
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
 
   @protected
@@ -961,6 +983,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<double> dco_decode_list_prim_f_32_loose(dynamic raw);
 
   @protected
   Float32List dco_decode_list_prim_f_32_strict(dynamic raw);
@@ -1051,6 +1076,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRenderedFrame? dco_decode_opt_box_autoadd_bridge_rendered_frame(
+      dynamic raw);
+
+  @protected
+  BridgeRotoFailure? dco_decode_opt_box_autoadd_bridge_roto_failure(
       dynamic raw);
 
   @protected
@@ -1303,6 +1332,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRenderedFrame sse_decode_box_autoadd_bridge_rendered_frame(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoFailure sse_decode_box_autoadd_bridge_roto_failure(
       SseDeserializer deserializer);
 
   @protected
@@ -1785,6 +1818,23 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeRevealKind sse_decode_bridge_reveal_kind(SseDeserializer deserializer);
 
   @protected
+  BridgeRotoFailure sse_decode_bridge_roto_failure(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoStage sse_decode_bridge_roto_stage(SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoStatus sse_decode_bridge_roto_status(SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoStroke sse_decode_bridge_roto_stroke(SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoStrokeKind sse_decode_bridge_roto_stroke_kind(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSampledPixels sse_decode_bridge_sampled_pixels(
       SseDeserializer deserializer);
 
@@ -2108,6 +2158,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeRotoStroke> sse_decode_list_bridge_roto_stroke(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeScalar> sse_decode_list_bridge_scalar(
       SseDeserializer deserializer);
 
@@ -2170,6 +2224,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
       SseDeserializer deserializer);
+
+  @protected
+  List<double> sse_decode_list_prim_f_32_loose(SseDeserializer deserializer);
 
   @protected
   Float32List sse_decode_list_prim_f_32_strict(SseDeserializer deserializer);
@@ -2270,6 +2327,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeRenderedFrame? sse_decode_opt_box_autoadd_bridge_rendered_frame(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeRotoFailure? sse_decode_opt_box_autoadd_bridge_roto_failure(
       SseDeserializer deserializer);
 
   @protected
@@ -2534,6 +2595,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_rendered_frame(
       BridgeRenderedFrame self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_roto_failure(
+      BridgeRotoFailure self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_sampled_pixels(
@@ -3071,6 +3136,26 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeRevealKind self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_roto_failure(
+      BridgeRotoFailure self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_roto_stage(
+      BridgeRotoStage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_roto_status(
+      BridgeRotoStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_roto_stroke(
+      BridgeRotoStroke self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_roto_stroke_kind(
+      BridgeRotoStrokeKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_sampled_pixels(
       BridgeSampledPixels self, SseSerializer serializer);
 
@@ -3410,6 +3495,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeRational> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_roto_stroke(
+      List<BridgeRotoStroke> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_scalar(
       List<BridgeScalar> self, SseSerializer serializer);
 
@@ -3472,6 +3561,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_list_prim_u_8_strict(
       List<Uint8List> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_f_32_loose(
+      List<double> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_f_32_strict(
@@ -3580,6 +3673,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_rendered_frame(
       BridgeRenderedFrame? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_roto_failure(
+      BridgeRotoFailure? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_scalar(

@@ -25,6 +25,7 @@ pub mod layer;
 pub mod project;
 pub mod project_item;
 pub mod retime;
+pub mod roto;
 pub mod shell;
 pub mod solid;
 pub mod state;
@@ -147,6 +148,11 @@ pub enum BridgeError {
     /// A pin edit on a layer with no puppet block. The first pin is what makes
     /// the block, and only the click that places it knows the reference time.
     NoPuppet,
+    /// A pin was aimed at a layer with no mesh under it: nothing at or above
+    /// 10 % alpha to cut one from (docs/impl/puppet.md §6).
+    PuppetNoMesh,
+    /// A pin was aimed outside the mesh. Never a floating pin (§6).
+    PuppetOutsideMesh,
     /// A paint stroke with no points in it (K-227).
     EmptyStroke,
     /// No stroke of that id on this layer.

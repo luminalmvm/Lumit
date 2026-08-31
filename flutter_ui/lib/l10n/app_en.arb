@@ -1294,6 +1294,103 @@
   "@laneModeTooltip": {
     "description": "Tooltip on the lane-mode chip that cycles Wave, Stack, Spectral."
   },
+  "rotoFailedBusy": "Another propagation is already running",
+  "@rotoFailedBusy": {
+    "description": "Roto brush status line when Propagate was refused: only one propagation runs at a time."
+  },
+  "rotoFailedFlowUnavailable": "This device has no optical flow to propagate with",
+  "@rotoFailedFlowUnavailable": {
+    "description": "Roto brush status line when Propagate was refused: the graphics card cannot measure motion, and the slow fallback would take hours."
+  },
+  "rotoFailedNoBaseFrame": "Stroke the subject on a frame first",
+  "@rotoFailedNoBaseFrame": {
+    "description": "Roto brush status line when Propagate was refused: nothing has been drawn, so there is no frame to propagate from."
+  },
+  "rotoFailedNoFrames": "There are no frames to propagate through",
+  "@rotoFailedNoFrames": {
+    "description": "Roto brush status line when the propagation was refused: the file opened but holds no pictures."
+  },
+  "rotoFailedNoSeeds": "The strokes do not describe a subject yet",
+  "@rotoFailedNoSeeds": {
+    "description": "Roto brush status line when the propagation was refused: the strokes on the base frame do not separate a subject from its background."
+  },
+  "rotoFailedOffline": "The media is offline",
+  "@rotoFailedOffline": {
+    "description": "Roto brush status line when Propagate was refused: the file has no fingerprint, so there is nothing to name a cached matte with."
+  },
+  "rotoFailedUnreadable": "The media could not be read",
+  "@rotoFailedUnreadable": {
+    "description": "Roto brush status line when the propagation was refused: the file would not open, or carries no video."
+  },
+  "rotoNoMatte": "No matte yet",
+  "@rotoNoMatte": {
+    "description": "Roto brush status line when a propagation finished without producing any frames."
+  },
+  "rotoNoStrokes": "Not stroked yet",
+  "@rotoNoStrokes": {
+    "description": "Roto brush status line before anything has been drawn on the picture."
+  },
+  "rotoQueued": "Waiting to start",
+  "@rotoQueued": {
+    "description": "Roto brush status line: the propagation has been accepted but has not begun."
+  },
+  "rotoReadyToPropagate": "Based on frame {frame}",
+  "@rotoReadyToPropagate": {
+    "description": "Roto brush status line before Propagate has been pressed. {frame} is the source frame the strokes were drawn on.",
+    "placeholders": {
+      "frame": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSolving": "Frame {done} of {total}",
+  "@rotoSolving": {
+    "description": "Roto brush status line while the matte is being carried through the shot. Both numbers are frame counts.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSolvingReusing": "Frame {done} of {total}, {reused} kept",
+  "@rotoSolvingReusing": {
+    "description": "Roto brush status line while re-propagating after a correction: {reused} counts the frames copied from the previous run instead of being worked out again.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reused": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSpanPartial": "Frames {first} to {last}",
+  "@rotoSpanPartial": {
+    "description": "Roto brush status line: the matte covers part of the clip, and outside that span the effect does nothing. Both numbers are source frame indices.",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
+    }
+  },
+  "rotoSpanWhole": "The whole shot, {frames} frames",
+  "@rotoSpanWhole": {
+    "description": "Roto brush status line: the matte covers every frame of the clip. {frames} is a frame count.",
+    "placeholders": {
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "spectralRange": "0–12 kHz",
   "@spectralRange": {
     "description": "Caption on the spectrogram lane naming the frequency span its height covers. kHz is a unit symbol and stays as it is."

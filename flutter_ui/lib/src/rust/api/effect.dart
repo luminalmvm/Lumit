@@ -10,6 +10,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
+import 'roto.dart';
 part 'effect.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
@@ -261,6 +262,49 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
   /// effect has no pair for is unlinked, never an error.
   bool pairLinked({required String stem});
+
+  /// Add one stroke to this Roto brush, on the **staged** copy (K-713).
+  ///
+  /// `points` are `[x0, y0, x1, y1, …]` in **source raster pixels** on the
+  /// unaltered footage — the viewer converts, because only it knows the chain
+  /// of transforms the pointer came through, and the matte has to describe the
+  /// file's frames rather than this comp's (K-248). `frame` is the source
+  /// frame the stroke was drawn on.
+  ///
+  /// **The first stroke sets the base frame**, which is what makes Propagate
+  /// answerable at all; a later stroke on another frame is a *correction* and
+  /// leaves the base where it is. Moving the base is
+  /// [`Self::roto_set_base_frame`], deliberately a separate gesture.
+  ///
+  /// An odd-length `points`, a stroke with none, or a non-finite coordinate is
+  /// refused rather than stored: a stroke nobody can stamp is a stroke that
+  /// would silently do nothing.
+  void rotoAddStroke(
+      {required List<double> points,
+      required double radius,
+      required BridgeRotoStrokeKind kind,
+      required PlatformInt64 frame});
+
+  /// Throw away every stroke and the base frame, on the staged copy — the
+  /// panel's "start again". The cached mattes are not touched: they are keyed
+  /// by the strokes that made them, so they are simply never asked for again,
+  /// and an undo brings the strokes and their mattes both back.
+  void rotoClear();
+
+  /// Move the base frame — the frame propagation runs outward from — on the
+  /// staged copy.
+  ///
+  /// A real edit and not a preference: every cached matte depends on it, so
+  /// moving it retires the whole run, which is exactly what a user asking for
+  /// the shot to be re-decided from somewhere else means.
+  void rotoSetBaseFrame({PlatformInt64? frame});
+
+  /// Every stroke this instance holds, for the overlay to draw (K-713).
+  ///
+  /// Read on the gesture that needs it and on a document revision moving —
+  /// never per rebuild, which is the contract every other panel read has
+  /// (K-681).
+  List<BridgeRotoStroke> rotoStrokes();
 
   String serialize();
 

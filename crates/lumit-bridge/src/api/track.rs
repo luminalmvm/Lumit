@@ -366,6 +366,12 @@ pub fn fire_effect_action(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    // The Roto brush's two go the same way (K-713), and so do the Planar
+    // track's three: one doorway, so a press is one crossing whichever effect
+    // made it.
+    if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
+        return crate::api::roto::press(&layer, fx, &param);
+    }
     // The Planar track's three buttons go the same way as the Camera track's
     // two: one doorway, so a press is one crossing whichever effect made it.
     if fx.effect.match_name == lumit_core::track::PLANAR_TRACK {
@@ -439,7 +445,7 @@ pub fn fire_effect_action(
 /// is a head-and-tail hash rather than the whole file. It happens on the
 /// caller's thread because the *key* has to exist before the job can be handed
 /// over, and the job is what carries the disk work away.
-fn media_source(
+pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
 ) -> Result<(PathBuf, Fingerprint), BridgeError> {

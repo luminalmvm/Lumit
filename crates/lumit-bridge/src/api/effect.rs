@@ -1563,7 +1563,10 @@ fn clamp_animation(animation: Animation, bounds: (Option<f64>, Option<f64>)) -> 
 /// committing").
 #[frb(opaque)]
 pub struct BridgeEffectInstance {
-    effect: EffectInstance,
+    // `pub(crate)` since K-713: the Roto brush's stroke accessors live in
+    // `api::roto`, next to the rest of that effect's surface, and stage on the
+    // same copy every other row stages on.
+    pub(crate) effect: EffectInstance,
     /// Where the owning layer's own zero sits on the composition's clock, so a
     /// handle read out of a layer still knows how to speak comp time about its
     /// keyframes (K-213). Carried rather than looked up: the handle is a

@@ -719,6 +719,44 @@ Nothing here does the work; this is the doorway.
   (K-184) already carries every layer's every effect, so the interface finds the layer whose
   stack holds an enabled Camera track with Show points on, from data it is already holding.
 
+### The Roto brush: strokes down, a span and a progress up (K-713)
+
+`crates/lumit-bridge/src/api/roto.rs`. The propagation itself is `lumit-render`'s — its own
+thread, over the media file — and this is the doorway.
+
+- **A stroke is an ordinary effect-stack edit.** `BridgeEffectInstance::roto_add_stroke`,
+  `roto_set_base_frame` and `roto_clear` stage on the same copy `set_value` and
+  `set_shader_source` stage on, and `LayerReference::set_effects` commits, so a scribble is
+  one op, one journal entry and one undo step. There is no roto-shaped op and no roto-shaped
+  commit, because there is no roto-shaped question the whole-stack commit cannot answer.
+- **Points cross in source raster pixels** (K-248), as a flat `[x0, y0, x1, y1, …]`. The
+  viewer converts, because only it knows the chain of transforms the pointer came through,
+  and the matte has to describe the *file's* frames rather than one composition's — which is
+  what lets one shot's mattes serve every composition that cuts it. A stroke with no points,
+  an odd-length list, or a non-finite number is **refused**, never stored: a stroke nobody can
+  stamp would silently do nothing.
+- **The buttons go through the one Action doorway.** `fire_effect_action` carries Propagate
+  and Cancel exactly as it carries Analyse and Cancel — an Action carries no value, so a press
+  is an event: nothing is staged, nothing is committed, no undo entry appears.
+- **The status is polled, and only while it is moving.** `roto_status(layer, effect)` answers
+  the stage, `done`/`total`, how many frames were **copied** rather than re-solved, the span
+  the matte covers in source frames, the clip's length, the base frame and the stroke count —
+  one crossing for a whole row. A press moves no document revision, so there is nothing to
+  refresh against; the engine keeps progress as a value in a map precisely so nobody has to
+  hold a subscription (the camera track's arrangement).
+- **The reason crosses as an enum with no text in it.** `BridgeRotoFailure` is seven variants
+  — offline, no flow on this device, busy, no base frame, unreadable, no frames, no seeds —
+  and Dart's exhaustive switch (`panels/roto_display_frb.dart`) picks the arb key. K-303's
+  chain at its strictest: there is no free text to fall back to, so a reason added to the
+  engine is a Dart compile error rather than a blank line.
+- **The span is what makes the passthrough legible.** Outside `first_frame..last_frame` the
+  effect renders the layer unchanged, and the status row says how far the matte reaches, so
+  an untouched frame is explained rather than mysterious. A **cancelled** run reports the same
+  shape as a finished one, because it is the same kind of answer: the frames it reached are
+  kept (K-540).
+- **What is not a call**: the matte itself. It is pixels, it is large, and the render path
+  already reads it out of the store on the way to the card; nothing about it needs to cross.
+
 ### The export dialogue's settings cross flat (K-479, K-485, K-503)
 
 `BridgeExportSpec` is `lumit_render::export::ExportSpec` **flattened**: no engine enum
