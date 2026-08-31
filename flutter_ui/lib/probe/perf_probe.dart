@@ -336,19 +336,34 @@ class _Probe {
     out.writeln('media beside project: '
         '${mediaLive ? "resolves (live preview)" : "MISSING (empty preview)"}');
 
-    // Panel geometry.
+    // Panel geometry. The ruler and lane rects live in the horizontal scroll's
+    // CONTENT space: a project saved zoomed-in reports them thousands of pixels
+    // wide and starting left of the window, and a gesture aimed at a fraction
+    // of that width lands outside the window and measures nothing (a whole run
+    // of empty rows, found the hard way). Every rect is therefore intersected
+    // with the panel's own on-screen rect before any point is taken from it.
     final panel = _rectOf(_byTypeName('TimelinePanelFrb').firstOrNull);
-    final ruler = _rectOf(_byTypeName('TimelineRuler').firstOrNull);
-    final lanes = _rectOf(_byTypeName('LayerArea').firstOrNull);
+    final rulerFull = _rectOf(_byTypeName('TimelineRuler').firstOrNull);
+    final lanesFull = _rectOf(_byTypeName('LayerArea').firstOrNull);
     final viewer = _rectOf(_byTypeName('ViewerPanelFrb').firstOrNull);
     final rows = _byTypeName('OutlineRow');
     out.writeln('panel=${_fmtRect(panel)} viewer=${_fmtRect(viewer)}');
-    out.writeln('ruler=${_fmtRect(ruler)} lanes=${_fmtRect(lanes)} '
+    out.writeln('ruler=${_fmtRect(rulerFull)} lanes=${_fmtRect(lanesFull)} '
         'rows=${rows.length}');
-    if (panel == null || ruler == null || lanes == null || rows.isEmpty) {
+    if (panel == null ||
+        rulerFull == null ||
+        lanesFull == null ||
+        rows.isEmpty) {
       out.writeln('FAILED: geometry not found');
       _flush();
       return;
+    }
+    final clamped = rulerFull.left < panel.left || rulerFull.right > panel.right;
+    final ruler = clamped ? rulerFull.intersect(panel) : rulerFull;
+    final lanes = clamped ? lanesFull.intersect(panel) : lanesFull;
+    if (clamped) {
+      out.writeln('clamped to window: ruler=${_fmtRect(ruler)} '
+          'lanes=${_fmtRect(lanes)}');
     }
     final laneCentre = Offset(
         lanes.left + lanes.width * 0.55, lanes.top + lanes.height * 0.4);

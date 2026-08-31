@@ -638,7 +638,11 @@ It opens the project, fronts the comp named *Clips* (or the first comp), **print
 conditions** (window physical size, dpr, whether media resolves — §2.1's trap made
 that mandatory), drives the gestures through the real hit-test path, and writes §2's
 raw rows: per-gesture `FrameTiming` aggregates, per-click detail, and per-name
-bridge-call deltas. Run, from `flutter_ui/`:
+bridge-call deltas. The ruler and lane rects it aims at live in the horizontal
+scroll's content space, so a project saved zoomed-in reports them wider than the
+monitor and starting left of it; the probe clamps them to the panel's on-screen
+rect (and says so in its output), because a gesture aimed off-window measures an
+empty row and looks like a result. Run, from `flutter_ui/`:
 
 ```
 flutter run --profile -d windows --no-pub \
