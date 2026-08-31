@@ -1013,6 +1013,24 @@ pub fn combined_coverage(
 ) -> Vec<u8> {
     let sx = f64::from(w) / natural_w.max(1.0);
     let sy = f64::from(h) / natural_h.max(1.0);
+    // Rasterising a stack costs a polygon fill and — for a feathered mask — a
+    // distance transform over every pixel, tens of milliseconds at comp size,
+    // and it was being paid on **every frame build** whether or not anything
+    // about the masks had moved (a still feathered ellipse on a Precomp cost
+    // ~55 ms a frame on the project that found this). The memo below is keyed
+    // by the *evaluated* content — the interpolated path, the feather and
+    // expansion and opacity at `t`, the raster size — so a still mask hits on
+    // every frame and an animated one recomputes exactly when its shape is
+    // genuinely different.
+    let key = coverage_key(masks, w, h, sx, sy, t);
+    if let Ok(mut memo) = COVERAGE_MEMO.lock() {
+        if let Some(i) = memo.iter().position(|(k, _)| *k == key) {
+            let hit = memo.remove(i);
+            let out = hit.1.clone();
+            memo.push(hit); // most recently used last
+            return out;
+        }
+    }
     let base: u16 = match masks
         .iter()
         .find(|m| m.does_something_at(t))
@@ -1052,7 +1070,78 @@ pub fn combined_coverage(
             };
         }
     }
-    total.into_iter().map(|t| t as u8).collect()
+    let total: Vec<u8> = total.into_iter().map(|t| t as u8).collect();
+    if let Ok(mut memo) = COVERAGE_MEMO.lock() {
+        if memo.len() >= COVERAGE_MEMO_SLOTS {
+            memo.remove(0);
+        }
+        memo.push((key, total.clone()));
+    }
+    total
+}
+
+/// How many rasterised stacks the memo holds — a bound, not a target
+/// (docs/14: budgeted allocations). Eight comp-sized coverages is ~12 MB at
+/// 1080p-class sizes; a comp showing more distinct masked stacks per frame
+/// than that simply recomputes, as before.
+// ponytail: whole-stack granularity and a tiny LRU; per-mask caching (so one
+// animated mask in a stack does not evict its still siblings) if a project
+// with many simultaneously animated masks measures over budget.
+const COVERAGE_MEMO_SLOTS: usize = 8;
+static COVERAGE_MEMO: std::sync::Mutex<Vec<(u128, Vec<u8>)>> = std::sync::Mutex::new(Vec::new());
+
+/// The content name of a rasterised stack: everything the pixels depend on,
+/// evaluated at `t` — so two times where nothing about the masks differs name
+/// the same bytes, and any moved vertex, feather, opacity, order or size names
+/// different ones.
+fn coverage_key(masks: &[Mask], w: u32, h: u32, sx: f64, sy: f64, t: f64) -> u128 {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"maskcov/1");
+    hasher.update(&w.to_le_bytes());
+    hasher.update(&h.to_le_bytes());
+    hasher.update(&sx.to_bits().to_le_bytes());
+    hasher.update(&sy.to_bits().to_le_bytes());
+    let f = |hasher: &mut blake3::Hasher, v: f64| {
+        hasher.update(&v.to_bits().to_le_bytes());
+    };
+    for mask in masks {
+        // A mask that does nothing at `t` leaves no pixel, so it takes no part
+        // in the name either — switching one off must hit the same entry as
+        // deleting it would.
+        if !mask.does_something_at(t) {
+            continue;
+        }
+        hasher.update(&[mask.mode as u8, u8::from(mask.inverted)]);
+        f(&mut hasher, mask.opacity.value_at(t));
+        f(&mut hasher, mask.expansion.value_at(t));
+        let path = mask.path_at(t);
+        let (uniform, per_vertex) = mask.feather_widths_at(path.vertices.len(), t);
+        f(&mut hasher, uniform);
+        if let Some(widths) = per_vertex {
+            hasher.update(&(widths.len() as u64).to_le_bytes());
+            for width in widths {
+                f(&mut hasher, width);
+            }
+        }
+        hasher.update(&[u8::from(path.closed)]);
+        hasher.update(&(path.vertices.len() as u64).to_le_bytes());
+        for v in &path.vertices {
+            for c in [
+                v.pos.0,
+                v.pos.1,
+                v.tan_in.0,
+                v.tan_in.1,
+                v.tan_out.0,
+                v.tan_out.1,
+            ] {
+                f(&mut hasher, c);
+            }
+        }
+    }
+    let bytes = hasher.finalize();
+    let mut k = [0u8; 16];
+    k.copy_from_slice(&bytes.as_bytes()[..16]);
+    u128::from_le_bytes(k)
 }
 
 // ---------------------------------------------------------------------------
@@ -1618,6 +1707,36 @@ mod tests {
         assert_eq!(rgba[4 * 4 + 3], 0, "inverted left transparent");
         let right = rgba[(4 + 3) * 4 + 3];
         assert!((i16::from(right) - 127).abs() <= 2, "half opacity {right}");
+    }
+
+    /// The coverage memo answers repeats with the same bytes and answers a
+    /// changed input — a feather, an animated path's time — with fresh ones.
+    /// Without the memo the whole stack re-rasterised (fill plus a feather's
+    /// distance transform) on every frame build, ~55 ms a frame at comp size
+    /// on the project that found it, none of it owned by any layer's number.
+    #[test]
+    fn coverage_is_memoised_by_evaluated_content() {
+        let mut m = Mask::rectangle(2.0, 2.0, 20.0, 20.0);
+        m.feather = Property::fixed(6.0);
+        let masks = [m];
+        let first = combined_coverage(&masks, 32, 32, 32.0, 32.0, 0.0);
+        // A different `t` on a still mask evaluates to the same content: the
+        // memo must serve it, and serve it right.
+        let second = combined_coverage(&masks, 32, 32, 32.0, 32.0, 5.0);
+        assert_eq!(first, second, "a still mask reads the same at any time");
+
+        let mut wider = masks[0].clone();
+        wider.feather = Property::fixed(12.0);
+        let softer = combined_coverage(&[wider], 32, 32, 32.0, 32.0, 0.0);
+        assert_ne!(first, softer, "a changed feather is different content");
+
+        let mut off = masks[0].clone();
+        off.mode = MaskMode::None;
+        let bare = combined_coverage(&[off], 32, 32, 32.0, 32.0, 0.0);
+        assert!(
+            bare.iter().all(|&c| c == 255),
+            "a switched-off mask is no mask, memo or not"
+        );
     }
 
     /// Two 16-wide-tall rectangles: A covers x 0..10, B covers x 6..16, so
