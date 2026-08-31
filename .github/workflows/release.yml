@@ -24,9 +24,23 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # A rehearsal: build all three artefacts without publishing anything. The
+  # version cannot come from a branch name, so it is typed in, and the publish
+  # and announce jobs below run for a tag only - a manual run leaves the
+  # installers as run artefacts and creates no release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, with or without the leading v"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  # A tag run takes its version from the tag; a manual run from the input. The
+  # leading v is stripped where the version is used, as it always was.
+  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
 
 jobs:
   windows-installer:
@@ -67,7 +81,7 @@ jobs:
       - name: Build the installer
         shell: pwsh
         run: |
-          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $version = "$env:RELEASE_VERSION".TrimStart('v')
           & packaging/windows/build-installer.ps1 -Version $version
       # The same files the installer lays down, as a plain archive (K-297).
       # This is what a per-user installation fetches to update itself: no
@@ -75,7 +89,7 @@ jobs:
       - name: Package the app for in-place updates
         shell: pwsh
         run: |
-          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $version = "$env:RELEASE_VERSION".TrimStart('v')
           $stage = "$env:RUNNER_TEMP\lumit-package"
           New-Item -ItemType Directory -Force -Path "$stage\icons" | Out-Null
           Copy-Item -Recurse -Force flutter_ui\build\windows\x64\runner\Release\* $stage
@@ -134,7 +148,7 @@ jobs:
           flutter build linux --release
       - name: Stage the bundle
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_VERSION#v}"
           stage="lumit-$version-linux-x64"
           cp -r flutter_ui/build/linux/x64/release/bundle "$stage"
           # The bridge links FFmpeg's shared build; the launcher's rpath already
@@ -160,7 +174,7 @@ jobs:
         # release (K-304), so a failure here fails the release rather than
         # publishing a Linux-shaped hole.
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_VERSION#v}"
           stage="lumit-$version-linux-x64"
           # Two packages flatpak-builder needs but does not depend on, both of
           # which --no-install-recommends would otherwise drop:
@@ -262,7 +276,7 @@ jobs:
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
       - name: Build the disk image
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_VERSION#v}"
           packaging/macos/make-dmg.sh "$version"
       # The bundle on its own, for in-place updates (K-297). `ditto` rather than
       # `zip`: an .app carries symbolic links, code signatures and executable
@@ -270,7 +284,7 @@ jobs:
       # to open.
       - name: Package the bundle for in-place updates
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_VERSION#v}"
           app="flutter_ui/build/macos/Build/Products/Release/Lumit.app"
           mkdir -p packaging/macos/dist
           ditto -c -k --keepParent "$app" \
@@ -286,6 +300,8 @@ jobs:
   publish:
     name: GitHub release
     needs: [windows-installer, linux-bundle, macos-dmg]
+    # A manual run is a rehearsal and publishes nothing.
+    if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
