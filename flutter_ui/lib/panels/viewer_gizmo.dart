@@ -317,6 +317,20 @@ class LayerBox {
   }
 }
 
+/// The box a drawing tool works on: the first of [boxes] — which are top first
+/// — whose layer is in [selectedIds].
+///
+/// Every tool that draws onto a layer rather than at the composition needs the
+/// same answer, and "the primary selection" has to mean the same thing in all
+/// of them: the topmost selected layer, not whichever the selection set happens
+/// to iterate first.
+LayerBox? primarySelectedBox(List<LayerBox> boxes, Set<UuidValue> selectedIds) {
+  for (final box in boxes) {
+    if (selectedIds.contains(box.id)) return box;
+  }
+  return null;
+}
+
 /// One vertex of one mask, named so a selection can hold it: which layer, which
 /// mask, and which point along it (K-224).
 ///

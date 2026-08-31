@@ -196,13 +196,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   }
 
   /// The layer a shape would be drawn on: the primary selection.
-  LayerBox? get _target {
-    final ids = widget.uiState.selectedLayerIds;
-    for (final box in widget.boxes) {
-      if (ids.contains(box.id)) return box;
-    }
-    return null;
-  }
+  LayerBox? get _target =>
+      primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
   /// The space the art being drawn lives in, and how to get it back on screen
   /// (K-238).
