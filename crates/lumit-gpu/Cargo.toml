@@ -8,7 +8,11 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
-bytemuck = { version = "1", features = ["derive"] }
+# `min_const_generics` is what makes Pod/Zeroable reach an array of any length -
+# the curve uniform is 325 vec4s. Another crate's feature union was providing it
+# on Windows and Linux and not on macOS, where the build stopped; it is asked
+# for here rather than relied on.
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 glam = "0.29"
 half = "2"
 pollster = "0.4"

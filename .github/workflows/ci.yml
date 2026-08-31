@@ -847,12 +847,14 @@ jobs:
           # teaching a grep where a test module begins — which held right up
           # until a second file grew an inline one (worker_thread.rs), and the
           # job started failing on code that was never on the API surface.
-          # src/api/tests.rs is still named here: it is test code end to end
-          # and carries no `#[cfg(test)]` of its own to stop at.
+          # A file that is test code end to end carries no `#[cfg(test)]` of its
+          # own to stop at, so those go by name: `tests.rs` and `*_tests.rs`, the
+          # repository's two spellings. Naming one such file was what broke when
+          # a second one arrived (layer/style_tests.rs).
           hits=$(
             find crates/lumit-bridge/src/api crates/lumit-bridge/src/api.rs \
               -name '*.rs' -type f \
-              ! -path 'crates/lumit-bridge/src/api/tests.rs' \
+              ! -name 'tests.rs' ! -name '*_tests.rs' \
             | while read -r file; do
                 awk -v f="$file" \
                   '/^#\[cfg\(test\)\]/ { exit } { print f ":" NR ":" $0 }' "$file"

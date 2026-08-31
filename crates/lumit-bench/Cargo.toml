@@ -6,6 +6,10 @@ license = "GPL-3.0-only"
 # Never goes to crates.io: these crates are the application, and they
 # reference each other by path (docs/05-ARCHITECTURE.md).
 publish = false
+# Two binaries live here now - the harness itself and `ofx-bench` - so a bare
+# `cargo run -p lumit-bench` has to be told which one it means. It means this
+# one; docs/13-PERFORMANCE-RULES.md §7.3 and the CI gate both call it that way.
+default-run = "lumit-bench"
 
 # The headless performance harness (docs/13-PERFORMANCE-RULES.md §7.3, K-389).
 # A **development** crate: it builds docs/13 §1's reference comp in code and
