@@ -1090,8 +1090,8 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuAnimation,
       items: () => [
-        MenuEntry.todo(l10n.menuSaveAnimationPreset),
-        MenuEntry.todo(l10n.menuApplyAnimationPreset),
+        saveAnimationPresetRow(ui),
+        applyAnimationPresetRow(app, ui),
         MenuEntry.divider(),
         // The four keyframe commands act on the property rows the Timeline has
         // picked, and on the keys those rows carry **under the playhead**: the

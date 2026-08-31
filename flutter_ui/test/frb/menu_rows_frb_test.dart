@@ -10,11 +10,15 @@
 // of half these rows is about the selection, and the selection lives in a
 // notifier the bar does not subscribe to itself.
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
+import 'package:lumit_flutter/state/file_dialogs.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -606,6 +610,94 @@ void main() {
       expect(p.state.project!.internalid, isNot(was),
           reason: 'the one that was open has gone');
       expect(p.state.project!.getItems(), isEmpty);
+    });
+
+    /// The two preset rows are a second door onto the `.lumfx` the Effects &
+    /// presets panel writes and reads (K-244), so what is worth asserting is
+    /// that the menu reaches the same document — and that Apply reaches every
+    /// selected layer (K-523).
+    group('Animation ▸ preset rows', () {
+      late Directory dir;
+
+      setUp(() {
+        dir = Directory.systemTemp.createTempSync('lumit-menu-preset');
+      });
+      tearDown(() {
+        animationPresetSavePicker = (suggested) => pickPresetSaveLocation(
+            suggested,
+            initialDirectory: presetsDirPath());
+        animationPresetOpenPicker = pickPresetToOpen;
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+
+      testWidgets('Save writes the selected layer\'s stack as a .lumfx',
+          (tester) async {
+        final p = withComp();
+        final layer = p.comp.addSolidLayer();
+        layer.addEffect(name: 'blur');
+        p.uiState.setSelection([layer]);
+        p.uiState.model.refresh();
+        await mount(tester, p);
+
+        final path = '${dir.path}/Soft edges.lumfx';
+        animationPresetSavePicker = (_) async => path;
+
+        await choose(tester, 'Animation', l10n.menuSaveAnimationPreset);
+        await tester.pump();
+
+        final written = File(path);
+        expect(written.existsSync(), isTrue);
+        final text = written.readAsStringSync();
+        expect(text, contains('blur'));
+        expect(text, contains('Soft edges'),
+            reason: 'the preset is named after its file, as the panel names it');
+      });
+
+      testWidgets('Apply lands the preset on every selected layer',
+          (tester) async {
+        final p = withComp();
+        final source = p.comp.addSolidLayer();
+        source.addEffect(name: 'blur');
+        final path = '${dir.path}/one.lumfx';
+        File(path).writeAsStringSync(source.savePreset(name: 'one'));
+
+        final a = p.comp.addSolidLayer();
+        final b = p.comp.addSolidLayer();
+        p.uiState.setSelection([a, b]);
+        p.uiState.model.refresh();
+        await mount(tester, p);
+
+        animationPresetOpenPicker = () async => path;
+
+        await choose(tester, 'Animation', l10n.menuApplyAnimationPreset);
+        await tester.pump();
+
+        expect(a.getEffects().length, 1);
+        expect(b.getEffects().length, 1);
+        expect(a.getInfo().effects.first.id,
+            isNot(b.getInfo().effects.first.id),
+            reason: 'each layer gets its own instance (K-065)');
+      });
+
+      testWidgets('both rows grey with nothing selected', (tester) async {
+        final p = withComp();
+        await mount(tester, p);
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+
+        await open(tester, 'Animation');
+        for (final row in [
+          l10n.menuSaveAnimationPreset,
+          l10n.menuApplyAnimationPreset,
+        ]) {
+          expect(find.text(l10n.notImplemented(row)), findsNothing,
+              reason: 'the row is built now, so it carries no mark');
+          expect(tester.widget<Text>(find.text(row)).style?.color,
+              t.textDisabled);
+        }
+        await dismiss(tester);
+      });
     });
   });
 }

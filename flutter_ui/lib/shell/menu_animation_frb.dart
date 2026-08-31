@@ -14,6 +14,8 @@
 // pair — so a key eased from this menu and one eased on the strip cannot come
 // out different.
 
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -24,7 +26,9 @@ import '../l10n/strings.dart';
 import '../panels/graph_channels.dart';
 import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
+import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
+import '../state/file_dialogs.dart';
 import 'expression_dialog_frb.dart';
 import 'keyframe_dialogs_frb.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
@@ -348,3 +352,77 @@ MenuEntry trackCameraRow(LumitState app, LumitUiState ui) => MenuEntry(
 
 /// The tracker's own name in the effect registry.
 const String _cameraTrack = 'camera_track';
+
+// ---------------------------------------------------------------------------
+// Presets
+// ---------------------------------------------------------------------------
+
+/// The two file dialogues the preset rows open, and the seam a test replaces —
+/// the pattern `openExternalLink` set, because no plugin channel opens a real
+/// dialogue in a widget test.
+Future<String?> Function(String suggested) animationPresetSavePicker =
+    (suggested) =>
+        pickPresetSaveLocation(suggested, initialDirectory: presetsDirPath());
+Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
+
+/// Animation ▸ Save animation preset (K-244): the selected layer's effect
+/// stack written out as the `.lumfx` document the Effects & presets panel's
+/// own **Save preset…** writes, through the same engine call.
+///
+/// The engine hands back the text and never opens a dialogue; where it goes is
+/// the picker's business and writing it is Dart's. The preset's display name is
+/// its file's stem, as the panel names it, so one saved from here and one saved
+/// from there are the same document.
+MenuEntry saveAnimationPresetRow(LumitUiState ui) {
+  final layer = ui.selectedLayer.value;
+  return MenuEntry(
+    l10n.menuSaveAnimationPreset,
+    layer == null
+        ? null
+        : () async {
+            final path = await animationPresetSavePicker('preset.lumfx');
+            if (path == null) return;
+            final name =
+                path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
+            try {
+              File(path).writeAsStringSync(layer.savePreset(name: name));
+            } catch (_) {
+              // A folder that will not take the file, or a layer that went away
+              // under the open dialogue. The document is untouched either way.
+            }
+          },
+  );
+}
+
+/// Animation ▸ Apply animation preset (K-244): a saved `.lumfx` onto **every**
+/// selected layer (K-523), read once and applied per layer as one undo step.
+///
+/// A layer's refusal leaves the rest of the batch standing, and a file that is
+/// not a preset at all is a normal thing for a picker to hand back rather than
+/// something to shout about — the Effects & presets panel's own rules.
+MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
+  final layers = ui.selectedLayers.value;
+  return MenuEntry(
+    l10n.menuApplyAnimationPreset,
+    layers.isEmpty
+        ? null
+        : () async {
+            final path = await animationPresetOpenPicker();
+            if (path == null) return;
+            final String text;
+            try {
+              text = File(path).readAsStringSync();
+            } catch (_) {
+              return;
+            }
+            asOneUndoStep(app.project, () {
+              for (final layer in layers) {
+                try {
+                  layer.loadPreset(text: text);
+                } catch (_) {}
+              }
+            });
+            app.notifyDocumentChanged();
+          },
+  );
+}
