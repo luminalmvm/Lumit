@@ -72,17 +72,15 @@ In the Effect Controls panel:
 - **Matte** is the depth pass.
 - **Focus distance** picks which colour value is in focus.
 - **Use focus point** with **Focus point x** and **Focus point y** read the depth
-  value at a specific spot and focus there; if the value at the point changes, the 
-  focus changes.
+  value at a specific spot and focus there.
 - **Focus range** is the area around the focus point which stays sharp before 
   the blur begins.
 - **Aperture** is the main scale for both near and far blur.
-- **Near blur** and **Far blur** scale the blur separately for blur on the close and far blurs.
+- **Near blur** and **Far blur** scale the near and far blur separately.
 
 The **Iris** group shapes the blur:
 
-- **Blades** is how many straight edges the aperture has. It does nothing while
-  Roundness is fully round.
+- **Blades** is how many straight edges the aperture has.
 - **Roundness**: changes how round the iris appears.
 - **Rotation** rotates the iris.
 - **Aspect ratio** squeezes the iris.
@@ -99,19 +97,16 @@ The **Depth map** group alters information about how the depth pass is read:
 
 - **Depth channel** selects the channel to use as the matte.
 - **Invert** inverts the depth pass before applying blur.
-- **Gamma** is the same as applying the gamma effect to the depth layer. Used
-  to adjust the "scaling" between black and white values.
+- **Gamma** is the same as applying the gamma effect to the depth layer.
 - **Remove edge leak** and **Detect edge threshold** suppress haloes where a
-  near object is next to a far one and the depth and normal layers don't perfectly
-  align.
+  near object is next to a far one.
 
 Additional properties:
 
-- **Repeat edge pixels** holds the outermost pixel where the gather reaches past
-  the frame, so the border does not darken from reading transparency.
-- **Display** is a diagnostic view. Depth map shows what the effect actually
-  reads after invert and gamma are applied; Focus map shows white where the
-  picture is being kept sharp.
+- **Repeat edge pixels** holds the outermost pixel where the blur reaches past
+  the frame.
+- **Display** is a diagnostic view. Depth map shows what the effect reads;
+  Focus map shows white where the picture is kept sharp.
 - **Mix**: how much of the result replaces the original.
 
 ## Related

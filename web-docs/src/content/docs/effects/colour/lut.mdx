@@ -19,13 +19,9 @@ Applies a **look-up table**. This must be a `.cube` file, and is loaded from
 disk.
 
 :::note[Set Input space to whatever the LUT expects]
-Lumit composites in scene-linear light, where mid-grey sits at 0.18. Most
-creative LUTs are baked in a grading application whose input is display
-encoded, where mid-grey sits near 0.5. **Input space** says which of the two the
-table was written for: the picture is converted into that space, the table
-applies, and the result comes back to linear. Leave it on Linear for a LUT
-authored against linear input; choose sRGB or Rec. 709 for one made from
-display-encoded footage. Log-encoded LUTs have no matching option yet.
+**Input space** says which space the table was written for: the picture is
+converted into that space, the table applies, and the result comes back to
+linear. Log-encoded LUTs have no matching option yet.
 :::
 
 ## Parameters
@@ -51,9 +47,7 @@ In the Effect Controls panel:
 ## What each control does
 
 - **File**: the .cube file to apply.
-- **Input space**: the encoding the table was authored for. Linear applies it
-  to the working picture untouched, which is what this effect always did; sRGB
-  and Rec. 709 convert into that curve first and back afterwards.
+- **Input space**: the encoding the table was authored for.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 
