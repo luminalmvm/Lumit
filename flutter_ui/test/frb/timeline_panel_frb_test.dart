@@ -7050,11 +7050,13 @@ void main() {
         'keys-interp-hold',
         'keys-interp-ease',
         'keys-interp-bezier',
-        'keys-reverse',
-        'keys-copy',
-        'keys-paste',
       ]) {
         expect(find.byKey(ValueKey<String>(key)), findsOneWidget, reason: key);
+      }
+      // Reverse, Copy and Paste at playhead are gone from the bar (owner,
+      // 2026-08-31, K-722); Copy and Paste keep their Ctrl+C / Ctrl+V roads.
+      for (final key in const ['keys-reverse', 'keys-copy', 'keys-paste']) {
+        expect(find.byKey(ValueKey<String>(key)), findsNothing, reason: key);
       }
       // In the drawing's order, left to right.
       double x(String key) =>
@@ -7062,14 +7064,13 @@ void main() {
       expect(x('keys-interp-linear'), lessThan(x('keys-interp-hold')));
       expect(x('keys-interp-hold'), lessThan(x('keys-interp-ease')));
       expect(x('keys-interp-ease'), lessThan(x('keys-interp-bezier')));
-      expect(x('keys-interp-bezier'), lessThan(x('keys-reverse')));
-      expect(x('keys-reverse'), lessThan(x('keys-copy')));
-      expect(x('keys-copy'), lessThan(x('keys-paste')));
 
       // And the whole run stands under the outline, not under the lanes: its
       // last button ends before the lane bar begins.
       expect(
-          tester.getRect(find.byKey(const ValueKey('keys-paste'))).right,
+          tester
+              .getRect(find.byKey(const ValueKey('keys-interp-bezier')))
+              .right,
           lessThanOrEqualTo(tester
               .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))
               .left),
@@ -7107,62 +7108,10 @@ void main() {
       expect(keyShapeOf(keys().first), (KeyShape.diamond, KeyShape.diamond));
     });
 
-    /// Reverse: the block plays backwards where it stands. The times mirror
-    /// through the middle of the selection, and **each value travels with its
-    /// own key** — this re-times keys, it does not shuffle values under fixed
-    /// times.
-    testWidgets('Reverse mirrors the selected keys within their span',
-        (tester) async {
-      final p = withComp();
-      final layer = blockLayer(p, [600, 900, 1500]);
-      await mount(tester, p);
-      await openKeyLane(tester, layer);
-      await boxRow(
-          tester,
-          ValueKey<String>(
-              'tl-keys-${layer.internallayerId}/transform/opacity'));
-
-      await tapStrip(tester, 'keys-reverse');
-
-      expect(framesOf(p, layer), [600, 1200, 1500],
-          reason: '900 reflects through the middle of 600…1500');
-      expect(valuesOf(layer), [1500, 900, 600],
-          reason: 'the values travelled with their keys, so the run reads '
-              'back to front where it stands');
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      expect(framesOf(p, layer), [600, 900, 1500]);
-      expect(valuesOf(layer), [600, 900, 1500],
-          reason: 'one press, one undo step');
-    });
-
-    /// Copy, then Paste at playhead: the block lands with its first key on the
-    /// playhead, on the same property it came off.
-    testWidgets('Copy and Paste at playhead put the block under the playhead',
-        (tester) async {
-      final p = withComp();
-      final layer = blockLayer(p, [600, 900]);
-      await mount(tester, p);
-      await openKeyLane(tester, layer);
-      await boxRow(
-          tester,
-          ValueKey<String>(
-              'tl-keys-${layer.internallayerId}/transform/opacity'));
-
-      await tapStrip(tester, 'keys-copy');
-
-      p.uiState.playheadFrame.value = 1800;
-      await tapStrip(tester, 'keys-paste');
-
-      final frames = framesOf(p, layer);
-      expect(frames, contains(1800),
-          reason: 'the block\'s first key landed on the playhead');
-      expect(frames, contains(2100),
-          reason: 'and the second kept its 300-frame gap');
-      expect(frames, containsAll(<int>[600, 900]),
-          reason: 'a paste adds; it does not move what was there');
-    });
+    // Reverse's and the Copy/Paste buttons' widget tests went with the
+    // buttons (owner, 2026-08-31, K-722): the copy/paste road that remains is
+    // the chord, round-tripped below; Reverse's arithmetic keeps its pins in
+    // key_block_test.dart.
 
     // ---------------------------------------------------------------------
     // The owner's desktop-testing batch (K-529, K-530).

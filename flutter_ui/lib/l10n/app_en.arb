@@ -8924,22 +8924,6 @@
   "@keysEase": {
     "description": "Timeline, Keys mode bottom bar: the word that opens the Ease popover on the selected keyframes. Drawn in capitals, beside Linear, Hold and Bezier."
   },
-  "keysPasteAtPlayhead": "Paste at playhead",
-  "@keysPasteAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
-  },
-  "tipReverseKeys": "Reverse keyframes",
-  "@tipReverseKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
-  },
-  "tipCopyKeys": "Copy keyframes",
-  "@tipCopyKeys": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
-  },
-  "tipPasteKeysAtPlayhead": "Paste keyframes",
-  "@tipPasteKeysAtPlayhead": {
-    "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
-  },
   "welcomeNewProject": "New project",
   "@welcomeNewProject": {
     "description": "Welcome screen: the title of the first of two start cards. It opens the editor on an empty project. Fits a 180px card on one line."

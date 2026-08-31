@@ -462,7 +462,8 @@ Future<void> _showLayerMenu(
 /// less of than the lane bar had.
 ///
 /// Two shapes, one per view. In **Layers** it is the keyframe strip (K-458):
-/// the four interpolations, a rule, then Reverse, Copy and Paste at playhead.
+/// the four interpolations — and nothing after them, since the owner removed
+/// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
 /// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
 /// the tangent modes, the value/speed lens and the auto-fit toggle. Every
 /// button keeps the face, the tooltip and the widget key it had on the lane
@@ -489,9 +490,6 @@ class KeyCommandStrip extends StatelessWidget {
   /// The Ease word pressed, with its own context so the popover can be
   /// anchored to it — the same box the block badge opens.
   final ValueChanged<BuildContext>? onEaseBlock;
-  final VoidCallback? onReverse;
-  final VoidCallback? onCopy;
-  final VoidCallback? onPaste;
 
   const KeyCommandStrip({
     super.key,
@@ -504,9 +502,6 @@ class KeyCommandStrip extends StatelessWidget {
     this.onTangentMode,
     this.onOpenEasing,
     this.onEaseBlock,
-    this.onReverse,
-    this.onCopy,
-    this.onPaste,
   });
 
   Widget _button(
@@ -591,33 +586,11 @@ class KeyCommandStrip extends StatelessWidget {
                   tip: l10n.tipEasyEase,
                   on: false,
                   onPressed: () => onInterp?.call(easyEase)),
-              const SizedBox(width: 8),
-              // **The two runs read apart**: everything left of this rule says
-              // how the movement between keys is shaped; everything right of
-              // it moves the keys themselves.
-              Container(width: 1, height: 10, color: t.hairlineStrong),
-              const SizedBox(width: 8),
-              _button(t,
-                  keyName: 'keys-reverse',
-                  label: l10n.fxReverse,
-                  tip: l10n.tipReverseKeys,
-                  on: false,
-                  onPressed: () => onReverse?.call()),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'keys-copy',
-                  label: l10n.menuCopy,
-                  tip: l10n.tipCopyKeys,
-                  on: false,
-                  onPressed: () => onCopy?.call()),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'keys-paste',
-                  label: l10n.keysPasteAtPlayhead,
-                  tip: l10n.tipPasteKeysAtPlayhead,
-                  on: false,
-                  onPressed: () => onPaste?.call()),
               const SizedBox(width: 12),
+              // No second run: Reverse, Copy and Paste at playhead left the
+              // strip on the owner's ruling (2026-08-31, desktop testing).
+              // Copy and Paste keep their Ctrl+C / Ctrl+V roads; the four
+              // interpolations are the whole of the bar.
             ],
             if (lens != null) ...[
               // The selected keys' easing, one click each — the F9 family's

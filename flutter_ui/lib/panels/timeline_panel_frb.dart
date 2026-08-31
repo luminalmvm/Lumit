@@ -1802,8 +1802,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// it read as broken — **claimed the chord anyway**, leaving whatever was
   /// copied last on the clipboard for Paste to put down again.
   ///
-  /// Reverse, the interpolation words, the tangent modes and the Ease popover
-  /// have always resolved it this way ([_selectionChannels]); Copy and Paste
+  /// The interpolation buttons, the tangent modes and the Ease popover have
+  /// always resolved it this way ([_selectionChannels]); Copy and Paste
   /// now do too, which is why they behave the way the rest of the strip does.
   List<GraphChannel> _commandChannels(LumitUiState ui) {
     final paths = _selectionPaths();
@@ -2003,29 +2003,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         fpsDen: fpsDen,
       );
     });
-    ui.model.refresh();
-  }
-
-  /// Reverse the selected keys in time (K-458, the Keys bottom bar): the block
-  /// plays backwards where it stands, each value travelling with its own key.
-  ///
-  /// One undo step however many rows and layers the block reaches across.
-  void _reverseSelectedKeys() {
-    final ui = Provider.of<LumitUiState>(context, listen: false);
-    final channels = _selectionChannels(ui);
-    final selection = _actionKeySelection(channels);
-    if (selection.isEmpty) return;
-    final (fpsNum, fpsDen) = ui.model.fpsExact;
-    asOneUndoStep(
-      _project,
-      () => reverseSelection(
-        channels: channels,
-        selectedKeys: selection,
-        fps: ui.model.fps,
-        fpsNum: fpsNum,
-        fpsDen: fpsDen,
-      ),
-    );
     ui.model.refresh();
   }
 
@@ -3605,9 +3582,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   if (box is! RenderBox) return;
                   _openEasePopover(box.localToGlobal(Offset.zero));
                 },
-                onReverse: _reverseSelectedKeys,
-                onCopy: _copySelectedKeys,
-                onPaste: _pasteKeysIntoSelection,
               ),
             ),
             Expanded(

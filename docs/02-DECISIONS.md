@@ -22843,3 +22843,23 @@ fx · 3D · motion blur · adjustment · flow · collapse. The hide ladder (K-63
 
 Tests: `timeline_panel_frb_test` ("the outline columns sit in their groups", "flow and
 collapse stand in cells of their own") pin the new order.
+
+## K-722 — Reverse, Copy and Paste at playhead leave the keyframe strip
+
+**Status:** DECIDED — 2026-08-31
+
+Owner, desktop testing: "Remove the Reverse, Copy, and paste at playhead in the timeline's
+bottom bar. I don't want those." The keyframe strip at the outline's foot (K-458's strip,
+moved there when the lane bar was pared back) now carries the four interpolations and
+nothing after them — the rule that separated the two runs went with the run it separated.
+
+Copy and Paste keep the chord road (`Ctrl+C` / `Ctrl+V` through the shell's claims, K-300),
+which the round-trip tests pin. Reverse has no other surface in Layers view, so the panel's
+`_reverseSelectedKeys` went too; the block arithmetic (`reverseSelection`,
+`reversedFrames`) stays where the Ease popover's Stagger shares it, with its own pins in
+`key_block_test`. The four strip-only strings (`keysPasteAtPlayhead`, `tipReverseKeys`,
+`tipCopyKeys`, `tipPasteKeysAtPlayhead`) left `app_en.arb`; `fxReverse` stays — it is the
+effect's engine label.
+
+Tests: `timeline_panel_frb_test` ("the outline's foot carries the keyframe strip" now pins
+the three buttons as absent).
