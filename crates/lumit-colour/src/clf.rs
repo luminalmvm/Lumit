@@ -467,7 +467,7 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
                     })?;
                     let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
                     let value = attr
-                        .unescape_value()
+                        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|err| {
                             bad(what, format!("an attribute could not be read ({err})"))
                         })?
@@ -515,7 +515,7 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
             Event::Text(ref t) => {
                 if open_child.is_some() {
                     let chunk = t
-                        .xml_content()
+                        .xml_content(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|e| bad(what, format!("text could not be read ({e})")))?;
                     // A comment inside an Array splits the text into two
                     // events, and the reader trims each one — so the last

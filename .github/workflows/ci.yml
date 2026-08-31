@@ -752,7 +752,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p lumit-ofx --test handle_fuzz --target x86_64-unknown-linux-gnu
+      # `+nightly` explicitly: rust-toolchain.toml pins stable for the whole
+      # repository, and it wins over whichever toolchain the step above made the
+      # default - so without this cargo runs stable and `-Zsanitizer` is refused.
+      - run: cargo +nightly test -p lumit-ofx --test handle_fuzz --target x86_64-unknown-linux-gnu
 
   no-hex-outside-theme:
     name: design-token lint (no hex literals outside the theme module)

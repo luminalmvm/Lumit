@@ -19,7 +19,7 @@ yaml-rust2 = "0.12"
 # CLF/CTF are XML. A hand-rolled scanner would be more code than this and worse
 # on entities, CDATA and attribute quoting — and this is a file-parsing trust
 # boundary. quick-xml is MIT, zero-dependency, and pull-based (docs/14 §9).
-quick-xml = "0.38"
+quick-xml = "0.41"
 
 [lints]
 workspace = true
