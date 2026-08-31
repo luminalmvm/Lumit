@@ -316,35 +316,8 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       key: ValueKey<String>('tl-group-label-${widget.header.id}'),
       behavior: HitTestBehavior.opaque,
       onTapDown: (d) async {
-        final picked = await showLumitPopup<int>(
-          context: context,
-          position: d.globalPosition,
-          builder: (close) => FloatSurface(
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < LumitTheme.labelCount; i++)
-                    GestureDetector(
-                      key: ValueKey<String>('tl-group-label-chip-$i'),
-                      onTap: () => close(i),
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: t.labelColour(i),
-                          borderRadius:
-                              BorderRadius.circular(t.tokens.controlRadius),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
+        final picked = await showLabelPicker(context, d.globalPosition,
+            keyPrefix: 'tl-group-label');
         if (picked == null) return;
         widget.actions.onLabel(_group, picked);
       },

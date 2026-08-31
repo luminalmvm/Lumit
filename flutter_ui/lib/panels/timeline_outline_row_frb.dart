@@ -719,35 +719,8 @@ class _OutlineRowState extends State<OutlineRow> {
       key: ValueKey<String>('tl-label-$id'),
       behavior: HitTestBehavior.opaque,
       onTapDown: (d) async {
-        final picked = await showLumitPopup<int>(
-          context: context,
-          position: d.globalPosition,
-          builder: (close) => FloatSurface(
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < LumitTheme.labelCount; i++)
-                    GestureDetector(
-                      key: ValueKey<String>('tl-label-chip-$i'),
-                      onTap: () => close(i),
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: t.labelColour(i),
-                          borderRadius:
-                              BorderRadius.circular(t.tokens.controlRadius),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
+        final picked = await showLabelPicker(context, d.globalPosition,
+            keyPrefix: 'tl-label');
         if (picked == null) return;
         // Every selected layer (K-523), the Project panel's `_setLabel` being
         // the reference: one call each, because one call is what the engine's

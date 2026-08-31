@@ -233,6 +233,49 @@ Future<T?> showMenuAt<T>({
       },
     );
 
+/// The eight-colour **label picker** at [position], resolving to the colour
+/// picked or null when it is dismissed.
+///
+/// One row of chips, in the theme's own label palette — so no colour literal
+/// lives at either call site. Opened by a layer's label dot and by a group's
+/// colour tick (K-523), which drew the same popup twice; [keyPrefix] keeps each
+/// surface's long-standing chip keys.
+Future<int?> showLabelPicker(
+  BuildContext context,
+  Offset position, {
+  required String keyPrefix,
+}) {
+  final t = ThemeScope.of(context).theme;
+  return showLumitPopup<int>(
+    context: context,
+    position: position,
+    builder: (close) => FloatSurface(
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < LumitTheme.labelCount; i++)
+              GestureDetector(
+                key: ValueKey<String>('$keyPrefix-chip-$i'),
+                onTap: () => close(i),
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: t.labelColour(i),
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// The right-click menu on a marker flag: edit what it says, take it away, or
 /// — for a layer's own markers — clear the lot. Shared by the ruler's comp
 /// markers and the bars' layer markers (K-254), which had grown one copy each.
