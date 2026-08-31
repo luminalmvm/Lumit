@@ -30,6 +30,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -645,6 +646,83 @@ void main() {
       // And the shell holds it, so the Viewer and Delete act on it.
       expect(picked.ui.selectedLayer.value?.equals(layer: picked.layer), isTrue,
           reason: 'the click did not reach the shell selection');
+    });
+
+    /// The fifth selection path: clicking a **group header** (K-702), which
+    /// selects the whole band.
+    ///
+    /// It was the one still holding a panel-wide `setState` after WP-2 took
+    /// the layer click's away — reported from the owner's desktop as choosing
+    /// a group being "far slower than selecting any other layer". The header
+    /// click makes one selection write and publishes, exactly as a layer
+    /// click does; the trap below is the rebuild coming back.
+    testWidgets('clicking a group header selects the band without redrawing '
+        'the panel', (tester) async {
+      final p = await mount(tester);
+      final layers = p.comp.getLayers();
+      final gid = p.comp.groupLayers(
+          layerIds: [for (final LayerReference l in layers) l.internallayerId],
+          name: 'Band');
+      p.ui.model.refresh();
+      await settleFrb(tester, minRounds: 4);
+
+      final header = find.byKey(ValueKey<String>('tl-group-row-$gid'));
+      expect(header, findsOneWidget);
+      // On the blank number cell: off the name (whose double-tap rename holds
+      // the arena open), off the twirl, tick and switches (which claim their
+      // own clicks), and near the row's left end, inside the outline's
+      // visible viewport — the row itself runs on under the lane half.
+      final at = tester.getRect(header);
+      final numberCell = Offset(
+          at.left +
+              8 + // the row's own padding
+              switchesGroupWidth +
+              groupDividerWidth +
+              16 + // the twirl's cell
+              identityGap +
+              numberCellWidth / 2,
+          at.center.dy);
+      rebuilds
+        ..reset()
+        ..counting = true;
+      await tester.tapAt(numberCell);
+      await tester.pump(const Duration(milliseconds: 16));
+      rebuilds
+        ..counting = false
+        ..remove();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // ignore: avoid_print
+      print('GROUP CLICK REBUILDS ${rebuilds.total}\n${rebuilds.ranking()}');
+      // The click reached the shell: the whole band is the selection.
+      expect(
+          {
+            for (final LayerReference l in p.ui.selectedLayers.value)
+              l.internallayerId
+          },
+          {for (final LayerReference l in layers) l.internallayerId},
+          reason: 'choosing the header chooses every member');
+      // And none of the Timeline's chrome redrew for it — the trap for the
+      // panel-wide `setState` coming back.
+      for (final name in [
+        'ColumnHeader',
+        'Toolbar',
+        'Outline',
+        'LayerArea',
+        'TimelineRuler',
+      ]) {
+        expect(
+          rebuilds.byName[name] ?? 0,
+          0,
+          reason: 'the whole Timeline redrew for one group click ($name):\n'
+              '${rebuilds.ranking()}',
+        );
+      }
+      expect(
+        rebuilds.total,
+        lessThan(1800),
+        reason: 'clicking a group redrew far too much:\n${rebuilds.ranking()}',
+      );
     });
 
     /// The **scale** rule, and the one the three budgets above cannot state:

@@ -633,9 +633,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             for (final m in g.members)
               if (byId[m] != null) byId[m]!,
           ]);
+          // Published, not `setState` — [_selectLayer]'s own rule (WP-2): the
+          // rows and bars listen for their slice of [TimelineSelection], so
+          // what redraws is the band lit and the layers let go. The header
+          // click used to rebuild the whole panel on top of the publish,
+          // which is why choosing a group was "far slower than selecting any
+          // other layer" (owner, 2026-08-31). Graph mode keeps the rebuild
+          // the layer path keeps: the picked properties are its picture.
           _publishRowSelection();
           _publishLaneKeys();
-          setState(() {});
+          if (_graph) setState(() {});
         },
         onRename: (g, name) {
           comp.setGroupName(group: g.id, name: name);
