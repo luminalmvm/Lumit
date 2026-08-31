@@ -101,7 +101,10 @@ ordered work packages, each gated by a probe re-run in those conditions:
 - **WP-2 — the select click**: layer selection becomes listenable row state; a
     first-visit click's worst build < 8.3 ms (was 39–67 ms).
 - **WP-3 — incremental scroll**: `LazyBlocks` reuses identical children across window
-    slides + a per-block `RepaintBoundary` (scroll is 8–12 fps in every condition).
+    slides + a per-block `RepaintBoundary`. The "8–12 fps in every condition" that
+    outlived it was the probe grinding the scroll's stops plus its fps arithmetic
+    (K-733, note §2.6): on the pinned backend every notch answers inside the 16.6 ms
+    floor.
 - **WP-4 — zero per-frame document calls during drags**: `animated_mask_paths_at` and
     `time_of_frame` off the scrub path (~1.3 ms a frame today).
 - **WP-5 — the edit storm becomes one wave**: the per-revision walks stop being

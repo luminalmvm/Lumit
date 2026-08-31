@@ -23174,3 +23174,32 @@ the startup line does not appear anywhere in the run's output, and the probe rea
 | Playhead drag, measuring off | 132.2 / 5.5 / 10.1 | frames > 17 ms: 72 of 72 |
 
 — the Skia column of §2.4 reproduced from a launch that asked for nothing.
+
+## K-733 — The scroll's "12 fps" was the probe's own gesture and arithmetic; the wheel meets the floor on the pinned backend
+
+**Date:** 2026-08-31 · **Status:** DECIDED · **Scope:** perf probe, docs/impl/ui-performance.md
+
+After K-732 pinned Skia, one gesture still read ~12 fps in the probe: the wheel
+scroll — against 88–132 fps everywhere else, with a build p90 of 6 ms that could not
+explain it. Diagnosed in the running app (owner's conditions) rather than assumed:
+the probe's fps divided by a wall clock that included its 300 ms tail (~15% low on
+every row) and counted only what the engine's late-flushed timings batch delivered;
+a per-frame vsync-gap column then showed frames tracking notches one for one
+(gap med ≈ the notch pace) with a single 509 ms stall — the gesture scrolled
+3,600 px legs into 1,038 px of scroll extent, so two-thirds of its notches ground
+against the stops, where a clamped scroll draws nothing and correctly so. A CPU
+sample capture agreed (UI thread ~98% idle during the "slow" scroll). With frames
+counted over the gesture's own `Timeline.now` window and the legs sized to the
+measured extent, the stalls vanish and the scroll answers every notch: span med
+10.7–15.3 ms, zero frames over 17 ms at a hand's pace and on the outline at any
+pace. No app change was warranted; the app was already meeting the mandate.
+
+What changed: `perf_probe.dart` (windowed fps via `framesWithin`, gap column,
+batch-outwaiting tail, `tus=` window line for lining up external captures, extent
+line, in-range wheel legs); note §2.6 records the re-read table and §6 the method;
+`probe_frame_window_test.dart` pins the windowing in CI. Recorded, not fixed: at an
+inhuman 40 notches/s the lane half's multi-row slide frames run 17–25 ms on 4 of 19
+frames (§4.3's entering-row re-record); absent at any human pace. Also recorded in
+§6: a leftover `lumit_flutter.exe` from an earlier probe run occludes the new
+window and halves the whole table — one contaminated run cost this diagnosis an
+hour, and the run script now kills strays first.

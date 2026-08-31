@@ -15,6 +15,7 @@
 // Every ui-performance work package re-runs this before and after; it goes
 // the day docs/13 §7.3's real-window CI harness supersedes it.
 
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:ui' as dart_ui;
 
@@ -73,6 +74,27 @@ class CountingBridgeHandler extends BaseHandler {
     }
   }
 }
+
+/// The frames whose vsync started inside the gesture's own wall-clock window
+/// `[t0, t1)` (micros on [developer.Timeline.now]'s clock, which is the clock
+/// [FrameTiming] stamps carry).
+///
+/// The probe's fps is counted over these and only these. Counting whatever
+/// landed in the bucket instead — as the probe did until K-733 — mixes in
+/// frames from the settle either side of the gesture, misses whatever the
+/// engine's timings batch (flushed up to a second late) had not delivered
+/// when the bucket closed, and divides by a wall clock that includes the
+/// 300 ms tail, reading every gesture ~15% slow. The window also makes the
+/// per-frame vsync gaps computable, which is what told the scroll story:
+/// frames track wheel notches one for one, and the "missing" frames were
+/// notches grinding against the scroll extent's stops, where drawing nothing
+/// is correct.
+List<FrameTiming> framesWithin(List<FrameTiming> frames, int t0, int t1) => [
+      for (final f in frames)
+        if (f.timestampInMicroseconds(dart_ui.FramePhase.vsyncStart) >= t0 &&
+            f.timestampInMicroseconds(dart_ui.FramePhase.vsyncStart) < t1)
+          f,
+    ];
 
 void startPerfProbe(
     LumitState state, LumitUiState ui, CountingBridgeHandler? bridge) {
@@ -211,14 +233,20 @@ class _Probe {
     final frames = <FrameTiming>[];
     _bucket = frames;
     final before = bridge?.snapshot();
-    final wall = Stopwatch()..start();
+    final t0 = developer.Timeline.now;
     await gesture();
-    // Let trailing frames (the follow-on cost of the gesture) land.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    wall.stop();
+    final t1 = developer.Timeline.now;
+    // Let trailing frames land — and wait out the engine's timings batch,
+    // which flushes up to a second after the frames it describes (a fast
+    // scrub's last ~20 frames arrived after the old 300 ms tail closed the
+    // bucket). The fps column counts only frames whose vsync falls inside
+    // [t0, t1], so neither this tail nor the old one pads the denominator —
+    // the old wall clock included its tail and read every gesture ~15% slow
+    // (K-733).
+    await Future<void>.delayed(const Duration(milliseconds: 1300));
     _bucket = null;
     final after = bridge?.snapshot();
-    _report(name, frames, wall.elapsed, before, after);
+    _report(name, frames, t0, t1, before, after);
   }
 
   Future<void> _settle() async {
@@ -228,7 +256,8 @@ class _Probe {
   void _report(
     String name,
     List<FrameTiming> frames,
-    Duration wall,
+    int t0,
+    int t1,
     ({Map<String, int> calls, Map<String, int> micros})? before,
     ({Map<String, int> calls, Map<String, int> micros})? after,
   ) {
@@ -237,16 +266,31 @@ class _Probe {
     double at(List<double> xs, double q) =>
         xs.isEmpty ? 0 : xs[((xs.length - 1) * q).round()];
 
+    final inGesture = framesWithin(frames, t0, t1);
     final build = sorted(frames.map((f) => ms(f.buildDuration)));
     final raster = sorted(frames.map((f) => ms(f.rasterDuration)));
     final span = sorted(frames.map((f) => ms(f.totalSpan)));
     final over17 = span.where((s) => s > 17.0).length;
     final over9 = span.where((s) => s > 8.7).length;
-    final secs = wall.inMicroseconds / 1e6;
+    final secs = (t1 - t0) / 1e6;
+    final starts = sorted(inGesture
+        .map((f) => f.timestampInMicroseconds(dart_ui.FramePhase.vsyncStart) / 1000.0));
+    final gaps = sorted([
+      for (var i = 1; i < starts.length; i++) starts[i] - starts[i - 1],
+    ]);
 
     out.writeln('== $name ==');
-    out.writeln('frames=${frames.length} wall=${secs.toStringAsFixed(2)}s '
-        'fps=${(frames.length / secs).toStringAsFixed(1)}');
+    // The gesture's window on the Timeline clock, for lining a CPU-sample or
+    // VM-timeline capture up against exactly these frames.
+    out.writeln('tus=$t0..$t1');
+    out.writeln('frames=${inGesture.length} (+${frames.length - inGesture.length}'
+        ' trailing) wall=${secs.toStringAsFixed(2)}s '
+        'fps=${(inGesture.length / secs).toStringAsFixed(1)}');
+    if (gaps.isNotEmpty) {
+      out.writeln('gap(ms): med=${at(gaps, 0.5).toStringAsFixed(2)} '
+          'p90=${at(gaps, 0.9).toStringAsFixed(2)} '
+          'max=${at(gaps, 1.0).toStringAsFixed(2)}');
+    }
     String row(String label, List<double> xs) =>
         '$label med=${at(xs, 0.5).toStringAsFixed(2)} '
         'p90=${at(xs, 0.9).toStringAsFixed(2)} '
@@ -384,6 +428,26 @@ class _Probe {
     }
     await Future<void>.delayed(const Duration(seconds: 1));
 
+    // How far the rows actually scroll, read off the lane half's own vertical
+    // scrollable, and the wheel legs sized to stay inside it. The original
+    // gesture scrolled 3,600 px into ~1,180 px of extent, so two-thirds of its
+    // notches ground against the stops — where drawing nothing is the *correct*
+    // answer (idle is zero frames) — and the row read "12 fps" (K-733). A leg
+    // that stays in range measures scrolling, not the stop.
+    var vExtent = 0.0;
+    for (final e in _elements((e) =>
+        e is StatefulElement && e.state is ScrollableState)) {
+      final r = _rectOf(e);
+      if (r == null || !r.contains(laneCentre)) continue;
+      final p = ((e as StatefulElement).state as ScrollableState).position;
+      if (!p.hasContentDimensions) continue;
+      if (axisDirectionToAxis(p.axisDirection) != Axis.vertical) continue;
+      if (p.maxScrollExtent > vExtent) vExtent = p.maxScrollExtent;
+    }
+    final vNotches = vExtent <= 0 ? 9 : (vExtent / 120).floor().clamp(2, 30);
+    out.writeln('vertical extent=${vExtent.toStringAsFixed(0)}px, '
+        'wheel legs $vNotches notches x 120px');
+
     // One whole-window capture beside the table, for eyeballing what the
     // engine under test does to text and hairlines (the WP-7 A/B's visual
     // half; external capture is dead on this machine, so it is taken from
@@ -432,15 +496,34 @@ class _Probe {
     await _selectClicks('edit: clicks on a row lock switch',
         dx: 0, cellPrefix: 'tl-locked-');
 
-    // G2: wheel-scroll the lanes down then up.
-    await _measure('scroll: lanes wheel 30 down + 30 up', () async {
-      for (var i = 0; i < 30; i++) {
+    // G2: wheel-scroll the lanes down then up, faster than any hand (25 ms a
+    // notch), staying inside the extent.
+    await _measure('scroll: lanes wheel $vNotches down + $vNotches up, 25ms',
+        () async {
+      for (var i = 0; i < vNotches; i++) {
         _wheel(laneCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
-      for (var i = 0; i < 30; i++) {
+      for (var i = 0; i < vNotches; i++) {
         _wheel(laneCentre, -120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+    });
+
+    // G2b: the same wheel at a hand's pace — ~11 notches a second, not 40.
+    // A wheel scroll draws one frame per notch and nothing between (idle is
+    // zero frames), so its fps ceiling *is* the notch rate: what this row
+    // exists to show is the per-notch answer time (the span column), which is
+    // the number the mandate actually constrains for a discrete gesture.
+    await _measure('scroll: lanes wheel $vNotches down + $vNotches up, 90ms',
+        () async {
+      for (var i = 0; i < vNotches; i++) {
+        _wheel(laneCentre, 120);
+        await Future<void>.delayed(const Duration(milliseconds: 90));
+      }
+      for (var i = 0; i < vNotches; i++) {
+        _wheel(laneCentre, -120);
+        await Future<void>.delayed(const Duration(milliseconds: 90));
       }
     });
 
@@ -448,12 +531,13 @@ class _Probe {
     final outlineCentre = Offset(
         panel.left + (lanes.left - panel.left) * 0.5,
         lanes.top + lanes.height * 0.4);
-    await _measure('scroll: outline wheel 30 down + 30 up', () async {
-      for (var i = 0; i < 30; i++) {
+    await _measure('scroll: outline wheel $vNotches down + $vNotches up, 25ms',
+        () async {
+      for (var i = 0; i < vNotches; i++) {
         _wheel(outlineCentre, 120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
-      for (var i = 0; i < 30; i++) {
+      for (var i = 0; i < vNotches; i++) {
         _wheel(outlineCentre, -120);
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }

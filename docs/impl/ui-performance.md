@@ -182,9 +182,10 @@ against Skia's ~5 ms, and a live picture widens that by another ~18 ms** — on 
 the difference between 20 fps and 125–146 fps in the hand. On Skia the zoom fly, both
 playhead sweeps and the work-area drag all clear the 60 fps floor with 6–8× headroom
 at their medians and p90 spans of 10–15 ms, with today's widget code. What Skia does
-*not* fix: the scroll (still ~10 fps — UI-thread build), the first-visit and
-edit-commit build storms, and the per-frame sync calls (§3.4, now ~10 % of a 145 fps
-frame interval). Those are Lumit's own, and their packages stand.
+*not* fix: the scroll (still ~10 fps — UI-thread build; WP-3 later fixed the build
+and §2.6 shows the figure that survived it was the probe's own gesture), the
+first-visit and edit-commit build storms, and the per-frame sync calls (§3.4, now
+~10 % of a 145 fps frame interval). Those are Lumit's own, and their packages stand.
 
 ### 2.5 The same table after WP-2..WP-6
 
@@ -218,6 +219,56 @@ frame classes survive that this programme did not reach: a **first visit** to a 
 still runs one ~40 ms build frame, and a lock switch's own commit still costs ~16 ms of
 fsync (§7 item 5). Both are named in §7, neither is the wave, and neither is
 reproducible in a headless test of the Timeline alone.
+
+### 2.6 The scroll row, re-read on the pinned backend (K-733, 2026-08-31)
+
+The one gesture still reading ~10 fps after the pin was the wheel scroll — ~12 fps in
+the probe against a table of 88–132 — and the missing ~70 ms a frame turned out not to
+exist. Three instruments found that out, in order:
+
+- **The fps arithmetic was diluted.** The probe counted whatever `FrameTiming`s landed
+  in its bucket and divided by a wall clock that included its 300 ms post-gesture tail —
+  reading every gesture ~15% slow — and the engine reports timings in batches flushed up
+  to a second late, so a fast scrub's last ~20 frames missed the bucket entirely. Fixed
+  by stamping the gesture's window with `Timeline.now` and counting only frames whose
+  vsync falls inside it (`framesWithin`, pinned by `probe_frame_window_test.dart`); the
+  same window makes **per-frame vsync gaps** printable, which is the column that told
+  the rest of the story.
+- **The frames were never slow; most notches were asking for nothing.** With gaps
+  visible, the scroll read: gap median **24.2 ms ≈ the 25 ms notch pace** — a frame per
+  notch, exactly as designed — build 3.1 / raster 12.6, and **one 509 ms gap**. The
+  gesture scrolled 30 notches × 120 px = 3,600 px per leg into **1,038 px** of vertical
+  scroll extent (the probe now reads the extent off the scrollable and prints it), so
+  two-thirds of its notches ground against the stops, where a clamped scroll moves
+  nothing and drawing nothing is the *correct* answer — the same draw-nothing-at-rest
+  the idle row gates. A CPU-sample capture over the gesture agreed: 39 samples in 2.1 s
+  at 1 kHz — the UI thread was ~98% idle while the row read "12 fps". Both halves
+  stalled identically (509/511 ms), which is the mirror behaving.
+- **In-range legs prove it.** With the legs sized to the extent (8 notches each way),
+  the stalls vanish and every notch answers on the next frame:
+
+| Scroll, owner's conditions, Skia pin | gap med / max ms | build med | raster med | span med / p90 / max | frames > 17 ms |
+|---|---|---|---|---|---|
+| Lanes, 25 ms a notch (faster than any hand) | 25.3 / **31.8** | 2.70 | 9.72 | 15.31 / 18.77 / 25.14 | 4 of 19 |
+| Lanes, 90 ms a notch (a hand's pace) | 90.9 / 97.0 | 3.17 | 6.66 | **12.04 / 13.97 / 15.03** | **0** |
+| Outline, 25 ms a notch | 25.4 / 30.3 | 2.65 | 6.07 | **10.68 / 12.03 / 13.99** | **0** |
+
+So the wheel scroll **meets the 60 fps floor on the pinned backend**: a discrete
+gesture's fps ceiling is the notch rate (it schedules one frame per notch and rests
+between — the gap median *is* the notch pace at both speeds), and the number the
+mandate actually constrains is the per-notch answer, the span column — inside 16.6 ms
+at its median everywhere, with zero frames over 17 ms at a hand's pace and on the
+outline at any pace. What remains real is small and named: at 40 notches/s the lane
+half's slide frames re-record 4–5 entering rows each (§4.3's design) and 4 of 19
+frames run 17–25 ms — a hair over one 60 Hz interval, invisible at 165 Hz refresh and
+absent at any human pace. Not a package; recorded.
+
+The same corrected accounting re-reads the whole table upward — the same run:
+zoom fly **103.8** fps (span med 11.4), playhead sweeps **139.1 / 141.5** (9.3),
+work-area drag **152.6** (9.0), graph zoom **120.3**, graph drag **142.2**,
+measuring-off **151.4** with zero frames over 17 ms. Earlier fps columns (§2.3–§2.5,
+K-732's verification table) carry the ~15% dilution and stand as recorded; every
+comparison inside them was like-for-like.
 
 ## 3. Where each millisecond sits
 
@@ -257,7 +308,10 @@ build on each slide frame plus ~42 ms of raster per frame — 8.6 fps, both halv
 scroll mirrors). K-638's virtualisation bounded the cost — 2,000 layers cost what 57
 do, and that stands — what is left is that the window is rebuilt and re-recorded
 wholesale instead of incrementally. This one is genuinely UI-thread: Skia's better
-raster still leaves it at 9.9 fps on its ~69 ms slide builds. §4.3 is the fix.
+raster still leaves it at 9.9 fps on its ~69 ms slide builds. §4.3 is the fix —
+and the fps figure itself was the instrument, resolved in §2.6: after §4.3 the
+frames track notches one for one, and the residual "10 fps" was the probe grinding
+the scroll's stops plus the old fps arithmetic.
 
 ### 3.3 Zoom and scrub are raster-bound, and two comparisons say where
 
@@ -477,6 +531,11 @@ with it, 42.5 → 32.6–34.8 across the two post-change runs. What the package 
 reach is the frame rate: 9.5 fps against the gate's 60, because ~33 ms of the ~63 ms span
 is the window-sized raster floor WP-1 measured and could not move (§4.1, §7.2). The
 UI-thread half of §3.2 is answered; the rest of that gesture's cost is the backend's.
+**Resolved by K-732 + K-733 (§2.6):** on the pinned backend, with the probe's legs
+kept inside the scroll extent and fps counted over the gesture's own window, the
+scroll answers every notch within the 16.6 ms floor (span med 10.7–15.3, zero frames
+over 17 ms at a hand's pace) — the lingering "9.5 fps" was the stops and the
+arithmetic, not a frame class.
 
 ### 4.4 Selection is listenable row state, never a panel `setState`
 
@@ -667,6 +726,23 @@ table on Skia (§2.4). Every work package below re-runs the probe before and aft
 package is done when its gate row holds. docs/13 §7.3 names it the manual instrument
 for B1/B2; it is deleted the day a real-window CI harness supersedes it.
 
+**The accounting, corrected 2026-08-31 (K-733).** Frames are counted against the
+gesture's own window: `_measure` stamps `[t0, t1]` with `Timeline.now` (printed as the
+`tus=` line, for lining a CPU-sample or VM-timeline capture up against the same
+window), `framesWithin` keeps only frames whose vsync falls inside it, fps divides by
+the gesture's duration alone, and the tail waits out the engine's timings batch
+(flushed up to a second late) so no frame's report misses the bucket. Each row also
+prints the **gap** column — per-frame vsync spacing — which is what distinguishes "a
+frame is slow" from "no frame was asked for": a discrete gesture like the wheel
+resting at the notch pace is correct, and a gap far above the pace is a stall with a
+cause. The wheel legs are sized from the measured vertical extent (printed) so they
+scroll rather than grind the stops — §2.6 is the row that mistake produced.
+`probe_frame_window_test.dart` pins the windowing. Two traps for whoever runs it
+next: fps figures from before this date read ~15% low, and **a leftover
+`lumit_flutter.exe` from an earlier run occludes the new window and halves the whole
+table** — kill it first, and trust the run only if the gesture rows reproduce their
+class.
+
 ## 7. Work packages
 
 Ordered; each sized for one agent; each gate measured by the probe **in the owner's
@@ -708,7 +784,9 @@ said otherwise; where marked, also asserted in a widget test so CI holds it.
    met with room; the raster, span and fps rows are the ~33 ms window floor of §4.1 —
    the backend pin the gate's wording assumed does not exist (K-677), and Graph mode's
    single painter rasters the same in the same window. Nothing widget-side reaches
-   them; they travel to §7.2. *Gate (CI):* a window slide builds only entering blocks
+   them; they travel to §7.2. **Closed by K-732 + K-733 (§2.6): on the pinned backend
+   the scroll answers every notch inside the floor, and the residual low fps figure
+   was the probe's own gesture and arithmetic.** *Gate (CI):* a window slide builds only entering blocks
    — `rebuild_budget_test`'s "a scroll builds the rows it brings in, not the whole
    window": 3 rows and 3 bars on a slide of two rows, from 28 and 28. K-649's
    playhead-repaints-alone test keeps holding.
