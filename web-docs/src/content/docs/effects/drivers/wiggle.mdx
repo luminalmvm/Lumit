@@ -14,18 +14,14 @@ Wiggle is a **Drivers** effect.
 ## What it does
 
 Puts out a number that drifts about instead of holding still. Wire its **Value** socket
-into a position, a rotation, a blur radius or anything else that takes a number, and that
-parameter stops looking like a computer's idea of a shot.
+into a position, a rotation, a blur radius or anything else that takes a number.
 
-The wobble is the same every time. It is worked out from the node's own identity and the
-layer's time, never from the clock or from which frame rendered first, so a preview and an
-export agree and a scrub backwards gives the same picture as a scrub forwards. Two Wiggles
-on one layer wobble differently, which is what you want when one is driving position and
-the other rotation.
+The wobble is worked out from the node's own identity and the layer's time, so a preview
+and an export agree, scrubbing in either direction gives the same picture, and two Wiggles
+on one layer wobble differently.
 
-The value is centred on nought and runs either side of it. To wobble around some other
-number, take Wiggle into a [Math](/effects/drivers/math/) set to Add, or into a
-[Remap](/effects/drivers/remap/).
+The value is centred on nought. To wobble around some other number, take Wiggle into a
+[Math](/effects/drivers/math/) set to Add, or into a [Remap](/effects/drivers/remap/).
 
 ## Parameters
 
@@ -41,8 +37,7 @@ number, take Wiggle into a [Math](/effects/drivers/math/) set to Add, or into a
 ## What each control does
 
 - **Amount**: how far the value strays either side of nought. It has no unit of its own —
-  whatever you wire it into decides what the numbers mean, exactly as a
-  [Slider control](/effects/controls/slider-control/) does. Nought is silence.
+  whatever you wire it into decides what the numbers mean.
 - **Frequency**: wobbles per second. Low is a slow drift; high is a jitter.
 
 ## Related

@@ -237,10 +237,9 @@ Values for expressions to read.
 
 Values that other effects follow, wired up rather than keyframed.
 
-A driver makes a number, a colour or a stream of points instead of a picture, so it has no
-page picture and does nothing on its own. Drop one on a layer and run a wire from its
-socket into another effect's parameter, and that parameter follows the wire instead of its
-own keyframes. Bypass the driver and the parameter goes back to the keyframes it had.
+A driver makes a number, a colour or a stream of points instead of a picture. Run a wire
+from its socket into another effect's parameter and that parameter follows the wire
+instead of its own keyframes; bypass the driver and the keyframes come back.
 
 See [The node graph](/use/nodes/) for how a driver is added and wired.
 

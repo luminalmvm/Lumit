@@ -14,13 +14,11 @@ Math is a **Drivers** effect.
 ## What it does
 
 Takes two numbers and does one piece of arithmetic with them, putting the answer out of its
-**Value** socket. Wire something into A, something into B, pick Multiply, and out comes the
-product. It is what an expression would do, drawn as a box with two wires going in so you
-can see at a glance what feeds what.
+**Value** socket. Either input can be left as a typed number, so scaling one driver by a
+constant is a single node.
 
-Either input can be left as a typed number, so scaling one driver by a constant is a single
-node. Dividing by nought, and taking the remainder by nought, both answer nought: a frame
-has to render, and a number that ran away to infinity would take the picture with it.
+Dividing by nought, and taking the remainder by nought, both answer nought rather than
+running away.
 
 ## Parameters
 
@@ -38,11 +36,9 @@ has to render, and a number that ran away to infinity would take the picture wit
 
 - **A**: the left-hand number.
 - **B**: the right-hand number.
-- **Operation**: what to do with them. **Add**, **Subtract**, **Multiply** and **Divide**
-  are the obvious four. **Minimum** and **Maximum** keep the smaller or the larger, which is
-  how you put a floor or a ceiling under a driver. **Remainder** is what is left after
-  dividing, and is the way to make something repeat. **Power** raises A to B, for bending a
-  straight response into a curve.
+- **Operation**: what to do with them. **Minimum** and **Maximum** put a floor or a
+  ceiling under a driver, **Remainder** makes a value repeat, and **Power** raises A to B,
+  bending a straight response into a curve.
 
 ## Related
 

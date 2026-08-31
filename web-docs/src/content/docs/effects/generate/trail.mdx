@@ -17,13 +17,10 @@ Wire a producer's teal **Points** socket into this effect and every point grows 
 line of dots, or one connected ribbon, running back through the places it was a moment ago
 and fading as it goes.
 
-Nothing is remembered between frames. Instead of keeping a history, Trail asks the producer
-again at each of a handful of earlier moments and reads each point's older self out of the
-answer. That is why frame 500 costs what frame 3 costs, from a cold start and from either
-scrub direction, and why a tail is the same however you arrived at the frame.
-
-A point that had not been born yet at one of those earlier moments simply has a shorter
-tail, which is the honest picture rather than a fault.
+Nothing is remembered between frames: Trail asks the producer again at each of a handful
+of earlier moments and reads each point's older self out of the answer. A tail is the same
+however you arrived at the frame, and a point that had not been born yet at one of those
+moments simply has a shorter tail.
 
 With nothing wired in, the picture passes straight through and the box carries the
 no-stream mark.
@@ -56,14 +53,12 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Samples**: how many earlier moments are looked at, and so how many dabs long a tail is.
-  Each one costs another evaluation of the producer, so this is the dial that decides what
-  the effect costs.
-- **Spacing**: how far apart in time those moments are. A composition frame is the natural
-  setting and the default is close to one. Wider spacing buys a longer tail for the same
-  number of samples, at the price of a gappier one.
-- **Style**: **Dots** draws one dab per sample, which is the honest picture of what was
-  actually looked at. **Segments** joins each dab to the one before it into a continuous
-  ribbon.
+  Each one costs another evaluation of the producer, so this is what the effect costs.
+- **Spacing**: how far apart in time those moments are. The default is close to one
+  composition frame. Wider spacing buys a longer tail for the same number of samples, at
+  the price of a gappier one.
+- **Style**: **Dots** draws one dab per sample. **Segments** joins each dab to the one
+  before it into a continuous ribbon.
 - **Scale**: multiplies each point's own size — the diameter of a dot, or the thickness of a
   segment.
 - **Feather**: how soft a dab's edge is.

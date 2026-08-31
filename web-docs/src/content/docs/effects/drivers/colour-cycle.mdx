@@ -13,10 +13,9 @@ Colour cycle is a **Drivers** effect.
 
 ## What it does
 
-Puts out a colour that keeps changing — red, orange, yellow, and round again — at whatever
-rate you set. Wire its **Colour** socket into a [Fill](/effects/generate/fill/), a
-[Glow](/effects/stylise/glow/), a [Gradient](/effects/generate/gradient/) stop or a
-particle colour and the picture cycles without a single keyframe.
+Puts out a colour whose hue turns through the wheel at a rate you set. Wire its **Colour**
+socket into a [Fill](/effects/generate/fill/), a [Glow](/effects/stylise/glow/), a
+[Gradient](/effects/generate/gradient/) stop or a particle colour.
 
 It is the one driver that carries a colour rather than a number, so it only fits sockets
 that take one.
@@ -40,11 +39,11 @@ that take one.
   thirds is blue, and 1 is red again. Turns rather than degrees, so a
   [Wiggle](/effects/drivers/wiggle/) of amount 1 wired in here sweeps exactly one
   revolution.
-- **Rate**: turns per second, and negative runs the wheel backwards. Nought holds the
-  colour still at Phase, which is what you want when something else is driving Phase.
-- **Saturation**: how coloured it is. Nought is grey at the brightness asked for.
-- **Brightness**: how bright, as a per cent of white. It runs past 100 so a driven colour
-  can reach the same headroom a colour parameter has.
+- **Rate**: turns per second; negative runs the wheel backwards. Nought holds the colour
+  still at Phase, for when something else is driving Phase.
+- **Saturation**: how coloured it is. Nought is grey.
+- **Brightness**: per cent of white. It runs past 100, matching a colour parameter's
+  headroom.
 
 ## Related
 

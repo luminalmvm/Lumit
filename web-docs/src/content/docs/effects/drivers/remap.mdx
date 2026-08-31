@@ -13,17 +13,12 @@ Remap is a **Drivers** effect.
 
 ## What it does
 
-A loudness that arrives as 0 to 1 and a blur radius that wants 0 to 40 do not speak the
-same language. Remap is the translator: say what range comes in and what range should come
-out, and it maps one onto the other in a straight line. It is the piece that makes every
-other driver usable on every parameter, and most rigs have one in front of the thing being
-driven.
+Maps a number from one range onto another in a straight line: say what range comes in and
+what range should come out. Most rigs have one in front of the thing being driven.
 
-Putting the output ends the other way round — a high Out low and a low Out high — inverts
-the response, so a level that rises makes a value fall.
-
-An input range of no width has no line through it, so it answers the output's low end
-rather than dividing by nought.
+Putting the output ends the other way round inverts the response, so a level that rises
+makes a value fall. An input range of no width answers the output's low end rather than
+dividing by nought.
 
 ## Parameters
 
@@ -46,10 +41,9 @@ rather than dividing by nought.
 - **In low** and **In high**: the range the number arrives in. Set these to what the thing
   feeding you actually produces — an [Audio level](/effects/drivers/audio-level/) rarely
   reaches 1, so an In high of about 0.4 uses the whole of the response.
-- **Out low** and **Out high**: the range it should leave in, in whatever units the
-  parameter you are driving counts in.
-- **Clamp**: holds the result inside the output range instead of letting it run past the
-  ends. On by default, because whatever you are driving usually has a range of its own.
+- **Out low** and **Out high**: the range it should leave in, in the driven parameter's
+  units.
+- **Clamp**: holds the result inside the output range. On by default.
 
 ## Related
 

@@ -15,24 +15,22 @@ Emit from image is a **Generate** effect.
 
 ## What it does
 
-[Scatter](/effects/generate/scatter/) keeps the points that land on something *opaque*; this
-one keeps the points that land on something *bright*. Point it at a layer — a title, a logo,
-a noise pattern, a luma matte somebody painted — and its highlights become a cloud of points
-in the shape of themselves.
+[Scatter](/effects/generate/scatter/) keeps the points that land on something *opaque*;
+this one keeps the points that land on something *bright*. Point it at a layer and its
+highlights become a cloud of points in the shape of themselves.
 
-Threshold is where "bright" starts, and it is a threshold rather than a switch: a point that
-lands halfway between the threshold and white stands about half the time, so a gradient
-comes out as a crowd that thins rather than as a hard cut. Brightness is measured on the
-light in the picture, not on how much of the pixel is covered, so a soft edge does not read
-as grey and thin out twice.
+A point that lands between the threshold and white stands part of the time, so a gradient
+comes out as a crowd that thins rather than a hard cut. Brightness is measured on the light
+in the picture, not on alpha coverage, so a soft edge does not read as grey and thin out
+twice.
 
 The same points are handed out on a teal **Points** socket, and Mix at nought emits them
 while drawing nothing.
 
 One limit, the same one Scatter has: because these points depend on a picture, neither a
 [Points sample](/effects/drivers/points-sample/) driver nor a
-[Layer points](/effects/drivers/layer-points/) tap can read the stream. Both see it as
-empty. Wiring one of this layer's own consumers to it works.
+[Layer points](/effects/drivers/layer-points/) tap can read the stream. Wiring one of this
+layer's own consumers to it works.
 
 ## Parameters
 
@@ -67,7 +65,6 @@ In the Effect Controls panel:
 - **Source layer**: the layer whose brightness decides where the points go. Nothing is
   emitted until you set it.
 - **Threshold**: where "bright" starts. Below it nothing is kept; at white everything is.
-  Raise it to keep only the highlights, lower it to fill the mid-tones as well.
 - **Density**: how many points are thrown per hundred-pixel square of the composition, so
   the same number means the same spacing whatever size the composition is.
 - **Seed**: which points. Reseeding moves the crowd and changes which of it survives.

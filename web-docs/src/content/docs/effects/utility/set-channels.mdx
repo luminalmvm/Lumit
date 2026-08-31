@@ -15,11 +15,7 @@ Set channels is a **Utility** effect.
 
 Four dropdowns, one per output channel, each saying where that channel is fetched from:
 one of this layer's own four channels or its brightness, the same five off a **Source**
-layer you pick, or flat on and flat off. It is how a depth pass is moved into the alpha,
-how a luma pass becomes a red channel, and how a colour is thrown away without a Fill.
-
-At its defaults it copies each channel to itself, so adding it changes nothing until you
-tell a channel where to come from.
+layer you pick, or flat on and flat off. At its defaults it copies each channel to itself.
 
 ## Parameters
 
@@ -49,17 +45,13 @@ In the Effect Controls panel:
 - **Source**: the other layer the five **Source** options read. Leave it unset and those
   options read nothing at all — black, and clear in the alpha.
 - **Red from**, **Green from**, **Blue from**, **Alpha from**: where each output channel
-  comes from. The first five options are this layer's own red, green, blue, alpha and
-  brightness; the next five are the Source layer's same five; **Full on** and **Full off**
-  are 1 and 0 everywhere.
+  comes from. **Full on** and **Full off** are 1 and 0 everywhere.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's
   brightness; see [Effects](/use/effects/).
 
-Note that the Source layer may be this layer, which is worth knowing when you are
-converting an After Effects project: After Effects gives every output channel its own
-layer picker, and Lumit's one Source row plus the five *this layer* options cover the same
-ground for every project we have measured.
+After Effects gives every output channel its own layer picker; Lumit's one Source row plus
+the five *this layer* options cover the same ground.
 
 ## Related
 

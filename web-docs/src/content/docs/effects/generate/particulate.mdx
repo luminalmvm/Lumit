@@ -15,47 +15,40 @@ Particulate is a **Generate** effect.
 
 ## What it does
 
-Sparks, dust, snow, streaks, embers. Many small things are born from an emitter, carried
-about by gravity, wind and turbulence, and fade as they age. Particulate draws them over
-whatever is underneath it, and hands the same particles out on a teal **Points** socket for
-the rest of the family to build on.
+A particle system. Particles are born from an emitter, carried by gravity, wind and
+turbulence, and fade as they age. Particulate draws them over whatever is underneath it,
+and hands the same particles out on a teal **Points** socket for the rest of the family to
+build on.
 
-Nothing is remembered from frame to frame. Where a particle is at a given moment is worked
-out from its birth and its age rather than from the frame before it, so scrubbing is
-instant, an export can render frames in any order, and two renders of the same frame agree.
-The practical consequence is the one worth knowing: the picture depends on the **Emit rate**
-you keyframed, not on which frames you happened to play, so a rate you animate rewrites the
-whole history of births rather than only the frames after the change.
+Nothing is remembered from frame to frame: a particle's place is worked out from its birth
+and its age, not from the frame before, so scrubbing is instant, an export can render
+frames in any order, and two renders of the same frame agree. The consequence worth
+knowing: the picture depends on the **Emit rate** you keyframed, not on which frames you
+happened to play, so animating the rate rewrites the whole history of births rather than
+only the frames after the change.
 
 Particles live in three axes. **Position z**, **Depth**, **Direction z**, **Spread z** and
 **Wind z** all default to flat, so a 2D layer draws exactly what it always drew. Turn the
-layer's 3D switch on and give the composition a camera and the depth becomes visible:
-particles pass in front of and behind other layers, and foreshorten as they recede. See
-[Cameras and 3D](/use/camera/).
+layer's 3D switch on and give the composition a camera and particles pass in front of and
+behind other layers, and foreshorten as they recede. See [Cameras and 3D](/use/camera/).
 
-**Where particles are born.** Point emits them all from one place. Line spreads them along a
-segment. Ellipse and Rectangle fill their interior evenly, and **Ellipse outline** and
-**Rectangle outline** put them only on the edge, which is how you get a ring or a frame of
-sparks rather than a filled disc. Mask path emits along one of the layer's own masks, evenly
-by length, so an emitter can follow any shape you can draw — see [Masks](/use/masks/). With
-**Depth** above nought a Point becomes a line receding from the camera, an Ellipse a
-cylinder and a Rectangle a box; Line and Mask path stay flat.
+**Emitters.** **Ellipse outline** and **Rectangle outline** emit only on the edge, and
+**Mask path** emits along one of the layer's own masks, evenly by length. With **Depth**
+above nought a Point becomes a line receding from the camera, an Ellipse a cylinder and a
+Rectangle a box; Line and Mask path stay flat.
 
-**How a particle is drawn.** **Disc** is a feathered dot, and is the cheapest. **Sprite**
-stamps a layer of your choosing at each particle, turned and scaled per particle — a
-snowflake, a leaf, a piece of debris. **Streak** draws a short capsule from where the
-particle was a moment ago to where it is now, which is what makes a spark read as fast.
-Each mode has one control of its own, and the other two are greyed while it is not chosen.
-A Sprite mode with no layer set draws discs rather than nothing, because a render mode has
-to draw something.
+**Render modes.** **Disc** is a feathered dot, and the cheapest. **Sprite** stamps a layer
+of your choosing at each particle, turned and scaled per particle. **Streak** draws a
+short capsule from where the particle was a moment ago to where it is now. Each mode has
+one control of its own; a Sprite mode with no layer set draws discs rather than nothing.
 
-**The points wire.** Everything drawn here is also available as data. Run a wire from the
-Points socket into [Clone to points](/effects/generate/clone-to-points/) to stamp a layer at
-each particle, [Connect points](/effects/generate/connect-points/) to web them together,
-[Trail](/effects/generate/trail/) to draw where they have been, or
-[Points sample](/effects/drivers/points-sample/) to turn them into numbers that drive
-something else. A [Layer points](/effects/drivers/layer-points/) node carries the same
-stream to another layer.
+**The points wire.** Run a wire from the Points socket into
+[Clone to points](/effects/generate/clone-to-points/),
+[Connect points](/effects/generate/connect-points/),
+[Trail](/effects/generate/trail/) or
+[Points sample](/effects/drivers/points-sample/); a
+[Layer points](/effects/drivers/layer-points/) node carries the same stream to another
+layer.
 
 ## Parameters
 
@@ -128,8 +121,7 @@ In the Effect Controls panel:
 
 The **Emitter** group — where particles come from and how they leave:
 
-- **Shape**: which emitter. Point, Line, Ellipse, Rectangle, Mask path, Ellipse outline or
-  Rectangle outline, as above.
+- **Shape**: which emitter.
 - **Position x**, **Position y** and **Position z**: where the emitter sits. Position z is
   how far in front of or behind the layer's own plane it floats; nought is on the plane.
 - **Width** and **Height**: how big the emitter is. Line reads only Width; Point and Mask
@@ -146,7 +138,7 @@ The **Emitter** group — where particles come from and how they leave:
   camera, negative towards it.
 - **Spread**: the cone about Direction. At 360 they leave every way at once.
 - **Spread z**: the lean's own cone. At nought every particle leaves in the plane, so a full
-  Spread stays a disc of directions rather than quietly becoming a sphere.
+  Spread stays a disc of directions rather than becoming a sphere.
 - **Initial speed**: how fast a particle leaves.
 - **Speed jitter**: how much particles differ from each other in that speed.
 
@@ -156,16 +148,14 @@ The **Particle** group — what one is and how it changes as it ages:
 - **Size** and **Size jitter**: how big it is at birth, and how much that varies.
 - **Size over life**: multiplies Size against the particle's age, from birth on the left to
   death on the right. Flat by default, so a particle stays the size it was born.
-- **Opacity over life**: the same curve for opacity. It starts solid and ends invisible,
-  which is most of why the default look reads as motes rather than dots.
+- **Opacity over life**: the same curve for opacity. It starts solid and ends invisible.
 - **Colour** and **End colour**: the colour at birth and at death, blended across the
   particle's life. Values above 1 are legal and useful under a
   [Glow](/effects/stylise/glow/).
 - **Rotation**: how far round a particle is drawn. It shows on Sprite and Streak, and not on
   a disc.
 - **Rotation jitter**: how much particles differ from one another in that rotation. A whole
-  turn by default, because a hundred identical stamps all facing the same way reads as a
-  mistake. Set it to nought and Rotation means exactly what it says.
+  turn by default; at nought Rotation means exactly what it says.
 - **Spin**: how fast that rotation turns.
 - **Align to motion**: turns each particle to face the way it is travelling, with Spin added
   on top.
@@ -175,8 +165,7 @@ The **Forces** group — what pushes them about:
 - **Gravity**: a constant pull, positive downwards.
 - **Wind x**, **Wind y** and **Wind z**: the air's own speed. Wind acts through Drag, so with
   Drag at nought it does nothing at all.
-- **Drag**: how quickly a particle's speed comes round to the wind's. This is the control
-  that makes Wind mean anything.
+- **Drag**: how quickly a particle's speed comes round to the wind's.
 - **Turbulence amount**: how far a rolling noise pushes a particle off its path.
 - **Turbulence scale**: how far apart two particles have to be before the noise pushes them
   different ways. Small is a boil, large is a drift.

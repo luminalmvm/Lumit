@@ -8,26 +8,21 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 
 The **Node graph** draws the selected layer's [effect stack](/use/effects/) as boxes joined
-left to right by wires. It is the same stack the Effect Controls panel lists, seen another
-way — and it can do one thing the list cannot: wire a **driver** into a parameter, so the
-value comes from somewhere else instead of from its own keyframes.
+left to right by wires. It is the same stack the Effect Controls panel lists, and it can do
+one thing the list cannot: wire a **driver** into a parameter, so the value comes from
+somewhere else instead of from its own keyframes.
 
 <Shot file="graph-panel.png" caption="The Node graph: a layer's image chain wired left to right, with a driver feeding one of its parameters." eager/>
 
-Open it from **Window ▸ Node graph**, or switch to the **Nodes** workspace, which gives the
-graph most of the window. The panel follows the layer selected in the Timeline; with nothing
-selected it says so and draws nothing.
+Open it from **Window ▸ Node graph**, or switch to the **Nodes** workspace. The panel
+follows the layer selected in the Timeline.
 
 ## The image chain
 
-Every graph starts with three boxes it derives rather than stores: **Source**, the layer's
-own picture; one box per effect, in stack order; and **Layer out**. The wires between them
-are the picture's path through the layer.
-
-That path is the stack, always. An effect's **Input** takes exactly one wire, and it is the
-effect above it — so there is no gesture here that branches the picture, skips a stage, or
-merges two chains. Whatever you build in the graph, the Effect Controls list can show it
-honestly, because the list is what the graph is drawing.
+Every graph starts with **Source**, one box per effect in stack order, and **Layer out**.
+An effect's **Input** takes exactly one wire — the effect above it — so nothing here can
+branch the picture, skip a stage, or merge two chains. The graph always draws exactly the
+stack the Effect Controls list shows.
 
 | Gesture | What it does |
 | --- | --- |
@@ -36,39 +31,33 @@ honestly, because the list is what the graph is drawing.
 | Drag from a socket | Pulls out a wire; drop it on a socket that takes the same kind of value. |
 | `Delete` | Removes the picked boxes. |
 
-Two switches sit in the panel's toolbar. **Auto-wire** joins a node to the wire in hand as it
-lands, rather than leaving it loose. **Heal** reconnects the neighbours of a deleted box, so
-the chain closes over the gap instead of breaking.
+Two switches sit in the panel's toolbar. **Auto-wire** joins a dropped node to the wire in
+hand as it lands. **Heal** reconnects the neighbours of a deleted box.
 
 ## Getting about the canvas
 
-- **Middle-drag** pans. The wheel zooms about the pointer, and the reading beside it says how
-  far in you are.
+- **Middle-drag** pans. The wheel zooms about the pointer.
 - **Frame all** fits every box on screen.
-- A **primary drag on empty canvas** sweeps a selection box, taking every box wholly inside
-  it. Click to replace the selection, `Ctrl`-click to toggle one, `Shift`-click to add, and
-  `Ctrl+A` for everything on the canvas.
-- **`Tab`** opens the node search. Press it with a wire in hand and the results are filtered
-  to the kinds that wire can join, and picking one connects it.
+- A **primary drag on empty canvas** sweeps a selection box. Click replaces the selection,
+  `Ctrl`-click toggles one, `Shift`-click adds, and `Ctrl+A` selects everything.
+- **`Tab`** opens the node search. With a wire in hand the results are filtered to the
+  kinds that wire can join, and picking one connects it.
 
 Each box carries two small badges. **B** bypasses it — the box draws with a dashed border
 and the picture passes through untouched. **E** exposes it, growing a hollow socket for
-every parameter so there is something to wire into; a socket that already has a wire is
-drawn whether the box is exposed or not.
+every parameter; a socket that already has a wire is drawn either way.
 
 ## Drivers
 
-A **driver** makes no picture. It makes a value — a wobbling number, the loudness of the
-music, a slowly turning colour — and a wire from a driver into a parameter's socket makes
-that parameter follow the value. "The glow pulses with the music" is one wire rather than
-an expression.
+A **driver** makes a value rather than a picture, and a wire from a driver into a
+parameter's socket makes that parameter follow the value.
 
 | Driver | Hands out |
 | --- | --- |
 | [**Wiggle**](/effects/drivers/wiggle/) | A number wandering by an Amount at a Frequency. Seeded per node, so it is the same wobble every time you play it. |
 | [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment, over a window you set, plus the same reading over the low end alone. |
 | [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate from a Phase, at the Saturation and Brightness you give it. |
-| [**Math**](/effects/drivers/math/) | Two numbers and an operation. An expression you can see. |
+| [**Math**](/effects/drivers/math/) | Two numbers and an operation. |
 | [**Remap**](/effects/drivers/remap/) | Maps a number from one range onto another, with a clamp. |
 | [**Smooth**](/effects/drivers/smooth/) | Its input, softened over Time. |
 | [**Points sample**](/effects/drivers/points-sample/) | Reads a points stream: how many points are alive, and how far the nearest one is from a position. |
@@ -77,19 +66,18 @@ an expression.
 Add one from the `Tab` search — they are grouped under **Drivers** — and wire its output to
 a parameter's socket.
 
-Two of them read something outside this layer, and they name it rather than reaching for it
-with a wire: Audio level has an **Audio** row and Layer points a **Points layer** row, both
-ordinary layer pickers. Wires never cross between layers.
+Wires never cross between layers. The two drivers that read another layer name it instead:
+Audio level has an **Audio** row and Layer points a **Points layer** row, both ordinary
+layer pickers.
 
-A driven parameter says so wherever it is drawn. Its row in Effect Controls reads *driven*
-and names the driver in place of a value, and its stopwatch keyframes are overridden for as
-long as the wire is there. Pull the wire and the keyframes are exactly where you left them.
+A driven parameter's row in Effect Controls reads *driven* and names the driver in place of
+a value. Its keyframes are overridden while the wire is there, and come back exactly as
+they were when it is pulled.
 
 ## Wires and their colours
 
-A wire's colour is the kind of value it carries, so the **Types** legend in the corner of the
-canvas is the whole of what you need to read one. Seven kinds share five colours, grouped as
-the legend groups them:
+A wire's colour is the kind of value it carries; the **Types** legend in the corner of the
+canvas lists them. Seven kinds share five colours, grouped as the legend groups them:
 
 - **image · matte**
 - **number**
@@ -98,49 +86,40 @@ the legend groups them:
 - **audio**
 
 The colours come from the theme, so a scheme of your own changes them and the legend still
-reads. Dropping a wire on a socket of another kind is refused, and nothing is committed.
+reads. A wire dropped on a socket of another kind is refused.
 
 ## Mattes and points
 
 An effect's **Matte** socket takes a wire as well as the layer picker on its row. The one
-thing the graph can do that the row cannot is feed an effect the layer's **own** masked
-picture at that point in the chain — the Source box's matte output. While that wire is
-there it is what the effect reads, and the Matte row says so by name.
+thing only the graph can do is feed an effect the layer's **own** masked picture at that
+point in the chain — the Source box's matte output. While that wire is there it is what the
+effect reads, and the Matte row says so by name.
 
 **Particulate** and the rest of the points family hand their points out on a socket of their
 own, for another box to read. A box whose Points socket has nothing in it draws a **No
-stream** mark and behaves as if it had been given an empty one — nothing anywhere near,
-nothing to draw.
+stream** mark and behaves as if it had been given an empty one.
 
 ## Seeing the picture at a box
 
 Selecting exactly one effect — a box here, or a heading in Effect Controls, they are one
 selection — puts an **at &lt;effect&gt;** chip over the Viewer's picture. Turn it on and the
 Viewer renders the composition with that layer's stack stopping there, at full quality
-through the ordinary path. It is the finished picture with the rest of the stack cut off,
-not a preview of one.
-
-A driver offers no chip. It makes a number, not a picture.
+through the ordinary path. A driver offers no chip: it makes no picture.
 
 ## The Nodes workspace
 
 <Shot file="nodes-workspace.png" caption="The Nodes workspace: the graph across most of the window, a small Viewer and the Node panel down the right." />
 
-The **Nodes** workspace puts the graph where the Timeline usually is: the graph takes the
-centre and left with a short Timeline underneath it, and the right-hand column carries a
-small Viewer — keeping its whole bar — over the **Node panel**, which lists the picked box's
-parameter rows. It carries no Project panel, on the reasoning that you arrive here with the
-layer already chosen.
-
-The Node panel follows the last box you picked. Its heading counts how many of that box's
-parameters are being driven.
+The **Nodes** workspace puts the graph where the Timeline usually is, with a short Timeline
+underneath and a right-hand column carrying a small Viewer — keeping its whole bar — over
+the **Node panel**, which lists the picked box's parameter rows and counts how many of them
+are driven. There is no Project panel: you arrive here with the layer already chosen.
 
 :::note[What the graph does not draw]
 There are no branching image chains and no merge node: joining two pictures is what layers
 and [blend modes](/use/blend-modes/) already do. The Layer out box draws an **Audio** input
-that takes no wire — a layer's sound comes from its own footage, and wiring audio into a
-layer's output is not built. And the graph draws the document, never the engine's internal
-evaluation of it.
+that takes no wire — a layer's sound comes from its own footage. And the graph draws the
+document, never the engine's internal evaluation of it.
 :::
 
 ## Related
