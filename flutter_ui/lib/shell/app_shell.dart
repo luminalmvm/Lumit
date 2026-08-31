@@ -20,6 +20,7 @@ import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
 import 'package:lumit_flutter/state/dock.dart';
@@ -411,6 +412,46 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'playback.comp.end':
         final last = (comp?.durationFrames() ?? 1) - 1;
         ui.playheadFrame.value = last < 0 ? 0 : last;
+      // Ten frames at a time (Shift+PageUp/PageDown, docs/07 §15), through the
+      // same clamped step the single-frame keys take.
+      case 'playback.frame.prev10':
+        ui.stepFrame(-10);
+      case 'playback.frame.next10':
+        ui.stepFrame(10);
+      // The ends of the work area (Shift+Home / Shift+End). A comp nobody has
+      // narrowed reads as the whole comp (K-203), so the pair always has
+      // somewhere to go — the same rule B and N set it by.
+      case 'playback.workarea.start' || 'playback.workarea.end':
+        if (comp == null) {
+          handled = false;
+        } else {
+          final work = comp.getWorkArea();
+          final start = action.endsWith('start');
+          if (work == null) {
+            final last = comp.durationFrames() - 1;
+            ui.scrubTo(start ? 0 : (last < 0 ? 0 : last));
+          } else {
+            ui.scrubTo(comp.frameAtTime(
+                time: start ? work.inPoint : work.outPoint));
+          }
+        }
+      // The ends of the selected layer's bar (`I` and `O`). From the read
+      // model, which already holds both in composition frames — the same pair
+      // the Timeline draws the bar between.
+      case 'playback.layer.in' || 'playback.layer.out':
+        final ids = ui.selectedLayerIds;
+        final entry = ids.isEmpty
+            ? null
+            : ui.model.layers
+                .where((e) => ids.contains(e.layer.internallayerId))
+                .firstOrNull;
+        if (entry == null) {
+          handled = false;
+        } else {
+          ui.scrubTo(action == 'playback.layer.in'
+              ? entry.info.inFrame
+              : entry.info.outFrame);
+        }
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
@@ -463,6 +504,26 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The menu bar owns the palette's list of commands, so the key asks
         // for it rather than assembling a second one (docs/07 §12).
         ui.requestPalette();
+      // `X` in the Timeline: the eye, for every selected layer at once, taking
+      // the first one's state as the state they all end up in — the switch
+      // cells' own rule (K-720), so a mixed selection comes out even.
+      case 'layer.toggle.visible':
+        final ids = ui.selectedLayerIds;
+        final entries = [
+          for (final entry in ui.model.layers)
+            if (ids.contains(entry.layer.internallayerId)) entry,
+        ];
+        if (comp == null || entries.isEmpty) {
+          handled = false;
+        } else {
+          comp.setSwitchOnLayers(
+            clicked: entries.first.layer.internallayerId,
+            layers: [for (final e in entries) e.layer.internallayerId],
+            switch_: BridgeLayerSwitch.visible,
+            on_: !entries.first.info.switches.visible,
+          );
+          state.notifyDocumentChanged();
+        }
       case 'layer.duplicate':
         final layer = ui.selectedLayer.value;
         if (layer == null) {

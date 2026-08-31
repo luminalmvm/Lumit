@@ -1030,6 +1030,16 @@ collection, the recording mode, the panel) is in the entry above.
 - **Export status still speaks the old idiom** - `export.rs` replies in JSON
     strings (`err_json`) polled on a timer; follow the worker's typed-stream way.
 
+- **Four shipped chords still have nothing answering them.** The keymap binds
+    them and Settings ▸ Keymap lists them, so they can be rebound and still do
+    nothing: `,` / `.` (**previous / next keyframe** — it needs a rule for what
+    "the keyframes" are when no property row is picked), `Ctrl+,` / `Ctrl+.`
+    (**previous / next edit point**, which needs an idea of what counts as an
+    edit point in a comp), `` ` `` (**maximise the panel under the pointer**,
+    dock work), and `K` (**shuttle pause** — the shuttle itself is not built,
+    which is why `J`/`L` step a frame instead). Everything else in docs/07 §15
+    is dispatched.
+
 - **The menu bar names its own backlog (K-244).** Every row marked
     "(Not implemented)" in File/Edit/Composition/Layer/Animation/View/Help is a
     command with a place waiting for it. What is left, now that the rows whose

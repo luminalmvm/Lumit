@@ -808,5 +808,86 @@ void main() {
           reason: 'a trim leaves the other end where it was');
       expect(keyFrame(), -20, reason: 'a trim moves no keyframes');
     });
+
+    /// Every one of these was in the shipped keymap with nothing answering it:
+    /// the chord looked up an action the shell's switch had no case for, so it
+    /// fell through and the key did nothing at all.
+    group('the navigation chords the table shipped', () {
+      Future<void> chord(WidgetTester tester, LogicalKeyboardKey key,
+          {bool shift = false}) async {
+        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(key);
+        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+      }
+
+      testWidgets('Shift+PageDown and Shift+PageUp step ten frames',
+          (tester) async {
+        final p = await mount(tester);
+        p.uiState.playheadFrame.value = 30;
+
+        await chord(tester, LogicalKeyboardKey.pageDown, shift: true);
+        expect(p.uiState.playheadFrame.value, 40);
+        await chord(tester, LogicalKeyboardKey.pageUp, shift: true);
+        expect(p.uiState.playheadFrame.value, 30);
+      });
+
+      testWidgets('Shift+Home and Shift+End go to the ends of the work area',
+          (tester) async {
+        final p = await mount(tester);
+        final comp = p.uiState.selectedComp!;
+        comp.setWorkArea(
+          span: BridgeSpan(
+            inPoint: comp.timeOfFrame(frame: 20),
+            outPoint: comp.timeOfFrame(frame: 60),
+            startOffset: const BridgeRational(num: 0, den: 1),
+          ),
+        );
+
+        await chord(tester, LogicalKeyboardKey.end, shift: true);
+        expect(p.uiState.playheadFrame.value, 60);
+        await chord(tester, LogicalKeyboardKey.home, shift: true);
+        expect(p.uiState.playheadFrame.value, 20);
+      });
+
+      testWidgets('I and O go to the ends of the selected layer',
+          (tester) async {
+        final p = await mount(tester);
+        final comp = p.uiState.selectedComp!;
+        final layer = comp.addSolidLayer();
+        layer.setSpan(
+          span: BridgeSpan(
+            inPoint: comp.timeOfFrame(frame: 12),
+            outPoint: comp.timeOfFrame(frame: 48),
+            startOffset: const BridgeRational(num: 0, den: 1),
+          ),
+        );
+        p.uiState.setSelection([layer]);
+        p.uiState.model.refresh();
+        await tester.pump();
+
+        await chord(tester, LogicalKeyboardKey.keyO);
+        expect(p.uiState.playheadFrame.value, 48);
+        await chord(tester, LogicalKeyboardKey.keyI);
+        expect(p.uiState.playheadFrame.value, 12);
+      });
+
+      testWidgets('X in the Timeline turns the eye off for the selection',
+          (tester) async {
+        final p = await mount(tester);
+        final comp = p.uiState.selectedComp!;
+        final a = comp.addSolidLayer();
+        final b = comp.addSolidLayer();
+        p.uiState.setSelection([a, b]);
+        p.uiState.activePanel.value = Panel.timeline;
+        p.uiState.model.refresh();
+        await tester.pump();
+
+        await chord(tester, LogicalKeyboardKey.keyX);
+        expect(a.getSwitches().visible, isFalse);
+        expect(b.getSwitches().visible, isFalse,
+            reason: 'the whole selection, not the primary alone');
+      });
+    });
   }, skip: !engineAvailable);
 }
