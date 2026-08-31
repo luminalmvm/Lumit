@@ -48,6 +48,24 @@
   backdrop-filter: blur(20px);
 }
 
+/* Starlight hands the "On this page" rail the sidebar's width plus half of
+   whatever the viewport has spare, so on a wide screen the right rail balloons
+   past the left one. Pin it to the same --sl-sidebar-width as the left rail,
+   give the freed space to the main pane, and centre the prose in it (Starlight
+   pins it right with `auto 0`) so the content sits between two equal rails.
+   Unlayered, so it outranks Starlight's rules inside the starlight.core layer.
+   Same 72rem breakpoint as Starlight's own rule: below it both rails collapse
+   exactly as before. */
+@media (min-width: 72rem) {
+  .right-sidebar-container {
+    width: var(--sl-sidebar-width);
+  }
+  [data-has-sidebar][data-has-toc] .main-pane {
+    --sl-content-margin-inline: auto;
+    width: calc(100% - var(--sl-sidebar-width));
+  }
+}
+
 /* An effect page's example picture. Rendered by the engine, encoded by
    scripts/gen-effect-shots.mjs, laid out by src/components/Compare.astro. */
 figure.example {
