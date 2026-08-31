@@ -79,6 +79,7 @@ r.addEventListener("input",set);set()})})`,
             // Read in order, once: install it, learn the shape of a
             // composition, then the task-shaped walkthroughs underneath.
             {
+              id: "tutorials",
               label: "Tutorials",
               link: "/start/install/",
               icon: "open-book",
@@ -172,8 +173,9 @@ r.addEventListener("input",set);set()})})`,
               ],
             },
           ],
-          // The site root is a landing page and belongs to no topic.
-          { exclude: ["/"] },
+          // The site root is a landing page; it sits under the Tutorials topic
+          // so it carries the same sidebar and topic tabs as every other page.
+          { topics: { tutorials: ["/"] } },
         ),
       ],
     }),
