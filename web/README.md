@@ -103,29 +103,43 @@ change the geometry, edit the keyframes and the `viewBox` anchors directly.
 
 ## Screenshots
 
-`public/shots/` holds the pictures the front page shows. Every one is a real
-capture of the application, cropped and re-encoded as WebP - nothing is a
-mockup and nothing has a fake window frame around it:
+`src/assets/shots/` holds the pictures the front page shows. Every one is a real
+capture of the application - nothing is a mockup and nothing has a fake window
+frame around it:
 
-| File | Size | Where it appears |
-| --- | --- | --- |
-| `workspace.webp` | 1704x961, 60 KB | the wide picture under "Everything you know" |
-| `timeline.webp` | 1160x520, 29 KB | "Familiar by design." |
-| `welcome.webp` | 1160x520, 12 KB | "Yours to keep." |
-| `poster-retime.webp` | 768x364, 8 KB | poster for the Retime slot |
-| `poster-flare.webp` | 768x364, 3 KB | poster for the lens-flare slot |
-| `poster-camera.webp` | 768x364, 12 KB | poster for the camera-solve slot |
+| File | Where it appears |
+| --- | --- |
+| `hero.png` | the wide picture under "Composite the way you know" |
+| `timeline.png` | "Intuitively designed." |
+| `node-graph.png` | "Dynamic effects." |
+| `workspace.png` | Meet the interface, Timeline |
+| `graph-editor.png` | Meet the interface, Graph |
+| `nodes-workspace.png` | Meet the interface, Nodes |
+| `audio-workspace.png` | Meet the interface, Audio |
 
-About 124 KB in total, all of it lazily loaded except the wide one. To replace
-a picture, capture the application, crop to the aspect in the table and save as
-WebP at quality 80 - there is no build-time image pipeline here on purpose.
+They sit in `src/assets/` rather than `public/` so Astro's `<Image>` resizes
+each one, re-encodes it as WebP and writes the `srcset` the page serves. Source
+format and size do not matter; a 1.5 MB PNG leaves the build as a 149 KB WebP.
+To replace a picture, overwrite the file with a capture of the same shape - the
+two card pictures are cut to 580:260, the rest are whole windows or whole
+panels shown at their own aspect.
 
-## Feature clips
+`hero.png` is a placeholder: the owner's own capture of the application mid-edit
+belongs there, and a clip belongs there after that.
 
-The three slots under the screenshots play a short clip on hover. Each is a real
-`<video>` pointing at `public/clips/` (`retime.webm`, `flare.webm`, `camera.webm`)
-with a screenshot crop as its poster. **None of the three clips has been recorded
-yet**, so what a visitor sees today is the poster: hovering removes the "plays on
-hover" label and leaves the picture, which is a real screenshot and worth showing
-on its own. Drop the files in and the slots start moving with no code change. The
-three are listed as content debt in `docs/TODO.md`.
+## The front page arrives
+
+Nothing below the wordmark is drawn at load. The wordmark plays its own
+animation and, on the frame the lockup lands, dispatches `wordmark:home` and
+plays `public/audio/click.mp3` at a quarter volume - a browser that refuses to
+play audio nobody asked for simply does not, and nothing else changes.
+
+That cue releases the page. The hero goes in order: the download button, the
+line above it a word at a time, then the two lines under it. Everything further
+down arrives as it scrolls into view. Each piece takes 500ms, blurring and
+lifting into place; `--i` on an element pushes it 70ms later than its
+neighbours, and `--base` on the hero line delays its first word.
+
+Under `prefers-reduced-motion` and without script the whole page is simply
+there. The source of the sound is `assets/audio/click.mp3` at the repo root;
+`public/audio/` holds the site's copy, as `public/` does for the brand marks.

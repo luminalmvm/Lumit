@@ -141,10 +141,18 @@ const { class: klass } = Astro.props;
       // timing it comes from, instead of being guessed at as a delay elsewhere.
       if (!fired && t >= 45/46) {
         fired = true;
+        snap.play().catch(function () {});
         document.dispatchEvent(new Event("wordmark:home"));
       }
     }
     var fired = false;
+
+    // The frame the lockup lands on has a sound. Quiet on purpose, and only if
+    // the browser will play audio nobody asked for - most will not until the
+    // visitor has clicked something, and a refused play() is not a failure.
+    var snap = new Audio("/audio/click.mp3");
+    snap.preload = "auto";
+    snap.volume = 0.25;
 
     apply(0);
     // The launch is stretched by 300ms: a power ramp that starts near-still and

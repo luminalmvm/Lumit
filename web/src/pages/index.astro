@@ -1,78 +1,102 @@
 ---
+import { Image } from "astro:assets";
 import Base from "../layouts/Base.astro";
 import Wordmark from "../components/Wordmark.astro";
 import HeroField from "../components/HeroField.astro";
 
-// The two screenshot cards under the wide one. Both are real captures of the
-// application, cropped and re-encoded for the web (web/public/shots/).
+// Every picture on this page is a real capture of the application, kept in
+// src/assets/ so Astro resizes and re-encodes it at build time. To swap one,
+// overwrite the file - the name is the only thing the page knows about it.
+import heroShot from "../assets/shots/hero.png";
+import timelineShot from "../assets/shots/timeline.png";
+import nodeGraphShot from "../assets/shots/node-graph.png";
+import workspaceShot from "../assets/shots/workspace.png";
+import graphEditorShot from "../assets/shots/graph-editor.png";
+import nodesShot from "../assets/shots/nodes-workspace.png";
+import audioShot from "../assets/shots/audio-workspace.png";
+
+// The hero line arrives a word at a time. One span per word, each carrying its
+// own index; the delay is arithmetic in CSS rather than script.
+const tagline =
+  "Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.";
+const words = tagline.split(" ");
+
+// The two cards under the wide one.
 const shots = [
   {
-    src: "/shots/timeline.webp",
-    alt: "Lumit's timeline: four layers with their modes, mattes, blends and keyframes",
+    src: timelineShot,
+    alt: "Lumit's timeline, cut in half: layers with their switches, modes, mattes and keyframes on one side, the graph editor's curves on the other",
     h: "Intuitively designed.",
-    p: "Bring your knowledge directly into Lumit. We know time matters,so you can work without interruption.",
+    p: "Bring your knowledge directly into Lumit. We know time matters, so you can work without interruption.",
   },
   {
-    src: "/shots/welcome.webp",
-    alt: "Lumit's welcome window, listing recent projects on disk",
+    src: nodeGraphShot,
+    alt: "Lumit's node graph: a solid wired into a Glow, with a Wiggle driving the glow's threshold",
     h: "Dynamic effects.",
     p: "Effects can be driven by expressions, altered in the node graph, or simply in the effect controls. You decide.",
   },
 ];
 
-// Three hover-play slots. The clips are not recorded yet: each slot is a real
-// <video> whose source will appear under /clips/, and until it does the poster
-// - a crop of the matching screenshot - is what the visitor sees. Nothing here
-// pretends to move. The slots are listed as content debt in docs/TODO.md.
-const clips = [
+// Meet the interface: one picture at a time, chosen by name.
+const tabs = [
   {
-    src: "/clips/retime.webm",
-    poster: "/shots/poster-retime.webp",
-    alt: "The timeline's keyframes and graph column",
+    src: workspaceShot,
+    alt: "The Lumit workspace: project panel, viewer, effects list and timeline",
     h: "Timeline.",
   },
   {
-    src: "/clips/flare.webm",
-    poster: "/shots/poster-flare.webp",
-    alt: "The Viewer showing a composited frame",
+    src: graphEditorShot,
+    alt: "The graph editor, showing the value graph of an animated property",
     h: "Graph.",
   },
   {
-    src: "/clips/camera.webm",
-    poster: "/shots/poster-camera.webp",
-    alt: "The Viewer beside the effects and presets list",
+    src: nodesShot,
+    alt: "The Nodes workspace: the graph across the window with the viewer beside it",
     h: "Nodes.",
+  },
+  {
+    src: audioShot,
+    alt: "The Audio workspace: mixer strips, levels and beat detection, with a waveform lane in the timeline",
+    h: "Audio.",
   },
 ];
 
 const features = [
   {
-    h: "Playback is the product",
-    p: "Rendering runs on the GPU. Lumit reuses cached work and lowers preview quality when it needs to, so the interface stays responsive - even during export.",
+    h: "Retime, two ways",
+    p: "One retime, read as a value graph or as a speed graph. With support for both After Effects and Vegas styles of retiming, and switch at any point.",
   },
   {
-    h: "One retime, two choices",
-    p: "Retime has two views of the same data. Use the value graph if you work like After Effects, or the speed graph and Sequence layers if you cut like Vegas. Switch whenever you need.",
+    h: "Over 100 effects, built in",
+    p: "Glow, motion blur, camera shake, RGB split, smooth zoom, colour grading, roto brush and puppet. All GPU-rendered, each with a documentation page for details.",
   },
   {
-    h: "Cut like an NLE, inside a layer",
-    p: "Sequence layers hold a run of clips cut back-to-back on one row - cutting and per-clip retiming, living inside the composition's layer stack.",
+    h: "A graph editor to work in",
+    p: "Value and speed views of the same curves, with support for easing, linear holding, and ways to alter multiple keyframes at once.",
   },
   {
-    h: "A graph editor worth living in",
-    p: "Value and speed views of the same curves, AE-compatible bezier maths, and easing built to be judged by feel.",
+    h: "Cuts inside a layer",
+    p: "A Sequence layer holds clips cut back-to-back on one row, each with its own retime, inside a layer, just like an NLE.",
   },
   {
-    h: "The effects you actually use",
-    p: "Eighty-five of them ship, built in and GPU-rendered: glow, motion blur, camera shake, RGB split, smooth zoom, and a grading suite with a LUT loader. Every one has a page in the manual showing what it does. OFX hosting is on the roadmap.",
+    h: "OFX plugin support",
+    p: "Any OFX plugin is supported: Sapphire, Twixtor, and the rest are found at start-up and sit beside built-in effects.",
   },
   {
     h: "Bring your After Effects projects",
-    p: "A free panel runs inside After Effects and writes a bundle Lumit opens. Keyframes carry across value for value, and an import report says what was adjusted on the way and what could not come at all.",
+    p: "Import After Effects projects directly across into Lumit. Keyframes carry across value for value, with support for all base effects and OFX plugins that Lumit can access.",
+  },
+  {
+    h: "Let music guide you",
+    p: "Beat detection marks the audio, cuts and retime features snap to the markers, and any parameter can be driven from a layer's sound.",
   },
   {
     h: "Your work survives the crash",
-    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and it offers the recovered project on the next launch.",
+    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and the recovered project is offered on the next launch.",
+  },
+  {
+    h: "The interface never blocks",
+    p: "Rendering runs on the GPU, cached work is reused, and preview quality drops when a frame is late. The interface answers while an export runs.",
   },
   {
     h: "Open source, GPLv3",
@@ -80,48 +104,56 @@ const features = [
   },
 ];
 
-// Three numbered stages. The stage after 1.0 gets a dashed rail: past the
-// release, the order is a guess and the site should say so.
+// Three stages. The last one gets a dashed rail: past the near work the order
+// is a guess and the site should say so.
 const roadmap = [
   {
-    label: "Currently in-progress",
+    label: "Completed",
     items: [
-      "After Effects import",
+      "Layers, masks, mattes and blend modes",
+      "Keyframes and the graph editor",
+      "Sequence layers and the Retime system",
+      "Optical-flow frame interpolation",
+      "Beat detection and markers",
+      "Over 100 GPU effects",
+      "Presets, saved and shared",
+      "2.5D camera and 3D layers",
+      "Roto brush and Puppet",
+      "Camera and planar tracking",
+      "Text layers with animators",
+      "Shape layers and paint",
       "Expressions",
-      "Optical-flow retiming",
-      "Beat detection and snapping",
-      "Motion paths in the Viewer",
-      "Shape modifiers and path editing",
-      "The macOS pass",
+      "The node graph",
+      "OFX plugin hosting",
+      "After Effects import, bundle and .aep",
+      "Export queue with hardware encoding",
+      "Proxies and background caching",
+      "Autosave and crash recovery",
+      "Windows, macOS and Linux builds",
     ],
   },
   {
-    label: "Before 1.0",
+    label: "In progress",
     items: [
-      "Export queue",
+      "The Audio workspace",
+      "Custom shader nodes",
+      "Colour management",
       "Tone mapping",
-      "GPU scopes",
-      "Proxy generation",
-      "First-run setup",
-      "Signed installers",
+      "Interface performance at 60 and 120 fps",
     ],
   },
   {
-    label: "After 1.0",
+    label: "Long run",
     dashed: true,
     items: [
-      "OFX plugin hosting",
-      "3D lights and camera depth of field",
-      "Tracker and stabiliser",
-      "Rotoscoping",
-      "Variable-width mask feather",
-      "Particles",
-      "Text animators",
-      "Audio panel and level meters",
-      "Composer audio workspace",
-      "Node view",
+      "Lumit's own effect format",
+      "Lights and camera depth of field",
+      "Particle simulator",
       "Scripting",
-      "Colour management",
+      "Blender scene import",
+      "Lottie export",
+      "OpenTimelineIO interchange",
+      "Render-farm and command-line export",
     ],
   },
 ];
@@ -131,6 +163,13 @@ const roadmap = [
   title="Lumit"
   description="A native compositing and motion-graphics editor."
 >
+  {/* Everything below the hero starts hidden and is revealed by the script at
+      the foot of this page. Without script the class is never set and the page
+      is simply the page. */}
+  <script is:inline>
+    document.documentElement.classList.add("anim");
+  </script>
+
   {/* ---------- hero ---------- */}
   <div class="relative -mt-16">
     <HeroField />
@@ -141,12 +180,19 @@ const roadmap = [
         <span class="sr-only">Lumit - Compositing that adapts to your workflow.</span>
       </h1>
 
-      <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80">
-        Compositing that adapts to your workflow. Built by editors, for editors. 
-        With an application that always remains responsive.
+      {/* The hero arrives once the wordmark is home, and the download button
+          leads: button, line, the two links under it. */}
+      <p class="words relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80" data-reveal style="--base:150ms">
+        {
+          words.map((word, i) => (
+            <Fragment>
+              <span class="word" style={`--i:${i}`}>{word}</span>{" "}
+            </Fragment>
+          ))
+        }
       </p>
 
-      <div class="relative mt-7 flex flex-wrap items-center justify-center gap-3">
+      <div class="lead relative mt-7 flex flex-wrap items-center justify-center gap-3">
         <a class="btn border-white" href="/download" data-dl>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
@@ -155,7 +201,7 @@ const roadmap = [
         </a>
       </div>
 
-      <p class="relative mt-2 text-[14px] text-fg-2">
+      <p class="relative mt-2 text-[14px] text-fg-2" data-reveal style="--i:4">
         <a class="text-[13px] text-fg-2 no-underline hover:text-accent-2" href="/download" data-alt>
           All download options
         </a>
@@ -185,7 +231,7 @@ const roadmap = [
         })();
       </script>
 
-      <p class="relative mt-6 text-[17px] text-fg-2">
+      <p class="relative mt-6 text-[17px] text-fg-2" data-reveal style="--i:6">
         Let your creativity flow. Free and open-source, forever.
       </p>
     </section>
@@ -193,49 +239,42 @@ const roadmap = [
 
   {/* ---------- the product, in pictures ---------- */}
   <section id="features" class="wrap flex flex-col gap-10 pt-24 pb-20 sm:pt-[120px]">
-    <div class="flex flex-col gap-3.5">
+    <div class="flex flex-col gap-3.5" data-reveal>
       <p class="kicker">Welcome to Lumit</p>
       <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
         <span class="text-fg">Composite the way you know.</span>
       </h2>
     </div>
 
-    {/* The one wide slot under the heading. It was the workspace still; it is a
-        video now, and the still it replaced is gone rather than left underneath
-        it. Same hover-to-play as the three below, so the page has one rule for
-        moving pictures rather than two. */}
-    <figure class="clip relative m-0 overflow-hidden rounded-card border border-line bg-ink-2">
-      <video
+    {/* The one wide slot under the heading: the application on a real edit. A
+        clip will take this place when one is recorded. */}
+    <figure class="m-0 overflow-hidden rounded-card border border-line bg-ink-2" data-reveal style="--i:1">
+      <Image
         class="block w-full"
-        src="/clips/workspace.webm"
-        poster="/shots/workspace.webp"
-        aria-label="The Lumit workspace: project panel, viewer, effects list and timeline"
-        muted
-        loop
-        playsinline
-        preload="none"
+        src={heroShot}
+        alt="Lumit mid-edit: the viewer showing a graded frame, effect controls at the left, and a full timeline of layers and keyframes below"
+        widths={[720, 1200, 1800]}
+        sizes="(min-width: 1360px) 1200px, 100vw"
+        loading="eager"
+        fetchpriority="high"
+        quality={90}
       />
-      <span
-        class="pointer-events-none absolute bottom-2 left-2 rounded-ctl bg-ink/70 px-1.5 py-1 font-mono text-[11px] leading-none tracking-[0.08em] uppercase text-fg-3 transition-opacity"
-        data-hint
-      >
-        Video · plays on hover
-      </span>
     </figure>
 
-    <div class="grid gap-10 md:grid-cols-2">
+    <div class="flex flex-col gap-10">
       {
-        shots.map((s) => (
-          <figure class="m-0 flex flex-col gap-2.5">
-            <img
-              class="aspect-[580/260] w-full rounded-card border border-line bg-ink-2 object-cover"
+        shots.map((s, i) => (
+          <figure class="m-0 flex flex-col gap-2.5" data-reveal style={`--i:${i}`}>
+            <Image
+              class="block w-full rounded-card border border-line bg-ink-2"
               src={s.src}
-              width="1160"
-              height="520"
-              loading="lazy"
               alt={s.alt}
+              widths={[720, 1200, 1800]}
+              sizes="(min-width: 1360px) 1200px, 100vw"
+              loading="lazy"
+              quality={90}
             />
-            <figcaption class="flex flex-col gap-2.5">
+            <figcaption class="flex max-w-[620px] flex-col gap-2.5">
               <span class="font-mono text-[18px] tracking-[-0.01em] text-fg">{s.h}</span>
               <span class="text-[15px] leading-[1.35] text-fg-3">{s.p}</span>
             </figcaption>
@@ -244,24 +283,24 @@ const roadmap = [
       }
     </div>
 
-    <div class="flex flex-col gap-3.5">
+    <div class="flex flex-col gap-3.5" data-reveal>
       <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
         <span class="text-fg"> Meet the interface. </span>
       </h2>
     </div>
-    {/* Three names on one rule, and one picture under them - the drawing's own
-        idea, and a good one: three slots side by side had to be small to fit,
+    {/* Four names on one rule, and one picture under them - the drawing's own
+        idea, and a good one: four slots side by side had to be small to fit,
         and the point of these is that you can see what is happening in them.
         One is always open, so the panel is never empty and the row never reads
-        as three things you have not chosen yet. */}
-    <div data-tabs>
+        as four things you have not chosen yet. */}
+    <div data-tabs data-reveal>
       <div
         class="flex items-baseline border-b border-line pb-3.5"
         role="tablist"
         aria-label="Meet the interface"
       >
         {
-          clips.map((c, i) => (
+          tabs.map((c, i) => (
             <>
               {i > 0 && (
                 <span class="px-4 text-[15px] text-fg-4" aria-hidden="true">
@@ -284,7 +323,7 @@ const roadmap = [
         }
       </div>
       {
-        clips.map((c, i) => (
+        tabs.map((c, i) => (
           <div
             id={`panel-${i}`}
             role="tabpanel"
@@ -292,15 +331,14 @@ const roadmap = [
             class="mt-6 overflow-hidden rounded-card border border-line bg-ink-2"
             hidden={i !== 0}
           >
-            <video
-              class="block aspect-video w-full object-cover"
+            <Image
+              class="block w-full"
               src={c.src}
-              poster={c.poster}
-              aria-label={c.alt}
-              muted
-              loop
-              playsinline
-              preload="none"
+              alt={c.alt}
+              widths={[720, 1200, 1800]}
+              sizes="(min-width: 1360px) 1200px, 100vw"
+              loading="lazy"
+              quality={90}
             />
           </div>
         ))
@@ -311,22 +349,24 @@ const roadmap = [
   {/* ---------- why it exists ---------- */}
   <section class="border-t border-line py-20 sm:py-24">
     <div class="wrap">
-      <p class="kicker">Why Lumit exists</p>
-      <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">
-        Editing should not be a chore.
-      </h2>
-      <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
-        Preview lag, interfaces that stop responding, and large external plugin suites
-        that slow down your device. Lumit replaces all of this in a single application,
-        with support for OFX plugins should you still require them.
-      </p>
+      <div data-reveal>
+        <p class="kicker">Why Lumit exists</p>
+        <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">
+          Editing should not be a chore.
+        </h2>
+        <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
+          Preview lag, interfaces that stop responding, and large external plugin suites
+          that slow down your device. Lumit replaces all of this in a single application,
+          with support for OFX plugins should you still require them.
+        </p>
+      </div>
 
       <div
         class="mt-12 grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-2"
       >
         {
-          features.map((f) => (
-            <div class="bg-ink-2 p-7">
+          features.map((f, i) => (
+            <div class="bg-ink-2 p-7" data-reveal style={`--i:${i % 2}`}>
               <h3 class="font-mono text-[15px] text-fg">{f.h}</h3>
               <p class="mt-2.5 text-[15px] leading-[1.35] text-fg-3">{f.p}</p>
             </div>
@@ -339,17 +379,19 @@ const roadmap = [
   {/* ---------- roadmap ---------- */}
   <section id="roadmap" class="border-t border-line bg-ink-2 py-20 sm:py-24">
     <div class="wrap">
-      <p class="kicker">Roadmap</p>
-      <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">What we are building.</h2>
-      <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
-        Lumit is in public beta. Here are the current in-progress features, and a
-        preview of what's to come.
-      </p>
+      <div data-reveal>
+        <p class="kicker">Roadmap</p>
+        <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">What we are building.</h2>
+        <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
+          Lumit is in public beta. Here is what is built, what is being worked on now, and
+          what comes after.
+        </p>
+      </div>
 
       <div class="roadmap mt-14">
         {
           roadmap.map((stage, i) => (
-            <div class:list={["stage", stage.dashed && "stage-open"]}>
+            <div class:list={["stage", stage.dashed && "stage-open"]} data-reveal>
               <span class="marker" aria-hidden="true">
                 {String(i + 1).padStart(2, "0")}
               </span>
@@ -370,7 +412,7 @@ const roadmap = [
 
   {/* ---------- close ---------- */}
   <section class="border-t border-line py-20 text-center sm:py-24">
-    <div class="wrap">
+    <div class="wrap" data-reveal>
       <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Free, forever.</h2>
       <p class="mx-auto mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
         Open source under GPLv3, and yours to keep. Windows, Linux and macOS builds are
@@ -385,6 +427,85 @@ const roadmap = [
 </Base>
 
 <style>
+  /* Nothing marked for reveal is drawn until the script releases it - the
+     wordmark coming home for the hero, scrolling into view for the rest. --i
+     staggers the pieces of one group against each other, 70ms apart. */
+  :global(html.anim) [data-reveal] {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(12px);
+  }
+  :global(html.anim) [data-reveal].shown {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+    transition:
+      opacity 500ms ease-out calc(var(--i, 0) * 70ms),
+      filter 500ms ease-out calc(var(--i, 0) * 70ms),
+      transform 500ms ease-out calc(var(--i, 0) * 70ms);
+  }
+
+  /* The download button does not wait for the wordmark: it blurs in as the
+     page loads, and the rest of the hero follows the lockup home. */
+  :global(html.anim) .lead {
+    animation: piece-in 500ms both;
+  }
+  @keyframes piece-in {
+    from {
+      opacity: 0;
+      filter: blur(10px);
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: none;
+    }
+  }
+
+  /* The hero line is the one that arrives a word at a time, so the paragraph
+     itself never blurs - its words do, each taking 500ms and starting 16ms
+     after the one before it, the line as a whole starting at --base. */
+  :global(html.anim) [data-reveal].words {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition: none;
+  }
+  :global(html.anim) .words .word {
+    opacity: 0;
+  }
+  :global(html.anim) .words.shown .word {
+    animation: word-in 500ms both;
+    animation-delay: calc(var(--base, 0ms) + var(--i) * 16ms);
+  }
+  .word {
+    display: inline-block;
+  }
+  /* Both ends are written out. A keyframe list with no `to` takes the element's
+     own style as its end, and a word's own style is the hidden one above - so
+     an implicit end would animate it from invisible to invisible. */
+  @keyframes word-in {
+    from {
+      opacity: 0;
+      filter: blur(6px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(html.anim) [data-reveal],
+    :global(html.anim) .lead,
+    :global(html.anim) .words .word {
+      animation: none;
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
+  }
 
   /* The name of the panel you are looking at lifts a few pixels off the rule
      and takes the full text colour. It is the whole indicator - no underline,
@@ -404,8 +525,8 @@ const roadmap = [
   }
 
   /* Numbered stages against a rail. Each stage carries its own rail segment so
-     the last one can go dashed: past 1.0 the order is a guess, and the line
-     should look like one. */
+     the last one can go dashed: past the near work the order is a guess, and
+     the line should look like one. */
   .stage {
     position: relative;
     display: grid;
@@ -509,10 +630,8 @@ const roadmap = [
   }
 
   // Meet the interface: one panel open at a time, and always one. Clicking a
-  // name opens its panel and plays it; the arrow keys walk the row, which is
-  // what a tablist is expected to do and is four lines here. The panel that is
-  // open is the only one that ever plays, so two clips are never running at
-  // once for the sake of a switch nobody has made yet.
+  // name opens its panel; the arrow keys walk the row, which is what a tablist
+  // is expected to do and is four lines here.
   const tabsRoot = document.querySelector<HTMLElement>("[data-tabs]");
   if (tabsRoot) {
     const tabs = [...tabsRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
@@ -524,10 +643,6 @@ const roadmap = [
         tab.setAttribute("aria-selected", on ? "true" : "false");
         tab.tabIndex = on ? 0 : -1;
         panels[i].hidden = !on;
-        const video = panels[i].querySelector("video");
-        if (!video) return;
-        if (on) video.play().catch(() => {});
-        else video.pause();
       });
       if (focus) tabs[want].focus();
     };
@@ -541,34 +656,38 @@ const roadmap = [
         open((i + step + tabs.length) % tabs.length, true);
       });
     });
-
-    // Nothing plays until the row is on screen: preload is off, so starting the
-    // open panel here is also what fetches it.
-    new IntersectionObserver((entries, obs) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        obs.disconnect();
-        const shown = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
-        open(shown < 0 ? 0 : shown);
-      }
-    }).observe(tabsRoot);
   }
 
-  // The wide slot plays on hover. A slot whose clip does not exist yet keeps
-  // its poster and drops the "plays on hover" label rather than removing
-  // itself: the picture is a real screenshot and is worth showing on its own.
-  for (const slot of document.querySelectorAll<HTMLElement>(".clip")) {
-    const video = slot.querySelector("video");
-    if (!video) continue;
-    const hint = slot.querySelector("[data-hint]");
-    const missing = () => hint?.remove();
-    video.addEventListener("error", missing);
-    slot.addEventListener("mouseenter", () => {
-      video.play().then(() => hint?.classList.add("opacity-0"), missing);
-    });
-    slot.addEventListener("mouseleave", () => {
-      video.pause();
-      hint?.classList.remove("opacity-0");
-    });
+  // The page below the hero arrives once the wordmark has come home - the same
+  // cue the hero's own background waits for - and then a group at a time as it
+  // scrolls into view. The timeout is the safety net for a wordmark that never
+  // animates.
+  const reveal = () => {
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add("shown");
+          seen.unobserve(entry.target);
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px" },
+    );
+    for (const el of document.querySelectorAll("[data-reveal]")) seen.observe(el);
+  };
+
+  let revealed = false;
+  const once = () => {
+    if (revealed) return;
+    revealed = true;
+    reveal();
+  };
+  // A visit that lands part-way down the page - an anchor from the header, a
+  // restored scroll position - has no hero animation to wait for.
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) once();
+  else if (location.hash || scrollY > 0) once();
+  else {
+    document.addEventListener("wordmark:home", once, { once: true });
+    setTimeout(once, 1800);
   }
 </script>

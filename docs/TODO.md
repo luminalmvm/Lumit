@@ -38,7 +38,10 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
-- The three site clips (web/public/clips/) remain the owner's own recording.
+- The front page's hero picture (web/src/assets/shots/hero.png) is a placeholder -
+    a capture of the owner's own project standing in for the owner's own screenshot,
+    and for the clip that replaces it after that. The video slots the three unrecorded
+    clips sat in are gone; the page is pictures until a clip exists.
 
 ## Now - the preview must keep up
 
