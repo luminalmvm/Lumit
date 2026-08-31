@@ -775,12 +775,23 @@ class LayerArea extends StatelessWidget {
                                             razorFrameAt: razorFrameAt,
                                             onSelect: () =>
                                                 onSelect(rows[i].entry.layer),
-                                            onOpenSequence:
-                                                rows[i].entry.info.kind ==
-                                                        BridgeLayerKind.sequence
-                                                    ? () => onOpenSequence
-                                                        ?.call(rows[i].entry)
-                                                    : null,
+                                            // A Sequence layer's view, or the
+                                            // comp a Precomp draws (owner,
+                                            // 2026-08-31) — the same opens a
+                                            // double-click on the outline's
+                                            // name performs; the panel's
+                                            // handler tells the kinds apart.
+                                            onOpenSequence: rows[i]
+                                                            .entry
+                                                            .info
+                                                            .kind ==
+                                                        BridgeLayerKind
+                                                            .sequence ||
+                                                    rows[i].entry.info.kind ==
+                                                        BridgeLayerKind.precomp
+                                                ? () => onOpenSequence
+                                                    ?.call(rows[i].entry)
+                                                : null,
                                             onChanged: onChanged,
                                             dragPreview: dragPreview,
                                             bounds: bounds[rows[i].id] ??

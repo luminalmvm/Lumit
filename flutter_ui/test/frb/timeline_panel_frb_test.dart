@@ -6033,6 +6033,34 @@ void main() {
           reason: 'and nothing is being renamed');
     });
 
+    /// **And its bar answers the same double-click** (owner, 2026-08-31): the
+    /// lane area is where the eye already is, and a Precomp's bar opens the
+    /// comp it draws exactly as its name does — through the bar's own
+    /// double-tap counter, so the razor's single taps stay unheld.
+    testWidgets('double-clicking a precomp bar opens its comp',
+        (tester) async {
+      final p = withComp();
+      final inner = p.state.project!.newComposition(name: 'Inner');
+      final layer = p.comp.addPrecompLayer(comp: inner);
+      await mount(tester, p);
+
+      // Retried, the alignment suite's reason: the first tap selects and can
+      // rebuild the row under the second tap on a loaded runner.
+      final bar = find
+          .byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
+      for (var attempt = 0; attempt < 3; attempt++) {
+        await tester.tap(bar);
+        await tester.pump(const Duration(milliseconds: 30));
+        await tester.tap(bar);
+        await tester.pumpAndSettle();
+        if (p.uiState.selectedComp?.getSettings().name == 'Inner') break;
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+
+      expect(p.uiState.selectedComp?.getSettings().name, 'Inner',
+          reason: 'the nested comp is fronted from the lane side too');
+    });
+
     /// Every other kind has no window of its own yet, so a double-click on one
     /// does nothing at all — and in particular does not rename it.
     testWidgets('double-clicking any other layer does nothing', (tester) async {

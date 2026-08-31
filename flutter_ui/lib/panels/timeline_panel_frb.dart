@@ -959,10 +959,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return out;
   }
 
-  /// Open or close a Sequence layer's view. Any other kind is left alone: a
-  /// double-click on a Precomp already means "open the comp", and a layer with
-  /// no clips has nothing to show.
-  void _toggleSequenceView(BridgeLayerEntry entry) {
+  /// What a double-click on a layer opens (K-243): a Sequence layer's view,
+  /// in place, or the comp a Precomp draws — fronted the way the outline's
+  /// name, the Project panel and the Hierarchy already front it. The lane
+  /// bar reaches here too (owner, 2026-08-31: "if I double click a precomp
+  /// in the lane area, please can it open the precomp"). Any other kind is
+  /// left alone until it has a window of its own to open.
+  void _openLayerView(BridgeLayerEntry entry) {
+    if (entry.info.kind == BridgeLayerKind.precomp) {
+      final ItemReference? source;
+      try {
+        source = entry.layer.getSourceItem();
+      } catch (_) {
+        // A layer that has gone: nothing to open, and never a crash.
+        return;
+      }
+      if (source is! ItemReference_Composition) return;
+      Provider.of<LumitUiState>(context, listen: false)
+          .openNestedComp(entry.layer, source.field0);
+      return;
+    }
     if (entry.info.kind != BridgeLayerKind.sequence) return;
     final id = entry.layer.internallayerId.toString();
     setState(() {
@@ -3475,7 +3491,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             rows: rows,
                                             vScroll: _vOutline,
                                             viewport: box.maxHeight,
-                                            onOpenSequence: _toggleSequenceView,
+                                            onOpenSequence: _openLayerView,
                                             layerDrag: _layerDrag,
                                             renameRequest: _renameRequest,
                                             blockHeights: blockHeights,
@@ -3852,7 +3868,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,
                       groupActions: _groupActions(ui, comp),
-                      onOpenSequence: _toggleSequenceView,
+                      onOpenSequence: _openLayerView,
                       onGraphHeight: (entry, h) => setState(() =>
                           _sequenceGraph[
                               entry.layer.internallayerId.toString()] = h),

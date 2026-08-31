@@ -281,9 +281,10 @@ class Bar extends StatefulWidget {
   /// Clicking (or grabbing) the bar selects its layer.
   final VoidCallback onSelect;
 
-  /// Double-clicking a Sequence layer's bar opens its view, the same as
-  /// double-clicking its name (K-248): the clips are what you came for, and
-  /// the bar is where you were already looking.
+  /// Double-clicking this bar opens what double-clicking its name opens: a
+  /// Sequence layer's view in place (K-248), or the comp a Precomp draws
+  /// (owner, 2026-08-31) — the clips or the comp are what you came for, and
+  /// the bar is where you were already looking. Null on every other kind.
   final VoidCallback? onOpenSequence;
   final VoidCallback onChanged;
 
@@ -442,6 +443,11 @@ class _BarState extends State<Bar> {
   /// drag-start: a drag's start position is where the slop was exceeded,
   /// which read a fast edge grab as a grab of the middle.
   double _downDx = 0;
+
+  /// Where the last primary press landed, globally — what the double-click
+  /// counter measures the release against, so a drag's up never counts as a
+  /// tap. Null between presses.
+  Offset? _downAt;
 
   /// The last press landed on an already-selected bar and left the selection
   /// standing for a possible selection drag (K-720); the tap, if the gesture
@@ -659,13 +665,24 @@ class _BarState extends State<Bar> {
                       !keys.isMetaPressed &&
                       !keys.isShiftPressed;
                   if (!_keptSelection) widget.onSelect();
-                  // A Sequence layer's bar opens its view on a double-click, the
-                  // same as its name does (K-248) — counted here rather than
-                  // with an `onDoubleTap` below, because a double-tap recogniser
-                  // beside the razor's `onTapUp` makes the arena hold every
-                  // single tap back, and the razor stops cutting ([DoubleTap]).
+                  _downAt = event.position;
+                },
+                // The bar opens what its name opens on a double-click — a
+                // Sequence layer's view (K-248), a Precomp's comp — counted
+                // with raw timestamps rather than an `onDoubleTap` below,
+                // because a double-tap recogniser beside the razor's `onTapUp`
+                // makes the arena hold every single tap back, and the razor
+                // stops cutting ([DoubleTap]). Counted on the **up**, and only
+                // when the pointer stayed put: it used to count downs, so two
+                // quick trim drags read as a double-click and opened the view
+                // the hand was only resizing.
+                onPointerUp: (event) {
                   final open = widget.onOpenSequence;
-                  if (open != null && _barTaps.tap()) open();
+                  final downAt = _downAt;
+                  _downAt = null;
+                  if (open == null || downAt == null) return;
+                  if ((event.position - downAt).distance > kTouchSlop) return;
+                  if (_barTaps.tap()) open();
                 },
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
