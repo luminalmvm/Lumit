@@ -794,6 +794,10 @@
   "@deleteStroke": {
     "description": "Context-menu item: remove one brush stroke."
   },
+  "detachAudioNoSound": "That layer has no sound to separate.",
+  "@detachAudioNoSound": {
+    "description": "One line in the status bar at the bottom of the window, after Detach audio was asked of a layer whose media carries no sound - a solid colour, a title, or footage with no audio track. Calm, not an error."
+  },
   "detectingBeats": "Detecting beats",
   "@detectingBeats": {
     "description": "The line on the card covering the shell while beat detection runs."
@@ -3816,6 +3820,10 @@
   "@menuAuto": {
     "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
   },
+  "menuAudio": "Audio",
+  "@menuAudio": {
+    "description": "Submenu in the Layer menu, holding the commands that act on a layer's sound."
+  },
   "menuAnimation": "Animation",
   "@menuAnimation": {
     "description": "Menu item."
@@ -3909,6 +3917,10 @@
   "menuDeselectAll": "Deselect all",
   "@menuDeselectAll": {
     "description": "Menu item."
+  },
+  "menuDetachAudio": "Detach audio",
+  "@menuDetachAudio": {
+    "description": "Menu item, in Layer > Audio and on a layer's right-click menu in the Timeline: put the layer's sound on an audio-only row of its own directly below, and mute the original row."
   },
   "menuDetectBeats": "Detect beats",
   "@menuDetectBeats": {

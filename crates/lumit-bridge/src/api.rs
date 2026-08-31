@@ -94,7 +94,8 @@ pub enum BridgeError {
     ExportFailed(String),
     /// No audio pipeline on this machine (no adapter, or a build without one).
     NoAudioPipeline,
-    /// The composition has no audible sources to analyse.
+    /// Nothing here makes a sound: a composition with no audible sources to
+    /// analyse, or a layer with none to detach.
     NoAudio,
     /// The layer has no retiming to edit.
     NotRetimed,

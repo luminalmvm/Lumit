@@ -958,6 +958,17 @@ class _OutlineRowState extends State<OutlineRow> {
                 key: const ValueKey('tl-row-from-sequence'),
                 onPressed: () => close('from-sequence'),
                 child: Text(l10n.menuConvertToFootageLayer)),
+          // **Detach audio** (K-701): the layer's sound onto a row of its own,
+          // directly below, with this row muted. Not offered on a row that is
+          // already nothing but sound — there is nothing to separate it from —
+          // and a row that turns out to make no sound says so in the status
+          // line rather than being greyed here, because finding out costs a
+          // probe of the media and a menu cannot wait for one.
+          if (widget.entry.info.kind != BridgeLayerKind.audio)
+            MenuRow(
+                key: const ValueKey('tl-row-detach-audio'),
+                onPressed: () => close('detach-audio'),
+                child: Text(l10n.menuDetachAudio)),
           // **Retime's own commands** (docs/04 §12.1), on the layers that have
           // a Retime to command. A Sequence layer's maps belong to its clips
           // (K-075) and are commanded from the clips' own menu in the sequence
@@ -1086,6 +1097,23 @@ class _OutlineRowState extends State<OutlineRow> {
           try {
             target.layer.convertFromSequenced();
           } catch (_) {}
+        }
+      case 'detach-audio':
+        // A layer that makes no sound refuses, and one line says so for the
+        // whole batch: four silent solids should not post four notices.
+        var refused = false;
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          if (target.info.kind == BridgeLayerKind.audio) continue;
+          try {
+            await target.layer.detachAudio();
+          } catch (_) {
+            refused = true;
+          }
+        }
+        if (refused && mounted) {
+          Provider.of<LumitState>(this.context, listen: false)
+              .postNotice(l10n.detachAudioNoSound);
         }
       case 'retime':
         for (final target in targets) {

@@ -6494,6 +6494,50 @@ a music track that has never shown anything. Each row now shows only the
 switches its layer can actually use. A control that does nothing when you click
 it is worse than no control, because you have to click it to find out.
 
+### Sending a clip's sound to a row of its own (K-701)
+
+A clip that was filmed with sound arrives as one row: picture and audio
+together, one bar, one set of switches. That is usually what you want. It stops
+being what you want the moment the sound needs treating differently from the
+picture — a fade that starts before the cut, a level ride under a voice, a
+music bed that carries on over the next shot. All of that has to be done on the
+row that is also carrying the picture, where the trims and the keyframes get in
+each other's way.
+
+**Detach audio** (Layer ▸ Audio ▸ Detach audio, or right-click the row) splits
+the two apart. It adds a second row directly below the first, holding the same
+media as *sound only* — an Audio layer, the one-bit-on-a-footage-layer from the
+section above — and turns the speaker off on the original row. The new row is a
+straight copy: same in and out points, same start offset, same retime, same
+volume and pan keyframes, same effects. That is the whole trick. Nothing is
+heard twice, because the row that used to make the sound has been muted, and
+nothing sounds different, because the row that makes it now was copied from
+that one. What has changed is only where the sound is edited.
+
+Both halves go in as **one batch**, which the engine treats as a single edit, so
+one Ctrl+Z takes back the new row and the mute together rather than leaving you
+half-detached. A precomp detaches the same way: its copy names the same nested
+composition and mixes the same sound out of it, which is how a music bed you
+built inside another comp can be separated too.
+
+Two things it deliberately does *not* do. It does not keep the two rows in step
+afterwards — trim one and the other stays as it was. A live link sounds helpful
+and is the reason you cannot then move the sound where you want it, which was
+the whole point; if the two must stay together, do not detach in the first
+place. And it does not renumber the copied effects. Effects carry identifiers,
+and the layer's own wiring — a driver riding the volume, say — points at those
+identifiers by name; minting fresh ones for the copy would quietly cut those
+wires, and the copy would then sound like something else. The identifiers only
+have to be unique *within* a layer, so the copy simply keeps them.
+
+Asked of something silent — a solid, a title, footage with no sound in it — the
+command declines and says so in one line at the bottom of the window. Finding
+out whether a layer makes a sound means opening the media file, which is far too
+slow to do while a menu is being drawn, so the menu offers the command and the
+engine answers when it is pressed. The one case that *can* be known instantly is
+a row that is already nothing but sound: there is nothing to separate it from,
+so that row is not offered the command at all.
+
 ### The bouncing bars beside a fader (K-690)
 
 A mixing desk has a column of little bars next to every fader. They add nothing

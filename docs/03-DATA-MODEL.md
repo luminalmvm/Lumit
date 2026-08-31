@@ -525,9 +525,12 @@ so every project saved before it existed reads unchanged.
   draws it with its own glyph and no thumbnail; `has_picture` answers false whatever the file
   holds, which is what the outline reads to know the layer has no visibility switch to offer.
 
-**Not built:** *Detach audio* — a linked Audio layer sharing a Footage layer's source, kept
-in step with it (docs/09 §6). *Add audio only* makes an independent layer from the item, not
-a link to an existing layer.
+**Detach audio** (K-701) makes one of these from a layer already placed: an `audio_only`
+copy of the layer directly below it, over the same source and with its span, retime, volume
+and pan copied, and the original's audible switch off — one op batch, one undo step
+(docs/09 §6). The two are **not linked** afterwards: neither *Add audio only* nor Detach
+makes a layer that stays in step with another, and both are independent from the moment
+they land.
 
 ---
 

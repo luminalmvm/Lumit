@@ -1039,5 +1039,16 @@ that read-back is gone.
     served from memory after, and both map a retimed layer's columns through
     its own clock (K-436).
 
+- **Detach audio** (K-701) is `LayerReference::detach_audio()`: one `Op::Batch` —
+    `AddLayer` of an `audio_only` copy of the layer directly below it, then
+    `SetLayerAudible(false)` on the original — so the pair is one undo step, and a
+    locked layer refuses the batch whole like every other edit. The copy carries the
+    same source, span, offset, retime, volume, pan, effects and graph, including the
+    effect **ids**, which the layer's own driver wires name. It answers the new
+    layer's `LayerReference`, and refuses with `NoAudio` on a layer that makes no
+    sound or is already only sound. Asynchronous, because deciding whether the layer
+    sounds opens the media — the same probe `has_audio` runs, on the same shared
+    pool.
+
 The historical record of the port that produced this seam is frozen in
 [archive/flutter-port/](archive/flutter-port/).

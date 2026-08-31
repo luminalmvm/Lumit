@@ -929,6 +929,28 @@ List<MenuSection> lumitMenus(
         MenuEntry.submenu(
             l10n.menuMaskAndShapePath, maskAndShapePathRows(app, ui)),
         MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
+        // Audio ▸ — what to do with the *sound* of a layer that has some.
+        // Detach puts it on a row of its own, muting the picture's row, so it
+        // can be cut and ridden in the audio surfaces without the picture
+        // coming along (K-701). Greyed on a layer that is already nothing but
+        // sound; a layer that turns out to make none refuses when pressed and
+        // says so in the status line, because the answer costs a probe of the
+        // media and a menu cannot wait for one.
+        MenuEntry.submenu(l10n.menuAudio, [
+          MenuEntry(
+            l10n.menuDetachAudio,
+            _detachable(layer)
+                ? onLayer((l) async {
+                    try {
+                      await l.detachAudio();
+                      app.notifyDocumentChanged();
+                    } catch (_) {
+                      app.postNotice(l10n.detachAudioNoSound);
+                    }
+                  })
+                : null,
+          ),
+        ]),
         // The selected layer's Retime (K-197). In the menu as well as on the
         // keyboard (K-198's lesson: a command whose only route is a chord has no
         // route the day something intercepts the chord). The command names what
@@ -1283,6 +1305,19 @@ bool _convertible(LayerReference? layer) {
   try {
     final kind = layer.getKind();
     return kind == BridgeLayerKind.footage || kind == BridgeLayerKind.sequence;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Whether this layer has a sound that could be put on a row of its own
+/// (K-701). A layer that is *already* only sound has nothing to separate it
+/// from; whether the rest of them actually make any is the engine's answer,
+/// and it costs a probe, so it is given as a refusal rather than a grey row.
+bool _detachable(LayerReference? layer) {
+  if (layer == null) return false;
+  try {
+    return layer.getKind() != BridgeLayerKind.audio;
   } catch (_) {
     return false;
   }

@@ -285,9 +285,17 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   the same layer (audible switch, volume property, waveform lane). **Shipped (K-435):**
   *Add audio only* on a footage item places that item's sound as its own **Audio layer** —
   a Footage layer with `audio_only` set (docs/03 §5.7), which never draws. Media with no
-  picture becomes one on placement whichever route placed it. "Detach audio" — a *linked*
-  Audio layer kept in step with an existing Footage layer's source — is **not yet built**
-  ([TODO.md](TODO.md)); *Add audio only* makes an independent layer from the item.
+  picture becomes one on placement whichever route placed it.
+- **Detach audio** (K-701): *Layer ▸ Audio ▸ Detach audio*, and the same row on a layer's
+  right-click, separates a layer that is already placed. It adds an Audio layer over the
+  **same** source directly below — same span, offset, retime, volume, pan, effects and
+  graph, **copied** — and turns the original layer's audible switch off, as one op batch
+  and so one undo step. The comp sounds exactly as it did; what changes is which row the
+  sound is cut and ridden on. A **Precomp** layer detaches the same way, its sibling
+  naming the same nested comp. The pair is **not linked** (K-701): trimming one afterwards
+  does not trim the other, which is the point of separating them. A layer that makes no
+  sound, or one that is already nothing but sound, is refused with one calm line in the
+  status bar.
 - **Switches show only what a layer can do** (K-435): an Audio layer is offered no
   visibility switch, and a layer that can never be heard — a solid, a title, a shape,
   image-only footage — is offered no audible switch. The same reasoning that decides
@@ -394,8 +402,9 @@ engine that sums arbitrary sources, and a file format that tolerates new propert
 2. **Onset algorithm ceiling.** Spectral flux is fine for percussive genre music; melodic
    onsets (piano edits, some phonk) may need a complex-domain or ML detector later. Is
    detector pluggability worth designing in now, or is replace-when-needed acceptable?
-3. **Detached audio linking.** Should detached audio keep a persistent sync-lock badge
-   with "resync" (Premiere-style), or is the v1 grouping-only link enough for the
+3. **Detached audio linking.** Detach ships **unlinked** (K-701): the sibling is a copy,
+   and nothing keeps the two rows in step afterwards. Should it later keep a persistent
+   sync-lock badge with "resync" (Premiere-style), or is no link at all enough for the
    audience? Needs a quick user test with a montage editor.
 4. **Scrub feel.** Grain length and windowing for scrub audio (§3.4) need tuning against
    Vegas, which this audience considers the scrub benchmark; parameters live in one place

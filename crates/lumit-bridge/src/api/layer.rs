@@ -3845,6 +3845,83 @@ impl LayerReference {
         Ok(LayerReference::new(self.project_id, self.comp_id, new_id))
     }
 
+    /// **Detach audio** (K-701): put this layer's sound on a row of its own.
+    ///
+    /// **In plain terms.** A clip that has both picture and sound arrives as
+    /// one row, and everything you do to its sound — a fade, a cut, a level
+    /// ride — has to be done on the row carrying the picture. Detaching makes
+    /// a second row directly below that holds the *same* media as sound only,
+    /// and turns the original row's speaker off. Nothing is heard twice and
+    /// nothing sounds different; the sound simply has its own bar to work on,
+    /// in the audio surfaces, while the picture keeps its own.
+    ///
+    /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`],
+    /// K-435) over the same source, with the same span, offset, retime, volume
+    /// and pan **copied** — not linked. Trimming one afterwards does not trim
+    /// the other; that is what makes them separately editable, which is the
+    /// point of the command. A Precomp layer detaches the same way, its sibling
+    /// naming the same nested comp.
+    ///
+    /// **One undo step**: the sibling and the mute go in as a single
+    /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
+    /// was — and a locked layer refuses the batch whole, as the lock does
+    /// everywhere.
+    ///
+    /// Refused with [`BridgeError::NoAudio`] on a layer that makes no sound to
+    /// separate — a solid, a title, silent footage — and on a layer that is
+    /// *already* only sound, which has nothing left to detach from.
+    ///
+    /// Not `#[frb(sync)]`: deciding whether the layer sounds opens the media
+    /// with FFmpeg, exactly as [`Self::has_audio`] does, and the document lock
+    /// is let go of before it.
+    pub fn detach_audio(&self) -> Result<LayerReference, BridgeError> {
+        let mut sound = self.item()?;
+        if sound.audio_only {
+            return Err(BridgeError::NoAudio);
+        }
+        let comp = self.composition()?;
+        let index = comp
+            .layers
+            .iter()
+            .position(|l| l.id == self.layer_id)
+            .ok_or(BridgeError::InvalidLayer)?;
+
+        let snapshot = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        if !lumit_render::headless::AudioJobsBuilder::new().layer_has_audio(&snapshot, &sound) {
+            return Err(BridgeError::NoAudio);
+        }
+
+        sound.id = Uuid::now_v7();
+        sound.audio_only = true;
+        // **The effect ids are kept, unlike a duplicate's.** They are named
+        // within their own layer — including by this layer's driver graph,
+        // whose `NodeRef::Effect` wires are what drive an audio insert's
+        // parameters — so minting fresh ones here would cut those wires and the
+        // sibling would not sound like what it was detached from.
+        let new_id = sound.id;
+
+        self.commit(lumit_core::Op::Batch {
+            ops: vec![
+                // Directly below the original, where the eye looks for it.
+                lumit_core::Op::AddLayer {
+                    comp: self.comp_id,
+                    index: index + 1,
+                    layer: Box::new(sound),
+                },
+                lumit_core::Op::SetLayerAudible {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    audible: false,
+                },
+            ],
+        })?;
+        Ok(LayerReference::new(self.project_id, self.comp_id, new_id))
+    }
+
     /// Commit `op` against this layer's project.
     #[frb(ignore)]
     pub(crate) fn commit(&self, op: lumit_core::Op) -> Result<(), BridgeError> {

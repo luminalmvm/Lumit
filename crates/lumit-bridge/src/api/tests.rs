@@ -494,6 +494,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
 
     let comp = lumit_core::model::Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: name.into(),
@@ -1143,6 +1144,7 @@ fn effect_with_every_kind() -> lumit_core::model::EffectInstance {
         sample_temporally: true,
         custom_name: None,
         linked_pairs: Vec::new(),
+        plugin_state: None,
         extra: serde_json::Map::new(),
     }
 }
@@ -2404,6 +2406,122 @@ fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
         !over_nothing.has_audio().expect("asked"),
         "a precomp with nothing in it must not claim a mute switch"
     );
+}
+
+/// **Detaching audio changes where the sound is edited, never what it is**
+/// (K-701, owner). The sibling holds the same source over the same span with
+/// the same levels, and the original goes quiet — so the mixer's own job list,
+/// which is what decides every sample, comes out the same as it was but for
+/// which row the sound is filed under. One undo puts the pair back.
+#[test]
+fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let song = dir.path().join("song.wav");
+    std::fs::write(&song, silent_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let footage = project
+        .import_footage(song.to_string_lossy().into_owned())
+        .expect("imported");
+    let inner = add_comp(&project, "Music");
+    inner
+        .add_footage_layer(&footage, false)
+        .expect("the sound is placed");
+    if !inner.get_layers().expect("layers")[0]
+        .has_audio()
+        .expect("asked")
+    {
+        // No decoder in this build, or none that reads the fixture: there is
+        // no sound in the document to detach, so there is no claim to test.
+        return;
+    }
+
+    // A Precomp layer over that comp: a row with a picture *and* a sound, which
+    // is the row this command exists for. (Footage that draws and sings needs a
+    // real container; the precomp asks the same question of the same walk.)
+    let outer = add_comp(&project, "Edit");
+    let precomp = outer.add_precomp_layer(&inner).expect("nested");
+    precomp
+        .set_volume_db(BridgeScalar::Static(-3.0))
+        .expect("a level to carry across");
+
+    let before = audible_jobs(&project, &outer);
+    assert!(!before.is_empty(), "the song is heard before the detach");
+
+    let sound = precomp.detach_audio().expect("detached");
+    assert!(
+        audible_jobs(&project, &outer) == before,
+        "the same media, span, offset and levels — only the row it sits on moved"
+    );
+
+    // Directly below the original, as an Audio layer, with the original muted.
+    let rows = outer.get_layers().expect("layers");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1].layer_id, sound.layer_id);
+    assert_eq!(
+        rows[1].get_kind().expect("kind"),
+        crate::api::layer::BridgeLayerKind::Audio
+    );
+    assert_eq!(
+        rows[0].get_span().expect("span"),
+        rows[1].get_span().expect("span")
+    );
+    assert!(
+        !rows[0].get_switches().expect("switches").audible,
+        "the picture row stops sounding, or the clip would be heard twice"
+    );
+
+    // One op batch, so one undo takes the whole thing back.
+    project.undo().expect("undone");
+    let rows = outer.get_layers().expect("layers");
+    assert_eq!(rows.len(), 1, "the sibling goes with the mute");
+    assert!(rows[0].get_switches().expect("switches").audible);
+    assert!(audible_jobs(&project, &outer) == before);
+
+    // A layer that is already nothing but sound has nothing left to detach
+    // from, and says so rather than making a second copy of itself.
+    let music_row = inner.get_layers().expect("layers").remove(0);
+    assert!(matches!(
+        music_row.detach_audio(),
+        Err(BridgeError::NoAudio)
+    ));
+}
+
+/// **A layer that makes no sound says so calmly** — the refusal the menu row
+/// turns into one line in the status bar, rather than leaving a mute solid
+/// behind.
+#[test]
+fn detaching_audio_from_something_silent_is_refused() {
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+    let solid = comp.add_solid_layer().expect("layer");
+    assert!(matches!(solid.detach_audio(), Err(BridgeError::NoAudio)));
+    assert_eq!(
+        comp.get_layers().expect("layers").len(),
+        1,
+        "a refusal leaves the comp as it was"
+    );
+}
+
+/// The comp's audio jobs with the mixer *strip* blanked: the strip is the row
+/// the sound is filed under, which is exactly what detaching changes, and
+/// everything else on the job is what decides the samples.
+fn audible_jobs(
+    project: &ProjectReference,
+    comp: &CompositionReference,
+) -> Vec<lumit_render::export::AudioJob> {
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let composition = doc.comp(comp.id).expect("the comp is there").clone();
+    lumit_render::headless::AudioJobsBuilder::new()
+        .audio_jobs(&doc, &composition)
+        .into_iter()
+        .map(|mut job| {
+            job.layer = Uuid::nil();
+            job
+        })
+        .collect()
 }
 
 /// Sixteen-bit mono PCM, a tenth of a second of silence: enough of a file for
@@ -10696,6 +10814,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
         sample_temporally: true,
         custom_name: None,
         linked_pairs: Vec::new(),
+        plugin_state: None,
         extra: serde_json::Map::new(),
     };
 

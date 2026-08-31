@@ -1816,6 +1816,40 @@ class LayerReference {
   void deleteStroke({required UuidValue id}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteStroke(that: this, id: id);
 
+  /// **Detach audio** (K-701): put this layer's sound on a row of its own.
+  ///
+  /// **In plain terms.** A clip that has both picture and sound arrives as
+  /// one row, and everything you do to its sound — a fade, a cut, a level
+  /// ride — has to be done on the row carrying the picture. Detaching makes
+  /// a second row directly below that holds the *same* media as sound only,
+  /// and turns the original row's speaker off. Nothing is heard twice and
+  /// nothing sounds different; the sound simply has its own bar to work on,
+  /// in the audio surfaces, while the picture keeps its own.
+  ///
+  /// The sibling is an Audio layer ([`lumit_core::model::Layer::audio_only`],
+  /// K-435) over the same source, with the same span, offset, retime, volume
+  /// and pan **copied** — not linked. Trimming one afterwards does not trim
+  /// the other; that is what makes them separately editable, which is the
+  /// point of the command. A Precomp layer detaches the same way, its sibling
+  /// naming the same nested comp.
+  ///
+  /// **One undo step**: the sibling and the mute go in as a single
+  /// [`lumit_core::Op::Batch`], so one Ctrl+Z puts the row back the way it
+  /// was — and a locked layer refuses the batch whole, as the lock does
+  /// everywhere.
+  ///
+  /// Refused with [`BridgeError::NoAudio`] on a layer that makes no sound to
+  /// separate — a solid, a title, silent footage — and on a layer that is
+  /// *already* only sound, which has nothing left to detach from.
+  ///
+  /// Not `#[frb(sync)]`: deciding whether the layer sounds opens the media
+  /// with FFmpeg, exactly as [`Self::has_audio`] does, and the document lock
+  /// is let go of before it.
+  Future<LayerReference> detachAudio() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceDetachAudio(
+        that: this,
+      );
+
   /// Copy this layer, inserting the copy directly above the original.
   ///
   /// The copy is a fresh layer with fresh effect ids, not a second reference

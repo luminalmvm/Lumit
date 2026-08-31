@@ -21921,3 +21921,110 @@ because it changes no sample and no export. The Settings multiwave toggle keeps 
 what a fresh lane shows; the chip overrides it for one layer. The spectral painting sits
 in its own repaint boundary on the lane painters' existing layers, so the K-681 gates
 hold and flipping the mode repaints a lane rather than rebuilding the table.
+
+## K-700 — A layer's audio insert chain is its own effect stack, baked whole ahead of Volume
+
+**Status: DECIDED (2026-08-31).** AP3 of `docs/impl/audio-plugins.md` (K-683), building on
+AP1 (K-692) and AP2 (K-696). **Settles two things that note left as design** (its §3 chain
+worker, and the splice law) and reverses neither a numbered decision nor the note's decided
+§2 position.
+
+**The chain is the stack.** There is no separate audio-effect list and no new document
+field for one: an audio plugin is an entry in `Layer::effects` like any other effect, and
+the *chain* is whichever entries the catalogue will open as audio, in stack order. That is
+the note's "the stack is the rack" made literal, and it is why AP3 adds **no bridge API at
+all** — `add_effect`, `remove_effect`, `reorder_effect`, `set_effect_enabled`,
+`get_effects` and the staged `set_effects` commit already read and write the chain, and a
+plugin's parameters are ordinary schema rows, so keyframes, the graph editor, expressions
+and drivers reach them by the road they already take. The seam that had to be new is one
+trait method, `EffectDef::open_audio`: the mixer asks each definition in a layer's stack
+"are you a plugin I can play sound through?", and the ones that answer *are* the chain. A
+built-in answers `None` and costs a virtual call.
+
+**Its own namespace.** `EffectNamespace::Clap` — one variant for both standards, because
+both collapse into one `AudioEffectDef` and the match name's prefix already carries which
+is which. It exists so the picture's walks keep filtering on `Builtin | Ofx` and an audio
+effect is never resolved as an image op.
+
+**State is a hex string on the instance.** `EffectInstance::plugin_state`, absent when
+there is none, never parsed, handed back to the plugin on open. Hex rather than raw bytes
+because the `.lum` is pretty-printed JSON. Nothing in Lumit writes one yet: v1 is
+parameters-only (the note's §6), so only a state load changes plugin state, and a
+round-trip is the whole of what the format owes until the plugin's own window arrives.
+
+**Baked whole, not through a lookahead ring.** The note's §3 describes a per-layer chain
+worker pre-rendering blocks into an eight-block ring. What is built instead runs the whole
+placed span through the chain **at plan-build time**, on the prepare worker, and the
+processed buffer replaces the decoded one in the `MixPlan`. The ring exists so the realtime
+callback never waits on another process; a span already rendered keeps it off more firmly
+still, and the plan already holds whole decoded buffers, so the ring would buy nothing
+today and cost a thread, a mid-seek pre-roll, and a second answer to "which block is this".
+The prize is that **preview == export becomes structural** (K-031): both paths call one
+`chain_bake`, over one placement, in 512-frame blocks counted from the layer's own first
+sample, so they are equal sample for sample rather than equal to a tolerance. When the plan
+streams instead of holding buffers, the ring is the upgrade and `run_chain` is the block
+loop it wraps. Recorded, not hidden: a five-minute track through a plugin costs five
+minutes of plugin time whenever the mix signature changes, which is why the chain folds
+into that signature and why the work is on the coalescing background worker.
+
+**Latency is free here.** The run is given the chain's summed latency in extra frames so
+the delayed tail comes out, and the caller places the sound that many frames earlier. A
+lookahead limiter works with no scheduling at all.
+
+**The splice ramp is linear, not equal power** — the one place this reverses the note's own
+word. Equal power is the law for two *uncorrelated* signals, which is why a clip crossfade
+uses it (K-695). A dry block and the wet sound either side of it are the **same sound
+differently treated**: sine/cosine weights sum to √2 in the middle, so a ramp meant to hide
+a click would put a 3 dB swell there instead, and a plugin that happens to be a passthrough
+would have its dry block *changed* by the ramp around it. Linear weights sum to one at
+every point. A regression test pins exactly that: a passthrough that dies mid-run leaves
+the sound untouched.
+
+**Two ceilings, named rather than discovered.** A **Precomp** layer's own chain is not
+applied — Volume and Pan push down onto every contributing source because gain distributes
+over a sum, and a compressor does not, so honouring one means summing the nested comp
+first, which is a bus and the canvas note says v1 has none. A **Sequence** layer's chain
+runs per clip rather than on the row's mixed output, so a reverb does not tail across a
+join. Both want the same missing thing: a per-layer sum to insert on.
+
+## K-701 — Detach audio copies the layer's sound onto a muted sibling; the two are not linked
+
+**Status: DECIDED (2026-08-31).** Owner request. Builds the command K-435 named and left
+unbuilt, and **settles its shape against** the "linked Audio layer kept in step with the
+Footage layer" wording in docs/03 §5.7 and docs/09 §6: there is no link. Nothing else is
+reversed.
+
+**What it does.** *Layer ▸ Audio ▸ Detach audio*, and the same row on a layer's
+right-click in the Timeline, adds an Audio layer (K-435's `audio_only` flag) over the
+**same** source directly below the layer, and turns that layer's audible switch off. The
+sibling copies the span, start offset, retime, volume, pan, effects and driver graph, so
+the composition sounds exactly as it did — the mixer's own job list is unchanged but for
+which strip the sound is filed under, which is what the round-trip test asserts. A
+Precomp layer detaches the same way, its sibling naming the same nested comp, because
+`AudioJobsBuilder` already mixes a nested comp's sound through the carrier layer's
+Volume and the walk never looks at `audio_only`.
+
+**One batch, so one undo.** The add and the mute go in as a single `Op::Batch`, which is
+also what makes a **locked** layer refuse the whole thing rather than half of it. No new
+`Op`: the two the batch holds already exist, already invert exactly, and a third op would
+be a second place for "what detaching means" to be written down. The command therefore
+lives in the bridge beside `duplicate`, which composes `AddLayer` the same way.
+
+**The copy keeps its effect ids**, unlike `duplicate`'s and `split`'s. Effect instances
+are named within their own layer, and the layer's driver graph names them —
+`NodeRef::Effect(id)` — so minting fresh ids would cut the wires that drive an audio
+insert's parameters and the sibling would not sound like what it was detached from.
+Uniqueness across layers is not a property anything relies on.
+
+**Not linked, deliberately.** Trimming one row afterwards leaves the other where it was.
+A live link is the thing that stops the sound being moved where it is wanted, which is
+the only reason to detach in the first place; docs/09's open question 3 (a Premiere-style
+sync-lock badge) stays open above this floor rather than being answered by it.
+
+**Refusals are calm and cost nothing to draw.** A layer that is already nothing but sound
+has nothing to separate from, which is known from the layer's kind, so that row is not
+offered the command. Whether anything *else* makes a sound is `has_audio`'s question and
+opens the media with FFmpeg — far too slow for a menu being drawn — so the row is offered
+and the engine answers `BridgeError::NoAudio` when pressed, which the frontend turns into
+one line in the status bar. `detach_audio` is asynchronous for that reason, as `has_audio`
+is.
