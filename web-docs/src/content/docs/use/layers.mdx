@@ -69,37 +69,34 @@ effect is different, see [Effects](/use/effects/).
 
 ## Adjustment
 
-**Adjustment is a switch**, on any layer that draws something — turn it on and any layer's
-effect stack runs on the composite of everything below it; turn it off and the layer is
-itself again. Effects apply only to the area the layer covers, so scaling it down confines
-a grade to part of the frame.
+**Adjustment is a switch**, on any layer that draws something — turn it on and the layer's
+effect stack runs on the composite of everything below it. Effects apply only to the area
+the layer covers.
 
-**Layer ▸ New ▸ Adjustment** makes a comp-sized layer with the switch already on, which is
-the usual way in. Turn the switch off on one of those and it becomes an ordinary white
-solid.
+**Layer ▸ New ▸ Adjustment** makes a comp-sized layer with the switch already on. Turn the
+switch off on one of those and it becomes an ordinary white solid.
 
 Camera, Light, Null and Audio layers cannot be adjustment layers, and the cell is left out
 on their rows.
 
 ## Guide layers
 
-**Guide** marks a layer *for reference only*: a match photograph, a grid, an animatic. The
-Viewer draws it like any other layer and **no exported file contains it**, picture or sound.
+**Guide** marks a layer *for reference only*. The Viewer draws it like any other layer and
+**no exported file contains it**, picture or sound.
 
-Guide beats solo: soloing a guide layer changes what you are looking at, never what you
-deliver. A locked layer refuses the guide switch, unlike shy.
+Guide beats solo. A locked layer refuses the guide switch.
 
-The export dialogue can be told to write them anyway, for a review copy.
+The export dialogue can be told to write guide layers anyway.
 
 ## Light layers
 
-**Layer ▸ New** offers three: a **Point light**, a bare bulb with no extent; a **Spot light**,
-a cone aimed by the layer's own rotation; and an **Area light**, a rectangle of a real size —
-a softbox, a window, a strip light — which starts at a tenth of the composition.
+**Layer ▸ New** offers three: a **Point light**, a bare bulb with no extent; a **Spot
+light**, a cone aimed by the layer's own rotation; and an **Area light**, a rectangle
+which starts at a tenth of the composition.
 
-A light is placed by its ordinary transform, so it animates and parents like anything else.
-Which layers it shades is per layer: **Accepts lights**, on the layer's right-click menu in
-the Timeline, on by default.
+A light is placed by its ordinary transform, so it animates and parents like anything
+else. Which layers it shades is per layer: **Accepts lights**, on the layer's right-click
+menu in the Timeline, on by default.
 
 :::note[Partly built]
 A light's own properties — its colour, intensity, cone angle, size and falloff — have no rows
@@ -116,4 +113,4 @@ on top of them.
 - [Transforming layers](/use/transform/)
 - [Keyframes](/use/keyframes/)
 - [Masks](/use/masks/) and [Mattes](/use/mattes/)
-- [The Timeline](/panels/timeline/) - where the switches live.
+- [The Timeline](/panels/timeline/)

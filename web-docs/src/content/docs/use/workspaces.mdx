@@ -14,8 +14,8 @@ are six shipped ones plus however many you save.
 
 ## The panels
 
-Every panel is in the **Window** menu, with a tick showing whether it is in the arrangement.
-Toggling one adds or drops it, and the menu stays open while you do it.
+Every panel is in the **Window** menu, with a tick showing whether it is in the
+arrangement. Toggling one adds or drops it.
 
 | Panel | What it is for |
 | --- | --- |
@@ -42,12 +42,11 @@ Drag a panel's tab. The frame you drag it over shows where it would land:
 Drag a seam between two panels to change their share. Press `` ` `` (backtick) with the
 pointer over a panel to maximise it to the whole window, and again to put it back.
 
-Right-clicking a panel's tab offers **Close panel**, which is the same thing as un-ticking it
-in the Window menu.
+Right-clicking a panel's tab offers **Close panel**.
 
 :::note[Not built yet]
 Panels cannot be torn off into their own operating-system window. The **Pop out** row is
-drawn greyed out rather than hidden, because it is coming.
+greyed out.
 :::
 
 ## The shipped workspaces
@@ -63,31 +62,28 @@ first and then your own.
 | **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer and the Node panel down the right. |
 | **Colour** | Scopes given a wide right-hand column, Viewer dominant. |
 | **Audio** | A taller Timeline with waveforms open, Viewer reduced. |
-| **Retiming** | The Easing panel taking the right-hand column outright, so it stays on screen while the selection changes under it. |
+| **Retiming** | The Easing panel taking the right-hand column outright. |
 
 Rearranging under a preset moves the panels and leaves the preset alone. **Window ▸
-Workspace ▸ Reset workspace** puts the preset you are on back to how it shipped, without
-touching any of your own.
+Workspace ▸ Reset workspace** puts the preset you are on back to how it shipped.
 
 ## Save your own
 
 **Window ▸ Workspace ▸ Save as new workspace…** asks for a name and writes the arrangement
-out. It joins the strip beside the presets, drawn the same way.
+out. It joins the strip beside the presets.
 
-The same menu carries **Rename workspace…**, **Delete workspace**, **Export workspace…** and
-**Import workspace…**, each live only on one of your own. Export writes a `.lumworkspace`
-file you can send to somebody; Import reads one.
+The same menu carries **Rename workspace…**, **Delete workspace**, **Export workspace…**
+and **Import workspace…**, each live only on one of your own. Export writes a
+`.lumworkspace` file; Import reads one.
 
-Your workspaces are listed alphabetically, which is what makes `Alt+Shift+7` reach the same
-one on the next launch. A name is taken only once: saving a second *Grading* gives you
-*Grading 2*, and the status line says so.
+Your workspaces are listed alphabetically. A name is taken only once: saving a second
+*Grading* gives you *Grading 2*.
 
-**A workspace of your own keeps what you drag into it.** Move a panel while one is in force
-and the change is written back to its file. Deleting one leaves the panels on screen exactly
+**A workspace of your own keeps what you drag into it.** Move a panel while one is in
+force and the change is written back to its file. Deleting one leaves the panels on screen
 where they are — it forgets the name, not the layout.
 
-After a restart the strip ticks nothing; what persists is the arrangement. Click a name and
-both the tick and the write-back come back.
+After a restart the strip ticks nothing; what persists is the arrangement.
 
 :::note[Not built yet]
 **Assign shortcut to this workspace** is in the Window menu and does nothing yet. The nine
@@ -96,8 +92,8 @@ positional chords work.
 
 ## What the project keeps, and what you keep
 
-The two are separate, so a project opened on another machine looks like the same *edit*
-under somebody else's panel arrangement.
+The two are separate: a project opened on another machine is the same edit under that
+machine's panel arrangement.
 
 | Yours, per user | The project's |
 | --- | --- |
@@ -106,9 +102,7 @@ under somebody else's panel arrangement.
 | Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom |
 | Where a settings or export window was left | Guides, markers, the region of interest |
 
-Switching workspace never closes, reloads or re-renders anything. It only moves panels, and a
-panel that is open in the old arrangement and absent from the new one keeps its state for the
-session.
+Switching workspace never closes, reloads or re-renders anything. It only moves panels.
 
 ## How large everything draws
 
@@ -124,10 +118,10 @@ animate as they change; and **Compact**, which tightens the row spacing througho
 
 ## The menu bar
 
-Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, Help**. A menu
-item that needs something you have not selected appears disabled rather than missing.
+Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, Help**. A
+menu item that needs something you have not selected appears disabled rather than missing.
 
 ## Related
 
-- [Settings](/use/settings/) - including the keymap, on its Shortcuts page.
+- [Settings](/use/settings/)
 - [The node graph](/use/nodes/)

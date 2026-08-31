@@ -5,12 +5,10 @@ sidebar:
   order: 14.5
 ---
 
-Lumit tracks in two ways, and they answer different questions. [Camera
-track](/effects/utility/camera-track/) works out **where the camera was**, and hands you a
-Camera layer that moves the way the real one did. [Planar
-track](/effects/utility/planar-track/) works out **where one flat thing is** — a phone
-screen, a sign, a poster — and hands you a [Corner pin](/effects/distortion/corner-pin/)
-keyed to it.
+Lumit tracks in two ways. [Camera track](/effects/utility/camera-track/) works out **where
+the camera was**, and hands you a Camera layer that moves the way the real one did.
+[Planar track](/effects/utility/planar-track/) works out **where one flat thing is** and
+hands you a [Corner pin](/effects/distortion/corner-pin/) keyed to it.
 
 Both are effects, applied to the layer holding the shot, and both keep working while you
 carry on editing.
@@ -21,72 +19,65 @@ carry on editing.
 2. Press **Analyse**. The status row counts the frames as they go, and **Cancel** stops it.
 
 The analysis is of the **whole source footage**, not of the layer, and every layer using
-that footage shares the one solve — trimming, moving or [retiming](/use/retime/) a layer
-never tracks anything again. Re-analyse only after changing a setting.
+that footage shares the one solve. Re-analyse only after changing a setting.
 
 | Control | What it does |
 | --- | --- |
 | **Feature density** | How many points are followed. More is slower but copes better with hard footage. |
-| **Use masks** | Leaves the layer's masks out of the track. Use it for anything moving on its own, like a person walking through. |
+| **Use masks** | Leaves the layer's masks out of the track. Use it for anything moving on its own. |
 | **Show points** | Draws the solved points over the picture. |
 
 ### A track that stops part-way
 
-A shot can stop being followable — the lens racks, the frame whites out, there is a cut in
-the middle of the file. Lumit stops there and solves the part that worked.
+Where the shot stops being followable, Lumit stops there and solves the part that worked.
 
-A thin bar above the status line shows the analysed span against the length of the footage,
-and the line reads *Analysed 180 of 400 frames — the shot could not be followed further*.
+A thin bar above the status line shows the analysed span against the length of the
+footage, and the line says how far it got.
 
 A camera following a partial track moves inside the span and holds its last position past
-the end. Mask out whatever broke the shot and analyse again, or treat the two halves as two
-shots.
+the end. Mask out whatever broke the shot and analyse again.
 
-If nothing could be solved at all, the line says why in a sentence — the media could not be
-read, too little in the shot stayed still enough to follow, the camera only turned so there
-is no depth to recover.
+If nothing could be solved at all, the line says why.
 
 ### The camera
 
 **Create camera** beside the status makes a [Camera layer](/use/camera/) that follows the
-solve. Its Transform heading wears a *Following the solve* badge, and its position and zoom
-are derived from the shot on every frame.
+solve. Its Transform heading wears a *Following the solve* badge, and its position and
+zoom are derived from the shot on every frame.
 
 Past the end of what was solved the badge reads *Holding the last solved frame*. If the
 tracked layer is deleted or its media goes offline it reads *The solve could not be found*
-and the camera holds where it was — never a silent freeze.
+and the camera holds where it was.
 
 ### Nudging it
 
-A linked camera's own transform and zoom rows still take edits, and what you type there is a
-**correction**: the difference from where the rows sat when the link was made, added on top
-of the solved motion on every frame. Ordinary rows, ordinary keyframes, ordinary undo.
+A linked camera's own transform and zoom rows still take edits, and what you type there is
+a **correction**: the difference from where the rows sat when the link was made, added on
+top of the solved motion on every frame.
 
-A small dot beside the badge, and on the Camera track's own status row, says the camera has
-been nudged. **Clear corrections** puts the seven rows back where they started and leaves the
-link alone. **Convert to keyframes** bakes solve and correction together into one key per
-frame and ends the link — from then on it is an ordinary camera.
+A small dot beside the badge, and on the Camera track's own status row, says the camera
+has been nudged. **Clear corrections** puts the rows back where they started and leaves
+the link alone. **Convert to keyframes** bakes solve and correction together into one key
+per frame and ends the link.
 
 ### The point cloud
 
-With **Show points** on, the solved points draw over the picture on the tracked layer, cued
-by depth. Select some — singly, or by sweeping a box round them — and two buttons appear
-over the picture: **Create null** and **Create solid**, each placed at the average position
-of what you picked and facing the camera.
+With **Show points** on, the solved points draw over the picture on the tracked layer.
+Select some and two buttons appear over the picture: **Create null** and **Create solid**,
+each placed at the average position of what you picked and facing the camera.
 
 ## Planar track
 
 1. Select the footage layer and apply **Effect ▸ Utility ▸ Planar track**.
-2. Put the effect's four points round the flat thing, on the source's **first frame**. That
-   frame is the reference, and every later frame is measured against it.
-3. Mask out anything that crosses the surface — a hand over the phone. The layer's own masks
-   still apply inside the quad.
+2. Put the effect's four points round the flat thing, on the source's **first frame**.
+   That frame is the reference, and every later frame is measured against it.
+3. Mask out anything that crosses the surface. The layer's own masks still apply inside
+   the quad.
 4. Press **Analyse**.
 5. Set **Pin layer** to the layer you want pinned, and press **Create corner pin**.
 
 The Corner pin is appended to that layer's stack with one keyframe per frame. They are
-ordinary keyframes — edit or trim them afterwards and nothing resolves behind you. A layer
-that already carries a Corner pin keeps it.
+ordinary keyframes. A layer that already carries a Corner pin keeps it.
 
 **Feature density** and **Use masks** work as they do on the Camera track.
 
@@ -95,19 +86,17 @@ that already carries a Corner pin keeps it.
 *Surface tracked over 400 frames* is a whole track. *Tracked 180 of 400 frames* means the
 surface stopped being followable, and the span bar shows how far it reached.
 
-A second line may read *Re-anchored twice, so the far end may drift a little*. Every frame
-is measured against the reference frame, not the frame before it; when too few of the
-reference's features survive, the measurement adopts a recent frame instead and carries a
-little error forward. The count says how much to trust the far end.
+A second line may read *Re-anchored twice, so the far end may drift a little*. When too
+few of the reference frame's features survive, the measurement adopts a recent frame
+instead and carries a little error forward.
 
 *What is inside the shape is not one flat surface* means the four points enclose something
 that is not flat, or whose parts move against each other.
 
 :::note[Limitations]
 The quad is four rows in the panel; dragging its corners on the picture is not built, and
-the quad cannot be keyframed — it is the shape the surface has on the reference frame. The
-Planar track analyses a footage layer only, where the Camera track will also analyse a
-Precomp layer by rendering it.
+the quad cannot be keyframed. The Planar track analyses a footage layer only, where the
+Camera track will also analyse a Precomp layer.
 
 Point tracking that produces a keyframed transform is not built either.
 :::
@@ -116,5 +105,5 @@ Point tracking that produces a keyframed transform is not built either.
 
 - [Cameras and 3D](/use/camera/)
 - [Camera track](/effects/utility/camera-track/) and [Planar
-  track](/effects/utility/planar-track/) - the effects' own pages.
+  track](/effects/utility/planar-track/)
 - [Masks](/use/masks/)

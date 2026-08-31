@@ -23,11 +23,10 @@ appear in the tool options while using a paint tool.
 ## Pressure
 
 With a graphics tablet, pressing harder makes a wider mark. The **Pressure** tick in the
-tool options turns it on and off per brush; off commits a full press everywhere.
+tool options turns it on and off per brush.
 
-Pressure sets the **width** of the mark and nothing else — not opacity, not colour, not
-hardness. The stroke carries the pressures it was drawn with, so trimming it or
-re-rendering at any resolution keeps them.
+Pressure sets the **width** of the mark and nothing else. The stroke carries the pressures
+it was drawn with.
 
 :::note[Not built yet]
 Tilt is read by nothing.
@@ -48,10 +47,10 @@ effects will operate upon strokes as if they were part of the original layer's s
   layer is twirled open.
 - Each stroke is a single undo.
 - A brush, clone or erase stroke's strength can be reduced later by lowering its opacity.
-- **Start** and **End** under each stroke trim it by a percentage of its own length, and both
-  are keyframable: hold Start at 0 and animate End from 0 to 100 and the stroke draws itself on.
-- Each stroke picks a **blend mode** from the same list a layer does, deciding what colour the
-  mark lays down. An eraser ignores it, having no colour to combine.
+- **Start** and **End** under each stroke trim it by a percentage of its own length, and
+  both are keyframable.
+- Each stroke picks a **blend mode** from the same list a layer does. An eraser ignores
+  it.
 
 :::note[Limitation]
 A keyframed **Start**/**End** draws its diamonds on the Timeline lane but has no curve in the

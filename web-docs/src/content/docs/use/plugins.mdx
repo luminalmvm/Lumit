@@ -23,11 +23,11 @@ The standard OpenFX locations, scanned once at start-up:
 
 Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too.
 
-The scan runs in the background, so a machine with a large suite installed does not open any
-slower. Install a plugin while Lumit is running and it appears the next time you launch.
+The scan runs in the background. Install a plugin while Lumit is running and it appears
+the next time you launch.
 
-A plugin Lumit cannot drive is one line in the scan report, never a dialogue. The scan
-carries on, and the other plugins in the folder are unaffected.
+A plugin Lumit cannot drive is one line in the scan report. The other plugins in the
+folder are unaffected.
 
 ## Where they appear
 
@@ -42,20 +42,20 @@ difference is a provenance line at the top of its right-click menu: *From an Ope
 **Switch this plugin off**, on the plugin's right-click menu in that panel. It stops being
 offered and stops rendering, and the choice is remembered between sessions.
 
-Switching one off takes effect immediately. Switching one back on may need a restart before
-it is offered again, because a plugin that was off at start-up was never opened.
+Switching one off takes effect immediately. Switching one back on may need a restart
+before it is offered again.
 
-Any effect already in a project using a switched-off plugin is **kept exactly as it was
-saved**, values and all, and renders as if it were not there.
+Any effect already in a project using a switched-off plugin is **kept as it was saved**,
+and renders as if it were not there.
 
 ## When something goes wrong
 
-Each plugin bundle runs in a **process of its own**, so a plugin that crashes takes down its
-own process and nothing else. The frame it was in the middle of comes back unchanged, the
-layer still composites, and Lumit carries on.
+Each plugin bundle runs in a **process of its own**, so a plugin that crashes takes down
+its own process and nothing else. The frame it was in the middle of comes back unchanged,
+and Lumit carries on.
 
 The effect's card in [Effect Controls](/panels/effect-controls/) says which of four things
-happened, calmly, at the top:
+happened:
 
 | Badge | Means |
 | --- | --- |
@@ -64,12 +64,12 @@ happened, calmly, at the top:
 | **This plugin is not installed on this machine** | The project uses it and this machine has no plugin for it. Nothing is lost. |
 | **This build does not know this effect** | The project names something this build of Lumit has never heard of. |
 
-A plugin that wants to say something — an error, a warning, a question — gets a **notice on
-the status line**, never a modal window.
+A plugin that wants to say something gets a **notice on the status line**, never a modal
+window.
 
 :::note[Not built yet]
-Lumit's own native plugin interface is specified and not built. There is no Settings page
-listing what is installed, and no command to rescan without relaunching.
+Lumit's own native plugin interface. There is no Settings page listing what is installed,
+and no command to rescan without relaunching.
 :::
 
 ## Related

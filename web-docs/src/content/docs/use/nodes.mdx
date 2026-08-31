@@ -7,10 +7,9 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-The **Node graph** draws the selected layer's [effect stack](/use/effects/) as boxes joined
-left to right by wires. It is the same stack the Effect Controls panel lists, and it can do
-one thing the list cannot: wire a **driver** into a parameter, so the value comes from
-somewhere else instead of from its own keyframes.
+The **Node graph** draws the selected layer's [effect stack](/use/effects/) as boxes
+joined left to right by wires. It is the same stack the Effect Controls panel lists, plus
+one thing the list cannot do: wire a **driver** into a parameter.
 
 <Shot file="graph-panel.png" caption="The Node graph: a layer's image chain wired left to right, with a driver feeding one of its parameters." eager/>
 
@@ -21,8 +20,7 @@ follows the layer selected in the Timeline.
 
 Every graph starts with **Source**, one box per effect in stack order, and **Layer out**.
 An effect's **Input** takes exactly one wire — the effect above it — so nothing here can
-branch the picture, skip a stage, or merge two chains. The graph always draws exactly the
-stack the Effect Controls list shows.
+branch the picture, skip a stage, or merge two chains.
 
 | Gesture | What it does |
 | --- | --- |
@@ -54,9 +52,9 @@ parameter's socket makes that parameter follow the value.
 
 | Driver | Hands out |
 | --- | --- |
-| [**Wiggle**](/effects/drivers/wiggle/) | A number wandering by an Amount at a Frequency. Seeded per node, so it is the same wobble every time you play it. |
-| [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment, over a window you set, plus the same reading over the low end alone. |
-| [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate from a Phase, at the Saturation and Brightness you give it. |
+| [**Wiggle**](/effects/drivers/wiggle/) | A number wandering by an Amount at a Frequency. |
+| [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment. |
+| [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate. |
 | [**Math**](/effects/drivers/math/) | Two numbers and an operation. |
 | [**Remap**](/effects/drivers/remap/) | Maps a number from one range onto another, with a clamp. |
 | [**Smooth**](/effects/drivers/smooth/) | Its input, softened over Time. |
@@ -70,9 +68,8 @@ Wires never cross between layers. The two drivers that read another layer name i
 Audio level has an **Audio** row and Layer points a **Points layer** row, both ordinary
 layer pickers.
 
-A driven parameter's row in Effect Controls reads *driven* and names the driver in place of
-a value. Its keyframes are overridden while the wire is there, and come back exactly as
-they were when it is pulled.
+A driven parameter's row in Effect Controls names the driver in place of a value. Its
+keyframes are overridden while the wire is there, and come back when it is pulled.
 
 ## Wires and their colours
 
@@ -85,15 +82,13 @@ canvas lists them. Seven kinds share five colours, grouped as the legend groups 
 - **shape · points**
 - **audio**
 
-The colours come from the theme, so a scheme of your own changes them and the legend still
-reads. A wire dropped on a socket of another kind is refused.
+A wire dropped on a socket of another kind is refused.
 
 ## Mattes and points
 
-An effect's **Matte** socket takes a wire as well as the layer picker on its row. The one
-thing only the graph can do is feed an effect the layer's **own** masked picture at that
-point in the chain — the Source box's matte output. While that wire is there it is what the
-effect reads, and the Matte row says so by name.
+An effect's **Matte** socket takes a wire as well as the layer picker on its row. Only the
+graph can feed an effect the layer's **own** masked picture at that point in the chain —
+the Source box's matte output.
 
 **Particulate** and the rest of the points family hand their points out on a socket of their
 own, for another box to read. A box whose Points socket has nothing in it draws a **No
@@ -101,30 +96,28 @@ stream** mark and behaves as if it had been given an empty one.
 
 ## Seeing the picture at a box
 
-Selecting exactly one effect — a box here, or a heading in Effect Controls, they are one
-selection — puts an **at &lt;effect&gt;** chip over the Viewer's picture. Turn it on and the
-Viewer renders the composition with that layer's stack stopping there, at full quality
-through the ordinary path. A driver offers no chip: it makes no picture.
+Selecting exactly one effect — a box here, or a heading in Effect Controls — puts an **at
+&lt;effect&gt;** chip over the Viewer's picture. Turn it on and the Viewer renders the
+composition with that layer's stack stopping there. A driver offers no chip: it makes no
+picture.
 
 ## The Nodes workspace
 
 <Shot file="nodes-workspace.png" caption="The Nodes workspace: the graph across most of the window, a small Viewer and the Node panel down the right." />
 
-The **Nodes** workspace puts the graph where the Timeline usually is, with a short Timeline
-underneath and a right-hand column carrying a small Viewer — keeping its whole bar — over
-the **Node panel**, which lists the picked box's parameter rows and counts how many of them
-are driven. There is no Project panel: you arrive here with the layer already chosen.
+The **Nodes** workspace puts the graph where the Timeline usually is, with a short
+Timeline underneath and a right-hand column carrying a small Viewer over the **Node
+panel**, which lists the picked box's parameter rows. There is no Project panel.
 
 :::note[What the graph does not draw]
 There are no branching image chains and no merge node: joining two pictures is what layers
-and [blend modes](/use/blend-modes/) already do. The Layer out box draws an **Audio** input
-that takes no wire — a layer's sound comes from its own footage. And the graph draws the
-document, never the engine's internal evaluation of it.
+and [blend modes](/use/blend-modes/) already do. The Layer out box draws an **Audio**
+input that takes no wire — a layer's sound comes from its own footage.
 :::
 
 ## Related
 
-- [Working with the node graph](/tutorials/node-graph/) - the walkthrough.
-- [Effects](/use/effects/) - the same stack as a list.
-- [Expressions](/use/expressions/) - the other way to drive a value.
+- [Working with the node graph](/tutorials/node-graph/)
+- [Effects](/use/effects/)
+- [Expressions](/use/expressions/)
 - [Workspaces and panels](/use/workspaces/)

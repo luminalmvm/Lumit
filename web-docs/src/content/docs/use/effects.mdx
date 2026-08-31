@@ -40,17 +40,16 @@ below them. See [Layers](/use/layers/).
 
 ## Every effect has a Matte
 
-Every effect's controls have the following: a layer picker labelled **Matte**, with 
-a **Channel** dropdown and an **Invert** checkbox beside it. Channel picks what is 
-read from the matte layer: its brightness by default, or its alpha or one of the 
-colour channels. Select a layer and that layer's brightness 
-decides how much of the effect each pixel gets. White applies the effect in full and 
-black gets none. Invert reads the same picture the other way round. The row is not set 
-by default, and most effects work fine without it.
+Every effect's controls have a layer picker labelled **Matte**, with a **Channel**
+dropdown and an **Invert** checkbox beside it. Channel picks what is read from the matte
+layer: its brightness by default, or its alpha or one of the colour channels. Select a
+layer and that layer's brightness decides how much of the effect each pixel gets. White
+applies the effect in full and black gets none. Invert reads the same picture the other
+way round.
 
-A matte is different from a mask on the effect. A mask can hide what an effect does, 
+A matte is different from a mask on the effect. A mask can hide what an effect does,
 whereas a matte drives the effect itself. For a handful of effects it applies more than
-just strength, and their own effect pages explain this in the parameter table:
+just strength:
 
 - **Gaussian blur** narrows its radius.
 - **Turbulent displace** scales its turbulence.
@@ -59,15 +58,15 @@ just strength, and their own effect pages explain this in the parameter table:
 - **Lens flare** reads it as where to find its light sources.
 - **Set matte** reads it as the alpha itself, which is the whole effect.
 
-Lumit renders the matte layer on its own at the composition's size. Beside the picker, 
-the **Layer source** dropdown has the option to read that layer raw, with its masks, 
-or with its effects applied. If it is the same layer the effect is *on*, it reads that layer's 
-own picture at that point in the stack.
+Lumit renders the matte layer on its own at the composition's size. Beside the picker,
+the **Layer source** dropdown has the option to read that layer raw, with its masks,
+or with its effects applied. If it is the same layer the effect is *on*, it reads that
+layer's own picture at that point in the stack.
 
 ## The built-in roster
 
-Each effect has its own page under [Effects](/effects/), with an example of what it does 
-and a table with every parameter and its range, default and units. 
+Each effect has its own page under [Effects](/effects/), with a table of every parameter
+and its range, default and units.
 
 | Category | What the family is for |
 | --- | --- |

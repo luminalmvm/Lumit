@@ -29,24 +29,23 @@ stored on the disk are blue.
 Lower the preview resolution to render previews faster: full, half, third, quarter, or auto. 
 Changing the preview resolution has no impact when exporting.
 
-Lumit also has two preview resolution options in the Viewer bar. **Every frame** will render
-each frame in the composition, pausing audio if playback isn't realtime. **Adaptive res** will
-instead dynamically alter the resolution to try and maintain realtime playback. Sometimes in very 
-intensive compositions even at quarter resolution this won't be enough, at which point adaptive res
-will only display frames it manages to render in time.
+Lumit also has two preview resolution options in the Viewer bar. **Every frame** will
+render each frame in the composition, pausing audio if playback isn't realtime.
+**Adaptive res** will instead dynamically alter the resolution to try and maintain
+realtime playback; if even quarter resolution isn't enough, it will only display frames it
+manages to render in time.
 
 Personally I'd normally recommend **Every frame** as the default option to use.
 
 ## The progress bar
 
-Depending on what you're working on frames can take a while to render. While waiting, a 
-progress bar appears in the bar at the bottom of the viewer, and fills as the frame passes through
-decoding, building, and compositing.
+While waiting on a slow frame, a progress bar appears in the bar at the bottom of the
+viewer, and fills as the frame passes through decoding, building, and compositing.
 
 ## Adaptive degradation
 
-Under load, Lumit reduces quality on its own to keep responding. It may drop resolution while scrubbing
-effect values as you change them to try and give you an idea of what the value you change will look like.
+Under load, Lumit reduces quality on its own to keep responding. It may drop resolution
+while scrubbing effect values as you change them.
 
 ## If playback is slow
 

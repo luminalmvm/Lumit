@@ -7,22 +7,20 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-A **proxy** is a smaller stand-in file for a footage item. Lumit reads it while you work, so
-a timeline full of 6K plates behaves like one full of small ones, and reads the original
-again when you deliver.
+A **proxy** is a smaller stand-in file for a footage item. Lumit reads it while you work,
+and reads the original again when you deliver.
 
 <Shot file="project-panel.png" caption="A footage row reading from its proxy, wearing the proxy badge beside its name." eager/>
 
-The original is never replaced. The item keeps its own file, and the proxy sits beside it as
-a second reference with its own switch.
+The original is never replaced. The proxy sits beside it as a second reference with its
+own switch.
 
 ## Make one
 
 Right-click a footage row in the [Project panel](/panels/project/) and choose **Make proxy**.
 
 Lumit reads every frame of the source and writes it out at half width, as a `.mov` named
-after the original with `_proxy` on the end, **beside the original file** — so one item used
-by three projects wants one proxy, and a folder of footage carries its proxies when it moves.
+after the original with `_proxy` on the end, **beside the original file**.
 
 It runs in the background. The status line counts the frames and carries a Cancel; a
 cancelled job removes the half-written file. When it lands it attaches itself to the item.
@@ -34,37 +32,31 @@ cancelled job removes the half-written file. When it lands it attaches itself to
 | Where | What it does |
 | --- | --- |
 | **Use proxy**, on the footage row's menu | Whether *this* item reads from its proxy. Ticked. |
-| **PROXIES**, on the Project panel's bottom bar | Whether the project reads proxies at all. On by default, so making one has an effect without a second action. |
+| **PROXIES**, on the Project panel's bottom bar | Whether the project reads proxies at all. On by default. |
 | **Clear proxy**, on the row's menu | Forgets the proxy. The file on disk is left alone. |
 
-A row wears a quiet **proxy** badge while its own tick is on, so what the badge means is
-"this item is being read from its stand-in", not "this item has one somewhere".
+A row wears a **proxy** badge while its own tick is on.
 
-Switching proxies off hands back the frames that were cached before you switched them on,
-rather than rendering them again.
+Switching proxies off hands back the frames that were cached before you switched them on.
 
 ## What does not change
 
 The **original's numbers govern**. Size, rate and duration come from the original file
-whichever one is being read, so every transform, mask, stroke and parameter means what it
-meant before — a proxy changes the pixel count and nothing else.
+whichever one is being read — a proxy changes the pixel count and nothing else.
 
-**Sound always comes from the original.** A proxy carries no audio that Lumit reads.
+**Sound always comes from the original.**
 
 ## When Lumit ignores a proxy
 
-A proxy is quietly ignored, and the original read instead, when it is missing, unreadable,
-or **disagrees about the footage** — a different frame count or a different frame rate. Its
-frame 300 would not be the original's frame 300.
+A proxy is ignored, and the original read instead, when it is missing, unreadable, or
+**disagrees about the footage** — a different frame count or a different frame rate.
 
-A **missing original** still shows the colour-bar slate whatever proxy is attached, so a
-lost file is never hidden by its stand-in.
+A **missing original** still shows the colour-bar slate whatever proxy is attached.
 
 ## Delivery
 
-The export dialogue's **Proxies** row reads *Use no proxies*, and it opens that way whatever
-the project is switched to, so working with proxies on cannot quietly ship the small
-picture. For a quick review copy, *Use all proxies* is there.
+The export dialogue's **Proxies** row reads *Use no proxies*, and it opens that way
+whatever the project is switched to. For a quick review copy, *Use all proxies* is there.
 
 ## Related
 

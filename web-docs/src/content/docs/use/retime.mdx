@@ -57,13 +57,12 @@ a retime lands between two source frames:
 
 The third answer is **Flow**, which measures the motion between the two frames and
 synthesises the one in between. It is the **Flow** switch in the layer's switch cluster
-rather than an entry in that dropdown. Turning it on reveals a **Flow** group in the Effect
-Controls panel: measurement resolution, input rate, vector detail, smoothness, how
+rather than an entry in that dropdown. Turning it on reveals a **Flow** group in the
+Effect Controls panel: measurement resolution, input rate, vector detail, smoothness, how
 occlusions are handled, what to fall back to, a guard for on-screen overlays, and a switch
 to force it on where it would otherwise stand down.
 
-Turning Flow off returns the layer to Nearest and parks the group's settings, so comparing
-a flow shot against the plain one costs nothing.
+Turning Flow off returns the layer to Nearest and keeps the group's settings.
 
 Frame interpolation is a render setting either way. It does not change the retime map.
 
@@ -73,34 +72,30 @@ Frame interpolation is a render setting either way. It does not change the retim
 Right-click the layer's row in the Timeline and choose **Stretch…**.
 
 The dialogue takes a **new speed** in per cent or a **new duration**, and editing either
-well moves the other. The layer is anchored at its **in point**: it starts where it
-started, and its end moves.
+moves the other. The layer is anchored at its **in point**: it starts where it started,
+and its end moves.
 
-Stretch rescales the Retime map itself, so the graph editor goes on showing the true curve
-and an existing shape is kept — every key's time is scaled about the in point and its eased
-sides go with it. A layer with no map yet gets the plain one first. One undo step: the
-length and the map move together or not at all.
+Stretch rescales the Retime map itself, so an existing shape is kept — every key's time is
+scaled about the in point. It is one undo step.
 
-A **clip** inside a Sequence layer has **Speed…** instead, and no duration well — a clip's
-place and length are fixed, so re-speeding one never moves its edges. **Reset speed** on
-the same menu puts it back to 100%.
+A **clip** inside a Sequence layer has **Speed…** instead, and no duration field — a
+clip's place and length are fixed. **Reset speed** on the same menu puts it back to 100%.
 
 ## Freeze a frame where you are
 
 Right-click the layer's row and choose **Freeze frame at playhead**. The moment showing is
 held for one second, everything after it is pushed that far later, and the map is cropped
 back to the layer's own out point — the layer's length never changes. The tail may newly
-overrun, and that is drawn rather than quietly repaired.
+overrun.
 
 The hold is two ordinary keyframes once it is made, so it drags and eases like anything
-else. It is refused on a Sequence layer, whose clips carry their own maps, and at a moment
-on or outside the layer's own ends.
+else. It is refused on a Sequence layer, and at a moment on or outside the layer's own
+ends.
 
 ## The razor through a ramp
 
 A [Sequence layer's](/use/sequence-layers/) razor cuts straight through an eased speed
-ramp. The two halves' maps, laid end to end, are exactly the curve that was there before,
-so each half goes on playing the source moment it was playing and neither edge moves.
+ramp. The two halves' maps, laid end to end, are exactly the curve that was there before.
 
 ## Related
 

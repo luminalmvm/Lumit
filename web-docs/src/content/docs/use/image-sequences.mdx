@@ -5,17 +5,16 @@ sidebar:
   order: 2.6
 ---
 
-A folder of numbered stills — an EXR render, a scan, a frame dump — imports as **one footage
-item**, not as a hundred assets. It behaves like any other footage from then on: it trims, it
-retimes, it caches, it goes in a Sequence layer.
+A folder of numbered stills imports as **one footage item**, and behaves like any other
+footage from then on.
 
 ## Import a run
 
 1. **File ▸ Import**, or drag onto the Project panel.
 2. Pick **any one file** of the run.
 
-Lumit reads the folder round the file you picked and imports the whole run as a single item.
-Picking a different frame of the same run imports the same item, not a second one.
+Lumit reads the folder round the file you picked and imports the whole run as a single
+item. Picking a different frame of the same run imports the same item.
 
 What is recognised as a run:
 
@@ -45,12 +44,11 @@ runs a little short.
 
 ## The files are the truth
 
-Where a run starts, how long it is and which files are in it are **read from the folder every
-time the project opens** — none of it is stored. Add ten frames to the folder overnight and
-the item is ten frames longer the next morning, with nothing to reconcile and no re-import.
+Where a run starts, how long it is and which files are in it are **read from the folder
+every time the project opens** — none of it is stored. Add frames to the folder and the
+item is that much longer next time.
 
-The project stores the path of the run's **first file**, which is a real file, so saving,
-moving the project, fingerprinting and relinking all work the ordinary way.
+The project stores the path of the run's **first file**.
 
 ## Relinking
 
@@ -63,6 +61,5 @@ Sequences in an imported After Effects project come across as sequences.
 ## Related
 
 - [Importing media](/use/importing/)
-- [Sequence layers](/use/sequence-layers/) - a different thing with a similar name: several
-  clips cut back to back on one layer.
-- [Exporting](/use/export/) - writing a numbered run out again.
+- [Sequence layers](/use/sequence-layers/)
+- [Exporting](/use/export/)

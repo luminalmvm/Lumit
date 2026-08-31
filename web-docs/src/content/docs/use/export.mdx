@@ -20,15 +20,13 @@ queue does the writing.
 4. Choose where to write with **Browse**.
 5. Press **EXPORT**.
 
-**Composition ▸ Add to export queue** (`Ctrl+M`) opens the same dialogue. The difference
-is which button you press at the end of it: **EXPORT** sets the queue running, **Add to
-queue** leaves the item waiting for you to start it.
+**Composition ▸ Add to export queue** (`Ctrl+M`) opens the same dialogue. **EXPORT** sets
+the queue running; **Add to queue** leaves the item waiting for you to start it.
 
-## One page, and the tabs say where you are
+## The dialogue
 
-The dialogue is a single scrolling page. The tab row at the top — **Output**, **Time**,
-**Picture**, **Colour**, **Audio**, **Metadata** — follows whichever section you have
-scrolled to, and clicking a tab scrolls that section into view.
+The dialogue is a single scrolling page. The tab row at the top follows whichever section
+you have scrolled to, and clicking a tab scrolls that section into view.
 
 | Section | What it holds |
 | --- | --- |
@@ -44,17 +42,16 @@ The frame rate starts as the composition's own; the span starts as the work area
 is set and the whole composition where it is not.
 
 The footer states what pressing the button would produce — frames, length, size, rate, and
-an estimate of the file. When a setting is one the format cannot carry, the footer says so
-there instead, and both buttons go quiet until it is fixed.
+an estimate of the file. When a setting is one the format cannot carry, the footer says so,
+and both buttons go quiet until it is fixed.
 
 ## Presets
 
-A **preset** is the whole settings payload under a name: picking one fills in every section
-at once.
+A **preset** fills in every section at once.
 
 | Preset | What it is |
 | --- | --- |
-| **Master** | The composition's own frame and rate, HEVC at a worked-out bit rate, everything on. What you export when the file is for you. |
+| **Master** | The composition's own frame and rate, HEVC at a worked-out bit rate, everything on. |
 | **YouTube 1080p60** | 1920×1080, H.264, 16 Mb/s target. |
 | **YouTube 1440p60** | 2560×1440, HEVC, 25 Mb/s target. |
 | **YouTube 4K60** | 3840×2160, HEVC, 45 Mb/s target. |
@@ -70,8 +67,7 @@ beside the project, or always the same folder, with a filename template.
 
 ## What each format can hold
 
-The engine decides. A control the chosen format cannot honour is drawn **disabled**
-rather than left out or left live, so a setting never quietly does nothing.
+A control the chosen format cannot honour is drawn **disabled**.
 
 | Format | Picture | Sound | Alpha | Depth | Bit rate | Colour space | Metadata |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -83,41 +79,39 @@ rather than left out or left live, so a setting never quietly does nothing.
 | **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
-has no container to carry metadata, which is why that whole section is dead for one.
+has no container to carry metadata, so that section is disabled.
 
 ## Audio only
 
 The third chip on the Output row writes sound and no picture — the composition's finished
-mix as an M4A or a WAV. Everything to do with the picture goes dead, and the Audio
-section is where the work is: 44.1, 48 or 96 kHz; 16 bit, or 24 for the uncompressed
-forms; stereo, or the finished stereo mix folded down to mono once.
+mix as an M4A or a WAV. The Audio section sets the sample rate (44.1, 48 or 96 kHz), the
+width (16 bit, or 24 for the uncompressed forms) and the layout (stereo, or folded down
+to mono).
 
 ## Colour space
 
 The Colour section names the space the file is written and tagged in: sRGB / Rec. 709,
-Linear, Rec. 709, Rec. 2020 or Display P3. A container that can state its space says which
-one in its own header; a still sequence, which states none, is offered only the space an
-untagged file is taken to be.
+Linear, Rec. 709, Rec. 2020 or Display P3. A still sequence, which states no space in its
+files, is offered only the space an untagged file is taken to be.
 
 Where the project names a colour configuration, that configuration's own output spaces
 appear under a heading of their own. A file written through one of those is left
-**untagged** rather than mis-tagged. A space the configuration cannot actually deliver is
-listed and dead, with the reason on hover.
+**untagged** rather than mis-tagged. A space the configuration cannot deliver is listed
+and disabled, with the reason on hover.
 
-An export asking for a space this build cannot transform to is refused rather than written
-wrongly.
+An export asking for a space this build cannot transform to is refused.
 
 ## The render settings
 
-Two rows in the Composition group decide what the export reads rather than how it is
-encoded, and both default to the delivery answer whatever the project is set to:
+Two rows in the Composition group decide what the export reads, and both default to the
+delivery answer whatever the project is set to:
 
 - **Proxies** — *Use no proxies*. See [Proxies](/use/proxies/).
 - **Guide layers** — *All off*.
 
 **Motion blur** and **Retime blend** in the Time section are overrides on the export's own
-throwaway copy of the composition: leave them at *Current settings* to get what you see,
-or force them off for a fast check. Neither touches the project.
+copy of the composition: leave them at *Current settings* to get what you see, or force
+them off for a fast check. Neither touches the project.
 
 ## The queue
 
@@ -127,29 +121,26 @@ Both buttons put the item in the queue, and the queue window opens on top. **Win
 Export queue** reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
-from, what it is writing, and how it is getting on — *Waiting*, the frame it is on and the
-encoder writing it, *Done*, or the failure in the engine's own words. **START** sets a
-stopped queue running.
+from, what it is writing, and how it is getting on — *Waiting*, the frame it is on,
+*Done*, or the failure. **START** sets a stopped queue running.
 
-- **Drag a waiting row** to move it up or down. The order of the list is the order they
-  run in; a row that is running, has run, or has failed cannot be picked up.
+- **Drag a waiting row** to move it up or down. A row that is running, has run, or has
+  failed cannot be picked up.
 - **The × on a row** cancels it while it is writing, and forgets it once it has stopped.
 
-An item is photographed the moment it is queued, so it goes on writing what you asked for
+An item's settings are captured the moment it is queued, so it writes what you asked for
 however much you change the project afterwards.
 
-## Export does not block, and it does not cut corners
+## Export does not block
 
-Export runs apart from the interface, so you can carry on editing while it writes. The
-status strip at the bottom of the window says which frame it is on, and carries a Cancel
-that works whether the queue window is open or not.
+You can carry on editing while an export writes. The status strip at the bottom of the
+window says which frame it is on, and carries a Cancel.
 
 [Adaptive degradation](/use/preview/) and preview resolution touch the preview alone: an
 export always runs at the quality the dialogue asks for.
 
 :::note[Not built yet]
-ProRes and DNxHR intermediate codecs are not offered, and there is no export priority
-control. OCIO is the one face in the dialogue drawn dead in this build: the **Managed by**
+ProRes and DNxHR intermediate codecs, and an export priority control. The **Managed by**
 row reads back the configuration the project names and cannot be set from here.
 :::
 

@@ -35,9 +35,7 @@ which is Flat, Linear or Radial. Choose a ramp and three more rows appear: the
 **Gradient colour** it ends at, and the two points that aim it.
 
 Linear ramps along the line between the points; radial ramps outwards from the first,
-with the second on the outer edge. Switching a ramp on aims it at the shape's own box to
-start with. The points are animatable; the two colours are not, and there are two of them
-rather than a stop list.
+with the second on the outer edge. The points are animatable; the two colours are not.
 
 ## Combine two shapes
 
@@ -45,15 +43,12 @@ Every shape group after the first in the list carries a **Combine** row, saying 
 the one **above** it: **Apart**, **Union**, **Subtract**, **Intersect** or **Exclude**. Apart
 is the default, and draws it on its own.
 
-A run of shapes all set to something other than Apart folds top to bottom, so three items
-read as the first joined to the second and that result joined to the third. The first item of
-a run has nothing in front of it and draws alone.
+A run of shapes all set to something other than Apart folds top to bottom.
 
 **The run wears the first item's paint and modifiers.** The ones after it lend their path
 and nothing else, so their own fill, stroke and dash rows are left off the panel.
 
-A shape fills the same way after a combine as before it, so a five-pointed star keeps its
-hollow middle when you union something to it.
+A shape fills the same way after a combine as before it.
 
 ## Animate the shape itself
 
@@ -61,9 +56,8 @@ A shape group's **Path** row carries the shape, and its stopwatch animates it. K
 move the playhead, drag a vertex, and the shape morphs between the two.
 
 Vertices are paired by **order**, not by feature; where one path has fewer points, it is
-subdivided to match the denser one first. Rotating a path's start point is the lever for
-steering where new geometry grows. Whether a path is open or closed is held across the
-morph.
+subdivided to match the denser one first. Whether a path is open or closed is held across
+the morph.
 
 :::note[Limitation]
 A shape row's keyframes appear as diamonds on its Timeline lane but have no curve in the
@@ -74,20 +68,17 @@ as well as of the path.
 ## Trim paths
 
 Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**
-and **Trim offset**. Start and end are a percentage of the path's own length, so
-trimming a circle to 0–50% leaves half of it; offset slides that piece along the
-path in degrees, and 360 is one full lap of a closed shape.
+and **Trim offset**. Start and end are a percentage of the path's own length; offset
+slides that piece along the path in degrees, and 360 is one full lap of a closed shape.
 
-Key **Trim end** from 0 to 100 and the shape draws itself on. The fill is trimmed
-with the outline — a half-trimmed circle fills as a half circle — and an end below
-the start draws nothing.
+The fill is trimmed with the outline, and an end below the start draws nothing.
 
 ## Dashed outlines
 
 A shape with a stroke carries **Dash**, **Gap** and **Dash offset** rows, in pixels.
 Dash is the length of each mark, Gap the space after it, and the pair repeats along
-the path. Both start at zero — a solid outline — so typing a Dash is what turns the
-dashes on. Key the offset and the dashes march along the path.
+the path. Both start at zero — a solid outline. Key the offset and the dashes move along
+the path.
 
 ## Offset paths
 
@@ -95,8 +86,7 @@ The first row under a shape group is **Offset path**, one number in pixels. Posi
 pushes the outline outwards; negative pulls it in. Corners come out round.
 
 Pull the outline in by more than the shape is thick somewhere and it can cross itself,
-leaving a small loop. The fill rule hides most of that; where it shows, use a smaller
-number.
+leaving a small loop.
 
 ## The repeater
 
@@ -111,9 +101,7 @@ behind it. A copy is a scaled drawing, not a scaled path — halve the scale and
 and the dashes halve with it.
 
 The layer's box grows to hold the copies, and the layer's position stays pinned to that
-box's corner, so a repeater keyed to grow upwards or leftwards moves the art as it plays.
-Step down and to the right, or key the layer's position to match. The count stops at 100
-copies.
+box's corner. The count stops at 100 copies.
 
 ## Related
 
