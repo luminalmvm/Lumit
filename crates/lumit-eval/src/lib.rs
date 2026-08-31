@@ -893,6 +893,26 @@ fn feed_layer(
         true,
     )?;
 
+    // The **style stack** (docs/impl/layer-styles.md §1, K-706), immediately
+    // after it and through the very same fold: styles are picture, not metadata,
+    // so editing one has to retire the cached frames it changed. Emits nothing
+    // at all when the list is empty, which is every layer that has none — so
+    // every key written before styles existed is still the key that layer names.
+    feed_effect_stack(
+        h,
+        layer.switches.fx,
+        &layer.styles,
+        layer,
+        comp,
+        doc,
+        t,
+        lt,
+        quality,
+        stamper,
+        visited,
+        true,
+    )?;
+
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
     // source frames, which are content the parameter hash cannot see (K-094):
     // two comp times sharing the current frame — a held/frozen leading frame —
@@ -938,6 +958,41 @@ fn feed_layer(
         // bytes `to_string` built, with no intermediate String per layer per
         // frame key. Serialising plain data cannot fail.
         let _ = serde_json::to_writer(&mut *h, &layer.paint);
+    }
+
+    // Puppet: the block warps the layer's own pixels at the same seam paint and
+    // masks act on, so it is content in exactly the way they are — unlike
+    // Volume and Pan, which are sound and stay out of a picture's name
+    // (docs/impl/puppet.md §2.5).
+    //
+    // The pins' **evaluated** values go in beside the serialised block, for the
+    // reason an animated mask's shape does: a keyframed pin serialises
+    // identically at every frame, and this key carries no time of its own, so
+    // the stored keys alone would give every frame of a moving puppet the same
+    // name and the cache would hand back the first one for the whole of
+    // playback. Hashed only when the layer carries a block, so every layer
+    // nobody has pinned — which is nearly all of them — keeps the name it had.
+    if let Some(puppet) = &layer.puppet {
+        h.update(b"puppet");
+        feed_f64(h, puppet.density);
+        feed_f64(h, puppet.expansion);
+        feed_f64(h, puppet.reference_time.to_f64());
+        for pin in puppet.pins_at(lt) {
+            h.update(pin.id.as_bytes());
+            h.update(&[pin.kind as u8]);
+            for v in [
+                pin.rest[0],
+                pin.rest[1],
+                pin.now[0],
+                pin.now[1],
+                pin.rotation,
+                pin.scale,
+                pin.amount,
+                pin.extent,
+            ] {
+                feed_f64(h, v);
+            }
+        }
     }
 
     // Masks: static paths are plain data, so the serialised list names them.
@@ -1144,6 +1199,7 @@ fn feed_source(
             h.update(b"footage/");
             h.update(identity.as_bytes());
             h.update(&frame.to_le_bytes());
+            feed_roto(h, layer, frame);
             // A non-Nearest interpolation policy synthesises different
             // in-between pixels (blend/flow, K-088), so it is content. Nearest
             // shows exactly the stamped frame — pixel-identical to no retime —
@@ -1302,6 +1358,7 @@ fn feed_source(
                     h.update(b"seq-footage/");
                     h.update(identity.as_bytes());
                     h.update(&frame.to_le_bytes());
+                    feed_roto(h, layer, frame);
                     {
                         // Gated exactly as the Footage case: flow that cannot
                         // help keys as the Nearest it renders as (K-331). The
@@ -1427,6 +1484,36 @@ fn flow_effective_at<'a>(
 /// conform rate is read at `lt` and hashed as the value it takes there (K-160),
 /// so an animated rate keys each frame along the ramp distinctly.
 ///
+/// The **Roto brush's per-frame stamp** (K-710, docs/impl/roto.md §5).
+///
+/// A frame drawn through a propagated matte is drawn with a picture the document
+/// does not contain — the matte is derived from the strokes and kept outside the
+/// project — so a key made from the parameters alone would name two different
+/// pictures the same, and the frame banked before a correction would be served
+/// after it.
+///
+/// The stroke *table* must not go in whole: hashing it would rename every cached
+/// frame in the shot each time one correction was made. What goes in is the
+/// frame's own **chain hash** — the settings, the base, and exactly the strokes
+/// between the base and this frame on this frame's side — so a stroke edit
+/// retires precisely the frames it spoiled. `lumit-eval` still does not know
+/// what a matte is; [`lumit_core::roto`] answers, from the document alone.
+///
+/// Emits nothing for a layer with no stroked Roto brush on it, which is every
+/// layer of every project written before this existed.
+fn feed_roto(h: &mut blake3::Hasher, layer: &lumit_core::model::Layer, frame: u64) {
+    if !layer.switches.fx {
+        return;
+    }
+    let frame = i64::try_from(frame).unwrap_or(i64::MAX);
+    for fx in lumit_core::roto::brushes(&layer.effects) {
+        if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
+            h.update(b"roto/");
+            h.update(&chain);
+        }
+    }
+}
+
 /// Callers hash the sub-frame `source_time` *after* this, per K-093.
 fn feed_interp(h: &mut blake3::Hasher, i: &lumit_core::retime::Interpolation, lt: f64) {
     use lumit_core::retime::Interpolation;
@@ -1580,7 +1667,9 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -2452,6 +2541,7 @@ mod tests {
                 version,
                 extra: serde_json::Map::new(),
             },
+            roto: None,
             enabled: true,
             params: vec![EffectParam {
                 id: "gain".into(),
@@ -2633,6 +2723,7 @@ mod tests {
                 version: 1,
                 extra: serde_json::Map::new(),
             },
+            roto: None,
             enabled: true,
             params: vec![EffectParam {
                 id: "radius".into(),
@@ -2742,6 +2833,7 @@ mod tests {
                 version: 1,
                 extra: serde_json::Map::new(),
             },
+            roto: None,
             enabled: true,
             params: vec![EffectParam {
                 id: "radius".into(),

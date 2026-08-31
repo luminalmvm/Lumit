@@ -63,6 +63,9 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 | B12 | Particulate, default parameters (≈ 300 live particles), evaluate + draw **above the pass floor** | ≲ 0.2 ms | ≲ 0.6 ms |
 | B13 | Particulate, 20 000 live discs at the default cap, evaluate + draw above the pass floor | ≤ 1 ms | ≤ 4 ms |
 | B14 | Particulate at the 1 000 000 hard cap, evaluate + draw above the pass floor, one comp frame | ≤ 16 ms | — |
+| B15 | Puppet warp of a **fully covered** 1080p layer, single-threaded (≈ 40 ns a pixel warped) | ≤ 80 ms | ≤ 200 ms |
+| B16 | Puppet mesh build at natural 1080p, fully covered, default density | ≤ 100 ms | ≤ 250 ms |
+| B17 | Puppet per-frame solve at the 1500-vertex cap, factorisation held | ≤ 8 ms | ≤ 20 ms |
 
 ### 2.1 Document-scale budgets (the "thousands of layers" mandate)
 
@@ -162,6 +165,23 @@ Notes:
   the **ratio gate does not fire on them** — a factor at that size is scheduler noise. What
   holds them is the absolute assertion on the reference desktop, and the floor row beside
   them, which is where the copy itself getting dearer would show.
+- **B15–B17 are the puppet's three** (K-704, K-712), measured on the *pathological* fixture
+  on purpose: a 1920×1080 layer **fully covered**, which is the shape puppet is not for. A
+  cutout — an arm, a character, the thing the tool exists for — covers a fraction of that
+  and costs the same fraction, because the warp only touches the pixels the mesh covers.
+  Read B15 as its rate, ≈ 40 ns a pixel warped: a 400×600 cutout warps in about 10 ms and
+  scrubs inside B3.
+
+  Two of the three are looser than `docs/impl/puppet.md` first wrote them, and the reason
+  is arithmetic rather than accident (K-712 records it). The **warp** is one bilinear
+  resample and one barycentric per pixel in f64; two million of those do not fit 8 ms on
+  one thread, and the note's 8 ms is what the GPU warp it already names as the upgrade path
+  is *for*. The **solve** at the vertex cap is a forward and back substitution through a
+  dense 3000×3000 factor plus two 1500×1500 ones — about eighteen million multiply-adds,
+  which is milliseconds, not the microseconds the note estimated; the sparse factorisation
+  it already names is what closes that. Both upgrade paths carry an observable trigger in
+  the note, and both triggers have now fired: what these rows do until then is stop the two
+  numbers getting *worse*, which is what the ratio gate is for.
 
 ## 3. The resource governor
 
@@ -443,7 +463,10 @@ application depends on, run by the CI job **`performance gates (ratio vs baselin
   the twenty-second work area. Latency budgets are reported at the 95th percentile, playback
   budgets as milliseconds per frame. Beside them, **three per-effect scenarios** — B12, B13
   and B14, which time one Particulate pass rather than a comp and so need neither media nor
-  the reference comp. The binary runs all nine and writes the file; each is also an
+  the reference comp — and **three per-feature ones**: B15, B16 and B17, which time the
+  puppet's warp, mesh build and per-frame solve. Those three are pure processor work, so
+  unlike every other row they need no graphics adapter either and measure on any machine
+  the suite runs on. The binary runs all twelve and writes the file; each is also an
   `#[ignore]`d test, for measuring one budget while working on it.
 - **The harness measures; CI gates on the ratio to a baseline.** A GitHub runner is not §1's
   reference desktop — its graphics card is a software rasteriser — so a run is compared with

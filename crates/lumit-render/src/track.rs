@@ -2097,7 +2097,9 @@ mod tests {
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }

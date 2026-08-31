@@ -110,3 +110,17 @@ fn b12_b14_particulate() {
         Err(e) => panic!("{e}"),
     }
 }
+
+/// **B15-B17 in one run** (K-704, docs/impl/puppet.md §3 test 14): the puppet's
+/// warp, mesh build and per-frame solve. Pure CPU — no media and no adapter —
+/// so this one runs anywhere, and the gate is the same one every other row
+/// gets: [`lumit_bench::baseline`] against the runner's own numbers, and the
+/// absolute budgets on the reference machine.
+#[test]
+#[ignore = "measurement, not an oracle: run it explicitly"]
+fn b15_b17_puppet() {
+    lumit_bench::scenarios::puppet::budgets(&mut |m: Measurement| {
+        println!("{}", serde_json::to_string(&m).unwrap_or_default());
+    })
+    .unwrap();
+}

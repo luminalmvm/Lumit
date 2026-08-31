@@ -1538,11 +1538,13 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             effects,
+            styles: Vec::new(),
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
             markers: Vec::new(),
             paint: Default::default(),
+            puppet: None,
             extra: serde_json::Map::new(),
         };
         let layer_id = layer.id;
@@ -2332,11 +2334,13 @@ mod tests {
                 blend: Default::default(),
                 masks: Vec::new(),
                 effects,
+                styles: Vec::new(),
                 switches: Switches::default(),
                 interpolation: Default::default(),
                 parked_flow: None,
                 markers: Vec::new(),
                 paint: Default::default(),
+                puppet: None,
                 extra: serde_json::Map::new(),
             };
         let source = layer("source", source_effects, source_graph);

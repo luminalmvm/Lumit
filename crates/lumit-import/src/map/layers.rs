@@ -159,7 +159,9 @@ pub(crate) fn map_layer(
         blend: blend(conv, &path, ae.blend.as_deref()),
         masks,
         paint: Vec::new(),
+        puppet: None,
         effects,
+        styles: Vec::new(),
         // AE has no driver graph, so an import never produces one (K-471 §4);
         // the round trip is untouched.
         graph: Default::default(),

@@ -10957,6 +10957,10 @@
   "@histPaint": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histEditPuppet": "Edit puppet",
+  "@histEditPuppet": {
+    "description": "A row of the Edit > History window: the name of one edit that was made — a puppet pin added, moved, renamed or deleted. Sent by the engine as English and looked up here."
+  },
   "histEditShape": "Edit shape",
   "@histEditShape": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."

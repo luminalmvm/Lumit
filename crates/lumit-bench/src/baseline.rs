@@ -45,7 +45,7 @@ pub const NOISE_FLOOR_MS: f64 = 1.0;
 ///
 /// Asserted only under [`reference_hardware`]. Anywhere else these are what the
 /// harness is aiming at, not what it is judged by.
-pub const DESKTOP_BUDGET_MS: [(&str, f64); 9] = [
+pub const DESKTOP_BUDGET_MS: [(&str, f64); 12] = [
     ("B3", 50.0),
     ("B4", 500.0),
     ("B5", 1000.0 / 60.0),
@@ -55,6 +55,13 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 9] = [
     ("B12", 0.2),
     ("B13", 1.0),
     ("B14", 16.0),
+    // The puppet's three (K-704, K-712). B15 and B17 are looser than
+    // docs/impl/puppet.md first estimated, for the arithmetic reason docs/13 §2
+    // records: a CPU warp is one bilinear resample a pixel, and a dense
+    // factorisation at the vertex cap is millions of multiply-adds a frame.
+    ("B15", 80.0),
+    ("B16", 100.0),
+    ("B17", 8.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

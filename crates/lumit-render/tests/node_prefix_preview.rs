@@ -98,7 +98,9 @@ fn project(layer_id: Uuid, effects: Vec<EffectInstance>) -> (Arc<Document>, Uuid
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects,
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };

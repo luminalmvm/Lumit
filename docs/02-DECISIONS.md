@@ -22455,7 +22455,7 @@ filtering, and a narrowed list keeps the chosen group's heading.
 
 New arb key (Crowdin owes translations): `fxConsoleCompositions`.
 
-## K-711 — PU2 measured the puppet's three budgets, and two of them are what a CPU warp and a dense factorisation actually cost
+## K-712 — PU2 measured the puppet's three budgets, and two of them are what a CPU warp and a dense factorisation actually cost
 
 **DECIDED (2026-08-31).** Supersedes one sentence of [K-704](#k-704--puppet-ships-as-a-conforming-mesh-plus-the-closed-form-as-rigid-as-possible-solve-the-mesh-is-never-saved) — its
 "≤ 8 ms warp at 1080p, ≤ 100 ms mesh build, ≤ 1 ms per-frame solve at the cap" — and

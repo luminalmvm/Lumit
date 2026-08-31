@@ -90,7 +90,9 @@ pub(crate) fn base_layer(
         blend: lumit_core::model::BlendMode::Normal,
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     }

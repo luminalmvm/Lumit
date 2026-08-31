@@ -35,13 +35,16 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use spade::{
     handles::FixedVertexHandle, AngleLimit, ConstrainedDelaunayTriangulation, Point2,
     RefinementParameters, Triangulation,
 };
 use uuid::Uuid;
 
+use crate::anim::{Animation, Property};
 use crate::mask::signed_distance;
+use crate::time::Rational;
 
 /// Alpha at or above which a pixel is content (docs/impl/puppet.md §1.1). Ten
 /// per cent, not fifty: faint content — smoke, glow, a soft antialiased edge —
@@ -103,6 +106,35 @@ pub enum MeshError {
     /// A degenerate request: zero-sized raster, or a density that is not a
     /// positive finite number.
     Degenerate,
+}
+
+/// The alpha channel of a premultiplied RGBA buffer, at the layer's **natural**
+/// size — the space the mesh and the pins live in.
+///
+/// A frame drawn at a reduced preview resolution hands over a smaller buffer
+/// than the layer's own size, so its alpha is sampled up to natural before the
+/// mesh is walked; at full resolution — and for every kind that rasterises
+/// itself at natural size — this is a plain copy of every fourth byte.
+///
+/// Nearest, not bilinear: the coverage is about to be thresholded at 10 % and
+/// grown by three pixels, and a smoother resample would not move that boundary
+/// enough to be worth a multiply per pixel.
+#[must_use]
+pub fn alpha_at_natural(rgba: &[u8], w: u32, h: u32, natural_w: u32, natural_h: u32) -> Vec<u8> {
+    let (w, h) = (w as usize, h as usize);
+    let (nw, nh) = (natural_w as usize, natural_h as usize);
+    if w == 0 || h == 0 || nw == 0 || nh == 0 || rgba.len() < w * h * 4 {
+        return vec![0; nw * nh];
+    }
+    let mut out = vec![0u8; nw * nh];
+    for y in 0..nh {
+        let sy = (y * h / nh).min(h - 1);
+        for x in 0..nw {
+            let sx = (x * w / nw).min(w - 1);
+            out[y * nw + x] = rgba[(sy * w + sx) * 4 + 3];
+        }
+    }
+    out
 }
 
 /// Build the mesh over an alpha bitmap.
@@ -785,7 +817,7 @@ fn cholesky_solve(l: &Dense, b: &[f64]) -> Vec<f64> {
 // --- The deformer -----------------------------------------------------------
 
 /// The four pin kinds (docs/07-UI-SPEC.md §1.7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PuppetPinKind {
     Position,
     Starch,
@@ -826,7 +858,154 @@ impl SolvePin {
             rotation: 0.0,
             scale: 100.0,
             amount: 0.0,
-            extent: 50.0,
+            extent: DEFAULT_EXTENT,
+        }
+    }
+}
+
+// --- What the document stores (docs/impl/puppet.md §4) ----------------------
+
+/// Default target triangle edge, px at natural size.
+pub const DEFAULT_DENSITY: f64 = 24.0;
+/// Default growth of the coverage before the outline is walked, px.
+pub const DEFAULT_EXPANSION: f64 = 3.0;
+/// Default falloff radius for a starch, overlap or bend pin, rest px.
+pub const DEFAULT_EXTENT: f64 = 50.0;
+
+fn default_density() -> f64 {
+    DEFAULT_DENSITY
+}
+fn default_expansion() -> f64 {
+    DEFAULT_EXPANSION
+}
+fn default_extent() -> f64 {
+    DEFAULT_EXTENT
+}
+fn natural_scale() -> Property {
+    Property::fixed(100.0)
+}
+fn is_natural_scale(p: &Property) -> bool {
+    matches!(p.animation, Animation::Static(v) if v == 100.0) && p.extra.is_empty()
+}
+
+/// A layer's puppet: the pins the author placed, and the three numbers the mesh
+/// is built from. One block per layer (docs/impl/puppet.md §4).
+///
+/// **No triangle is ever stored.** The mesh is rebuilt from the layer's own
+/// alpha and cached by [`PuppetCache`], which is what lets a future, better
+/// triangulator change nothing in any saved project.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PuppetBlock {
+    /// The layer time the mesh's alpha is taken at: when the first pin was
+    /// placed. Rational, like a mask's keys, so a rate change cannot drift it.
+    pub reference_time: Rational,
+    /// Target triangle edge, px at natural size.
+    #[serde(default = "default_density")]
+    pub density: f64,
+    /// Coverage growth before meshing, px.
+    #[serde(default = "default_expansion")]
+    pub expansion: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pins: Vec<PuppetPin>,
+    /// Unknown fields from newer Lumit versions (docs/10 §1.1).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl PuppetBlock {
+    /// An empty block whose mesh will be taken at `reference_time`.
+    #[must_use]
+    pub fn new(reference_time: Rational) -> PuppetBlock {
+        PuppetBlock {
+            reference_time,
+            density: DEFAULT_DENSITY,
+            expansion: DEFAULT_EXPANSION,
+            pins: Vec::new(),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// The pins as the solver wants them at layer time `lt`: **rest** read at
+    /// the reference time, where the pin sits in the mesh, and **now** read at
+    /// this frame. Everything else is the pin's own animated value.
+    #[must_use]
+    pub fn pins_at(&self, lt: f64) -> Vec<SolvePin> {
+        let rest_t = self.reference_time.to_f64();
+        self.pins
+            .iter()
+            .map(|p| SolvePin {
+                id: p.id,
+                kind: p.kind,
+                rest: [p.x.value_at(rest_t), p.y.value_at(rest_t)],
+                now: [p.x.value_at(lt), p.y.value_at(lt)],
+                rotation: p.rotation.value_at(lt),
+                scale: p.scale.value_at(lt),
+                amount: p.amount.value_at(lt),
+                extent: p.extent,
+            })
+            .collect()
+    }
+}
+
+/// One pin. Every animatable field is an ordinary [`Property`] — the same
+/// stopwatch, lanes and diamonds as everything else.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PuppetPin {
+    pub id: Uuid,
+    pub name: String,
+    pub kind: PuppetPinKind,
+    /// Layer pixels, never per cent: a point parameter is pixels everywhere in
+    /// Lumit, and the mesh lives in layer px at natural size.
+    #[serde(with = "crate::mask::still_or_keyed")]
+    pub x: Property,
+    #[serde(with = "crate::mask::still_or_keyed")]
+    pub y: Property,
+    /// Bend only: degrees.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub rotation: Property,
+    /// Bend only: per cent, 100 = natural.
+    #[serde(
+        default = "natural_scale",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_natural_scale"
+    )]
+    pub scale: Property,
+    /// Starch 0..100, overlap −100..100 (in front / behind).
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub amount: Property,
+    /// Starch / overlap / bend falloff radius, rest px. Not animatable: which
+    /// vertices a pin reaches is a rest-pose fact, and that is what lets the
+    /// systems factor once (docs/impl/puppet.md §2.2).
+    #[serde(default = "default_extent")]
+    pub extent: f64,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl PuppetPin {
+    /// A pin of `kind` at `(x, y)` layer px, with every other value at its
+    /// default.
+    #[must_use]
+    pub fn new(kind: PuppetPinKind, name: impl Into<String>, x: f64, y: f64) -> PuppetPin {
+        PuppetPin {
+            id: Uuid::now_v7(),
+            name: name.into(),
+            kind,
+            x: Property::fixed(x),
+            y: Property::fixed(y),
+            rotation: Property::zero(),
+            scale: natural_scale(),
+            amount: Property::zero(),
+            extent: DEFAULT_EXTENT,
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -1527,23 +1706,40 @@ pub fn apply_puppet(
         let x1 = (maxx.ceil().max(0.0) as usize).min(iw);
         let y0 = miny.floor().max(0.0) as usize;
         let y1 = (maxy.ceil().max(0.0) as usize).min(ih);
+        // The barycentric coordinates are an **affine** function of the pixel,
+        // so everything about the triangle is worked out here rather than per
+        // pixel: one reciprocal instead of two divisions a pixel, which is most
+        // of what a full-frame warp costs.
+        let d = (dst[1][1] - dst[2][1]) * (dst[0][0] - dst[2][0])
+            + (dst[2][0] - dst[1][0]) * (dst[0][1] - dst[2][1]);
+        if !d.is_finite() || d.abs() < 1e-12 {
+            continue;
+        }
+        let inv_d = 1.0 / d;
+        let (l0x, l0y) = (
+            (dst[1][1] - dst[2][1]) * inv_d,
+            (dst[2][0] - dst[1][0]) * inv_d,
+        );
+        let (l1x, l1y) = (
+            (dst[2][1] - dst[0][1]) * inv_d,
+            (dst[0][0] - dst[2][0]) * inv_d,
+        );
         for py in y0..y1 {
+            let dy = py as f64 + 0.5 - dst[2][1];
+            let (row0, row1) = (l0y * dy, l1y * dy);
             for px in x0..x1 {
-                let p = [px as f64 + 0.5, py as f64 + 0.5];
-                let Some(l) = barycentric(dst[0], dst[1], dst[2], p) else {
-                    continue;
-                };
-                if l.iter().any(|&v| v < -1e-9) {
+                let dx = px as f64 + 0.5 - dst[2][0];
+                let l = [l0x * dx + row0, l1x * dx + row1, 0.0];
+                let l = [l[0], l[1], 1.0 - l[0] - l[1]];
+                if l[0] < -1e-9 || l[1] < -1e-9 || l[2] < -1e-9 {
                     continue;
                 }
-                let sxp = l[0] * rest[0][0] + l[1] * rest[1][0] + l[2] * rest[2][0];
-                let syp = l[0] * rest[0][1] + l[1] * rest[1][1] + l[2] * rest[2][1];
-                let texel = sample_rgba(&src, iw, ih, sxp - 0.5, syp - 0.5);
+                let sxp = l[0] * rest[0][0] + l[1] * rest[1][0] + l[2] * rest[2][0] - 0.5;
+                let syp = l[0] * rest[0][1] + l[1] * rest[1][1] + l[2] * rest[2][1] - 0.5;
+                let texel = sample_rgba(&src, iw, ih, sxp, syp);
                 let base = (py * iw + px) * 4;
-                for (k, v) in texel.iter().enumerate() {
-                    if let Some(slot) = rgba.get_mut(base + k) {
-                        *slot = *v;
-                    }
+                if let Some(slot) = rgba.get_mut(base..base + 4) {
+                    slot.copy_from_slice(&texel);
                 }
             }
         }
@@ -1560,12 +1756,15 @@ fn sample_rgba(src: &[u8], w: usize, h: usize, x: f64, y: f64) -> [u8; 4] {
     let (x0, y0) = (fx.floor() as usize, fy.floor() as usize);
     let (x1, y1) = ((x0 + 1).min(w - 1), (y0 + 1).min(h - 1));
     let (tx, ty) = (fx - x0 as f64, fy - y0 as f64);
+    // The four texels' offsets, once for all four channels: the same sixteen
+    // multiplies a channel used to redo.
+    let (i00, i10) = ((y0 * w + x0) * 4, (y0 * w + x1) * 4);
+    let (i01, i11) = ((y1 * w + x0) * 4, (y1 * w + x1) * 4);
     let mut out = [0u8; 4];
     for (c, o) in out.iter_mut().enumerate() {
-        let g =
-            |xx: usize, yy: usize| f64::from(src.get((yy * w + xx) * 4 + c).copied().unwrap_or(0));
-        let top = g(x0, y0) * (1.0 - tx) + g(x1, y0) * tx;
-        let bot = g(x0, y1) * (1.0 - tx) + g(x1, y1) * tx;
+        let g = |i: usize| f64::from(src.get(i + c).copied().unwrap_or(0));
+        let top = g(i00) * (1.0 - tx) + g(i10) * tx;
+        let bot = g(i01) * (1.0 - tx) + g(i11) * tx;
         *o = (top * (1.0 - ty) + bot * ty).round().clamp(0.0, 255.0) as u8;
     }
     out
@@ -2136,5 +2335,64 @@ mod tests {
         pins.push(SolvePin::position(Uuid::from_u128(3), [60.0, 30.0]));
         let f3 = cache.factorisation(&a, &pins);
         assert!(!Arc::ptr_eq(&f1, &f3), "a new pin is a new factorisation");
+    }
+
+    /// The block survives a trip through the file, writes only what differs
+    /// from the defaults, and keeps a newer version's unknown fields.
+    #[test]
+    fn the_block_round_trips_and_keeps_what_it_does_not_understand() {
+        let mut block = PuppetBlock::new(Rational::new(3, 2).unwrap());
+        block
+            .pins
+            .push(PuppetPin::new(PuppetPinKind::Position, "Pin 1", 12.5, 40.0));
+        let mut bend = PuppetPin::new(PuppetPinKind::Bend, "Bend 1", 80.0, 20.0);
+        bend.rotation = Property::fixed(35.0);
+        bend.extent = 72.0;
+        block.pins.push(bend);
+
+        let text = serde_json::to_string(&block).unwrap();
+        let back: PuppetBlock = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, block, "a puppet block is what it was written as");
+
+        // A still pin is a bare number, and the values nobody moved are absent
+        // altogether — the file-format rule every other animatable field keeps.
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["pins"][0]["x"], serde_json::json!(12.5));
+        assert!(
+            v["pins"][0].get("rotation").is_none() && v["pins"][0].get("scale").is_none(),
+            "an unmoved position pin writes no bend values: {text}"
+        );
+
+        // A newer Lumit's field rides through untouched, and the defaults fill
+        // in for a block written before they existed.
+        let older: PuppetBlock =
+            serde_json::from_str(r#"{"reference_time":[0,1],"pins":[],"wobble":7}"#).unwrap();
+        assert_eq!(older.density, DEFAULT_DENSITY);
+        assert_eq!(older.expansion, DEFAULT_EXPANSION);
+        assert_eq!(older.extra.get("wobble"), Some(&serde_json::json!(7)));
+        let again = serde_json::to_value(&older).unwrap();
+        assert_eq!(again["wobble"], serde_json::json!(7));
+    }
+
+    /// A pin's rest position is read at the reference time and its live one at
+    /// the frame — which is what makes a keyframed pin move at all.
+    #[test]
+    fn pins_rest_at_the_reference_time_and_move_at_the_frame() {
+        let key = |t: i64, value: f64| crate::anim::Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        let mut block = PuppetBlock::new(Rational::ONE);
+        let mut pin = PuppetPin::new(PuppetPinKind::Position, "Pin 1", 10.0, 10.0);
+        pin.x = Property {
+            animation: Animation::Keyframed(vec![key(1, 10.0), key(2, 50.0)]),
+            extra: serde_json::Map::new(),
+        };
+        block.pins.push(pin);
+        let at_two = block.pins_at(2.0);
+        assert_eq!(at_two[0].rest, [10.0, 10.0], "rest is the reference time");
+        assert_eq!(at_two[0].now, [50.0, 10.0], "now is this frame");
     }
 }

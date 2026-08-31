@@ -86,7 +86,9 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         blend: lumit_core::model::BlendMode::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };

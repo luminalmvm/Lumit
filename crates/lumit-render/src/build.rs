@@ -40,6 +40,75 @@ pub type LayerPixels = (Vec<u8>, u32, u32, (f32, f32));
 /// The map of already-decoded pixels a build reads, keyed by layer id.
 pub type PixelsByLayer<'a> = HashMap<Uuid, &'a CompLayerPixels>;
 
+/// The meshes and factorisations every puppeted layer in the process shares
+/// (docs/impl/puppet.md §1.4, §2.5). Both are keyed by content — the mesh by
+/// the alpha it was built over, the factorisation by the mesh and the pin
+/// structure — so a shared cache can only ever hand back the thing that would
+/// have been computed, and a mesh costing up to 100 ms is built once rather
+/// than once a frame.
+static PUPPET: std::sync::LazyLock<lumit_core::puppet::PuppetCache> =
+    std::sync::LazyLock::new(lumit_core::puppet::PuppetCache::new);
+
+/// Warp one layer's own pixels through its puppet (docs/impl/puppet.md §3),
+/// in place, at the paint/masks seam.
+///
+/// `solo_at` renders the layer alone at a layer time — the mesh is built over
+/// that picture at the block's **reference time**, which is the alpha the pins
+/// were placed on, never this frame's.
+///
+/// Every refusal here is a value and leaves the layer exactly as it was: no
+/// pins, an empty picture at the reference time, a mesh too dense to build
+/// (docs/14 §4).
+fn warp_puppet(
+    pixels: &mut LayerPixels,
+    layer: &lumit_core::model::Layer,
+    block: &lumit_core::puppet::PuppetBlock,
+    lt: f64,
+    solo_at: &impl Fn(&lumit_core::model::Layer, f64) -> Option<LayerPixels>,
+) {
+    let (rgba, w, h, natural) = pixels;
+    let (w, h, natural) = (*w, *h, *natural);
+    let pins = block.pins_at(lt);
+    if pins.is_empty() {
+        return;
+    }
+    let nw = natural.0.round().max(1.0) as u32;
+    let nh = natural.1.round().max(1.0) as u32;
+    // ponytail: the layer is rendered solo at the reference time on every
+    // frame, only to be thrown away when the mesh cache hits on its alpha. The
+    // upgrade is a per-layer memo of that alpha's hash, keyed on the layer's
+    // own content stamp. Observable trigger: a puppeted footage or text layer
+    // showing up in a docs/13 B3/B6 trace, where the doubled source cost is
+    // what the trace names.
+    //
+    // ponytail: and a **footage** layer's pixels here are this frame's decoded
+    // ones, not the reference time's — the decode planner schedules one frame
+    // per layer per rendered frame, and asking it for a second moment is a
+    // change to the plan rather than to this seam (docs/impl/puppet.md §1.1).
+    // Every self-rasterising kind is exact; footage whose silhouette does not
+    // move is exact too. Observable trigger: a mesh that visibly follows the
+    // shot instead of holding still — pins going inert as a figure walks out of
+    // where it stood at the reference time.
+    let Some((reference, rw, rh, _)) = solo_at(layer, block.reference_time.to_f64()) else {
+        return;
+    };
+    let alpha = lumit_core::puppet::alpha_at_natural(&reference, rw, rh, nw, nh);
+    let Ok(mesh) = PUPPET.mesh(&alpha, nw, nh, block.density, block.expansion) else {
+        return;
+    };
+    let factorisation = PUPPET.factorisation(&mesh, &pins);
+    let solution = lumit_core::puppet::solve(&mesh, &pins, &factorisation);
+    lumit_core::puppet::apply_puppet(
+        rgba,
+        w,
+        h,
+        f64::from(natural.0),
+        f64::from(natural.1),
+        &mesh,
+        &solution,
+    );
+}
+
 /// The single `model::BlendMode` → `gpu::Blend` mapping shared by every path
 /// that composites (K-031: they must never disagree). Every mode maps to its
 /// like-named GPU variant (K-162, T24).
@@ -602,6 +671,80 @@ pub(crate) fn unit(v: [f32; 3]) -> [f32; 3] {
     v.map(|c| c / len)
 }
 
+/// Resolve a layer's **effect stack and then its styles**, as one op list
+/// (docs/impl/layer-styles.md §3, K-706).
+///
+/// **In plain terms.** A layer's styles are a second little stack that runs on
+/// the layer's own picture after its effects and before the transform
+/// photographs it. This resolves both at the same layer time and hands back one
+/// list of ops with one list of instance ids beside it, so nothing downstream —
+/// `run_ops`, the per-effect cache, the profiler's per-row milliseconds — learns
+/// that styles exist at all.
+///
+/// **The order the ops run is not the order the list is stored in**, and the
+/// difference is deliberate. §2's stored order is a *painting* order, back to
+/// front, which is what the panel and the Timeline show. But these ops run one
+/// after another on a single raster, and an interior style (Colour overlay)
+/// floods whatever alpha it finds: run a Drop shadow first and the overlay would
+/// paint the shadow too. So the interiors go first, on the layer's own alpha,
+/// and the outer styles — which add pixels *underneath* — come after, in reverse
+/// order so that the last one composited ends up furthest back. Because the
+/// stored list is sorted, the outers are exactly its leading pair, and the split
+/// costs a `take_while` rather than an allocation.
+//
+// ponytail: each outer style reads the raster's alpha at its point in the
+// chain, so a second outer style casts its shadow from the first one's soft
+// edge as well as from the layer. Ceiling: visible only with Drop shadow AND
+// Outer glow both live, which is package 2's pair — one of them ships in this
+// package. Upgrade: hold the pre-outer alpha in a texture and hand it to the
+// outer kernels. Trigger: the §2 order pixel test for shadow-under-glow.
+#[allow(clippy::too_many_arguments)]
+fn resolve_layer_fx(
+    layer: &lumit_core::model::Layer,
+    drivers: &lumit_core::fx::ResolvedDrivers,
+    effect_lt: f64,
+    frame_lt: f64,
+    diag_px: f32,
+    px_scale: f32,
+    markers: &lumit_core::fx::MarkerContext,
+    context: Arc<ExpressionContext>,
+) -> (Vec<Uuid>, lumit_core::fx::ResolvedStack) {
+    let (mut ids, mut ops) = lumit_core::fx::resolve_stack_temporal_named(
+        &layer.effects,
+        drivers,
+        effect_lt,
+        frame_lt,
+        diag_px,
+        px_scale,
+        markers,
+        context.clone(),
+    );
+    if layer.styles.is_empty() {
+        return (ids, ops);
+    }
+    let outers = lumit_core::fx::styles::outer_prefix(&layer.styles);
+    let (outer, interior) = layer.styles.split_at(outers);
+    // The interiors as one walk, then the outers one at a time and in reverse:
+    // each composites underneath what is already there, so the one run last is
+    // the one that ends up furthest back, and §2 puts the Drop shadow there.
+    let walks = std::iter::once(interior).chain((0..outer.len()).rev().map(|i| &outer[i..=i]));
+    for slice in walks {
+        let (style_ids, style_ops) = lumit_core::fx::resolve_stack_temporal_named(
+            slice,
+            drivers,
+            effect_lt,
+            frame_lt,
+            diag_px,
+            px_scale,
+            markers,
+            context.clone(),
+        );
+        ids.extend(style_ids);
+        ops.append(style_ops);
+    }
+    (ids, ops)
+}
+
 /// Build a comp's draw list recursively (preview side of Precomp layers).
 /// Bottom-up order; matte sources come from decoded pixels (precomp mattes
 /// await the GPU mask pass, mirroring export). The ordinary render entry: draws
@@ -693,7 +836,13 @@ pub fn build_comp_draws_at(
         lumit_core::fx::resolve_drivers_projected(&l.graph, dlt, ctx, Some(&audio), projection)
     };
 
-    let pixels_for = |layer: &lumit_core::model::Layer| -> Option<LayerPixels> {
+    // One layer's own picture at layer time `lt`, alone: its source pixels with
+    // its paint stamped in and its masks gating them, and nothing else — no
+    // effects, no transform, no puppet. What [`pixels_for`] is built on, and
+    // what a puppet's mesh is built over, which is why the time is a parameter
+    // rather than this frame's (docs/impl/puppet.md §1.1: the mesh is taken at
+    // the block's reference time).
+    let solo_at = |layer: &lumit_core::model::Layer, lt: f64| -> Option<LayerPixels> {
         let context = Arc::new(ExpressionContext {
             document: expr_doc.clone(),
             layer: Some(layer.id),
@@ -708,10 +857,6 @@ pub fn build_comp_draws_at(
         if layer.is_adjustment() {
             return None;
         }
-        // The layer's own clock, the same one its transform, its masks and its
-        // paint are read at (K-213) — a keyframed shape modifier travels with
-        // the layer exactly as a keyframed mask does.
-        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
 
         let raw = match &layer.kind {
             // Neither kind has pixels of its own. An Adjustment layer is a
@@ -773,7 +918,12 @@ pub fn build_comp_draws_at(
                 // a cleverer predicate is how the bug happened.
                 let plain = layer.masks.is_empty()
                     && layer.paint.is_empty()
-                    && !layer.effects.iter().any(|e| e.enabled);
+                    && !layer.effects.iter().any(|e| e.enabled)
+                    // A style draws on the layer's own raster exactly as an
+                    // effect does (K-706), so a styled solid needs its real
+                    // pixels for the same reason an effected one does — an
+                    // 8 × 8 tile has no edge for a shadow to fall off.
+                    && !layer.styles.iter().any(|e| e.enabled);
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     px_tile(&px, tw, th),
@@ -882,6 +1032,22 @@ pub fn build_comp_draws_at(
             );
             (rgba, w, h, natural)
         })
+    };
+
+    let pixels_for = |layer: &lumit_core::model::Layer| -> Option<LayerPixels> {
+        // The layer's own clock, the same one its transform, its masks and its
+        // paint are read at (K-213) — a keyframed shape modifier travels with
+        // the layer exactly as a keyframed mask does.
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+        let mut pixels = solo_at(layer, lt)?;
+        // Puppet last of the three (docs/impl/puppet.md §3): paint and masks
+        // decide what the picture *is*, and the puppet carries that picture
+        // through its mesh. The mesh is built over the same solo picture at the
+        // block's reference time, which is the alpha the pins were placed on.
+        if let Some(block) = &layer.puppet {
+            warp_puppet(&mut pixels, layer, block, lt, &solo_at);
+        }
+        Some(pixels)
     };
 
     // The layer inputs of a stack's enabled built-in `dof` and `light_wrap`
@@ -1175,6 +1341,44 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
+    // **The roto mattes — the coverage carriage** (K-710, docs/impl/roto.md §5).
+    // One slot per enabled `roto_brush` op that resolves to an op at all — the
+    // same two conditions `mask_paths_for` applies, so this list stays 1:1 with
+    // the ops `run_ops` walks, with its own counter there.
+    //
+    // The lookup is by (instance, **source** frame): a matte describes the
+    // file's frames (K-248), so it survives every transform, retime and preview
+    // tier this layer applies, and one shot's mattes serve every comp cutting
+    // it. `None` — outside the propagated span, nothing propagated yet, the
+    // cache folder deleted — is the effect's passthrough and never a fault.
+    //
+    // No lock is held past this call: the store clones an `Arc` out from under
+    // its own guard, and what lands here is that same allocation.
+    let roto_mattes_for = |layer: &lumit_core::model::Layer,
+                           source_frame: i64|
+     -> Vec<Option<crate::draw::RotoMatteDraw>> {
+        use lumit_core::model::EffectNamespace;
+        layer
+            .effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter(|e| e.effect.match_name == lumit_core::roto::ROTO_BRUSH)
+            .filter(|e| {
+                lumit_core::fx::BUILTIN_DEFS
+                    .get(&e.effect.match_name)
+                    .is_some_and(|def| def.is_image_op())
+            })
+            .map(|e| {
+                let (width, height, gray) = crate::roto::matte(e.id, source_frame)?;
+                Some(crate::draw::RotoMatteDraw {
+                    width,
+                    height,
+                    gray,
+                })
+            })
+            .collect()
+    };
+
     // **The birth schedules — the timing carriage** (points-stream.md §3.3,
     // K-474). One per enabled built-in that declares a Points output AND
     // resolves to an op at all — the same two conditions `mask_paths_for`
@@ -1330,6 +1534,15 @@ pub fn build_comp_draws_at(
         // held/sub-frame re-render must not re-sample (docs/impl/
         // temporal-rerender.md §5). Equal to `lt` on an ordinary render.
         let frame_lt = lumit_core::time::layer_time(frame_t, layer.start_offset.0);
+        // Which frame of the **file** this layer is showing (K-710). The plan
+        // worked it out to decide what to decode, the decode carried it here,
+        // and a Roto brush's matte is indexed by it — the document holds no
+        // frame rate for a media item, so this is the only place the answer is
+        // in hand. Zero for a layer with no decoded source, which has no
+        // propagated matte to find either.
+        let source_frame = pixels_by_layer
+            .get(&layer.id)
+            .map_or(0, |px| px.source_frame);
         // This layer's effects (docs/08 §3.25): a Posterize time scoped to *this
         // layer* holds this layer's OWN effect stack on the coarse grid — its
         // effects sample the held time while the transform and source below stay
@@ -1631,8 +1844,8 @@ pub fn build_comp_draws_at(
                     // sample_temporally == false resolve at the frame time in a
                     // held re-render (§5); equal to `lt` on an ordinary render.
                     let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
-                    lumit_core::fx::resolve_stack_temporal_named(
-                        &layer.effects,
+                    resolve_layer_fx(
+                        layer,
                         &drivers_for(layer, effect_lt, context.clone()),
                         effect_lt,
                         frame_lt,
@@ -1760,6 +1973,10 @@ pub fn build_comp_draws_at(
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
                     mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
                     mask_paths: mask_paths_for(layer, lt),
+                    // An adjustment layer has no source frames of its own, so
+                    // nothing was ever propagated through it: a Roto brush
+                    // there passes through, honestly.
+                    roto_mattes: Vec::new(),
                     points_schedules: points_schedules_for(layer, lt, frame_lt),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
@@ -1831,8 +2048,8 @@ pub fn build_comp_draws_at(
                 // at the frame time `frame_lt` (§5); on an ordinary render
                 // `frame_lt == lt`, so this is the plain resolve.
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
-                lumit_core::fx::resolve_stack_temporal_named(
-                    &layer.effects,
+                resolve_layer_fx(
+                    layer,
                     &drivers_for(layer, effect_lt, context.clone()),
                     effect_lt,
                     frame_lt,
@@ -1958,6 +2175,7 @@ pub fn build_comp_draws_at(
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(layer, lt),
+            roto_mattes: roto_mattes_for(layer, source_frame),
             points_schedules: points_schedules_for(layer, lt, frame_lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
@@ -2383,7 +2601,9 @@ mod parent_placement_tests {
             blend: BlendMode::Normal,
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -2685,7 +2905,9 @@ mod render_below_at_tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -3126,7 +3348,9 @@ mod render_below_at_tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: vec![post],
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }
@@ -3458,7 +3682,9 @@ mod render_below_at_tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: vec![e],
+            styles: Vec::new(),
             switches: Switches::default(),
             extra: serde_json::Map::new(),
         }

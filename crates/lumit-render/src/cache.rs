@@ -341,7 +341,9 @@ mod tests {
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
+                puppet: None,
                 effects: Vec::new(),
+                styles: Vec::new(),
                 switches: Switches::default(),
                 extra: serde_json::Map::new(),
             }],
@@ -548,6 +550,72 @@ mod tests {
             frame_key(&doc, &unpainted, 0, q, &probes).unwrap(),
             before,
             "an unpainted layer keeps the name it had"
+        );
+    }
+
+    /// A puppet pin moves pixels, so where it stands at a frame is part of that
+    /// frame's name — and Volume, which moves none, is not
+    /// (docs/impl/puppet.md §2.5, test 13).
+    #[test]
+    fn a_pin_at_a_frame_names_that_frame_but_volume_does_not() {
+        use lumit_core::puppet::{PuppetBlock, PuppetPin, PuppetPinKind};
+        let (doc, comp, item) = footage_comp();
+        let (q, probes) = (Quality::default(), probed(item));
+        let before = frame_key(&doc, &comp, 0, q, &probes).unwrap();
+
+        // One pin, keyed: at rest at t = 0 and dragged to `x` by t = 1 s.
+        let pinned = |x: f64| {
+            let key = |t: i64, value: f64| lumit_core::anim::Keyframe {
+                time: Rational::new(t, 1).unwrap(),
+                value,
+                interp_in: lumit_core::anim::SideInterp::Linear,
+                interp_out: lumit_core::anim::SideInterp::Linear,
+            };
+            let mut pin = PuppetPin::new(PuppetPinKind::Position, "Pin 1", 10.0, 10.0);
+            pin.id = Uuid::from_u128(9);
+            pin.x.animation = lumit_core::anim::Animation::Keyframed(vec![key(0, 10.0), key(1, x)]);
+            let mut block = PuppetBlock::new(Rational::ZERO);
+            block.pins.push(pin);
+            let mut c = comp.clone();
+            c.layers[0].puppet = Some(block);
+            c
+        };
+
+        let a = pinned(50.0);
+        let b = pinned(90.0);
+        assert_ne!(
+            frame_key(&doc, &a, 0, q, &probes).unwrap(),
+            before,
+            "a pinned layer is not the layer that was cached before it was pinned"
+        );
+        assert_eq!(
+            frame_key(&doc, &a, 0, q, &probes).unwrap(),
+            frame_key(&doc, &b, 0, q, &probes).unwrap(),
+            "at frame 0 both pins are at rest, and the same picture keeps one name"
+        );
+        assert_ne!(
+            frame_key(&doc, &a, 30, q, &probes).unwrap(),
+            frame_key(&doc, &b, 30, q, &probes).unwrap(),
+            "a second later the pins are in different places, and so are the pixels"
+        );
+
+        // Volume is sound. It has never named a frame and must not start.
+        let mut louder = a.clone();
+        louder.layers[0].volume_db = lumit_core::anim::Property::fixed(-6.0);
+        assert_eq!(
+            frame_key(&doc, &louder, 30, q, &probes).unwrap(),
+            frame_key(&doc, &a, 30, q, &probes).unwrap(),
+            "turning a layer down changes no pixel"
+        );
+
+        // And a layer nobody has pinned keeps exactly the name it had, so this
+        // retired nothing banked before puppets existed.
+        let mut unpinned = a;
+        unpinned.layers[0].puppet = None;
+        assert_eq!(
+            frame_key(&doc, &unpinned, 0, q, &probes).unwrap(),
+            before,
+            "an unpinned layer keeps the name it had"
         );
     }
 

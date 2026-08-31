@@ -560,6 +560,154 @@ pub mod particulate {
     }
 }
 
+/// **B15–B17 — the puppet's own three numbers** (docs/13 §2, K-704).
+///
+/// # In plain terms
+///
+/// Like Particulate's three above, these time one *feature* rather than the
+/// editor: the three things a puppeted layer costs. The warp is what every
+/// frame of a puppeted layer pays; the mesh build is what the first pin pays,
+/// once, and again whenever the layer's alpha changes under it; the solve is
+/// what a pin drag pays per frame at the worst mesh the engine will build.
+///
+/// All three are CPU, so unlike B12–B14 they need no graphics adapter — and no
+/// media and no comp either, which is why they run beside the six rather than
+/// inside them.
+///
+/// The fixture is the pathological one on purpose (docs/impl/puppet.md §1.3):
+/// a **fully covered** 1920×1080 layer, which is the shape puppet is *not*
+/// for — a cutout is a fraction of that — so every number here is an upper
+/// bound on the real thing.
+pub mod puppet {
+    use super::{elapsed_ms, Instant, Measurement};
+    use lumit_core::puppet::{
+        apply_puppet, build_mesh, solve, Factorisation, PuppetMesh, SolvePin, DEFAULT_DENSITY,
+        DEFAULT_EXPANSION,
+    };
+    use uuid::Uuid;
+
+    /// 1080p, as every other row assumes.
+    const SIZE: (u32, u32) = (1920, 1080);
+    /// Timed blocks are repeated and the **fastest** kept, for the reason
+    /// [`super::particulate`] gives: these ask "how much work is this", and the
+    /// honest estimator for that is the best run.
+    const REPEATS: u32 = 3;
+    /// Warps and solves per timed block — both are fast enough that one of them
+    /// would be timing the clock.
+    const RUNS: u32 = 5;
+
+    /// The density that lands a full-frame mesh just under the 1500-vertex cap,
+    /// which is where the solve is dearest. Coarser than the default because
+    /// the default over a whole frame does not fit the cap at all — it
+    /// auto-coarsens, which is what B16 measures.
+    const CAP_DENSITY: f64 = 40.0;
+
+    /// Measure all three.
+    pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
+        let (w, h) = SIZE;
+        let alpha = vec![255u8; (w as usize) * (h as usize)];
+
+        // B16 first: the other two need a mesh, and this is the one that builds
+        // it. Default density over a full frame is the auto-coarsening path.
+        let mut build_ms = f64::INFINITY;
+        for _ in 0..REPEATS {
+            let t = Instant::now();
+            let mesh = build_mesh(&alpha, w, h, DEFAULT_DENSITY, DEFAULT_EXPANSION)
+                .map_err(|e| format!("the full-frame mesh refused to build: {e:?}"))?;
+            build_ms = build_ms.min(elapsed_ms(t));
+            // Kept out of the timed region, and asserted so a mesh that quietly
+            // stopped covering anything cannot pass as a fast one.
+            if mesh.triangles.is_empty() {
+                return Err("the full-frame mesh came out empty".into());
+            }
+        }
+
+        let mesh = build_mesh(&alpha, w, h, DEFAULT_DENSITY, DEFAULT_EXPANSION)
+            .map_err(|e| format!("{e:?}"))?;
+        let (pins, factorisation) = two_pins(&mesh);
+        let solution = solve(&mesh, &pins, &factorisation);
+        // A puppet nothing moved warps nothing (§2.3's early-out), and a number
+        // measured off that would be a gate reading zero for ever.
+        if solution.identity || !solution.inert.is_empty() {
+            return Err("the bench's pins did not take hold of the mesh".into());
+        }
+
+        // B15: one warp of the whole frame, the per-frame cost of a puppet.
+        let mut rgba = vec![200u8; (w as usize) * (h as usize) * 4];
+        let mut warp_ms = f64::INFINITY;
+        for _ in 0..REPEATS {
+            let t = Instant::now();
+            for _ in 0..RUNS {
+                apply_puppet(
+                    &mut rgba,
+                    w,
+                    h,
+                    f64::from(w),
+                    f64::from(h),
+                    &mesh,
+                    &solution,
+                );
+            }
+            warp_ms = warp_ms.min(elapsed_ms(t) / f64::from(RUNS));
+        }
+
+        // B17: the per-frame solve at the vertex cap — the factorisation is
+        // held, as it is in the renderer, so what is timed is the right-hand
+        // side and the back-substitutions a moved pin actually costs.
+        let capped = build_mesh(&alpha, w, h, CAP_DENSITY, DEFAULT_EXPANSION)
+            .map_err(|e| format!("{e:?}"))?;
+        eprintln!(
+            "lumit-bench: puppet cap mesh {} vertices, default mesh {} vertices",
+            capped.vertices.len(),
+            mesh.vertices.len()
+        );
+        let (capped_pins, capped_factor) = two_pins(&capped);
+        let mut solve_ms = f64::INFINITY;
+        for _ in 0..REPEATS {
+            let t = Instant::now();
+            for _ in 0..RUNS {
+                let _ = solve(&capped, &capped_pins, &capped_factor);
+            }
+            solve_ms = solve_ms.min(elapsed_ms(t) / f64::from(RUNS));
+        }
+
+        let out = vec![
+            Measurement {
+                budget: "B15",
+                value_ms: warp_ms,
+                frames: u64::from(RUNS),
+            },
+            Measurement {
+                budget: "B16",
+                value_ms: build_ms,
+                frames: 1,
+            },
+            Measurement {
+                budget: "B17",
+                value_ms: solve_ms,
+                frames: u64::from(RUNS),
+            },
+        ];
+        for m in &out {
+            progress(*m);
+        }
+        Ok(out)
+    }
+
+    /// Two position pins well inside the frame — one held at rest, one dragged
+    /// a hundred pixels — and the factorisation they share.
+    fn two_pins(mesh: &PuppetMesh) -> (Vec<SolvePin>, Factorisation) {
+        let (w, h) = (f64::from(SIZE.0), f64::from(SIZE.1));
+        let mut pins = vec![
+            SolvePin::position(Uuid::from_u128(1), [w * 0.25, h * 0.5]),
+            SolvePin::position(Uuid::from_u128(2), [w * 0.75, h * 0.5]),
+        ];
+        let factorisation = lumit_core::puppet::factorise(mesh, &pins);
+        pins[1].now[1] += 100.0;
+        (pins, factorisation)
+    }
+}
+
 /// Milliseconds since `t`, as a float.
 fn elapsed_ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0

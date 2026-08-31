@@ -14151,8 +14151,9 @@ have to decide which member's edge you meant, and there is no honest answer to t
 ## 51. Puppet pins, in plain terms
 
 You have a cutout of a character on a layer, and you want the arm to wave without cutting
-the layer into pieces. The Puppet tools (designed in `docs/impl/puppet.md`; the engine half
-is built, the tools on the strip are not yet wired to it) do it the way a real puppet does:
+the layer into pieces. The Puppet tools (designed in `docs/impl/puppet.md`; the engine, the
+document, the render and the bridge are built, and the tools on the strip are not yet wired
+to any of it) do it the way a real puppet does:
 with a skeleton of sorts, and strings.
 
 The skeleton is a **mesh** — a net of small triangles laid over the opaque part of the
@@ -14206,6 +14207,43 @@ arrangements, come out with no answer at all; when that happens the engine slide
 net by the average of what the pins asked for rather than throwing up its hands. A puppet
 that moves slightly wrong is a bad frame; a puppet that crashes the render is a bad
 evening.
+
+### What the project file keeps, and what the cache has to know
+
+The document stores only the pins and three numbers: the moment the net was traced from,
+how fine the triangles are, and how far the opaque region is grown before tracing (a few
+pixels, so the edge of the picture sits comfortably inside the net rather than on its knife
+edge). Each pin is an ordinary animatable property, the same kind of thing a position or an
+opacity is, so it gets the same stopwatch, the same diamonds and the same graph with no new
+machinery anywhere. A layer nobody has pinned writes nothing at all into the file, which is
+how an old project opens and saves back byte for byte.
+
+The cache needed telling. Every finished frame is filed under a **name** made from
+everything that went into it, and a frame can be served again only because two frames with
+the same name must be the same picture. A pin moves pixels, so where each pin stands *at
+that moment* is now part of the name: drag a pin and exactly the frames that change are
+retired, while a layer with no puppet keeps the name it always had. Volume, by contrast,
+stays out — it is sound, and sound changes no pixel. Getting this wrong is a specific and
+maddening bug: the edit lands, the document changes, and the picture on screen does not
+move until something else in the comp happens to nudge it.
+
+### Where the warp happens, and what it costs
+
+The redraw goes in at the same point in the render where paint strokes are stamped and
+masks are applied — the one place in the whole pipeline where a layer's own pixels are
+sitting in ordinary memory rather than on the graphics card. The net itself is traced from
+that same picture at the reference frame, through the same code, so the shape the net was
+cut from can never drift from the shape being warped.
+
+Three of the numbers in `docs/13` are now the puppet's, measured on the worst case on
+purpose — a 1080p layer covered corner to corner, which is precisely what puppet is *not*
+for. Read them as a rate: about forty billionths of a second per pixel warped, so a
+character-sized cutout costs about ten milliseconds a frame and scrubs comfortably. Two of
+the three are looser than the design first guessed, and honestly so: a full-frame warp is
+two million bilinear samples on one processor thread, and the solve at the largest net the
+engine will build is some eighteen million multiplications. The design already named the
+two upgrades — do the warp on the graphics card, and store the big matrix sparsely — and
+these measurements are what says when they are worth doing.
 
 ## 52. Layer styles, or the wardrobe a layer wears, in plain terms
 

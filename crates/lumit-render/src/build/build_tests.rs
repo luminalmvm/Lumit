@@ -45,7 +45,9 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -140,7 +142,9 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -316,7 +320,9 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -399,7 +405,9 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -516,7 +524,9 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -640,7 +650,9 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -787,7 +799,9 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -852,6 +866,140 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
     assert_eq!(px(2, 2), [255, 255, 255], "and the solid elsewhere");
 }
 
+/// A puppet pin carries the layer's pixels with it, at the same seam paint and
+/// masks act on (docs/impl/puppet.md §3, PU2) — checked where the pixels are
+/// made, as the paint test above is, rather than through a GPU.
+///
+/// One pin, so the solve short-circuits to a pure translation (§2.3) and the
+/// mark it drags is exactly eight pixels lower — an end-to-end assertion with
+/// no tolerance in it.
+#[test]
+fn a_puppet_pin_carries_the_layers_pixels() {
+    let solid_id = Uuid::now_v7();
+    let mut layer = Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: "solid".into(),
+        kind: LayerKind::Solid { def: solid_id },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        puppet: None,
+        effects: Vec::new(),
+        styles: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    // A red mark to follow, in a white square that is otherwise featureless.
+    let mut stroke = lumit_core::paint::PaintStroke::new("Brush 1", vec![(20.0, 20.0)]);
+    stroke.width = 6.0;
+    stroke.colour = LinearColour([1.0, 0.0, 0.0, 1.0]);
+    layer.paint.push(stroke);
+
+    let key = |t: i64, value: f64| lumit_core::anim::Keyframe {
+        time: Rational::new(t, 1).unwrap(),
+        value,
+        interp_in: lumit_core::anim::SideInterp::Linear,
+        interp_out: lumit_core::anim::SideInterp::Linear,
+    };
+    let mut block = lumit_core::puppet::PuppetBlock::new(Rational::ZERO);
+    block.density = 8.0;
+    let mut pin = lumit_core::puppet::PuppetPin::new(
+        lumit_core::puppet::PuppetPinKind::Position,
+        "Pin 1",
+        20.0,
+        20.0,
+    );
+    // Placed at the reference time and dragged eight pixels down by one second.
+    pin.y.animation = lumit_core::anim::Animation::Keyframed(vec![key(0, 20.0), key(1, 28.0)]);
+    block.pins.push(pin);
+    layer.puppet = Some(block);
+
+    let comp = Composition {
+        master_volume_db: 0.0,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: "Comp".into(),
+        width: 40,
+        height: 40,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: vec![layer],
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    let mut doc = Document::new();
+    doc.items.push(lumit_core::model::ProjectItem::Solid(
+        lumit_core::model::SolidDef {
+            id: solid_id,
+            name: "White".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 40,
+            height: 40,
+            extra: serde_json::Map::new(),
+        },
+    ));
+    doc.items
+        .push(lumit_core::model::ProjectItem::Composition(comp.clone()));
+
+    let map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    let one_second = |t: f64| {
+        let mut visited = vec![comp.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &comp,
+            t,
+            &map,
+            &mut visited,
+        );
+        let DrawSource::Pixels { rgba, tex_w, .. } = &draws[0].source else {
+            panic!("a solid draws pixels");
+        };
+        let w = *tex_w;
+        let rgba = rgba.clone();
+        move |x: u32, y: u32| {
+            let i = ((y * w + x) as usize) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        }
+    };
+
+    // At the reference time every pin is where it was placed, so the puppet is
+    // an identity and the picture is the one paint left (§2.3's early-out).
+    let at_rest = one_second(0.0);
+    assert_eq!(at_rest(20, 20), [255, 0, 0, 255], "the mark, unmoved");
+
+    let dragged = one_second(1.0);
+    assert_eq!(
+        dragged(20, 28),
+        [255, 0, 0, 255],
+        "the pin dragged the mark eight pixels down with it"
+    );
+    assert_eq!(
+        dragged(20, 20),
+        [255, 255, 255, 255],
+        "and left white where it used to be"
+    );
+}
+
 /// **The matte list is 1:1 with the ops that will consume it** (K-395, the
 /// K-387 one-predicate/one-order rule with its second predicate).
 ///
@@ -905,7 +1053,9 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -1044,7 +1194,9 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
             lumit_core::mask::Mask::ellipse(48.0, 48.0, 8.0, 8.0),
         ],
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -1165,7 +1317,9 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
             ..mask.clone()
         }],
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };
@@ -1256,7 +1410,9 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };

@@ -68,7 +68,9 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     };

@@ -310,6 +310,15 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
                 // backfill: a per cent is only a pixel count once the frame is
                 // known.
                 lumit_core::fx::migrate_percent_to_px(&mut layer.effects, w, h);
+                // The layer's styles (K-706) take the same forward migration —
+                // they are effect instances, and a style whose schema grew
+                // needs its new rows just as much. And then §1's invariants are
+                // restored: a file hand-edited (or written by a tool that did
+                // not know the order) comes back one-per-style and sorted, so
+                // the render never has to wonder what order it is looking at.
+                lumit_core::fx::backfill_builtin_params(&mut layer.styles);
+                lumit_core::fx::migrate_percent_to_px(&mut layer.styles, w, h);
+                lumit_core::fx::normalise_styles(&mut layer.styles);
             }
         }
     }
@@ -417,6 +426,19 @@ pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
 pub fn track_cache_dir() -> Option<PathBuf> {
     let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
     Some(dirs.cache_dir().join("track"))
+}
+
+/// Roto-matte sidecar directory (docs/10-FILE-FORMAT.md §3, K-710) — where a
+/// propagated matte is parked so a correction re-solves only the frames it
+/// spoiled, and the next session re-solves none of them.
+///
+/// Global for [`track_cache_dir`]'s reason and keyed the same way: the matte
+/// describes the *file*, the settings and the strokes, not the project that
+/// happened to ask, so one shot's mattes serve every composition that cuts it.
+/// Rebuildable and deletable at any time, like every tier under this root.
+pub fn roto_cache_dir() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.cache_dir().join("roto"))
 }
 
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
@@ -2780,7 +2802,9 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: vec![blur],
+            styles: Vec::new(),
             graph: LayerGraph::default(),
             switches: Default::default(),
             extra: serde_json::Map::new(),
@@ -3113,7 +3137,9 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             paint: Vec::new(),
+            puppet: None,
             effects: chain,
+            styles: Vec::new(),
             graph: Default::default(),
             switches: Default::default(),
             extra: serde_json::Map::new(),

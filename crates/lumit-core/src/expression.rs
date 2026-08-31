@@ -472,11 +472,13 @@ mod tests {
             blend: Default::default(),
             masks: Vec::new(),
             effects: Vec::new(),
+            styles: Vec::new(),
             switches: Switches::default(),
             interpolation: Default::default(),
             parked_flow: None,
             markers: Vec::new(),
             paint: Default::default(),
+            puppet: None,
             extra: serde_json::Map::new(),
         }
     }

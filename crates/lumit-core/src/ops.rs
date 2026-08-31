@@ -152,6 +152,18 @@ pub enum Op {
         layer: Uuid,
         strokes: Vec<crate::paint::PaintStroke>,
     },
+    /// Replace a layer's whole puppet block, or take it away
+    /// (docs/impl/puppet.md §4, K-704).
+    ///
+    /// The whole block, exactly invertible, exactly as `SetLayerMasks` and
+    /// `SetLayerPaint` are: a pin added, dragged, renamed or deleted is one
+    /// shape of edit and one undo step. `None` is a layer with no puppet at
+    /// all, which is how the block itself is undone.
+    SetLayerPuppet {
+        comp: Uuid,
+        layer: Uuid,
+        puppet: Option<crate::puppet::PuppetBlock>,
+    },
     /// Replace a shape layer's whole contents (docs/03 §7.2, K-237).
     ///
     /// The whole list, exactly invertible, like `SetLayerMasks` and
@@ -688,6 +700,7 @@ impl Op {
             Op::RenameLayer { .. } => "Rename layer",
             Op::SetLayerMasks { .. } => "Edit masks",
             Op::SetLayerPaint { .. } => "Paint",
+            Op::SetLayerPuppet { .. } => "Edit puppet",
             Op::SetShapeContents { .. } => "Edit shape",
             Op::SetLayerEffects { .. } => "Edit effects",
             Op::SetLayerGraph { .. } => "Edit drivers",
@@ -778,6 +791,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::RenameLayer { comp, layer, .. }
         | Op::SetLayerMasks { comp, layer, .. }
         | Op::SetLayerPaint { comp, layer, .. }
+        | Op::SetLayerPuppet { comp, layer, .. }
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
@@ -1043,6 +1057,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 strokes: previous,
+            })
+        }
+        Op::SetLayerPuppet {
+            comp,
+            layer,
+            puppet,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.puppet, puppet.clone());
+            Ok(Op::SetLayerPuppet {
+                comp: *comp,
+                layer: *layer,
+                puppet: previous,
             })
         }
         Op::SetShapeContents {

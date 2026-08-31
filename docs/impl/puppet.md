@@ -1,6 +1,8 @@
 # The Puppet tools (K-704)
 
-**Status: PU1 built (`lumit_core::puppet`); PU2 and PU3 outstanding.**
+**Status: PU1 and PU2 built (`lumit_core::puppet`, the seam in `lumit-render`'s `build.rs`,
+`Layer::puppet`, the frame-cache key, `lumit-bench`'s B15–B17, the bridge's five calls);
+PU3 — the tools, the overlay and the panel — outstanding.**
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1.7 names the four tools — Puppet position pin, Puppet
 starch pin, Puppet overlap pin, Puppet bend pin — and K-228 keeps them on the strip,
 disabled, until there is an engine behind them. This note is the binding *how* for that
@@ -35,9 +37,29 @@ can wave from the wrist without the wrist travelling.
 The mesh is built over the layer's **own rendered picture at natural size**, at the puppet
 block's **reference time** — the layer time at which the first pin was placed — with paint
 and masks already applied, because a mask gates the picture and the mesh should cover what
-the mask leaves ([paint.md](paint.md) shows the same closure in `lumit-render`'s
-`build.rs`; PU2 factors an engine helper that renders one layer solo this way). Coverage is
-the alpha channel of that buffer.
+the mask leaves. Coverage is the alpha channel of that buffer.
+
+PU2 built this as `solo_at(layer, lt)` in `lumit-render`'s `build.rs`: the closure that
+already made a layer's source pixels and ran `apply_strokes` and `apply_masks` over them,
+with the layer time it works at turned into a parameter. `pixels_for` is now that closure
+at *this* frame's time, and the mesh is the same closure at the reference time — one code
+path, so the picture the mesh is cut from cannot drift from the picture being warped.
+Two things it settles:
+
+- **The buffer may not be at natural size** (a reduced preview resolution hands over a
+  smaller one), so its alpha is sampled up to natural by
+  `lumit_core::puppet::alpha_at_natural` before the outline is walked. Nearest, not
+  bilinear: the coverage is about to be thresholded at 10 % and grown by three pixels. A
+  consequence worth naming: the mesh at draft resolution is not bit-identical to the mesh
+  at full, so it hashes differently and is built and cached separately — which is honest,
+  because the frame cache already names the resolution tier.
+- **Footage is sampled from the frame in hand**, not decoded again at the reference time.
+  The decode planner schedules one frame per layer per rendered frame; asking it for a
+  second moment is a change to the plan, not to this seam. For every kind that rasterises
+  itself — solid, text, shape — and for footage whose silhouette does not move, this is
+  exactly right; for footage whose alpha changes over the shot it means the mesh is cut
+  from the current frame's alpha rather than the reference frame's. Marked in the code with
+  its trigger; the fix is a decode job at the reference time.
 
 - **Coverage iso-value: alpha ≥ 25** (10%), not 128. Faint content — smoke, glow, soft
   antialiased edges — is still content, and a mesh cut at 50% alpha drops the fringe of
@@ -261,10 +283,24 @@ The warp, exactly:
    than NaNs.
 
 Cost: one bilinear-resample pass over the covered pixels — the same order of work as a
-paint stamp or a mask apply at the same size. **Budget, gated in `lumit-bench` (PU2): a
-1920×1080 layer fully covered at default density warps in ≤ 8 ms single-threaded on the
-CI baseline machine; mesh build (extraction + simplification + triangulation) ≤ 100 ms at
-natural 1080p; per-frame solve ≤ 1 ms at the vertex cap.**
+paint stamp or a mask apply at the same size. **Budgets, gated in `lumit-bench` as
+docs/13 §2's B15–B17** (PU2, `scenarios::puppet`, fixture: a 1920×1080 layer fully
+covered at default density): warp ≤ 80 ms, mesh build ≤ 100 ms, per-frame solve ≤ 8 ms at
+the vertex cap.
+
+Two of those three are **looser than this note first wrote them** (8 ms and 1 ms), and
+PU2's measurements are why — K-712 records the change and docs/13 §2 carries the reasoning.
+The warp is one barycentric and one bilinear resample per pixel in f64; two million of them
+do not fit 8 ms on one thread, and 8 ms is what the GPU warp below is *for*. The solve at
+the cap is a forward and back substitution through a dense 3000×3000 factor plus two
+1500×1500 ones — about eighteen million multiply-adds, which is milliseconds rather than
+the microseconds §2.5 estimated, and the sparse factorisation §2.4 names is what closes it.
+Both upgrade paths already carried an observable trigger; both triggers have fired. What
+the rows do meanwhile is stop either number getting worse.
+
+Read the warp budget as a **rate — about 40 ns a pixel warped** — because the fixture is
+the pathological case on purpose. Puppet is a cutout tool: a 400×600 arm is a fifteenth of
+a full frame and warps in about 10 ms.
 
 ## 4. Storage
 
@@ -399,10 +435,13 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
   Cholesky pair; the mesh and factorisation caches; tests 1–12. Pure engine, no bridge, no
   UI. `apply_puppet` itself lands here rather than in PU2, because tests 8 and 12 are pixel
   tests and a test that cannot run is not a test; what PU2 adds is the *call* at the seam.
-- **PU2 — model, seam, bridge**: `PuppetBlock`/`PuppetPin` on `Layer` (serde
-  round-trip), the solo-render-at-reference-time helper, the `apply_puppet` call at the
-  paint/masks seam, frame-cache key, bench scenario + budget gates,
-  bridge API for the block and pins (codegen once), tests 13–14.
+- **PU2 — model, seam, bridge** — **built**: `PuppetBlock`/`PuppetPin` on `Layer` (serde
+  round-trip, absent from the file when nobody has pinned the layer), `solo_at` at the
+  paint/masks seam and the `apply_puppet` call after it, the block in the frame-cache key,
+  `lumit-bench`'s B15–B17 and their docs/13 rows, and the bridge's `get_puppet` /
+  `set_puppet` / `add_puppet_pin` / `set_puppet_pin` / `delete_puppet_pin` over one
+  `Op::SetLayerPuppet`. Tests 13–14, plus an end-to-end one the plan did not name: a pinned
+  solid whose painted mark the build closure carries eight pixels down.
 - **PU3 — tools, overlay, panel**: arm the four tools (K-228 flip), tool options (Density,
   Expansion), the mesh ghost and pin overlay, gestures and document commands, the Timeline
   rows, every string through `app_en.arb` (refusal messages, pin lane labels, options) —

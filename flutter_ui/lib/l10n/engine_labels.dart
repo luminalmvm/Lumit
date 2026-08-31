@@ -937,6 +937,7 @@ Map<String, String> get _table => {
       "Rename layer": l10n.histRenameLayer,
       "Edit masks": l10n.histEditMasks,
       "Paint": l10n.histPaint,
+      "Edit puppet": l10n.histEditPuppet,
       "Edit shape": l10n.histEditShape,
       "Edit effects": l10n.histEditEffects,
       "Edit drivers": l10n.histEditDrivers,

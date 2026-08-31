@@ -79,6 +79,17 @@ fn run() -> Result<(), String> {
         },
     )?);
 
+    // The puppet's three (docs/13 §2 B15-B17, K-704). CPU only: no media, no
+    // comp and no adapter, so they run wherever the harness runs.
+    results.extend(lumit_bench::scenarios::puppet::budgets(
+        &mut |m: Measurement| {
+            println!(
+                "{}",
+                serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+            );
+        },
+    )?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =

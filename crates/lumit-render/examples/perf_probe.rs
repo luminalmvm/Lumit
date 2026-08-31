@@ -49,7 +49,9 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         blend: Default::default(),
         masks: Vec::new(),
         paint: Vec::new(),
+        puppet: None,
         effects: Vec::new(),
+        styles: Vec::new(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     }
