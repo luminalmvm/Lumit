@@ -85,7 +85,7 @@ class BridgeCompModel {
   final F32Array4 background;
   final List<BridgeLayerEntry> layers;
 
-  /// The comp's layer groups (K-700), in document order and already resolved
+  /// The comp's layer groups (K-702), in document order and already resolved
   /// to the run each one draws over. Empty for a comp nobody has grouped,
   /// which is every comp until someone presses Ctrl+G.
   final List<BridgeLayerGroup> groups;
@@ -231,7 +231,7 @@ class BridgeCompSize {
 }
 
 /// Which of the four broadcast switches a group header press moves
-/// ([`CompositionReference::set_group_switch`], K-700). The same four switches
+/// ([`CompositionReference::set_group_switch`], K-702). The same four switches
 /// a layer row already carries — a group press just sets them on every member
 /// at once, as one undo step.
 enum BridgeGroupSwitch {
@@ -265,7 +265,7 @@ class BridgeLayerEntry {
           info == other.info;
 }
 
-/// One **layer group** as the Timeline draws it (K-700): the header row's
+/// One **layer group** as the Timeline draws it (K-702): the header row's
 /// name, colour and switch faces, the members folded under it, and the span
 /// its combined bar covers.
 ///
@@ -808,7 +808,7 @@ class CompositionReference {
         that: this,
       );
 
-  /// Fold the given layers into a new group (K-700) and answer its id.
+  /// Fold the given layers into a new group (K-702) and answer its id.
   ///
   /// Refused with [`BridgeError::OpError`] when they are not an unbroken run
   /// of the stack, or when one of them is already in a group — see
@@ -1246,7 +1246,7 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceSetGroupName(
               that: this, group: group, name: name);
 
-  /// Set one switch on **every member** of a group, as one undo step (K-700).
+  /// Set one switch on **every member** of a group, as one undo step (K-702).
   ///
   /// The broadcast the group header's switch cells perform: the face reads on
   /// only when all of them are on ([`BridgeLayerGroup::visible`] and friends),
@@ -1349,7 +1349,7 @@ class CompositionReference {
           that: this, span: span);
 
   /// Slide every member of a group along the timeline by `delta` frames, as
-  /// one undo step — what dragging the group's combined bar commits (K-700).
+  /// one undo step — what dragging the group's combined bar commits (K-702).
   ///
   /// A **move**, never a trim: each member's in point, out point and start
   /// offset all travel together, so the group's contents keep their timing

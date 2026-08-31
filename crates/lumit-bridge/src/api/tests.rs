@@ -1103,6 +1103,7 @@ fn effect_with_every_kind() -> lumit_core::model::EffectInstance {
             version: 1,
             extra: serde_json::Map::new(),
         },
+        roto: None,
         enabled: true,
         params: vec![
             param(
@@ -4907,6 +4908,92 @@ fn a_shape_layer_refuses_art_that_is_not_a_shape() {
         layer.set_shape_contents(vec![shape_item("Rectangle", 0.0, 0.0, 10.0)], None),
         Err(BridgeError::NotShape)
     ));
+}
+
+// --- Puppet: the block and its pins (K-704) -------------------------------
+
+fn puppet_pin(name: &str, x: f64, y: f64) -> crate::api::layer::BridgePuppetPin {
+    use crate::api::effect::BridgeScalar;
+    use crate::api::layer::{BridgePuppetPin, BridgePuppetPinKind};
+    BridgePuppetPin {
+        id: Uuid::now_v7(),
+        name: name.into(),
+        kind: BridgePuppetPinKind::Position,
+        x: BridgeScalar::Static(x),
+        y: BridgeScalar::Static(y),
+        rotation: BridgeScalar::Static(0.0),
+        scale: BridgeScalar::Static(100.0),
+        amount: BridgeScalar::Static(0.0),
+        extent: 50.0,
+    }
+}
+
+/// The whole puppet surface in one pass: no block to begin with, a block made,
+/// pins added, moved, renamed and deleted — each one op and one undo step, the
+/// same promise a brush drag makes.
+#[test]
+fn a_puppet_is_made_pinned_moved_and_undone_a_step_at_a_time() {
+    use crate::api::effect::{BridgeRational, BridgeScalar};
+    use crate::api::layer::BridgePuppet;
+    let (project, layer) = project_with_layer();
+    assert!(layer.get_puppet().expect("puppet").is_none());
+
+    // A pin before there is a block is a calm refusal, not an invented block:
+    // only the click that places the first pin knows the reference time.
+    assert!(matches!(
+        layer.add_puppet_pin(puppet_pin("Pin 1", 10.0, 10.0)),
+        Err(BridgeError::NoPuppet)
+    ));
+
+    layer
+        .set_puppet(Some(BridgePuppet {
+            reference_time: BridgeRational { num: 0, den: 1 },
+            density: 24.0,
+            expansion: 3.0,
+            pins: Vec::new(),
+        }))
+        .expect("block made");
+    let pin = puppet_pin("Pin 1", 10.0, 10.0);
+    layer.add_puppet_pin(pin.clone()).expect("pinned");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(read.density, 24.0);
+    assert_eq!(read.pins.len(), 1);
+    assert_eq!(read.pins[0].name, "Pin 1");
+    assert_eq!(read.pins[0].x, BridgeScalar::Static(10.0));
+
+    // Moving a pin is writing its position back, exactly as a mask's opacity is
+    // dragged; renaming it rides the same call.
+    let mut moved = pin.clone();
+    moved.x = BridgeScalar::Static(42.0);
+    moved.name = "Elbow".into();
+    layer.set_puppet_pin(moved).expect("moved");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(read.pins[0].x, BridgeScalar::Static(42.0));
+    assert_eq!(read.pins[0].name, "Elbow");
+
+    project.undo().expect("undone");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(
+        read.pins[0].x,
+        BridgeScalar::Static(10.0),
+        "one drag, one undo step"
+    );
+
+    // A stale id is a calm error rather than an edit landing on another pin.
+    assert!(matches!(
+        layer.delete_puppet_pin(Uuid::now_v7()),
+        Err(BridgeError::NoSuchPin)
+    ));
+    layer.delete_puppet_pin(pin.id).expect("deleted");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert!(
+        read.pins.is_empty(),
+        "the block outlives its last pin: the mesh is still the one it was built from"
+    );
+
+    // And the block itself comes away, which is what undoing the first pin means.
+    layer.set_puppet(None).expect("removed");
+    assert!(layer.get_puppet().expect("puppet").is_none());
 }
 
 // --- Paint: strokes on a layer (K-227) ------------------------------------
@@ -10809,6 +10896,7 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
             version: 1,
             extra: serde_json::Map::new(),
         },
+        roto: None,
         enabled: true,
         params: Vec::new(),
         sample_temporally: true,

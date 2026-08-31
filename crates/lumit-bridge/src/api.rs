@@ -142,6 +142,11 @@ pub enum BridgeError {
     EmptyPath,
     /// The edit named a mask this layer does not have.
     NoSuchMask,
+    /// The edit named a pin this layer's puppet does not have.
+    NoSuchPin,
+    /// A pin edit on a layer with no puppet block. The first pin is what makes
+    /// the block, and only the click that places it knows the reference time.
+    NoPuppet,
     /// A paint stroke with no points in it (K-227).
     EmptyStroke,
     /// No stroke of that id on this layer.
@@ -262,6 +267,8 @@ impl fmt::Display for BridgeError {
             BridgeError::NoClipThere => write!(f, "No clip under the playhead"),
             BridgeError::EmptyPath => write!(f, "A mask needs at least two points"),
             BridgeError::NoSuchMask => write!(f, "No such mask on this layer"),
+            BridgeError::NoSuchPin => write!(f, "No such puppet pin on this layer"),
+            BridgeError::NoPuppet => write!(f, "That layer has no puppet yet"),
             BridgeError::EmptyStroke => write!(f, "A paint stroke needs at least one point"),
             BridgeError::NoSuchStroke => write!(f, "No such paint stroke on this layer"),
             BridgeError::NotShape => write!(f, "That layer is not a shape layer"),

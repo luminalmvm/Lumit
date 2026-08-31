@@ -497,6 +497,194 @@ pub struct BridgeStroke {
     pub clone_offset_y: f64,
 }
 
+/// Which of the four Puppet tools placed a pin (docs/07 §1.7, K-704).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgePuppetPinKind {
+    /// Takes hold of a spot and drags it.
+    Position,
+    /// Stiffens the region around it, so a torso stays rigid while a limb bends.
+    Starch,
+    /// Says which part draws in front where the picture folds over itself.
+    Overlap,
+    /// Turns and scales the region around it without travelling.
+    Bend,
+}
+
+/// One puppet pin, in layer pixels — a point parameter is pixels everywhere in
+/// Lumit, and the mesh lives in the layer's own pixels at natural size.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgePuppetPin {
+    pub id: Uuid,
+    pub name: String,
+    pub kind: BridgePuppetPinKind,
+    /// Where the pin stands, animatable exactly as a mask's opacity is, on the
+    /// composition's clock (K-213) — so the Timeline row carries the same
+    /// stopwatch and the same diamonds, and dragging a pin with the stopwatch
+    /// on lands a keyframe.
+    pub x: BridgeScalar,
+    pub y: BridgeScalar,
+    /// Bend only: degrees, and per cent with 100 the natural size.
+    pub rotation: BridgeScalar,
+    pub scale: BridgeScalar,
+    /// Starch 0..100; overlap −100..100, positive in front.
+    pub amount: BridgeScalar,
+    /// How far a starch, overlap or bend pin reaches, in rest-pose pixels. Not
+    /// animatable: which vertices a pin reaches is a fact about the mesh at
+    /// rest, and that is what lets the solver factor its matrices once.
+    pub extent: f64,
+}
+
+/// A layer's puppet: the pins, and the three numbers the mesh under them is
+/// built from (docs/impl/puppet.md §4).
+///
+/// No triangle crosses the seam. The mesh is rebuilt from the layer's own alpha
+/// at [`Self::reference_time`] and cached in the engine, so a future
+/// triangulator changes nothing in any saved project or any panel.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgePuppet {
+    /// When the first pin was placed — the moment whose alpha the mesh is cut
+    /// from. Composition time, as every other time across this seam is.
+    pub reference_time: BridgeRational,
+    /// Target triangle edge in pixels at natural size: smaller is suppler and
+    /// dearer.
+    pub density: f64,
+    /// How far the opaque region is grown before the outline is walked, px.
+    pub expansion: f64,
+    pub pins: Vec<BridgePuppetPin>,
+}
+
+impl BridgePuppetPinKind {
+    #[frb(ignore)]
+    fn read(kind: lumit_core::puppet::PuppetPinKind) -> Self {
+        use lumit_core::puppet::PuppetPinKind as K;
+        match kind {
+            K::Position => Self::Position,
+            K::Starch => Self::Starch,
+            K::Overlap => Self::Overlap,
+            K::Bend => Self::Bend,
+        }
+    }
+
+    #[frb(ignore)]
+    fn write(self) -> lumit_core::puppet::PuppetPinKind {
+        use lumit_core::puppet::PuppetPinKind as K;
+        match self {
+            Self::Position => K::Position,
+            Self::Starch => K::Starch,
+            Self::Overlap => K::Overlap,
+            Self::Bend => K::Bend,
+        }
+    }
+}
+
+impl BridgePuppetPin {
+    #[frb(ignore)]
+    fn read_at(pin: &lumit_core::puppet::PuppetPin, offset: Rational) -> Self {
+        Self {
+            id: pin.id,
+            name: pin.name.clone(),
+            kind: BridgePuppetPinKind::read(pin.kind),
+            x: BridgeScalar::read_at(&pin.x, offset),
+            y: BridgeScalar::read_at(&pin.y, offset),
+            rotation: BridgeScalar::read_at(&pin.rotation, offset),
+            scale: BridgeScalar::read_at(&pin.scale, offset),
+            amount: BridgeScalar::read_at(&pin.amount, offset),
+            extent: pin.extent,
+        }
+    }
+
+    /// The engine's pin this describes. Every channel is converted before any
+    /// of them is assigned, so a bad fifth channel cannot leave a pin half
+    /// written; the extent is clamped rather than trusted, because a negative
+    /// or infinite radius would reach nothing for ever after.
+    #[frb(ignore)]
+    fn write_at(&self, offset: Rational) -> Result<lumit_core::puppet::PuppetPin, BridgeError> {
+        let x = self.x.animation_at(offset)?;
+        let y = self.y.animation_at(offset)?;
+        let rotation = self.rotation.animation_at(offset)?;
+        let scale = self.scale.animation_at(offset)?;
+        let amount = self.amount.animation_at(offset)?;
+        let property = |animation| Property {
+            animation,
+            extra: serde_json::Map::new(),
+        };
+        Ok(lumit_core::puppet::PuppetPin {
+            id: self.id,
+            name: self.name.clone(),
+            kind: self.kind.write(),
+            x: property(x),
+            y: property(y),
+            rotation: property(rotation),
+            scale: property(scale),
+            amount: property(amount),
+            extent: if self.extent.is_finite() {
+                self.extent.clamp(1.0, 10_000.0)
+            } else {
+                lumit_core::puppet::DEFAULT_EXTENT
+            },
+            extra: serde_json::Map::new(),
+        })
+    }
+}
+
+impl BridgePuppet {
+    #[frb(ignore)]
+    fn read_at(block: &lumit_core::puppet::PuppetBlock, offset: Rational) -> Self {
+        let reference = block
+            .reference_time
+            .checked_add(offset)
+            .unwrap_or(block.reference_time);
+        Self {
+            reference_time: BridgeRational {
+                num: reference.num(),
+                den: reference.den(),
+            },
+            density: block.density,
+            expansion: block.expansion,
+            pins: block
+                .pins
+                .iter()
+                .map(|p| BridgePuppetPin::read_at(p, offset))
+                .collect(),
+        }
+    }
+
+    /// The engine's block this describes, on the layer's own clock.
+    ///
+    /// Density and expansion are clamped, not trusted: a density of zero or a
+    /// negative expansion is a mesh that refuses to build, and a refusal the
+    /// user could not act on is worse than a number quietly kept sane.
+    #[frb(ignore)]
+    fn write_at(&self, offset: Rational) -> Result<lumit_core::puppet::PuppetBlock, BridgeError> {
+        let reference_time = Rational::new(self.reference_time.num, self.reference_time.den)
+            .map_err(|_| BridgeError::InvalidTime)?
+            .checked_sub(offset)
+            .map_err(|_| BridgeError::InvalidTime)?;
+        let mut pins = Vec::with_capacity(self.pins.len());
+        for pin in &self.pins {
+            pins.push(pin.write_at(offset)?);
+        }
+        Ok(lumit_core::puppet::PuppetBlock {
+            reference_time,
+            density: if self.density.is_finite() {
+                self.density.clamp(2.0, 500.0)
+            } else {
+                lumit_core::puppet::DEFAULT_DENSITY
+            },
+            expansion: if self.expansion.is_finite() {
+                self.expansion.clamp(0.0, 100.0)
+            } else {
+                lumit_core::puppet::DEFAULT_EXPANSION
+            },
+            pins,
+            extra: serde_json::Map::new(),
+        })
+    }
+}
+
 impl BridgeStroke {
     #[frb(ignore)]
     fn read_at(stroke: &lumit_core::paint::PaintStroke, offset: Rational) -> Self {
@@ -2387,6 +2575,108 @@ impl LayerReference {
             comp: self.comp_id,
             layer: self.layer_id,
             strokes,
+        })
+    }
+
+    /// This layer's puppet, or `None` on a layer nobody has pinned — which is
+    /// most layers (docs/impl/puppet.md §4, K-704).
+    #[frb(sync)]
+    pub fn get_puppet(&self) -> Result<Option<BridgePuppet>, BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        Ok(layer.puppet.map(|p| BridgePuppet::read_at(&p, offset)))
+    }
+
+    /// Give this layer a puppet, replace the one it has, or take it away.
+    ///
+    /// The whole block, because that is the op the engine has and it is exactly
+    /// invertible (`SetLayerPuppet`): making the block, changing its density
+    /// and removing it altogether are one shape of edit, and each is one undo
+    /// step. `None` removes it — which is what undoing the first pin means.
+    #[frb(sync)]
+    pub fn set_puppet(&self, puppet: Option<BridgePuppet>) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let block = match puppet {
+            Some(p) => {
+                let mut written = p.write_at(offset)?;
+                // A newer Lumit's fields ride through an edit made by this one,
+                // exactly as they ride through a save (docs/10 §1.1).
+                if let Some(existing) = &layer.puppet {
+                    written.extra = existing.extra.clone();
+                    for pin in &mut written.pins {
+                        if let Some(was) = existing.pins.iter().find(|p| p.id == pin.id) {
+                            pin.extra = was.extra.clone();
+                        }
+                    }
+                }
+                Some(written)
+            }
+            None => None,
+        };
+        self.commit_puppet(block)
+    }
+
+    /// Add a pin to this layer's puppet. Errors when there is no block yet:
+    /// the first pin is what creates one, and it is the click that decides the
+    /// reference time, so the caller says so with [`Self::set_puppet`].
+    #[frb(sync)]
+    pub fn add_puppet_pin(&self, pin: BridgePuppetPin) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut block = layer.puppet.ok_or(BridgeError::NoPuppet)?;
+        block.pins.push(pin.write_at(offset)?);
+        self.commit_puppet(Some(block))
+    }
+
+    /// Replace one pin — where it stands, what it is called, how far it
+    /// reaches. Named by id, so a stale reference is a calm error rather than
+    /// an edit landing on whichever pin happens to sit at that index now.
+    ///
+    /// Moving a pin is this: the caller sends the pin with its `x`/`y` holding
+    /// the new value, or the new keyframe, exactly as a mask's opacity is
+    /// dragged.
+    #[frb(sync)]
+    pub fn set_puppet_pin(&self, pin: BridgePuppetPin) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut block = layer.puppet.ok_or(BridgeError::NoPuppet)?;
+        let at = block
+            .pins
+            .iter()
+            .position(|p| p.id == pin.id)
+            .ok_or(BridgeError::NoSuchPin)?;
+        // Written over the pin it replaces, so an edit to a pin's name cannot
+        // throw away the keyframes on its position.
+        let mut written = pin.write_at(offset)?;
+        written.extra = block.pins[at].extra.clone();
+        block.pins[at] = written;
+        self.commit_puppet(Some(block))
+    }
+
+    /// Remove a pin by id. The block stays, empty if that was the last pin —
+    /// the mesh is still the one the author built, and the next pin lands on
+    /// it rather than on a fresh one at a different reference time.
+    #[frb(sync)]
+    pub fn delete_puppet_pin(&self, id: Uuid) -> Result<(), BridgeError> {
+        let mut block = self.item()?.puppet.ok_or(BridgeError::NoPuppet)?;
+        let before = block.pins.len();
+        block.pins.retain(|p| p.id != id);
+        if block.pins.len() == before {
+            return Err(BridgeError::NoSuchPin);
+        }
+        self.commit_puppet(Some(block))
+    }
+
+    #[frb(ignore)]
+    fn commit_puppet(
+        &self,
+        puppet: Option<lumit_core::puppet::PuppetBlock>,
+    ) -> Result<(), BridgeError> {
+        self.commit(lumit_core::Op::SetLayerPuppet {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            puppet,
         })
     }
 

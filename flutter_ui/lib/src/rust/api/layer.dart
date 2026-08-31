@@ -18,8 +18,8 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -857,6 +857,132 @@ enum BridgePaintMode {
   ;
 }
 
+/// A layer's puppet: the pins, and the three numbers the mesh under them is
+/// built from (docs/impl/puppet.md §4).
+///
+/// No triangle crosses the seam. The mesh is rebuilt from the layer's own alpha
+/// at [`Self::reference_time`] and cached in the engine, so a future
+/// triangulator changes nothing in any saved project or any panel.
+class BridgePuppet {
+  /// When the first pin was placed — the moment whose alpha the mesh is cut
+  /// from. Composition time, as every other time across this seam is.
+  final BridgeRational referenceTime;
+
+  /// Target triangle edge in pixels at natural size: smaller is suppler and
+  /// dearer.
+  final double density;
+
+  /// How far the opaque region is grown before the outline is walked, px.
+  final double expansion;
+  final List<BridgePuppetPin> pins;
+
+  const BridgePuppet({
+    required this.referenceTime,
+    required this.density,
+    required this.expansion,
+    required this.pins,
+  });
+
+  @override
+  int get hashCode =>
+      referenceTime.hashCode ^
+      density.hashCode ^
+      expansion.hashCode ^
+      pins.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePuppet &&
+          runtimeType == other.runtimeType &&
+          referenceTime == other.referenceTime &&
+          density == other.density &&
+          expansion == other.expansion &&
+          pins == other.pins;
+}
+
+/// One puppet pin, in layer pixels — a point parameter is pixels everywhere in
+/// Lumit, and the mesh lives in the layer's own pixels at natural size.
+class BridgePuppetPin {
+  final UuidValue id;
+  final String name;
+  final BridgePuppetPinKind kind;
+
+  /// Where the pin stands, animatable exactly as a mask's opacity is, on the
+  /// composition's clock (K-213) — so the Timeline row carries the same
+  /// stopwatch and the same diamonds, and dragging a pin with the stopwatch
+  /// on lands a keyframe.
+  final BridgeScalar x;
+  final BridgeScalar y;
+
+  /// Bend only: degrees, and per cent with 100 the natural size.
+  final BridgeScalar rotation;
+  final BridgeScalar scale;
+
+  /// Starch 0..100; overlap −100..100, positive in front.
+  final BridgeScalar amount;
+
+  /// How far a starch, overlap or bend pin reaches, in rest-pose pixels. Not
+  /// animatable: which vertices a pin reaches is a fact about the mesh at
+  /// rest, and that is what lets the solver factor its matrices once.
+  final double extent;
+
+  const BridgePuppetPin({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.x,
+    required this.y,
+    required this.rotation,
+    required this.scale,
+    required this.amount,
+    required this.extent,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      kind.hashCode ^
+      x.hashCode ^
+      y.hashCode ^
+      rotation.hashCode ^
+      scale.hashCode ^
+      amount.hashCode ^
+      extent.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePuppetPin &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          kind == other.kind &&
+          x == other.x &&
+          y == other.y &&
+          rotation == other.rotation &&
+          scale == other.scale &&
+          amount == other.amount &&
+          extent == other.extent;
+}
+
+/// Which of the four Puppet tools placed a pin (docs/07 §1.7, K-704).
+enum BridgePuppetPinKind {
+  /// Takes hold of a spot and drags it.
+  position,
+
+  /// Stiffens the region around it, so a torso stays rigid while a limb bends.
+  starch,
+
+  /// Says which part draws in front where the picture folds over itself.
+  overlap,
+
+  /// Turns and scales the region around it without travelling.
+  bend,
+  ;
+}
+
 /// The groups a reveal should open on one layer. Effects are named
 /// individually, because the Effects group opens onto one row per effect and
 /// only the qualifying ones should unfold.
@@ -1511,6 +1637,12 @@ class LayerReference {
   void addMask({required BridgeMask mask}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddMask(that: this, mask: mask);
 
+  /// Add a pin to this layer's puppet. Errors when there is no block yet:
+  /// the first pin is what creates one, and it is the click that decides the
+  /// reference time, so the caller says so with [`Self::set_puppet`].
+  void addPuppetPin({required BridgePuppetPin pin}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceAddPuppetPin(that: this, pin: pin);
+
   /// Add one piece of art on top of this shape layer's stack.
   void addShapeItem({required BridgeShapeItem item}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddShapeItem(that: this, item: item);
@@ -1812,6 +1944,12 @@ class LayerReference {
   void deleteMask({required UuidValue id}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteMask(that: this, id: id);
 
+  /// Remove a pin by id. The block stays, empty if that was the last pin —
+  /// the mesh is still the one the author built, and the next pin lands on
+  /// it rather than on a fresh one at a different reference time.
+  void deletePuppetPin({required UuidValue id}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceDeletePuppetPin(that: this, id: id);
+
   /// Remove a stroke by id.
   void deleteStroke({required UuidValue id}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceDeleteStroke(that: this, id: id);
@@ -2075,6 +2213,13 @@ class LayerReference {
   /// This layer's transform parent, if any (K-103).
   UuidValue? getParent() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetParent(
+        that: this,
+      );
+
+  /// This layer's puppet, or `None` on a layer nobody has pinned — which is
+  /// most layers (docs/impl/puppet.md §4, K-704).
+  BridgePuppet? getPuppet() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetPuppet(
         that: this,
       );
 
@@ -2561,6 +2706,25 @@ class LayerReference {
   /// dangling matte it cannot be allowed to exist and be ignored later.
   void setParent({UuidValue? parent}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetParent(that: this, parent: parent);
+
+  /// Give this layer a puppet, replace the one it has, or take it away.
+  ///
+  /// The whole block, because that is the op the engine has and it is exactly
+  /// invertible (`SetLayerPuppet`): making the block, changing its density
+  /// and removing it altogether are one shape of edit, and each is one undo
+  /// step. `None` removes it — which is what undoing the first pin means.
+  void setPuppet({BridgePuppet? puppet}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetPuppet(that: this, puppet: puppet);
+
+  /// Replace one pin — where it stands, what it is called, how far it
+  /// reaches. Named by id, so a stale reference is a calm error rather than
+  /// an edit landing on whichever pin happens to sit at that index now.
+  ///
+  /// Moving a pin is this: the caller sends the pin with its `x`/`y` holding
+  /// the new value, or the new keyframe, exactly as a mask's opacity is
+  /// dragged.
+  void setPuppetPin({required BridgePuppetPin pin}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetPuppetPin(that: this, pin: pin);
 
   /// Replace the Retime property's whole animation, as one undoable step —
   /// the same coarse-grained shape as a transform property, for the same

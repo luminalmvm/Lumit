@@ -1121,6 +1121,7 @@ mod tests {
                 version: 1,
                 extra: serde_json::Map::new(),
             },
+            roto: None,
             enabled: true,
             params: vec![lumit_core::model::EffectParam {
                 id: "p1".into(),
