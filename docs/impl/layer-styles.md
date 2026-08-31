@@ -1,6 +1,6 @@
 # Layer styles
 
-Decision: K-703. Status: design note — no code yet; the packages in §10 build it.
+Decision: K-706. Status: design note — no code yet; the packages in §10 build it.
 
 **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
 behind it, a glow around it, a colour or gradient painted across its face, a

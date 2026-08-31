@@ -22218,7 +22218,7 @@ kind-specific rotation/scale/amount — the existing stopwatch, lanes and graph,
 animation machinery. Pins re-bind to a rebuilt mesh by position; one that lands outside
 goes inert (kept, hollow, ignored), never deleted.
 
-## K-705 — Layer styles are a second, order-locked effect list on the layer, run at the end of its own raster pass
+## K-706 — Layer styles are a second, order-locked effect list on the layer, run at the end of its own raster pass
 
 **DECIDED** (design, docs/impl/layer-styles.md). AE's nine layer styles (Drop shadow,
 Inner shadow, Outer glow, Inner glow, Bevel and emboss, Satin, Colour overlay, Gradient
