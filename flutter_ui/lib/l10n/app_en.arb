@@ -6019,7 +6019,7 @@
   "@tipAddKeyframe": {
     "description": "Tooltip. One or two words."
   },
-  "tipAddLayerStyle": "Add a layer style",
+  "tipAddLayerStyle": "Add style",
   "@tipAddLayerStyle": {
     "description": "Tooltip on the plus button beside the Styles heading in the Effect controls panel. A few words."
   },
@@ -11491,19 +11491,19 @@
   "@tipGroupColour": {
     "description": "Tooltip on the small coloured tick on a layer group's header row in the Timeline; pressing it opens an eight-colour picker. Two words."
   },
-  "tipGroupVisible": "Show or hide every layer in the group",
+  "tipGroupVisible": "Group visible",
   "@tipGroupVisible": {
     "description": "Tooltip on the eye switch on a layer group's header row in the Timeline. Pressing it sets every layer in the group at once."
   },
-  "tipGroupAudible": "Silence or unsilence every layer in the group",
+  "tipGroupAudible": "Group audible",
   "@tipGroupAudible": {
     "description": "Tooltip on the speaker switch on a layer group's header row in the Timeline. Pressing it sets every layer in the group at once."
   },
-  "tipGroupSolo": "Solo every layer in the group",
+  "tipGroupSolo": "Group solo",
   "@tipGroupSolo": {
     "description": "Tooltip on the solo switch on a layer group's header row in the Timeline. Solo means 'show only these'; pressing it sets every layer in the group at once."
   },
-  "tipGroupLocked": "Lock or unlock every layer in the group",
+  "tipGroupLocked": "Group locked",
   "@tipGroupLocked": {
     "description": "Tooltip on the padlock switch on a layer group's header row in the Timeline. A locked layer cannot be edited or moved; pressing this sets every layer in the group at once."
   },
