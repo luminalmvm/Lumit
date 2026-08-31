@@ -530,7 +530,7 @@ class KeyCommandStrip extends StatelessWidget {
         ),
       );
 
-  /// A strip command drawn as a glyph of the set (K-723): the interpolation
+  /// A strip command drawn as a glyph of the set (K-725): the interpolation
   /// entries, whose shapes — a line, a step, a curve, a handled curve — say
   /// more at 16px than four capitalised words did. The word is the tooltip,
   /// which is the control's name (K-482), and the semantic label for a reader.
@@ -579,7 +579,7 @@ class KeyCommandStrip extends StatelessWidget {
             // segmented run, 12 between one run and the next, so the runs read
             // as groups rather than as one long strip of buttons.
             if (strip) ...[
-              // Glyphs, not words (K-723, the owner's ask): the set's own
+              // Glyphs, not words (K-725, the owner's ask): the set's own
               // marks for the four interpolations, each named by its tooltip.
               _glyphButton(t,
                   keyName: 'keys-interp-linear',

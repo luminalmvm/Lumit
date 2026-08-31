@@ -22932,7 +22932,10 @@ those (K-230), and they drag and click rather than aim.
 Tests: `viewer_tool_cursor_test` pins `precise` for the aiming tools;
 `roto_tools_frb_test` and `viewer_panel_frb_test` assert the armed overlays wear it.
 
-## K-723 — The keyframe strip's interpolation entries are glyphs
+## K-725 — The keyframe strip's interpolation entries are glyphs
+
+*(Renumbered from K-723 in the commit after it landed: the roto agent's K-723 took the
+number first in the shared tree. Same decision, same date, same content.)*
 
 **Status:** DECIDED — 2026-08-31
 

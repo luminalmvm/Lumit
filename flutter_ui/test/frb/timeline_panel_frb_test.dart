@@ -7114,7 +7114,7 @@ void main() {
     // key_block_test.dart.
 
     /// **The interpolation entries are glyphs, named by their tooltips**
-    /// (K-723, the owner's ask): the set's own line, step, curve and handled
+    /// (K-725, the owner's ask): the set's own line, step, curve and handled
     /// curve where four capitalised words stood, each tooltip the control's
     /// word (K-482) and each glyph carrying it as its semantic label.
     testWidgets('the strip\'s interpolation entries draw the set\'s glyphs',
