@@ -1408,12 +1408,13 @@ list, not a re-statement of the roadmap.
     governor; ProRes/DNxHR intermediate export (v1 is
     H.264/HEVC only); the 8-/32-bpc working-depth switch (v1 is fp16 only); OCIO
     v2 colour management and its UI.
-- **Audio - the largest gap** ([07-UI-SPEC.md](07-UI-SPEC.md) §10,
-    [09-AUDIO.md](09-AUDIO.md)): the whole **Audio panel** and level meters; the
-    beat-marker tuning controls (sensitivity, BPM-grid, range); persistent
+- **Audio** ([07-UI-SPEC.md](07-UI-SPEC.md) §10, [09-AUDIO.md](09-AUDIO.md)): the
+    Audio panel, the Mixer, the meters and the beat-tuning controls all landed with
+    the AudioWorkspace programme (K-690..K-700, K-728). Still owed: persistent
     waveform peak files (the multi-zoom summary is built on demand and cached for
     the session, K-280 — never written to the project sidecar, so it is rebuilt
-    next time the project opens).
+    next time the project opens); the §3.4 scrub-audition grain and its Timeline
+    toggle; and §5's replace-or-merge offer on a re-run (detection replaces).
 - **File format ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)).** Embedded `thumbs/`
     previews in the `.lum`; the per-project sidecar `proxies/`, `peaks/` and
     `flow/` directories (only `frames/` and the global media index exist).
