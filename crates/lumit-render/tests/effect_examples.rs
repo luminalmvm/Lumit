@@ -209,6 +209,17 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("vertical_amount", f(220.0)),
         ],
 
+        // The plate is a moody scene: at the default 50% threshold almost no
+        // pixel counts as bright and the points-only figure came out near
+        // black. Lowered until the walls, sky and truck read as a cloud shaped
+        // like themselves, denser than the default so the shape is unmissable.
+        "emit_from_image" => vec![
+            ("threshold", f(16.0)),
+            ("density", f(1200.0)),
+            ("size", f(2.0)),
+            ("max_points", f(400_000.0)),
+        ],
+
         // --- the ones that read a second picture, wired in wire_aux ---
         "light_wrap" => vec![("width", f(70.0)), ("intensity", f(2.2))],
         "set_matte" => vec![("channel", choice(0))],
@@ -653,6 +664,36 @@ fn example_doc(
         }
     }
 
+    // Emit from image keeps points where a picture is bright, and drawn over
+    // that same picture its white discs on white highlights disappear — the
+    // first render of its figure read as the plate untouched. So its figure is
+    // staged the other way round: the plate goes invisible, the effect sits on
+    // the black solid, and its Source layer input reads the plate — the same
+    // hidden-layer-still-answers rule the depth pass rides. What the page then
+    // shows is exactly what the effect keeps: the highlights as a cloud of
+    // points, on nothing.
+    let mut fx = fx;
+    let mut board = None;
+    if fx
+        .as_ref()
+        .is_some_and(|f| f.effect.match_name == "emit_from_image")
+    {
+        let mut f = fx.take().expect("checked above");
+        plate.switches.visible = false;
+        if let Some(p) = f.params.iter_mut().find(|p| p.id == "source") {
+            p.value = EffectValue::Layer(Some(id("Plate")));
+        }
+        let mut b = layer(
+            "Board",
+            LayerKind::Solid {
+                def: id("Aux solid"),
+            },
+            span,
+        );
+        b.effects = vec![f];
+        board = Some(b);
+    }
+
     // The effect goes on the plate, unless it is one that reads what is under
     // it, in which case an adjustment layer carries it and the plate is the
     // scene it reads.
@@ -669,6 +710,7 @@ fn example_doc(
 
     let mut layers = Vec::new();
     layers.extend(adjustment);
+    layers.extend(board);
     layers.push(plate);
     if let Some(aux) = aux_layer(depth, span) {
         layers.push(aux);
