@@ -1255,6 +1255,14 @@ field; §7.1 and §7.2 are the proved layout maps.
    offsets could be checked against AE. One more sitting with real footage in the
    project unblocks the group, and the differential test asserts the fixture still has
    none so the exemption cannot rot.
+ - **An effect on a layer that is not the comp's size is owed.** Both layers carrying
+   effects in `fixture.aep` are 640 x 360 in a 640 x 360 comp, so the frame an effect's
+   stored two-dimensional point is a fraction *of* could not be measured: the parser now
+   reads it against the layer (K-636, and the format's own convention - the anchor point
+   and the mask path are the only other normalised values and both are the layer's),
+   which is what `an_effects_point_is_a_fraction_of_its_layer_not_of_the_composition`
+   in `aep::props` pins. A sitting with a Transform effect on a precomp or solid of a
+   different size than its comp settles it against After Effects itself.
  - **A dragged layer is owed too, and cannot be forged.** Every layer in `fixture.aep`
    starts at zero, so `ldta`'s start offset - what puts in and out points, keyframe times
    and a stretch's reach back on the comp's clock - is measured against AE at one value

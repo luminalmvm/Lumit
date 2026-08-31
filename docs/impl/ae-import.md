@@ -571,7 +571,19 @@ golden capture and each producing a plausible-looking wrong project if missed:
   the DOM. A layer at "1" is a layer nobody notices is wrong until it is.
 - **A colour is A,R,G,B in 0–255** on disk and R,G,B,A in 0–1 in the DOM. Read
   it in the file's own order and the alpha lands in the red channel.
-- **An effect's two-dimensional point is a fraction of the composition.**
+- **An effect's two-dimensional point is a fraction of the layer** (K-636), not
+  of the composition: After Effects runs an effect on the layer, so the point is
+  a point in the layer's own raster and the file normalises it against that
+  raster — the same rule the anchor point and the mask path below follow, they
+  being the only other normalised values in the format. The two agree exactly
+  while a layer is the comp's size, which is every effect-bearing layer in the
+  golden project, so this one is **reasoned from the format's own convention
+  rather than measured**: a fixture with an effect on a layer that is not the
+  comp's size is owed (docs/TODO.md). Read against the composition it puts a
+  Transform effect's Position at comp/layer of where After Effects has it while
+  its Anchor Point — absent from the file, and so written in at the layer's
+  centre by the mapping layer — lands correctly, which shifts a picture nobody
+  moved.
 - **An anchor point is a fraction of the layer's *source*** — but only when the
   layer has one. A shape, text or null layer stores it in raw pixels. A precomp
   layer's "source" is the composition it points at, whose size lives in *that*

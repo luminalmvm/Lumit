@@ -23,7 +23,7 @@
 //! - **The stored numbers are not the numbers After Effects reports.** Opacity
 //!   is a fraction on disk and a percentage in the DOM; a colour is A,R,G,B in
 //!   0–255 on disk and R,G,B,A in 0–1 in the DOM; an effect's point is a
-//!   fraction of the comp on disk and pixels in the DOM. Every one of those
+//!   fraction of the layer on disk and pixels in the DOM. Every one of those
 //!   conversions is here, in [`resolve`], and is proven against the golden
 //!   capture rather than assumed.
 //! - **A keyframe's layout depends on what kind of property it belongs to.**
@@ -102,10 +102,9 @@ pub(crate) type ParamTypes = std::collections::HashMap<String, (u8, String)>;
 /// What a group needs to know about where it sits, so the values inside it can
 /// be put back into the DOM's units.
 ///
-/// All four of the sizes matter: an effect's point is a fraction of the *comp*,
-/// an anchor point is a fraction of the *layer's source*, and a mask's path is
-/// a fraction of the layer too. Getting the wrong one puts the mask in the
-/// wrong place on a layer that is not comp-sized.
+/// All four of the sizes matter: an effect's point, an anchor point and a
+/// mask's path are each a fraction of the *layer's* frame. Getting the wrong
+/// one puts the mask in the wrong place on a layer that is not comp-sized.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Ctx<'a> {
     /// The containing effect's parameter definitions, when there is one, read
@@ -788,7 +787,17 @@ fn read_leaf(
 ///
 /// - a **percent** property (Opacity, Scale, Mask Opacity) is a fraction on
 ///   disk;
-/// - an **effect's point** is a fraction of the composition;
+/// - an **effect's point** is a fraction of the *layer's* frame (K-636). After
+///   Effects runs an effect on the layer, so an effect's point is a point in
+///   the layer's own raster and the file normalises it against that raster —
+///   the same rule the anchor point and the mask path below already follow,
+///   they being the only other normalised values in the format. Reading it
+///   against the *composition* agrees exactly while a layer is the comp's size,
+///   which is why it went unseen: put a 2560 × 1088 precomp in a 1920 × 816
+///   comp and a Transform effect's Position arrives at 0.75 of where After
+///   Effects has it while its Anchor Point — absent from the file, so written
+///   in at the layer's centre by the mapping layer — arrives at the right
+///   place, which shifts a picture nobody moved.
 /// - an **anchor point** is a fraction of the *layer's source* — but only when
 ///   the layer has one. A shape, text or null layer stores it in raw pixels,
 ///   and scaling that by anything at all moves the layer's pivot.
@@ -800,7 +809,10 @@ fn scale_of(match_name: &str, colour: bool, dimensions: usize, ctx: Ctx<'_>) -> 
         return vec![ctx.layer.0, ctx.layer.1, 1.0];
     }
     if ctx.in_effect && !colour && dimensions == 2 {
-        return vec![ctx.comp.0, ctx.comp.1];
+        // `layer` is the comp's size for a layer with no source of its own —
+        // a shape, a text, a null — which is the frame After Effects draws
+        // those at and exactly what `map::Conv::size` falls back to.
+        return vec![ctx.layer.0, ctx.layer.1];
     }
     Vec::new()
 }
@@ -1475,6 +1487,43 @@ mod tests {
             "an id no layer here claims is None, never another layer's index"
         );
         assert_eq!(read.properties[2].value, Some(json!(0)), "None stays None");
+    }
+
+    /// **An effect's point is a fraction of the layer, not of the composition**
+    /// (K-636).
+    ///
+    /// The Transform effect is where this is felt: its Anchor Point sits at the
+    /// layer's centre by default and is therefore *absent* from the file, so
+    /// the mapping layer writes it in at the layer's centre, while its Position
+    /// comes out of the file. Read the file's fraction against the composition
+    /// and the two land in different places on any layer that is not the comp's
+    /// size — a Transform nobody touched shifts the picture, and one whose
+    /// Position was moved moves it by the wrong distance. Here: a
+    /// 2560 × 1088 layer in a 1920 × 816 comp, both points at the layer's own
+    /// centre.
+    #[test]
+    fn an_effects_point_is_a_fraction_of_its_layer_not_of_the_composition() {
+        let bytes = group(leaf(
+            "ADBE Geometry2-0002",
+            tdb4_record(2, false, false),
+            cdat(&[0.5, 0.5, 0.0, 0.0]),
+        ));
+        let chunk = Chunks::new(&bytes)
+            .ok()
+            .next()
+            .expect("the synthetic group parses");
+        let read = read_group(
+            &chunk,
+            Ctx {
+                comp: (1920.0, 816.0),
+                layer: (2560.0, 1088.0),
+                in_effect: true,
+                ..ctx()
+            },
+        );
+
+        assert_eq!(read.properties.len(), 1);
+        assert_eq!(read.properties[0].value, Some(json!([1280.0, 544.0])));
     }
 
     /// **A percentage is a fraction on disk, and a colour is A,R,G,B in
