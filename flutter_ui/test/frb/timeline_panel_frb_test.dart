@@ -5945,6 +5945,71 @@ void main() {
           reason: 'and the editor closed');
     });
 
+    /// **A group renames the same as any other row** (owner, 2026-08-31):
+    /// with its header chosen, `Enter` opens the header's own editor through
+    /// the layer rename's road (K-243) — the same notifier, carrying the
+    /// group's id instead of a layer's.
+    testWidgets('Enter renames a group whose header chose the selection',
+        (tester) async {
+      final p = withComp();
+      final lower = p.comp.addSolidLayer();
+      final upper = p.comp.addSolidLayer();
+      final gid = p.comp.groupLayers(
+          layerIds: [upper.internallayerId, lower.internallayerId],
+          name: 'Band');
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      // Choose the band by its header — on the blank number cell, clear of
+      // the twirl, the tick, the switches and the name's double-tap window.
+      final header = tester
+          .getRect(find.byKey(ValueKey<String>('tl-group-row-$gid')));
+      await tester.tapAt(Offset(
+          header.left +
+              8 +
+              switchesGroupWidth +
+              groupDividerWidth +
+              16 +
+              identityGap +
+              numberCellWidth / 2,
+          header.center.dy));
+      await tester.pump(kDoubleTapTimeout);
+      expect(p.uiState.selectedLayers.value, hasLength(2),
+          reason: 'the header chose the whole band');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      final editor = find.byKey(ValueKey<String>('tl-group-rename-$gid'));
+      expect(editor, findsOneWidget,
+          reason: 'Enter opened the header\'s own editor, not a member\'s');
+      expect(find.byKey(ValueKey<String>(
+              'tl-rename-${upper.internallayerId}')),
+          findsNothing,
+          reason: 'and no layer row answered the same press');
+
+      await tester.enterText(editor, 'Chorus');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.model.groups.single.name, 'Chorus',
+          reason: 'the typed name landed on the group');
+
+      // A layer chosen since takes Enter back for itself.
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-name-${upper.internallayerId}')));
+      await tester.pump(kDoubleTapTimeout);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.byKey(ValueKey<String>('tl-group-rename-$gid')),
+          findsNothing);
+      expect(
+          find.byKey(
+              ValueKey<String>('tl-rename-${upper.internallayerId}')),
+          findsOneWidget,
+          reason: 'Enter renames the layer once the band is no longer chosen');
+    });
+
     /// Double-clicking a Precomp layer opens the comp it draws (K-243) — the
     /// same thing the Project panel and the Hierarchy do, and what a
     /// double-click means everywhere else in the application.

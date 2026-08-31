@@ -939,6 +939,7 @@ class Outline extends StatelessWidget {
                   groupOrder: groupOrder,
                   widths: widths,
                   actions: groupActions,
+                  renameRequest: renameRequest,
                 ),
               // A shut fold draws the header and nothing else: the carrier's
               // own row is one of the rows the fold hid.

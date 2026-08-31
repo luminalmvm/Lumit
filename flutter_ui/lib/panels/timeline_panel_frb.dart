@@ -633,6 +633,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             for (final m in g.members)
               if (byId[m] != null) byId[m]!,
           ]);
+          // After the write, not before: setting the selection notifies the
+          // listener that clears this, so the order is what leaves it set.
+          _selectedGroup = g.id;
           // Published, not `setState` — [_selectLayer]'s own rule (WP-2): the
           // rows and bars listen for their slice of [TimelineSelection], so
           // what redraws is the band lit and the layers let go. The header
@@ -1733,8 +1736,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Ctrl+click adding a second layer, a Viewer marquee. The rows still have to
   /// hear it, and the primary's listener above cannot say so.
   void _onLayerSelectionChanged() {
+    // Whatever changed the selection, the band a group header chose is no
+    // longer what is chosen — a header click sets it back right after this
+    // fires, which is the one road that keeps it.
+    _selectedGroup = null;
     if (mounted) _publishRowSelection();
   }
+
+  /// The group whose header made the current selection (K-702), or null when
+  /// anything else has chosen since. What `Enter` renames when it is set: the
+  /// band itself, through the same [_renameRequest] road a layer's rename
+  /// takes (K-243) — "we must be able to change its name the same as any
+  /// other" (owner, 2026-08-31).
+  UuidValue? _selectedGroup;
 
   /// Everything the panel holds that belongs to one layer. Called whenever the
   /// primary changes, from here or from anywhere else.
@@ -2183,6 +2197,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // panel focused yet falls to the Timeline, as it always did.
       final active = ui.activePanel.value;
       if (active != null && active != Panel.timeline) return false;
+      // A group header chose the current selection: Enter renames the band
+      // itself, through the same request road (K-243 for groups — the owner's
+      // "the same as any other"). Checked against the model so a group that
+      // has since been ungrouped falls through to the layer below.
+      final group = _selectedGroup;
+      if (group != null && ui.model.groups.any((g) => g.id == group)) {
+        _renameRequest.value = group;
+        return true;
+      }
       final layer = ui.selectedLayer.value;
       if (layer == null) return false;
       _renameRequest.value = layer.internallayerId;

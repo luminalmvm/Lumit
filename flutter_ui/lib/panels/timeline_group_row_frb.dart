@@ -139,12 +139,19 @@ class GroupOutlineRow extends StatefulWidget {
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
   final GroupActions actions;
+
+  /// The id `Enter` has just asked to rename (K-243's road, reached for a
+  /// group when its header was the last thing chosen) — the panel's one
+  /// notifier, shared with the layer rows: a group's id and a layer's are
+  /// both [UuidValue]s, and only the row the value names has anything to do.
+  final ValueNotifier<UuidValue?> renameRequest;
   const GroupOutlineRow({
     super.key,
     required this.header,
     required this.groupOrder,
     required this.widths,
     required this.actions,
+    required this.renameRequest,
   });
 
   @override
@@ -158,9 +165,32 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
   BridgeLayerGroup get _group => widget.header.group;
 
   @override
+  void initState() {
+    super.initState();
+    widget.renameRequest.addListener(_maybeRename);
+  }
+
+  @override
   void dispose() {
+    widget.renameRequest.removeListener(_maybeRename);
     _rename?.dispose();
     super.dispose();
+  }
+
+  /// `Enter` with this group's band chosen names this header: open the editor
+  /// on it, exactly as a layer row answers the same notifier.
+  void _maybeRename() {
+    if (!mounted || _rename != null) return;
+    if (widget.renameRequest.value != _group.id) return;
+    setState(() => _rename = TextEditingController(text: _group.name));
+  }
+
+  /// Clear the request this header answered, so pressing `Enter` again opens
+  /// the editor a second time rather than seeing no change.
+  void _clearRequest() {
+    if (widget.renameRequest.value == _group.id) {
+      widget.renameRequest.value = null;
+    }
   }
 
   void _commitRename() {
@@ -170,6 +200,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       _rename?.dispose();
       _rename = null;
     });
+    _clearRequest();
     if (text.isEmpty || text == _group.name) return;
     widget.actions.onRename(_group, text);
   }
@@ -180,6 +211,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       _rename?.dispose();
       _rename = null;
     });
+    _clearRequest();
   }
 
   @override
