@@ -738,7 +738,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         _effectCard(context, ui, comp, layer, info, index),
                       if (_stackIndices(info.effects, audio: true)
                           case final rack when rack.isNotEmpty) ...[
-                        _audioGroupHeading(context),
+                        _groupHeading(
+                            context, 'audio-group', l10n.workspaceAudio),
                         if (_isOpen('audio-group'))
                           for (final index in rack)
                             _effectCard(context, ui, comp, layer, info, index),
@@ -774,14 +775,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           if (isAudioEffectName(effects[i].name) == audio) i,
       ];
 
-  /// The Audio heading over the rack, twirling like every other heading.
-  Widget _audioGroupHeading(BuildContext context) {
+  /// One twirling heading over a group of cards — the Audio rack's and the
+  /// Styles fold's, which are the same row: a twirl, a word, and at most one
+  /// command at the far end.
+  ///
+  /// [storageKey] is both what the fold is remembered under and what the row is
+  /// keyed by, so a heading cannot be open under one name and keyed by another.
+  Widget _groupHeading(
+    BuildContext context,
+    String storageKey,
+    String label, {
+    Widget? trailing,
+  }) {
     final t = ThemeScope.of(context).theme;
-    final open = _isOpen('audio-group');
+    final open = _isOpen(storageKey);
     return GestureDetector(
-      key: const ValueKey('fx-audio-group'),
+      key: ValueKey<String>('fx-$storageKey'),
       behavior: HitTestBehavior.opaque,
-      onTap: () => _toggle('audio-group'),
+      onTap: () => _toggle(storageKey),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
         child: Row(
@@ -794,11 +805,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             const SizedBox(width: 2),
             Expanded(
               child: Text(
-                l10n.workspaceAudio,
+                label,
                 style: t.small.copyWith(color: t.textMuted),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (trailing != null) trailing,
           ],
         ),
       ),
@@ -820,50 +832,27 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     BridgeLayerInfo info,
   ) {
     final t = ThemeScope.of(context).theme;
-    final open = _isOpen('styles-group');
     final worn = {for (final s in info.styles) s.name};
-    return Padding(
-      key: const ValueKey('fx-styles-group'),
-      padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
-      child: Row(
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _toggle('styles-group'),
-            child: Row(
-              children: [
-                lumitIcon(
-                  open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                  size: iconSize,
-                  color: t.textMuted,
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  l10n.foldStyles,
-                  style: t.small.copyWith(color: t.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          LumitTooltip(
-            message: l10n.tipAddLayerStyle,
-            child: HouseButton(
-              key: const ValueKey<String>('fx-add-style'),
-              frameless: true,
-              small: true,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              onPressed: worn.length < offeredStyles().length
-                  ? () => _addStyleMenu(context, ui, layer, worn)
-                  : null,
-              child: Text('+',
-                  style: t.small.copyWith(
-                      color: worn.length < offeredStyles().length
-                          ? t.textMuted
-                          : t.textDisabled)),
-            ),
-          ),
-        ],
+    return _groupHeading(
+      context,
+      'styles-group',
+      l10n.foldStyles,
+      trailing: LumitTooltip(
+        message: l10n.tipAddLayerStyle,
+        child: HouseButton(
+          key: const ValueKey<String>('fx-add-style'),
+          frameless: true,
+          small: true,
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          onPressed: worn.length < offeredStyles().length
+              ? () => _addStyleMenu(context, ui, layer, worn)
+              : null,
+          child: Text('+',
+              style: t.small.copyWith(
+                  color: worn.length < offeredStyles().length
+                      ? t.textMuted
+                      : t.textDisabled)),
+        ),
       ),
     );
   }
