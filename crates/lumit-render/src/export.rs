@@ -99,7 +99,7 @@ pub struct AudioJob {
     /// Volume socket (the *Duck under* wire). `None` for the ordinary layer,
     /// whose Volume keyframes answer as ever.
     pub driven: Option<Arc<DrivenVolume>>,
-    /// The layer's **audio insert chain** â€” the audio-typed effects in its
+    /// The layer's **audio insert chain** — the audio-typed effects in its
     /// stack, ahead of Volume and Pan (K-700). `None` for a layer carrying no
     /// effects at all, which is what keeps every mix without a plugin
     /// byte-identical to the one before this field existed.
@@ -165,13 +165,13 @@ impl PartialEq for DrivenVolume {
 }
 
 /// A layer's **audio insert chain**, as the mixer needs it (K-700,
-/// docs/impl/audio-plugins.md Â§2).
+/// docs/impl/audio-plugins.md §2).
 ///
 /// # In plain terms
 ///
 /// "The stack is the rack": an audio plugin is an entry in the layer's ordinary
 /// effect stack, and this is that stack carried down to where the sound is,
-/// with the two things the bake cannot look up for itself â€” the document the
+/// with the two things the bake cannot look up for itself — the document the
 /// plugin's rows are evaluated against, and where the layer's own clock sits on
 /// the mixed timeline.
 ///
@@ -182,13 +182,13 @@ impl PartialEq for DrivenVolume {
 /// ponytail: a **Precomp** layer's own chain is not applied. Volume and Pan
 /// push down onto every contributing source because gain distributes over a
 /// sum; a compressor does not, so honouring one would mean summing the nested
-/// comp first â€” which is a bus, and the canvas note says v1 has none. A
+/// comp first — which is a bus, and the canvas note says v1 has none. A
 /// **Sequence** layer's chain runs per clip rather than on the row's mixed
 /// output, so a reverb does not tail across a join. Both want the same thing:
 /// a per-layer sum to insert on.
 pub struct AudioChain {
     pub doc: Arc<lumit_core::model::Document>,
-    /// The comp the layer sits in â€” not necessarily the comp being mixed.
+    /// The comp the layer sits in — not necessarily the comp being mixed.
     pub comp: Uuid,
     pub layer: Uuid,
     /// The layer's whole effect stack, in order.
@@ -197,7 +197,7 @@ pub struct AudioChain {
     /// instead of its keyframes, exactly as a wired effect parameter in the
     /// picture does (K-471).
     pub graph: lumit_core::graph::LayerGraph,
-    /// Comp time where the layer's own time 0 sits, so `t âˆ’ offset_s` is the
+    /// Comp time where the layer's own time 0 sits, so `t − offset_s` is the
     /// layer time its rows are read at.
     pub offset_s: f64,
     /// Where the layer's comp starts on the mixed timeline.
@@ -218,7 +218,7 @@ impl PartialEq for AudioChain {
 }
 
 /// Open the chain and play `samples` (interleaved stereo, the job's placed
-/// span) through it â€” the **one** function the live plan and the export both
+/// span) through it — the **one** function the live plan and the export both
 /// call, which is what makes preview == export a fact about the code rather
 /// than an argument about it (K-031).
 ///
@@ -229,12 +229,12 @@ impl PartialEq for AudioChain {
 /// `None` when the layer's stack holds nothing the catalogue will open as
 /// audio, which is the ordinary answer and the one that leaves the decoded
 /// buffer untouched. Otherwise the processed span and the chain's summed
-/// latency, in frames â€” the caller places the sound that many frames **earlier**
+/// latency, in frames — the caller places the sound that many frames **earlier**
 /// so the wet lands where the dry did.
 ///
 /// ponytail: the whole span is processed here, at plan-build time, rather than
 /// a block at a time into a lookahead ring on a chain worker
-/// (docs/impl/audio-plugins.md Â§3). The ring exists to keep the realtime
+/// (docs/impl/audio-plugins.md §3). The ring exists to keep the realtime
 /// callback off another process; a span already rendered keeps it off even more
 /// firmly, and the plan holds whole decoded buffers anyway, so the ring would
 /// buy nothing today and cost a thread, a seek pre-roll and a second answer to
@@ -255,8 +255,8 @@ pub fn chain_bake(
         return None;
     }
     // Open first, bake second. Opening answers the question "are you audio?",
-    // and only once every link has answered is the chain's summed latency â€”
-    // and therefore how many blocks the run is â€” known. Baking a whole
+    // and only once every link has answered is the chain's summed latency —
+    // and therefore how many blocks the run is — known. Baking a whole
     // envelope for a blur that turns out not to be a plugin would be work for
     // nothing, so opening is handed one time point rather than the envelope.
     let mut opened = Vec::new();
@@ -293,7 +293,7 @@ pub fn chain_bake(
 /// What one effect instance's rows hold at each block start.
 ///
 /// A row reads its own keyframes unless a wire feeds it, in which case it reads
-/// the wire â€” the same substitution the picture's resolve makes, held to the
+/// the wire — the same substitution the picture's resolve makes, held to the
 /// same declared hard range (K-471, K-510), so a plugin parameter is driven
 /// like everything else. An instance with nothing animated and nothing wired
 /// bakes **one** entry, which the chain then holds past the end: an
@@ -301,7 +301,7 @@ pub fn chain_bake(
 ///
 /// ponytail: the driver walk is given no [`lumit_core::fx::AudioTap`], so an
 /// *Audio level* driver wired into a plugin parameter reads nothing here.
-/// Handing it the real tap would mix a window of the comp per block â€” tens of
+/// Handing it the real tap would mix a window of the comp per block — tens of
 /// thousands of mixes for a song. Bake the tap's levels once at control rate
 /// and index them, when a duck-driven plugin is a thing somebody asks for.
 fn bake_values(
@@ -374,7 +374,7 @@ fn bake_values(
                         .map(|v| f64::from(v.as_f32()))
                         .unwrap_or_else(|| row.property.value_at(lt));
                     // `max`/`min` rather than `clamp`, which panics on a
-                    // reversed pair (14-ENGINEERING-RULES Â§4).
+                    // reversed pair (14-ENGINEERING-RULES §4).
                     let value = value
                         .max(row.hard.0.unwrap_or(f64::NEG_INFINITY))
                         .min(row.hard.1.unwrap_or(f64::INFINITY));
@@ -2104,7 +2104,7 @@ fn mix_decoded(
 ) -> Vec<f32> {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
     // The insert chain runs first, and its output has to outlive the borrowed
-    // placements below â€” so the two passes rather than one: process, then place
+    // placements below — so the two passes rather than one: process, then place
     // over whichever buffer each job ended up with.
     /// One job, placed, with the chain already run over it where it had one.
     struct Placed<'a> {
@@ -2127,7 +2127,7 @@ fn mix_decoded(
             )?;
             let dry: &[f32] = &buf.samples[src_start * 2..(src_start + len) * 2];
             // The export runs the chain **offline** (docs/impl/audio-plugins.md
-            // Â§3): no deadline, and the plugin may take its slower path.
+            // §3): no deadline, and the plugin may take its slower path.
             match job
                 .chain
                 .as_ref()
@@ -2675,6 +2675,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
@@ -2874,8 +2875,8 @@ mod tests {
             carriers: Vec::new(),
             fade: None,
             driven: None,
-        };
             chain: None,
+        };
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
         assert!((g[0] - 0.501_19).abs() < 1e-3);
@@ -3070,8 +3071,8 @@ mod tests {
                 tail_s: 0.0,
             }),
             driven: None,
-        };
             chain: None,
+        };
 
         let (gain, envelope) = volume_bake(&job, 0, frames, rate);
         let envelope = envelope.expect("a sweep and a ramp both force the envelope");
@@ -3868,6 +3869,7 @@ mod tests {
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: outer_id,
             name: "Outer".into(),
@@ -3996,6 +3998,7 @@ mod tests {
         let outer_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: outer_id,
             name: "Outer".into(),
@@ -4123,6 +4126,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),

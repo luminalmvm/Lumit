@@ -42,6 +42,14 @@ class CompModel extends ChangeNotifier {
     return _model?.layers ?? const [];
   }
 
+  /// The comp's **layer groups** (K-702), already resolved by the engine to the
+  /// run each one draws over, with its combined span and its switch faces.
+  /// Empty for a comp nobody has grouped, which is every comp until Ctrl+G.
+  List<BridgeLayerGroup> get groups {
+    _freshen();
+    return _model?.groups ?? const [];
+  }
+
   /// The comp's length in frames, matching `durationFrames`.
   int get durationFrames {
     _freshen();

@@ -11071,5 +11071,77 @@
   "histSetBeatGrid": "Set beat grid",
   "@histSetBeatGrid": {
     "description": "A row of the Edit > History window: the name of one edit that was made (confirming or clearing the tempo grid beat detection found). Sent by the engine as English and looked up here."
+  },
+  "groupDefaultName": "Group",
+  "@groupDefaultName": {
+    "description": "The name a new layer group is given in the Timeline until it is renamed. A layer group is a labelled band folding a run of layers into one row; it is organisation only and changes nothing about the picture. One word."
+  },
+  "tipFoldGroup": "Fold group",
+  "@tipFoldGroup": {
+    "description": "Tooltip on the triangle at the left of a layer group's header row in the Timeline, when the group is open: pressing it hides the layers inside the group behind the one header row. Two words."
+  },
+  "tipUnfoldGroup": "Unfold group",
+  "@tipUnfoldGroup": {
+    "description": "Tooltip on the triangle at the left of a layer group's header row in the Timeline, when the group is folded shut: pressing it shows the layers inside the group again. Two words."
+  },
+  "tipGroupColour": "Group colour",
+  "@tipGroupColour": {
+    "description": "Tooltip on the small coloured tick on a layer group's header row in the Timeline; pressing it opens an eight-colour picker. Two words."
+  },
+  "tipGroupVisible": "Show or hide every layer in the group",
+  "@tipGroupVisible": {
+    "description": "Tooltip on the eye switch on a layer group's header row in the Timeline. Pressing it sets every layer in the group at once."
+  },
+  "tipGroupAudible": "Silence or unsilence every layer in the group",
+  "@tipGroupAudible": {
+    "description": "Tooltip on the speaker switch on a layer group's header row in the Timeline. Pressing it sets every layer in the group at once."
+  },
+  "tipGroupSolo": "Solo every layer in the group",
+  "@tipGroupSolo": {
+    "description": "Tooltip on the solo switch on a layer group's header row in the Timeline. Solo means 'show only these'; pressing it sets every layer in the group at once."
+  },
+  "tipGroupLocked": "Lock or unlock every layer in the group",
+  "@tipGroupLocked": {
+    "description": "Tooltip on the padlock switch on a layer group's header row in the Timeline. A locked layer cannot be edited or moved; pressing this sets every layer in the group at once."
+  },
+  "menuGroupLayers": "Group layers",
+  "@menuGroupLayers": {
+    "description": "Layer menu row: folds the selected layers into a named band in the Timeline, which is organisation only and changes nothing about the picture. Refused unless the selected layers sit next to each other in the stack."
+  },
+  "menuRenameGroup": "Rename group",
+  "@menuRenameGroup": {
+    "description": "Right-click menu row on a layer group's header row in the Timeline: opens the name for editing."
+  },
+  "menuUngroup": "Ungroup",
+  "@menuUngroup": {
+    "description": "Right-click menu row on a layer group's header row in the Timeline: takes the group away. The layers themselves stay exactly where they were. One word."
+  },
+  "menuPrecomposeGroup": "Pre-compose group",
+  "@menuPrecomposeGroup": {
+    "description": "Right-click menu row on a layer group's header row in the Timeline: packs the layers in the group into a composition of their own, which replaces them with a single layer. Unlike the group itself, this does change how the picture is built."
+  },
+  "keyGroupTheSelectedLayers": "Group the selected layers",
+  "@keyGroupTheSelectedLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyUngroup": "Ungroup",
+  "@keyUngroup": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. One word."
+  },
+  "histGroupLayers": "Group layers",
+  "@histGroupLayers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made (folding a run of layers into a named group in the Timeline). Sent by the engine as English and looked up here."
+  },
+  "histUngroupLayers": "Ungroup layers",
+  "@histUngroupLayers": {
+    "description": "A row of the Edit > History window: the name of one edit that was made (taking a layer group away; the layers themselves stay). Sent by the engine as English and looked up here."
+  },
+  "histRenameGroup": "Rename group",
+  "@histRenameGroup": {
+    "description": "A row of the Edit > History window: the name of one edit that was made (renaming a layer group). Sent by the engine as English and looked up here."
+  },
+  "histSetGroupColour": "Set group colour",
+  "@histSetGroupColour": {
+    "description": "A row of the Edit > History window: the name of one edit that was made (setting a layer group's label colour). Sent by the engine as English and looked up here."
   }
 }

@@ -22028,3 +22028,97 @@ opens the media with FFmpeg — far too slow for a menu being drawn — so the r
 and the engine answers `BridgeError::NoAudio` when pressed, which the frontend turns into
 one line in the status bar. `detach_audio` is asynchronous for that reason, as `has_audio`
 is.
+
+## K-702 — Layer groups are the light fold; Precompose stays the heavy one, one click away
+
+**Status: DECIDED (2026-08-31).** Owner request, crediting Koriqzia's suggestion, with the
+owner's own framing: "do all this work, then have it collapse into a single layer."
+Reverses nothing. It answers a question that had two candidate answers already in the
+building, and the argument for keeping them apart is most of this entry.
+
+**The two folds, and why both.** Lumit already collapses layers: **Precompose** (docs/07
+§13.4) packs a selection into a composition of its own and leaves one Precomp layer in its
+place. That is a *render-level* fold — the layers stop compositing into this comp and start
+compositing into another one, blend modes stop reaching across the boundary, the section
+caches as a unit (docs/06 §5.2), and a matte or a parent pointing out of the packed set
+goes dangling. It is exactly what the owner's "collapse into a single layer" describes, and
+it already exists.
+
+What it cannot be is *organisation*. A comp with forty layers in it is unreadable long
+before any of them are finished, and pre-composing to tidy up costs a render decision you
+did not want to make and cannot undo without a second pass. So a **layer group** is the
+light fold beside it: a named band over an unbroken run of layers, with a triangle on it.
+**The render walk never reads it.** Grouped, ungrouped, folded or open, `lumit-eval` and
+`lumit-render` build the identical frame — which is the whole promise, and the reason a
+group is safe to reach for in a way Precompose is not.
+
+The two are wired together rather than kept apart: the group header's right-click offers
+**Pre-compose group**, handing its members to the dialogue that already existed. That is
+the owner's collapse, one click from the organisation — and it is one implementation of
+"pack these into a comp", not a group-shaped copy of one.
+
+**Stored on the composition, as a list beside the layers**, not as a mark on each layer:
+`Composition.groups: Vec<LayerGroup>`, each holding an id, a name, a label colour (the
+K-567 palette a layer's own chip indexes) and its member ids. Two reasons. It keeps
+grouping out of every path that reads a `Layer` for the picture — no render walk, frame key
+or AE-import mapping had to learn a new field — and it is the shape the project already
+uses for the same kind of thing (`Project::item_labels`, `Project::proxies`). Skipped while
+empty, so every project written before groups existed re-saves byte-identical (docs/10
+§1.1); the round-trip test pins it.
+
+**A group draws over a contiguous run, and nothing polices that.** `group::drawn_members`
+answers the longest unbroken run of the stack starting at the topmost named layer. A member
+dragged out of the middle of the band, or deleted, simply stops being in the group — it
+draws as the ungrouped layer it now looks like, and dragging it back rejoins it, with no
+edit recorded and nothing to repair. This is the degrade-not-fault rule a dangling matte or
+parent already follows (docs/03 §5.1), and it is why **no reorder op anywhere had to learn
+that groups exist**.
+
+The one place it *is* policed is at creation: `Op::GroupLayers` refuses a scattered
+selection (`OpError::InvalidGroup`), because such a group would be half-drawn the moment it
+existed, and a fold that silently loses layers is worse than a refusal. The rejected
+alternative was to move the selected layers together first. That was declined outright:
+moving layers changes what the comp *looks like*, and an organisational command must never
+do that behind the user's back. Ctrl+G on a scattered selection therefore does nothing and
+says so, rather than rearranging the stack.
+
+**Four ops, each invertible on its own**: `GroupLayers` (carrying the whole group and the
+slot it goes into, exactly as `AddItem` carries an item and its index, so an undone Ungroup
+returns to the same slot), `UngroupLayers`, `SetGroupName`, `SetGroupLabel`. The **lock**
+has nothing to say about any of them (`lock_guards` answers `None`): a group is Timeline
+bookkeeping like shy and the label colour — it moves no layer and touches no pixel — so a
+locked layer can still be gathered into one.
+
+**Switches broadcast; they are not a fifth state.** The header's eye, speaker, solo and
+padlock read on only when *every* member is on, and pressing one sets every member as a
+single `Op::Batch` — the existing per-layer ops, so there is no second definition of what
+"hidden" means. A member already in the wanted state contributes no op, so a group already
+wholly set commits nothing rather than an empty undo step.
+
+**The combined bar moves the group whole.** The header row's bar spans the earliest
+member's in point to the latest one's out; dragging it commits one `shift_group` batch of
+`SetLayerSpan`, each member's in point, out point and start offset carried by the same
+duration (not round-tripped through frame numbers — a start offset need not sit on a frame
+boundary). A drag that would carry any member before comp zero clamps to the earliest that
+fits, so the group stops at the wall with its shape intact. It is a **move only**: a group
+has no ends of its own to trim, because a trim would have to decide which member's edge it
+meant, and there is no honest answer. A locked member refuses on its way through the batch
+and the batch is all-or-nothing, so a group holding a locked layer does not move at all.
+
+**The header rides on its carrier's block, not on a row of its own.** `LayerRow` gains an
+optional `groupHeader`, carried by the topmost member; the header is drawn above that
+layer's own row *inside* its block, and a shut fold makes the carrier draw the header
+alone while the other members leave the row list — the same filter the shy switch already
+performs. This is why groups needed no changes to the block heights, the stack-drag
+arithmetic, the row seams, or either half's `LazyBlocks` window: `rows` is still one entry
+per visible layer, so the K-638/K-678 shapes and their gates hold unchanged. The fold state
+itself lives in the panel beside the twirls — whether a band is open is no more part of the
+composition than whether a layer is.
+
+**Ctrl+G / Ctrl+Shift+G**, checked free against the whole default keymap (`G` alone is the
+pen, in the Tools context and unmodified). They sit next to Ctrl+Shift+C deliberately: the
+light fold and the heavy one belong under the same finger.
+
+Terminology: **layer group**, distinct from the **property group** already in the glossary
+(Transform, Masks) and from the Timeline's **column groups**. The glossary carries the
+entry.

@@ -19,6 +19,15 @@ pub enum OpError {
     UnknownComp,
     #[error("unknown layer")]
     UnknownLayer,
+    #[error("unknown layer group")]
+    UnknownGroup,
+    /// [`Op::GroupLayers`] was handed something that cannot be a group (K-702):
+    /// layers that are not a contiguous run of the stack, a layer already in a
+    /// group, or a group id this comp already has. A refusal rather than a
+    /// degradation, for [`Self::InvalidGraph`]'s reason: none of the three can
+    /// arise from deleting some other thing.
+    #[error("invalid group: the layers are not an unbroken run, or one is already grouped")]
+    InvalidGroup,
     #[error("index out of range")]
     BadIndex,
     #[error("invalid span: out point must be after in point")]
@@ -291,6 +300,49 @@ pub enum Op {
     SetLayerLabel {
         comp: Uuid,
         layer: Uuid,
+        label: u8,
+    },
+    /// Fold a run of layers into a named **layer group** (K-702,
+    /// [`crate::group`]): a band in the Timeline's outline, and nothing else.
+    ///
+    /// Carries the whole group — id, name, colour and members — and the slot it
+    /// goes into, exactly as [`Op::AddItem`] carries an item and its index, so
+    /// the inverse is a plain [`Op::UngroupLayers`] and undoing that puts the
+    /// group back where it was rather than at the end of the list.
+    ///
+    /// Refused ([`OpError::InvalidGroup`]) when the members are not a
+    /// contiguous run of this comp's stack, when one of them is already in a
+    /// group, or when this id is already a group here. None of the three can
+    /// be reached by deleting something else, so each is an edit to decline
+    /// rather than a state to degrade — the same line [`OpError::InvalidGraph`]
+    /// draws.
+    ///
+    /// **The lock has nothing to say about it.** A group is Timeline
+    /// bookkeeping like shy and the label colour: it moves no layer, changes no
+    /// timing and touches no pixel, so a locked layer can still be gathered
+    /// into one (`lock_guards` answers `None` for it).
+    GroupLayers {
+        comp: Uuid,
+        index: usize,
+        group: Box<crate::group::LayerGroup>,
+    },
+    /// Undo a grouping: the band goes, every layer it held stays exactly where
+    /// and what it was. The inverse restores the group in its old slot.
+    UngroupLayers {
+        comp: Uuid,
+        group: Uuid,
+    },
+    /// Rename a layer group.
+    SetGroupName {
+        comp: Uuid,
+        group: Uuid,
+        name: String,
+    },
+    /// Set a layer group's label colour — an index into the same palette a
+    /// layer's own label indexes (K-567).
+    SetGroupLabel {
+        comp: Uuid,
+        group: Uuid,
         label: u8,
     },
     /// Set a composition's motion-blur shutter (K-120): the master enable plus
@@ -653,6 +705,10 @@ impl Op {
             Op::SetLayerGuide { .. } => "Guide switch",
             Op::SetLayerLocked { .. } => "Lock switch",
             Op::SetLayerLabel { .. } => "Set layer colour",
+            Op::GroupLayers { .. } => "Group layers",
+            Op::UngroupLayers { .. } => "Ungroup layers",
+            Op::SetGroupName { .. } => "Rename group",
+            Op::SetGroupLabel { .. } => "Set group colour",
             Op::SetLayerCollapse { .. } => "Collapse switch",
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
             Op::SetCompBackground { .. } => "Composition background",
@@ -1296,6 +1352,78 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetLayerLabel {
                 comp: *comp,
                 layer: *layer,
+                label: previous,
+            })
+        }
+        Op::GroupLayers { comp, index, group } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            if *index > c.groups.len() {
+                return Err(OpError::BadIndex);
+            }
+            let stack: Vec<Uuid> = c.layers.iter().map(|l| l.id).collect();
+            // Three refusals, in the order that reads: the shape of the
+            // selection, then whether those layers are free, then whether this
+            // group already exists.
+            if !crate::group::is_contiguous(&stack, &group.members) {
+                return Err(OpError::InvalidGroup);
+            }
+            if group
+                .members
+                .iter()
+                .any(|m| c.groups.iter().any(|g| g.members.contains(m)))
+            {
+                return Err(OpError::InvalidGroup);
+            }
+            if c.groups.iter().any(|g| g.id == group.id) {
+                return Err(OpError::InvalidGroup);
+            }
+            c.groups.insert(*index, (**group).clone());
+            Ok(Op::UngroupLayers {
+                comp: *comp,
+                group: group.id,
+            })
+        }
+        Op::UngroupLayers { comp, group } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let index = c
+                .groups
+                .iter()
+                .position(|g| g.id == *group)
+                .ok_or(OpError::UnknownGroup)?;
+            let removed = c.groups.remove(index);
+            Ok(Op::GroupLayers {
+                comp: *comp,
+                index,
+                group: Box::new(removed),
+            })
+        }
+        Op::SetGroupName { comp, group, name } => {
+            let g = doc
+                .comp_mut(*comp)
+                .ok_or(OpError::UnknownComp)?
+                .groups
+                .iter_mut()
+                .find(|g| g.id == *group)
+                .ok_or(OpError::UnknownGroup)?;
+            let previous = std::mem::replace(&mut g.name, name.clone());
+            Ok(Op::SetGroupName {
+                comp: *comp,
+                group: *group,
+                name: previous,
+            })
+        }
+        Op::SetGroupLabel { comp, group, label } => {
+            let g = doc
+                .comp_mut(*comp)
+                .ok_or(OpError::UnknownComp)?
+                .groups
+                .iter_mut()
+                .find(|g| g.id == *group)
+                .ok_or(OpError::UnknownGroup)?;
+            let previous = std::mem::replace(&mut g.label, *label);
+            Ok(Op::SetGroupLabel {
+                comp: *comp,
+                group: *group,
                 label: previous,
             })
         }

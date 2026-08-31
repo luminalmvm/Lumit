@@ -14038,3 +14038,96 @@ and hands them back when the layer opens again. If the plugin is not installed o
 machine that opens the project, the entry stays in the stack with its knobs, its keyframes
 and its bytes intact and the sound simply passes through untouched — install the plugin and
 everything is where it was.
+
+## 50. Groups, and the two ways of folding layers away, in plain terms
+
+Open a project you have been working on for a week and count the rows. Forty is normal, and
+forty rows is a wall of names you have to read past every time you want the one you are
+actually editing. Every editing program answers this the same way: let people put a lid on a
+handful of rows and label the lid.
+
+That is a **group**. You pick a run of layers that sit together — the three that make the
+lower third, say — press Ctrl+G, and a band appears above them with a triangle, a name and a
+colour tick. Click the triangle and the three rows fold away behind the band. Click it again
+and they are back, exactly as they were.
+
+The important word in that paragraph is *exactly*. **A group changes nothing about the
+picture.** The layers render in the same order, with the same blend modes, the same mattes
+and the same parents, whether the band is open, shut, or never made at all. If you deleted
+every group in a project the exported file would be identical to the last byte. A group is a
+label on a filing cabinet, not a change to what is inside it.
+
+### The other kind of fold
+
+Lumit already had a way of collapsing layers, and it is worth being clear about why groups
+did not replace it.
+
+**Pre-compose** takes a set of layers and puts them in a composition of their own, leaving a
+single layer in their place that plays that new composition. That really does collapse them
+into one layer — it is what the owner asked for when he said "do all this work, then have it
+collapse into a single layer". But it is a *decision about how the picture is built*. Once
+the layers live in another composition they composite among themselves first and only then
+come back as one flat image, so a blend mode inside can no longer reach the layers outside,
+and a matte pointing out of the set stops pointing at anything. Sometimes that is precisely
+what you want. It is never what you want merely because the row list got long.
+
+So there are two folds, and they are deliberately different weights:
+
+| | What it does | Does it change the render? |
+|---|---|---|
+| **Group** | Puts a labelled band over a run of rows and hides them behind it | No. Never. |
+| **Pre-compose** | Packs the layers into a new composition, one layer in their place | Yes — that is the point |
+
+They are not rivals, and they are wired together: right-click a group's header and one of
+the rows is **Pre-compose group**. So the usual working order is the natural one — group
+things while you are building, because it costs nothing, and pre-compose the group later if
+and when you actually want it flattened. The heavy fold is one click from the light one.
+
+### Why a group has to be a run of layers that sit together
+
+If you pick the top layer and the bottom layer of a stack of forty and ask to group them,
+Lumit says no.
+
+This is not fussiness. A group is drawn as a *band* — one header row with the members
+indented under it. A band can only cover rows that are next to each other. If the two
+members were forty rows apart there would be no honest place to draw the header, and folding
+it would hide two rows from opposite ends of the comp while leaving the thirty-eight between
+them showing, which reads as a bug however you draw it.
+
+The tempting fix is to shuffle the two layers together first. Lumit does not do that either,
+and the reason matters: **moving layers changes what the composition looks like.** A layer's
+place in the stack is what decides whether it is in front of or behind its neighbours. An
+organisational command that quietly reorders your comp to make its own filing tidier is a
+command that can ruin a shot. So the answer to a scattered selection is a refusal, and you
+move the layers yourself if that is what you meant.
+
+### What happens when you break a group
+
+You are allowed to. Drag a layer out of the middle of a group and Lumit does not stop you,
+pop up a warning, or repair anything. That layer simply stops being in the group: the band
+shrinks to whatever run is still unbroken, and the layer you dragged out draws as the
+ordinary ungrouped layer it now looks like. Drag it back into place and it is in the group
+again — no edit is recorded either way, because nothing about the document changed. The
+group still names it; the drawing just reads the stack and answers honestly.
+
+The same is true of deleting a member: the group is one layer shorter and nothing else. And
+if you delete all of them, the band has nothing left to draw and quietly stops appearing.
+
+This is a pattern used elsewhere in Lumit — a layer whose matte or parent has been deleted
+degrades to "no matte", "no parent" rather than raising an error — and it buys something
+specific here. Because the *drawing* works out membership by reading the stack, no other
+part of the program has to know that groups exist. Dragging a layer up the stack, deleting
+one, pre-composing, importing: none of them needed a single line about groups.
+
+### The switches on the band
+
+The header row carries the same four switches a layer row does — the eye, the speaker, solo
+and the padlock — and they work as a broadcast. The eye shows as "on" only when *every*
+layer in the group is visible, and pressing it sets all of them at once. That is one undo
+step, not five: press it, decide you preferred it the other way, press Ctrl+Z once, and the
+whole group comes back.
+
+The bar beside the band is the same idea in time. It stretches from the earliest start in
+the group to the latest end, and dragging it slides every member together, keeping their
+timing relative to one another. You cannot trim it, only move it — trimming a band would
+have to decide which member's edge you meant, and there is no honest answer to that.

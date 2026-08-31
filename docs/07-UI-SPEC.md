@@ -1394,6 +1394,31 @@ the numbers rather than leave a stale frame's costs on screen. The same per-effe
 appears on the effect's title row in the Effect controls panel (§6), from the same
 measurement — the panel shows the numbers, it does not turn them on.
 
+#### 4.2a Layer groups (K-702)
+
+A **layer group** ([01-GLOSSARY.md](01-GLOSSARY.md)) is a named band over an unbroken run
+of layers: a header row in the outline with its members indented beneath it, and a combined
+bar in the lane half. It is **organisation only** — see
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §5.4 — and MUST never change the picture.
+
+- **Ctrl+G** groups the selected layers; **Ctrl+Shift+G** ungroups. A selection that is not
+  a contiguous run of the stack MUST be refused, and the stack MUST NOT be rearranged to
+  make one possible.
+- The header row draws, in the identity column: a **fold triangle**, a **colour tick** (the
+  §12A.3a label palette, opening the same eight-colour picker a layer's dot does), the
+  **name** (double-click, or the row's menu, to rename) and the **member count**. In the
+  switches column it draws the eye, speaker, solo and padlock; each reads on only when
+  every member is on, and one press sets them all as a single undo step. The remaining
+  columns are blank — a band has no blend mode, matte or parent.
+- **Folding** hides the members behind the header, exactly as the shy filter hides a row.
+  The fold is session state, like a layer's twirl; it is not saved with the composition.
+- The **combined bar** spans the earliest member's in point to the latest one's out, in the
+  group's own colour. Dragging it moves every member together as one undo step. It MUST NOT
+  be trimmable.
+- The header's right-click menu offers **Rename group**, **Ungroup**, and **Pre-compose
+  group** — the last handing the group's members to the dialogue in §13.4, which is the
+  render-level collapse a group deliberately is not.
+
 ### 4.3 Layer lanes and property twirl-down
 
 - Each layer row twirls open (`click` the caret, or property-reveal shortcuts, §15) into

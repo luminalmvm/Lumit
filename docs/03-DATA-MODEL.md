@@ -383,6 +383,39 @@ Invariants (binding, per K-020/K-022):
   layer's assembled output, after clip retiming — a glow keyframed on the layer is unaffected
   by where cuts fall.
 
+### 5.4 Layer groups (K-702)
+
+`Composition.groups: Vec<LayerGroup>` — named bands over runs of `layers`, each holding an
+id, a name, a label colour (the K-567 palette a layer's own chip indexes) and its member
+ids. Drawn as a header row in the Timeline's outline with its members indented beneath it.
+
+**Organisation only. The render walk never reads this field.** A composition builds the
+identical frame whether its layers are grouped, ungrouped, folded or open; grouping moves
+no layer, changes no blend and breaks no matte. The collapse that *does* change how the
+picture is built is **precompose** (§5.2, [07-UI-SPEC.md](07-UI-SPEC.md) §13.4), and the
+two are wired together rather than confused: a group's header offers *Pre-compose group*,
+handing its members to the existing command.
+
+- **A list beside the layers, not a mark on each one** — the shape `Project::item_labels`
+  and `Project::proxies` already use. It keeps grouping out of every path that reads a
+  `Layer` for the picture, and out of the AE-import mapping.
+- **Skipped while empty**, so a project written before groups existed re-saves
+  byte-identical ([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §1.1).
+- **A group draws over the longest unbroken run** of the stack starting at its topmost
+  named layer (`group::drawn_members`). A member deleted, or dragged out of the middle of
+  the band, simply stops being in the group and draws as an ordinary layer; dragging it
+  back rejoins it. This is §5.1's degrade-never-fault rule, and it is why no reorder op
+  has to know that groups exist.
+- **Creation is the one thing refused**: `Op::GroupLayers` declines a selection that is
+  not a contiguous run, or a layer already in a group (`OpError::InvalidGroup`). Moving
+  layers to make them adjacent would change what the comp looks like, which an
+  organisational command must never do.
+- **The lock has nothing to say about grouping** — like shy and the label colour, it is
+  Timeline bookkeeping, so a locked layer can still be gathered into a band.
+- **Switches broadcast**: the header's eye, speaker, solo and padlock read on only when
+  every member is on, and one press sets every member as a single `Op::Batch` of the
+  existing per-layer ops.
+
 ### 5.5 Light layers (K-360)
 
 `LayerKind::Light { light: LightDef }` — a source of light in the composition. Like a Camera

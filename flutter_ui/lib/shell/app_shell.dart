@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
+import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
@@ -469,6 +470,39 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           layer.duplicate();
           state.notifyDocumentChanged();
+        }
+      // The light fold, beside the heavy one below it (K-702). Ctrl+G gathers
+      // the selected run into a named band in the outline; the engine refuses
+      // a selection that is not an unbroken run of the stack, which is the
+      // whole of the rule and the reason nothing here checks it first.
+      case 'layer.group':
+        if (comp == null) {
+          handled = false;
+        } else if (groupSelectedLayers(
+          comp: comp,
+          layerIds: [
+            for (final l in ui.selectedLayers.value) l.internallayerId
+          ],
+          name: l10n.groupDefaultName,
+        )) {
+          state.notifyDocumentChanged();
+        } else {
+          // A scattered selection, or one already in a group: the engine said
+          // no, and the interface's answer is to leave the stack alone rather
+          // than rearrange it to make the group possible.
+          handled = false;
+        }
+      case 'layer.ungroup':
+        if (comp == null) {
+          handled = false;
+        } else if (ungroupSelection(
+          comp: comp,
+          groups: ui.model.groups,
+          layerIds: ui.selectedLayerIds,
+        )) {
+          state.notifyDocumentChanged();
+        } else {
+          handled = false;
         }
       case 'layer.precompose':
         // Ctrl+Shift+C asks before it packs (docs/07 §13.4): the dialogue is

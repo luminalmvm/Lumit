@@ -41,6 +41,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
+import '../panels/timeline_group_row_frb.dart';
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/clipboard.dart';
 import '../state/dock.dart';
@@ -1047,6 +1048,40 @@ List<MenuSection> lumitMenus(
                       workspace: ui.workspace,
                     ),
             action: 'layer.precompose'),
+        // The light fold beside the heavy one (K-702). Group is live with
+        // something selected; Ungroup only while the selection is actually in
+        // a group, so the row greys out rather than doing nothing when
+        // pressed. Both go through the shell's own command, which is the one
+        // implementation the keyboard reaches too.
+        MenuEntry.divider(),
+        MenuEntry(
+            l10n.menuGroupLayers,
+            comp == null || layers.isEmpty
+                ? null
+                : () {
+                    groupSelectedLayers(
+                      comp: comp,
+                      layerIds: [for (final l in layers) l.internallayerId],
+                      name: l10n.groupDefaultName,
+                    );
+                    app.notifyDocumentChanged();
+                  },
+            action: 'layer.group'),
+        MenuEntry(
+            l10n.menuUngroup,
+            comp == null ||
+                    !ui.model.groups
+                        .any((g) => g.members.any(ui.selectedLayerIds.contains))
+                ? null
+                : () {
+                    ungroupSelection(
+                      comp: comp,
+                      groups: ui.model.groups,
+                      layerIds: ui.selectedLayerIds,
+                    );
+                    app.notifyDocumentChanged();
+                  },
+            action: 'layer.ungroup'),
       ]
     ),
     (title: l10n.menuEffect, items: () => _effectMenu(app, layers)),

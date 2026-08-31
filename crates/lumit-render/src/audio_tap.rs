@@ -247,7 +247,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// ponytail: the layers' **audio insert chains** are deliberately not run
     /// (K-700). A driver reading the mix is asked once per picture frame, and a
     /// plugin cannot answer a window of a track thousands of times in a render
-    /// â€” so a glow that follows the music follows the *dry* music. Bake each
+    /// — so a glow that follows the music follows the *dry* music. Bake each
     /// chain once at control rate and read the tap off that, if a plugin ever
     /// changes a level enough for the picture to notice.
     fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
@@ -379,6 +379,7 @@ mod tests {
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),

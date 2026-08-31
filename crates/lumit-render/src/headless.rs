@@ -2454,7 +2454,7 @@ fn driven_volume_of(
 }
 
 /// The layer's **audio insert chain**, or `None` for a layer with an empty
-/// effect stack â€” which is most of them, and is what keeps a mix with no
+/// effect stack — which is most of them, and is what keeps a mix with no
 /// plugin in it exactly the mix it was (K-700).
 ///
 /// Whether any entry in the stack is *audio* is deliberately not asked here:
@@ -3220,6 +3220,7 @@ mod tests {
         };
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
@@ -3346,6 +3347,7 @@ mod tests {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id,
             name: name.into(),
@@ -3441,6 +3443,7 @@ mod tests {
             };
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                groups: Vec::new(),
                 beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
@@ -6011,6 +6014,7 @@ surfaces:
             adjust.effects = vec![mb];
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                groups: Vec::new(),
                 beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
@@ -6130,6 +6134,7 @@ surfaces:
             }
             doc.items.push(ProjectItem::Composition(Composition {
                 master_volume_db: 0.0,
+                groups: Vec::new(),
                 beat_grid: None,
                 id: comp_id,
                 name: "Scene".into(),
@@ -6200,6 +6205,7 @@ surfaces:
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),
@@ -7273,6 +7279,7 @@ surfaces:
         let comp_id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: comp_id,
             name: "Scene".into(),

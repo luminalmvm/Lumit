@@ -326,6 +326,32 @@ shape of the general rule: **a fact the model can state for nothing turns a per-
 question into no question at all**, and the expensive read (`get_graph`, to find which
 parameters a wire is deciding) is then made only for the layers that can possibly answer.
 
+### A layer group crosses already resolved (K-702)
+
+`BridgeCompModel.groups: Vec<BridgeLayerGroup>` carries, per group, its id, name and label
+colour, **the member ids in stack order**, the combined `in_frame`/`out_frame` its bar
+spans, and four switch faces (`visible`, `audible`, `solo`, `locked`) that are on only when
+every member is.
+
+Every one of those is a question the engine can answer for nothing while it already holds
+the document, and none of them is a question Dart should be answering at all. Which layers
+a group still draws over is a *reading of the document* — the unbroken run rule in
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §5.4 — and a second opinion about it living in the
+view is exactly the drift the read model exists to prevent. It is also the shape the
+section above names: working it out on the Dart side would be a walk of the whole stack per
+group per rebuild, on a panel that rebuilds constantly.
+
+Down the wire go five commands on `CompositionReference` — `group_layers` (which answers
+the new id, and refuses a scattered selection rather than moving anything),
+`ungroup`, `set_group_name`, `set_group_label`, `set_group_switch` (one `Op::Batch` over
+the members) and `shift_group` (likewise, for the combined bar's drag). Nothing new is
+needed for *Pre-compose group*: it hands the group's members to the `precompose` call that
+already existed.
+
+The **fold state is not on this boundary at all.** Whether a band is twirled open is
+session state in the Timeline panel, beside the layer twirls, for the same reason those are
+not in the document.
+
 ### The effect schema crosses as four lists, not one
 
 An effect's parameters are one question; how the panel *arranges* them is another, and they

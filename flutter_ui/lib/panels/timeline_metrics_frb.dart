@@ -20,6 +20,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'layer_fold_frb.dart';
+import 'timeline_group_row_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 
 /// The layer-number column: the mockup's own 18 (K-451), shared by the column
@@ -317,6 +318,16 @@ class LayerRow {
   /// put a small diamond behind every large one.
   final List<BridgeKeyframe> summaryKeys;
 
+  /// The **layer group's header row**, when this layer is the topmost member of
+  /// one (K-702), or null for every other layer.
+  ///
+  /// Carried on the carrier layer rather than standing as a row of its own,
+  /// which is what let groups arrive without touching the drag arithmetic, the
+  /// row seams or either half's window: `rows` is still one entry per visible
+  /// layer, and the header is simply drawn above its carrier's row inside the
+  /// carrier's own block.
+  final GroupHeader? groupHeader;
+
   const LayerRow({
     required this.entry,
     required this.id,
@@ -327,11 +338,54 @@ class LayerRow {
     required this.sequenceExtra,
     this.hasAudio = false,
     this.hasPicture = true,
+    this.groupHeader,
   });
 
-  /// This block's height: its own row, the rows it draws, and its open view.
+  /// Whether the layer's **own** row draws at all. A shut group's carrier
+  /// draws the header and nothing else — its bar, its switches and its
+  /// fold-out are what the fold hid, along with the members below it.
+  bool get bodyDrawn => !(groupHeader?.folded ?? false);
+
+  /// This block's height: the group header it carries, then — unless the fold
+  /// is shut — its own row, the rows it draws, and its open view.
   double get height =>
-      rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0);
+      (groupHeader == null ? 0 : rowHeight) +
+      (bodyDrawn
+          ? rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0)
+          : 0);
+}
+
+/// Where a comp's groups land on its rows: the header each carrier layer
+/// draws, and the layers a shut fold takes off the list.
+///
+/// **Both answers in one walk, decided once for the panel.** The two are the
+/// same question asked from either end — which layer carries a band, and which
+/// layers that band swallowed — and answering them apart is how the outline and
+/// the lanes end up disagreeing about how many rows a comp has.
+///
+/// The engine has already resolved each group to the unbroken run it actually
+/// draws over (`BridgeLayerGroup.members`, in stack order), so there is no
+/// membership arithmetic here at all: the first member carries the header, and
+/// a shut fold hides every member including that one's own row.
+({Map<String, GroupHeader> headers, Set<String> hidden}) groupFolds({
+  required List<BridgeLayerGroup> groups,
+  required Set<String> folded,
+}) {
+  final headers = <String, GroupHeader>{};
+  final hidden = <String>{};
+  for (final g in groups) {
+    if (g.members.isEmpty) continue;
+    final shut = folded.contains(g.id.toString());
+    headers[g.members.first.toString()] = GroupHeader(g, shut);
+    if (shut) {
+      // Every member but the first: the first stays in the list as the row
+      // the header is drawn on, with its own body standing down.
+      for (final m in g.members.skip(1)) {
+        hidden.add(m.toString());
+      }
+    }
+  }
+  return (headers: headers, hidden: hidden);
 }
 
 /// What a column group is called — in its header, and on the bottom bar's
@@ -374,6 +428,7 @@ List<LayerRow> layerRows({
   Map<String, BridgeScalar> volumeDb = const {},
   Map<String, Map<String, DrivenParam>> driven = const {},
   Map<String, RevealFilter> reveal = const {},
+  Map<String, GroupHeader> groupHeaders = const {},
   double compWidth = 0,
   double compHeight = 0,
 }) {
@@ -413,6 +468,7 @@ List<LayerRow> layerRows({
       // the visibility switch is the one every layer but a music track uses,
       // so appearing and then going is far less startling than the reverse.
       hasPicture: hasPicture[id] ?? true,
+      groupHeader: groupHeaders[id],
     ));
   }
   return out;

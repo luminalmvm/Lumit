@@ -4699,6 +4699,7 @@ fn marker_rig(
     let secs = |n, d| CompTime(Rational::new(n, d).unwrap());
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: uuid::Uuid::now_v7(),
         name: "c".into(),
@@ -8649,6 +8650,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
 
     let mut comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: uuid::Uuid::now_v7(),
         name: "Scene".into(),

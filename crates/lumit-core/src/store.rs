@@ -1151,6 +1151,7 @@ mod tests {
     fn test_comp() -> Composition {
         Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
@@ -2115,8 +2116,8 @@ mod tests {
             sample_temporally: true,
             custom_name: None,
             linked_pairs: Vec::new(),
-            extra: serde_json::Map::new(),
             plugin_state: None,
+            extra: serde_json::Map::new(),
         }];
         store
             .commit(Op::SetLayerEffects {

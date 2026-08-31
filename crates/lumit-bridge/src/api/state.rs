@@ -521,6 +521,14 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCompMarkers { comp, .. }
         // The beat band redraws from it, and it travels with the markers.
         | Op::SetBeatGrid { comp, .. }
+        // A layer group is a band over a run of rows (K-702), so the outline
+        // rebuilds and no one layer's contents changed. The comp is the honest
+        // scope for all four: making one, taking it away, and renaming or
+        // recolouring the header row it draws.
+        | Op::GroupLayers { comp, .. }
+        | Op::UngroupLayers { comp, .. }
+        | Op::SetGroupName { comp, .. }
+        | Op::SetGroupLabel { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
         // beneath it, and one that stops leaves those layers alone again — so
         // the comp is the honest scope, not the one row that changed.

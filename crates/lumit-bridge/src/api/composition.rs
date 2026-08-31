@@ -184,6 +184,54 @@ pub struct BridgeLayerEntry {
     pub info: crate::api::layer::BridgeLayerInfo,
 }
 
+/// One **layer group** as the Timeline draws it (K-702): the header row's
+/// name, colour and switch faces, the members folded under it, and the span
+/// its combined bar covers.
+///
+/// **Resolved here, not in Dart.** The engine already knows which of a group's
+/// named layers are still an unbroken run of the stack
+/// ([`lumit_core::group::drawn_members`]), what their ends come to in frames,
+/// and whether every one of them is visible. Working any of that out on the
+/// Dart side would be a second opinion about the document living in the view,
+/// which is the thing the read model exists to prevent — and it would cost a
+/// walk of the whole stack on every rebuild, which is the cost K-184 removed.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeLayerGroup {
+    pub id: Uuid,
+    pub name: String,
+    /// Index into the theme's label palette (K-567), like a layer's own.
+    pub label: u8,
+    /// The layers the header actually spans, topmost first. Empty for a group
+    /// whose layers have all been deleted — the outline draws no row for it.
+    pub members: Vec<Uuid>,
+    /// The combined bar: the earliest in point and the latest out point across
+    /// [`Self::members`], at the comp's own rate so the bar needs no time↔frame
+    /// trip to draw itself. `(0, 0)` when there are no members.
+    pub in_frame: i64,
+    pub out_frame: i64,
+    /// The header's switch faces: **on only when every member is on**, which is
+    /// what makes one press a broadcast rather than a guess. Hiding a group
+    /// hides all of it; showing it again shows all of it.
+    pub visible: bool,
+    pub audible: bool,
+    pub solo: bool,
+    pub locked: bool,
+}
+
+/// Which of the four broadcast switches a group header press moves
+/// ([`CompositionReference::set_group_switch`], K-702). The same four switches
+/// a layer row already carries — a group press just sets them on every member
+/// at once, as one undo step.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeGroupSwitch {
+    Visible,
+    Audible,
+    Solo,
+    Locked,
+}
+
 /// The comp read model (K-184): what one `get_model` crossing carries. Dart
 /// holds this and refreshes it when the engine reports a change; panels draw
 /// from it with no bridge calls at all.
@@ -207,6 +255,10 @@ pub struct BridgeCompModel {
     /// rebuild (K-184); writes still go through `set_background`.
     pub background: [f32; 4],
     pub layers: Vec<BridgeLayerEntry>,
+    /// The comp's layer groups (K-702), in document order and already resolved
+    /// to the run each one draws over. Empty for a comp nobody has grouped,
+    /// which is every comp until someone presses Ctrl+G.
+    pub groups: Vec<BridgeLayerGroup>,
 }
 
 /// Everything the Composition settings dialog reads and writes.
@@ -468,6 +520,7 @@ impl CompositionReference {
                     ),
                 })
                 .collect(),
+            groups: read_groups(comp),
         })
     }
 
@@ -828,6 +881,7 @@ impl CompositionReference {
 
         let inner = Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: name.clone(),
@@ -2397,5 +2451,447 @@ impl CompositionReference {
             retime: None,
             masks: Some(masks),
         }))
+    }
+
+    /// Fold the given layers into a new group (K-702) and answer its id.
+    ///
+    /// Refused with [`BridgeError::OpError`] when they are not an unbroken run
+    /// of the stack, or when one of them is already in a group — see
+    /// [`lumit_core::group`] for why a scattered group cannot be drawn
+    /// honestly. The Timeline says so rather than rearranging the stack: a
+    /// group must never move a layer.
+    ///
+    /// The name is the caller's, so the one place that decides what an untitled
+    /// group is called is the interface, in the reader's own language.
+    #[frb(sync)]
+    pub fn group_layers(&self, layer_ids: Vec<Uuid>, name: String) -> Result<Uuid, BridgeError> {
+        let comp = self.composition()?;
+        let group = lumit_core::group::LayerGroup {
+            id: Uuid::now_v7(),
+            name,
+            label: 0,
+            members: layer_ids,
+        };
+        let id = group.id;
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::GroupLayers {
+                comp: self.id,
+                index: comp.groups.len(),
+                group: Box::new(group),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(id)
+    }
+
+    /// Take a group's fold away. Every layer it held stays exactly where and
+    /// what it was; only the band goes.
+    #[frb(sync)]
+    pub fn ungroup(&self, group: Uuid) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::UngroupLayers {
+                comp: self.id,
+                group,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    #[frb(sync)]
+    pub fn set_group_name(&self, group: Uuid, name: String) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetGroupName {
+                comp: self.id,
+                group,
+                name,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    #[frb(sync)]
+    pub fn set_group_label(&self, group: Uuid, label: u8) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetGroupLabel {
+                comp: self.id,
+                group,
+                label,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// Set one switch on **every member** of a group, as one undo step (K-702).
+    ///
+    /// The broadcast the group header's switch cells perform: the face reads on
+    /// only when all of them are on ([`BridgeLayerGroup::visible`] and friends),
+    /// so one press makes the whole group agree rather than flipping each
+    /// member's own state and leaving a mixed group mixed.
+    ///
+    /// A member already in the wanted state contributes no op, so pressing a
+    /// group whose members half agree is one small batch, and a group already
+    /// wholly set commits nothing at all rather than an empty undo step.
+    #[frb(sync)]
+    pub fn set_group_switch(
+        &self,
+        group: Uuid,
+        switch: BridgeGroupSwitch,
+        on: bool,
+    ) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
+        let Some(g) = comp.groups.iter().find(|g| g.id == group) else {
+            return Err(BridgeError::OpError(lumit_core::OpError::UnknownGroup));
+        };
+        let members = lumit_core::group::drawn_members(&stack, g);
+        let ops: Vec<lumit_core::Op> = comp
+            .layers
+            .iter()
+            .filter(|l| members.contains(&l.id))
+            .filter(|l| {
+                on != match switch {
+                    BridgeGroupSwitch::Visible => l.switches.visible,
+                    BridgeGroupSwitch::Audible => l.switches.audible,
+                    BridgeGroupSwitch::Solo => l.switches.solo,
+                    BridgeGroupSwitch::Locked => l.switches.locked,
+                }
+            })
+            .map(|l| match switch {
+                BridgeGroupSwitch::Visible => lumit_core::Op::SetLayerVisible {
+                    comp: self.id,
+                    layer: l.id,
+                    visible: on,
+                },
+                BridgeGroupSwitch::Audible => lumit_core::Op::SetLayerAudible {
+                    comp: self.id,
+                    layer: l.id,
+                    audible: on,
+                },
+                BridgeGroupSwitch::Solo => lumit_core::Op::SetLayerSolo {
+                    comp: self.id,
+                    layer: l.id,
+                    solo: on,
+                },
+                BridgeGroupSwitch::Locked => lumit_core::Op::SetLayerLocked {
+                    comp: self.id,
+                    layer: l.id,
+                    locked: on,
+                },
+            })
+            .collect();
+        if ops.is_empty() {
+            return Ok(());
+        }
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::Batch { ops })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// Slide every member of a group along the timeline by `delta` frames, as
+    /// one undo step — what dragging the group's combined bar commits (K-702).
+    ///
+    /// A **move**, never a trim: each member's in point, out point and start
+    /// offset all travel together, so the group's contents keep their timing
+    /// relative to one another and to themselves. That is the same arithmetic
+    /// one bar's own move drag does, applied to the run at once.
+    ///
+    /// A drag that would carry any member's in point before comp zero is
+    /// clamped to the earliest one that fits, so the group stops at the wall
+    /// with its shape intact instead of accordioning against it. A locked
+    /// member refuses on its way through the batch, and the batch is
+    /// all-or-nothing — so a group holding a locked layer does not move at all,
+    /// which is the honest reading of a lock.
+    #[frb(sync)]
+    pub fn shift_group(&self, group: Uuid, delta: i64) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
+        let Some(g) = comp.groups.iter().find(|g| g.id == group) else {
+            return Err(BridgeError::OpError(lumit_core::OpError::UnknownGroup));
+        };
+        let members = lumit_core::group::drawn_members(&stack, g);
+        let moving: Vec<&lumit_core::model::Layer> = comp
+            .layers
+            .iter()
+            .filter(|l| members.contains(&l.id))
+            .collect();
+        let Some(earliest) = moving
+            .iter()
+            .map(|l| comp.frame_rate.frame_at(l.in_point))
+            .min()
+        else {
+            return Ok(());
+        };
+        let delta = delta.max(-earliest);
+        if delta == 0 {
+            return Ok(());
+        }
+        // The travel as a **duration**, added to each of the three times,
+        // rather than each time round-tripped through its frame number
+        // (docs/14 §2). A start offset need not sit on a frame boundary, and
+        // quantising it here would nudge a layer's contents by a fraction of a
+        // frame every time the group was dragged.
+        let travel = lumit_core::time::Duration(
+            comp.frame_rate
+                .time_of_frame(delta)
+                .map_err(|_| BridgeError::InvalidFrameRate)?
+                .0,
+        );
+        let mut ops = Vec::with_capacity(moving.len());
+        for l in &moving {
+            let at = |t: lumit_core::time::CompTime| {
+                t.add_dur(travel).map_err(|_| BridgeError::InvalidFrameRate)
+            };
+            ops.push(lumit_core::Op::SetLayerSpan {
+                comp: self.id,
+                layer: l.id,
+                in_point: at(l.in_point)?,
+                out_point: at(l.out_point)?,
+                start_offset: at(l.start_offset)?,
+            });
+        }
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::Batch { ops })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+}
+
+/// The comp's groups as the Timeline draws them — resolved once per read model
+/// (K-184), never per row.
+fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
+    let stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
+    comp.groups
+        .iter()
+        .map(|g| {
+            let members = lumit_core::group::drawn_members(&stack, g);
+            let held: Vec<&lumit_core::model::Layer> = comp
+                .layers
+                .iter()
+                .filter(|l| members.contains(&l.id))
+                .collect();
+            // An empty group answers a zero span and switch faces that are all
+            // on: it draws no row at all, so nothing reads either, and "all of
+            // nothing is on" is the honest answer to an `all()` over none.
+            BridgeLayerGroup {
+                id: g.id,
+                name: g.name.clone(),
+                label: g.label,
+                in_frame: held
+                    .iter()
+                    .map(|l| comp.frame_rate.frame_at(l.in_point))
+                    .min()
+                    .unwrap_or(0),
+                out_frame: held
+                    .iter()
+                    .map(|l| comp.frame_rate.frame_at(l.out_point))
+                    .max()
+                    .unwrap_or(0),
+                visible: held.iter().all(|l| l.switches.visible),
+                audible: held.iter().all(|l| l.switches.audible),
+                solo: held.iter().all(|l| l.switches.solo),
+                locked: held.iter().all(|l| l.switches.locked),
+                members,
+            }
+        })
+        .collect()
+}
+
+/// The layer-group half of this surface (K-702): what `get_model` hands the
+/// Timeline for a group, and what the edits do.
+///
+/// The engine's own rules — contiguity, undo, a deleted member leaving quietly
+/// — are pinned in `crates/lumit-core/tests/layer_groups.rs`. These are about
+/// the seam: that the read model resolves the run, the span and the switch
+/// faces so the Timeline never has to, and that a broadcast switch and a group
+/// drag are one undo step each.
+///
+/// In this file rather than in `api/tests.rs` because the crate builds as a
+/// `cdylib` only and has no `rlib` for an integration test to link — and behind
+/// this `#[cfg(test)]`, which is where the CI panic-grep over the API surface
+/// stops reading (`ci.yml`, `no-panics-in-frb-api`).
+#[cfg(test)]
+mod group_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
+    use super::*;
+    use crate::api::layer::LayerReference;
+    use crate::api::project::ProjectReference;
+    use crate::api::state::LumitBridgeState;
+
+    /// A project with one comp holding four Nulls, top of the stack first.
+    fn comp_with_four() -> (ProjectReference, CompositionReference, Vec<LayerReference>) {
+        let project = LumitBridgeState::new_project(None).expect("a new project");
+        let comp = project
+            .new_composition("Scene".into(), None)
+            .expect("a composition");
+        // Each `add_null_layer` goes in at the top, so the stack reads newest
+        // first; reversing gives the four in the order the outline shows them.
+        let mut layers: Vec<LayerReference> = (0..4)
+            .map(|_| comp.add_null_layer().expect("a null layer"))
+            .collect();
+        layers.reverse();
+        (project, comp, layers)
+    }
+
+    fn ids(layers: &[LayerReference]) -> Vec<Uuid> {
+        layers.iter().map(|l| l.layer_id).collect()
+    }
+
+    fn span(model: &BridgeCompModel, i: usize) -> (i64, i64) {
+        (
+            model.layers[i].info.in_frame,
+            model.layers[i].info.out_frame,
+        )
+    }
+
+    #[test]
+    fn the_read_model_resolves_the_run_the_header_spans() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[1..3].to_vec(), "Titles".into())
+            .expect("a run of two groups");
+
+        let model = comp.get_model().expect("the read model");
+        assert_eq!(model.groups.len(), 1);
+        let g = &model.groups[0];
+        assert_eq!(g.id, group);
+        assert_eq!(g.name, "Titles");
+        assert_eq!(g.members, all[1..3].to_vec(), "in stack order");
+        // Four fresh Nulls each span the whole comp, so the combined bar does.
+        assert_eq!((g.in_frame, g.out_frame), span(&model, 1));
+        // A fresh layer is visible and unlocked, so the header's faces agree.
+        assert!(g.visible && !g.locked);
+        // The stack itself is untouched: grouping moves nothing.
+        assert_eq!(
+            model
+                .layers
+                .iter()
+                .map(|e| e.layer.layer_id)
+                .collect::<Vec<_>>(),
+            all
+        );
+    }
+
+    #[test]
+    fn a_scattered_selection_is_refused_at_the_seam_too() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        assert!(comp
+            .group_layers(vec![all[0], all[2]], "Scattered".into())
+            .is_err());
+        assert!(comp.get_model().expect("model").groups.is_empty());
+    }
+
+    #[test]
+    fn a_switch_broadcasts_to_every_member_as_one_step() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[0..2].to_vec(), "Plates".into())
+            .expect("a group");
+
+        comp.set_group_switch(group, BridgeGroupSwitch::Visible, false)
+            .expect("the broadcast lands");
+        let model = comp.get_model().expect("model");
+        let visible = |i: usize| model.layers[i].info.switches.visible;
+        assert!(!visible(0) && !visible(1), "both members went dark");
+        assert!(
+            visible(2) && visible(3),
+            "and nothing outside the group did"
+        );
+        assert!(!model.groups[0].visible, "the header face follows");
+
+        // One undo takes the whole broadcast, not one member of it.
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        assert!(back.layers.iter().all(|e| e.info.switches.visible));
+
+        // Setting a switch to what it already says commits nothing at all, so
+        // there is no empty step left behind to undo past.
+        comp.set_group_switch(group, BridgeGroupSwitch::Visible, true)
+            .expect("a no-op is not an error");
+        assert!(comp
+            .get_model()
+            .expect("model")
+            .layers
+            .iter()
+            .all(|e| e.info.switches.visible));
+    }
+
+    #[test]
+    fn dragging_the_group_bar_moves_its_members_together() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[1..3].to_vec(), "Titles".into())
+            .expect("a group");
+        let before = comp.get_model().expect("model");
+        let untouched = span(&before, 0);
+
+        comp.shift_group(group, 12).expect("the group slides");
+        let after = comp.get_model().expect("model");
+        for i in 1..3 {
+            assert_eq!(
+                span(&after, i),
+                (span(&before, i).0 + 12, span(&before, i).1 + 12),
+                "member {i} moved whole"
+            );
+        }
+        assert_eq!(span(&after, 0), untouched, "and nothing else moved");
+        assert_eq!(
+            after.groups[0].in_frame, 12,
+            "the combined bar moved with it"
+        );
+
+        // The wall: a drag that would carry the group before comp zero stops
+        // with its shape intact rather than folding up against it.
+        comp.shift_group(group, -1000)
+            .expect("clamped, not refused");
+        let walled = comp.get_model().expect("model");
+        assert_eq!(span(&walled, 1).0, 0);
+        assert_eq!(
+            span(&walled, 1).1 - span(&walled, 1).0,
+            span(&before, 1).1 - span(&before, 1).0,
+            "the member kept its length"
+        );
+    }
+
+    #[test]
+    fn a_group_can_be_renamed_recoloured_and_taken_away() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[0..2].to_vec(), "Group 1".into())
+            .expect("a group");
+
+        comp.set_group_name(group, "Background".into())
+            .expect("rename");
+        comp.set_group_label(group, 4).expect("recolour");
+        let model = comp.get_model().expect("model");
+        assert_eq!(model.groups[0].name, "Background");
+        assert_eq!(model.groups[0].label, 4);
+
+        comp.ungroup(group).expect("ungroup");
+        let after = comp.get_model().expect("model");
+        assert!(after.groups.is_empty());
+        assert_eq!(after.layers.len(), 4, "ungrouping deletes nothing");
+
+        // A group that is not there is an error rather than a silent success:
+        // nothing in the interface can reach it, so reaching it is a bug worth
+        // hearing about.
+        assert!(comp.ungroup(group).is_err());
     }
 }

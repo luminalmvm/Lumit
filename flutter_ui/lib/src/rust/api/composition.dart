@@ -19,8 +19,8 @@ import 'project_item.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `runs_as_video`, `to_engine`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
 /// Every blend mode, in the order the Timeline's dropdown shows them. The index
@@ -85,6 +85,11 @@ class BridgeCompModel {
   final F32Array4 background;
   final List<BridgeLayerEntry> layers;
 
+  /// The comp's layer groups (K-700), in document order and already resolved
+  /// to the run each one draws over. Empty for a comp nobody has grouped,
+  /// which is every comp until someone presses Ctrl+G.
+  final List<BridgeLayerGroup> groups;
+
   const BridgeCompModel({
     required this.durationFrames,
     required this.fps,
@@ -93,6 +98,7 @@ class BridgeCompModel {
     required this.motionBlurEnabled,
     required this.background,
     required this.layers,
+    required this.groups,
   });
 
   @override
@@ -103,7 +109,8 @@ class BridgeCompModel {
       fpsDen.hashCode ^
       motionBlurEnabled.hashCode ^
       background.hashCode ^
-      layers.hashCode;
+      layers.hashCode ^
+      groups.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -116,7 +123,8 @@ class BridgeCompModel {
           fpsDen == other.fpsDen &&
           motionBlurEnabled == other.motionBlurEnabled &&
           background == other.background &&
-          layers == other.layers;
+          layers == other.layers &&
+          groups == other.groups;
 }
 
 /// Everything the Composition settings dialog reads and writes.
@@ -222,6 +230,18 @@ class BridgeCompSize {
           height == other.height;
 }
 
+/// Which of the four broadcast switches a group header press moves
+/// ([`CompositionReference::set_group_switch`], K-700). The same four switches
+/// a layer row already carries — a group press just sets them on every member
+/// at once, as one undo step.
+enum BridgeGroupSwitch {
+  visible,
+  audible,
+  solo,
+  locked,
+  ;
+}
+
 /// One layer of the comp read model (K-184): the plain-data handle Dart
 /// addresses edits by, and everything the panels draw for it.
 class BridgeLayerEntry {
@@ -243,6 +263,85 @@ class BridgeLayerEntry {
           runtimeType == other.runtimeType &&
           layer == other.layer &&
           info == other.info;
+}
+
+/// One **layer group** as the Timeline draws it (K-700): the header row's
+/// name, colour and switch faces, the members folded under it, and the span
+/// its combined bar covers.
+///
+/// **Resolved here, not in Dart.** The engine already knows which of a group's
+/// named layers are still an unbroken run of the stack
+/// ([`lumit_core::group::drawn_members`]), what their ends come to in frames,
+/// and whether every one of them is visible. Working any of that out on the
+/// Dart side would be a second opinion about the document living in the view,
+/// which is the thing the read model exists to prevent — and it would cost a
+/// walk of the whole stack on every rebuild, which is the cost K-184 removed.
+class BridgeLayerGroup {
+  final UuidValue id;
+  final String name;
+
+  /// Index into the theme's label palette (K-567), like a layer's own.
+  final int label;
+
+  /// The layers the header actually spans, topmost first. Empty for a group
+  /// whose layers have all been deleted — the outline draws no row for it.
+  final List<UuidValue> members;
+
+  /// The combined bar: the earliest in point and the latest out point across
+  /// [`Self::members`], at the comp's own rate so the bar needs no time↔frame
+  /// trip to draw itself. `(0, 0)` when there are no members.
+  final PlatformInt64 inFrame;
+  final PlatformInt64 outFrame;
+
+  /// The header's switch faces: **on only when every member is on**, which is
+  /// what makes one press a broadcast rather than a guess. Hiding a group
+  /// hides all of it; showing it again shows all of it.
+  final bool visible;
+  final bool audible;
+  final bool solo;
+  final bool locked;
+
+  const BridgeLayerGroup({
+    required this.id,
+    required this.name,
+    required this.label,
+    required this.members,
+    required this.inFrame,
+    required this.outFrame,
+    required this.visible,
+    required this.audible,
+    required this.solo,
+    required this.locked,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      label.hashCode ^
+      members.hashCode ^
+      inFrame.hashCode ^
+      outFrame.hashCode ^
+      visible.hashCode ^
+      audible.hashCode ^
+      solo.hashCode ^
+      locked.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLayerGroup &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          label == other.label &&
+          members == other.members &&
+          inFrame == other.inFrame &&
+          outFrame == other.outFrame &&
+          visible == other.visible &&
+          audible == other.audible &&
+          solo == other.solo &&
+          locked == other.locked;
 }
 
 /// One timeline marker (docs/03 §11): a cue on the comp's timebase, and — when
@@ -709,6 +808,21 @@ class CompositionReference {
         that: this,
       );
 
+  /// Fold the given layers into a new group (K-700) and answer its id.
+  ///
+  /// Refused with [`BridgeError::OpError`] when they are not an unbroken run
+  /// of the stack, or when one of them is already in a group — see
+  /// [`lumit_core::group`] for why a scattered group cannot be drawn
+  /// honestly. The Timeline says so rather than rearranging the stack: a
+  /// group must never move a layer.
+  ///
+  /// The name is the caller's, so the one place that decides what an untitled
+  /// group is called is the interface, in the reader's own language.
+  UuidValue groupLayers(
+          {required List<UuidValue> layerIds, required String name}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
+          that: this, layerIds: layerIds, name: name);
+
   /// This comp's **master fader**, in dB (docs/09 §3.1, K-691). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
@@ -1122,6 +1236,34 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
 
+  void setGroupLabel({required UuidValue group, required int label}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetGroupLabel(
+              that: this, group: group, label: label);
+
+  void setGroupName({required UuidValue group, required String name}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetGroupName(
+              that: this, group: group, name: name);
+
+  /// Set one switch on **every member** of a group, as one undo step (K-700).
+  ///
+  /// The broadcast the group header's switch cells perform: the face reads on
+  /// only when all of them are on ([`BridgeLayerGroup::visible`] and friends),
+  /// so one press makes the whole group agree rather than flipping each
+  /// member's own state and leaving a mixed group mixed.
+  ///
+  /// A member already in the wanted state contributes no op, so pressing a
+  /// group whose members half agree is one small batch, and a group already
+  /// wholly set commits nothing at all rather than an empty undo step.
+  void setGroupSwitch(
+          {required UuidValue group,
+          required BridgeGroupSwitch switch_,
+          required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetGroupSwitch(
+              that: this, group: group, switch_: switch_, on_: on_);
+
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.
   void setMarkers({required List<BridgeMarker> markers}) =>
@@ -1205,6 +1347,24 @@ class CompositionReference {
   void setWorkArea({BridgeSpan? span}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetWorkArea(
           that: this, span: span);
+
+  /// Slide every member of a group along the timeline by `delta` frames, as
+  /// one undo step — what dragging the group's combined bar commits (K-700).
+  ///
+  /// A **move**, never a trim: each member's in point, out point and start
+  /// offset all travel together, so the group's contents keep their timing
+  /// relative to one another and to themselves. That is the same arithmetic
+  /// one bar's own move drag does, applied to the run at once.
+  ///
+  /// A drag that would carry any member's in point before comp zero is
+  /// clamped to the earliest one that fits, so the group stops at the wall
+  /// with its shape intact instead of accordioning against it. A locked
+  /// member refuses on its way through the batch, and the batch is
+  /// all-or-nothing — so a group holding a locked layer does not move at all,
+  /// which is the honest reading of a lock.
+  void shiftGroup({required UuidValue group, required PlatformInt64 delta}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceShiftGroup(
+          that: this, group: group, delta: delta);
 
   /// Start writing this composition to `path`.
   ///
@@ -1294,6 +1454,11 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceTrimToWorkArea(
         that: this,
       );
+
+  /// Take a group's fold away. Every layer it held stays exactly where and
+  /// what it was; only the band goes.
+  void ungroup({required UuidValue group}) => BridgeLib.instance.api
+      .crateApiCompositionCompositionReferenceUngroup(that: this, group: group);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

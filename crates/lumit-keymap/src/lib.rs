@@ -139,6 +139,8 @@ impl ActionId {
             "layer.split" => "Split the layer at the playhead",
             "layer.duplicate" => "Duplicate the layer",
             "layer.precompose" => "Pre-compose the layer",
+            "layer.group" => "Group the selected layers",
+            "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",
             "timeline.zoom.in" => "Zoom in",
             "timeline.zoom.out" => "Zoom out",
@@ -732,6 +734,14 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "Mod+Shift+D", "layer.split"),
         row(Timeline, "Mod+D", "layer.duplicate"),
         row(Timeline, "Mod+Shift+C", "layer.precompose"),
+        // Ctrl+G folds the selected run into a group and Ctrl+Shift+G takes the
+        // fold away (K-702) — the chord every editor with groups in it uses,
+        // and free in Lumit: `G` alone is the pen in the Tools context, which
+        // is a different context and an unmodified key. It sits beside
+        // Pre-compose deliberately: the two are the light fold and the heavy
+        // one, and they belong under the same finger.
+        row(Timeline, "Mod+G", "layer.group"),
+        row(Timeline, "Mod+Shift+G", "layer.ungroup"),
         row(Timeline, "=", "timeline.zoom.in"),
         row(Timeline, "-", "timeline.zoom.out"),
         row(Timeline, "\\", "timeline.zoom.fit"),

@@ -2572,6 +2572,7 @@ mod tests {
         };
         let comp = Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
@@ -2738,6 +2739,7 @@ mod tests {
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
@@ -3013,17 +3015,16 @@ mod tests {
         journal.clear().unwrap();
         assert!(journal.read().unwrap().is_empty());
     }
-}
 
     /// **A layer's audio insert chain survives the file** (K-700,
-    /// docs/impl/audio-plugins.md Â§4; the note's Â§7 plan 6).
+    /// docs/impl/audio-plugins.md §4; the note's §7 plan 6).
     ///
-    /// The chain *is* the layer's effect stack â€” "the stack is the rack" â€” so
+    /// The chain *is* the layer's effect stack — "the stack is the rack" — so
     /// what has to round-trip is the order, each instance's keyframed rows, and
     /// the one thing that is new: the plugin's **opaque state blob**, which
     /// Lumit never parses and must hand back byte for byte. The plugin itself
     /// is deliberately not installed in this test: a missing plugin is docs/12
-    /// Â§1's inert placeholder and must lose nothing, which is exactly what a
+    /// §1's inert placeholder and must lose nothing, which is exactly what a
     /// project made on somebody else's machine looks like.
     ///
     /// And an instance with no blob writes no line for one, so every project
@@ -3065,6 +3066,7 @@ mod tests {
         let mut doc = doc_with_item();
         let mut comp = lumit_core::model::Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: "Comp 1".into(),
@@ -3080,7 +3082,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         // Two plugins in order, the second holding a blob with a byte that is
-        // not printable ASCII â€” the case a naive text encoding would mangle.
+        // not printable ASCII — the case a naive text encoding would mangle.
         let blob: Vec<u8> = vec![0x00, 0xff, 0x7f, 0x80, b'{', b'"'];
         let chain = vec![
             clap("com.nobody.eq", -6.5, None),
@@ -3167,3 +3169,4 @@ mod tests {
 {json}"
         );
     }
+}

@@ -63,6 +63,7 @@ fn doc_with(kind: LayerKind, extra_item: Option<ProjectItem>) -> (std::sync::Arc
     let comp_id = Uuid::now_v7();
     doc.items.push(ProjectItem::Composition(Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: comp_id,
         name: "Probe".into(),

@@ -46,6 +46,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
@@ -85,6 +86,7 @@ import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
+import 'timeline_group_row_frb.dart';
 import 'transform_rows_frb.dart';
 
 // The parts this file was split into (the split rule, K-007): every name they
@@ -118,6 +120,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// exactly the rows the outline draws — the two halves are one table, and a
   /// name that does not line up with its bar is worse than no fold-out at all.
   final Set<String> _open = {};
+
+  /// Which **layer groups** are folded shut (K-702), by group id. Session
+  /// state, held beside [_open] and for the same reason: a fold changes how
+  /// many rows the table has, and the outline and the lanes have to leave room
+  /// for exactly the same ones. Not document state — whether a band is twirled
+  /// open is no more part of the composition than whether a layer is.
+  final Set<String> _foldedGroups = {};
 
   /// Whether [id]'s twirl is down.
   ///
@@ -600,6 +609,78 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Graph mode is the exception the property paths already carve out: the
   /// picked properties *are* its curves, and dropping them gives it a new
   /// picture to draw.
+  /// Everything a **layer group's** two rows can be asked to do (K-702), built
+  /// once per build and handed to both halves so the header and its combined
+  /// bar act on one set rather than two that agree.
+  ///
+  /// Every one of them is a forward: the engine decides what grouping means,
+  /// what a broadcast switch does and how far a drag may travel, and the panel
+  /// only says which group and how much. The single exception is the fold
+  /// itself, which is session state and has no business in the document.
+  GroupActions _groupActions(LumitUiState ui, CompositionReference comp) =>
+      GroupActions(
+        onToggleFold: (id) => setState(() {
+          if (!_foldedGroups.remove(id)) _foldedGroups.add(id);
+        }),
+        // Choosing the header chooses the band, which is what makes every
+        // command that runs over the selection — the stack drag included —
+        // reach the whole group without a second road for groups.
+        onSelect: (g) {
+          final byId = {
+            for (final e in ui.model.layers) e.layer.internallayerId: e.layer,
+          };
+          ui.setSelection([
+            for (final m in g.members)
+              if (byId[m] != null) byId[m]!,
+          ]);
+          _publishRowSelection();
+          _publishLaneKeys();
+          setState(() {});
+        },
+        onRename: (g, name) {
+          comp.setGroupName(group: g.id, name: name);
+          ui.model.refresh();
+        },
+        onLabel: (g, label) {
+          comp.setGroupLabel(group: g.id, label: label);
+          ui.model.refresh();
+        },
+        onSwitch: (g, which, on) {
+          comp.setGroupSwitch(group: g.id, switch_: which, on_: on);
+          ui.model.refresh();
+        },
+        onUngroup: (g) {
+          comp.ungroup(group: g.id);
+          _foldedGroups.remove(g.id.toString());
+          ui.model.refresh();
+        },
+        // The heavy fold, from the light one's own menu: the group's members
+        // handed to the precompose dialogue that already existed, so there is
+        // one implementation of "pack these into a comp" rather than a
+        // group-shaped copy of one.
+        onPrecompose: (g) {
+          final byId = {
+            for (final e in ui.model.layers) e.layer.internallayerId: e.layer,
+          };
+          final layers = [
+            for (final m in g.members)
+              if (byId[m] != null) byId[m]!,
+          ];
+          if (layers.isEmpty) return;
+          showPrecomposeDialogFrb(
+            context: context,
+            comp: comp,
+            selectedLayers: layers,
+            ui: ui,
+            workspace: ui.workspace,
+          );
+        },
+        onShift: (g, delta) {
+          comp.shiftGroup(group: g.id, delta: delta);
+          ui.model.refresh();
+        },
+      );
+
   void _selectLayer(LumitUiState ui, LayerReference? layer,
       {List<BridgeLayerEntry> among = const []}) {
     _aimLayerSelection(ui, layer, among);
@@ -2870,10 +2951,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final frames = ui.model.durationFrames;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final needle = _search.trim().toLowerCase();
+    // Where the comp's groups land on its rows (K-702): the header each
+    // carrier layer draws, and the members a shut fold takes off the list —
+    // both from one walk, so the two halves cannot disagree about how many
+    // rows there are.
+    final folds =
+        groupFolds(groups: ui.model.groups, folded: _foldedGroups);
     final layers = [
       for (final e in ui.model.layers)
         if ((needle.isEmpty || e.info.name.toLowerCase().contains(needle)) &&
-            !(_hideShy && e.info.switches.shy))
+            !(_hideShy && e.info.switches.shy) &&
+            !folds.hidden.contains(e.layer.internallayerId.toString()))
           e,
     ];
     // Whether the matte column is carrying its two mode toggles' room: it does
@@ -2919,6 +3007,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with (K-622, K-684).
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
+        groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
 
@@ -3367,6 +3456,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             groupOrder: groupOrder,
                                             widths: groupWidths,
                                             matteToggles: matteToggles,
+                                            groupActions:
+                                                _groupActions(ui, comp),
                                             selection: _rowSelection,
                                             onSelectProperty: _selectProperty,
                                             onEditProperty: _selectOnEdit,
@@ -3737,6 +3828,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       selection: _rowSelection,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,
+                      groupActions: _groupActions(ui, comp),
                       onOpenSequence: _toggleSequenceView,
                       onGraphHeight: (entry, h) => setState(() =>
                           _sequenceGraph[

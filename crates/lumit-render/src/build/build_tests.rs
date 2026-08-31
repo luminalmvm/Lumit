@@ -51,6 +51,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
     };
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -145,6 +146,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     };
     let nested = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Nested".into(),
@@ -170,6 +172,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     pre_layer.transform.scale_x = lumit_core::anim::Property::fixed(200.0);
     let parent = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Parent".into(),
@@ -319,6 +322,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
     };
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -420,6 +424,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     ));
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -545,6 +550,7 @@ fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
 
     let comp_of = |top: Layer| Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -667,6 +673,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
 
     let comp_of = |layers: Vec<Layer>| Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -791,6 +798,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
 
     let painted = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -924,6 +932,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
 
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -1055,6 +1064,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
 
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),
@@ -1162,6 +1172,7 @@ fn a_text_layer_on_a_path_draws_into_the_paths_own_box() {
     let sizes = |path: Option<Uuid>| {
         let comp = Composition {
             master_volume_db: 0.0,
+            groups: Vec::new(),
             beat_grid: None,
             id: Uuid::now_v7(),
             name: "C".into(),
@@ -1260,6 +1271,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
 
     let comp = Composition {
         master_volume_db: 0.0,
+        groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
         name: "Comp".into(),

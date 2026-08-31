@@ -24,6 +24,7 @@ import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_layer_rows_frb.dart';
 import 'timeline_bar_frb.dart';
+import 'timeline_group_row_frb.dart';
 import 'timeline_outline_row_frb.dart';
 
 /// A scrollbar for a scroll view that is somewhere else in the tree.
@@ -847,6 +848,10 @@ class Outline extends StatelessWidget {
   /// The layer `Enter` has just asked to rename (K-243).
   final ValueNotifier<UuidValue?> renameRequest;
 
+  /// What a group header row can be asked to do (K-702) — the panel's, so the
+  /// lane half's combined bar and this half's header act on one set.
+  final GroupActions groupActions;
+
   /// The scroll this list sits in and the height of its viewport — what
   /// [LazyBlocks] windows the stack against, so a long precomp costs the rows
   /// on screen rather than the rows it has.
@@ -873,6 +878,7 @@ class Outline extends StatelessWidget {
     required this.layerDrag,
     required this.blockHeights,
     required this.renameRequest,
+    required this.groupActions,
     required this.vScroll,
     required this.viewport,
   });
@@ -912,6 +918,22 @@ class Outline extends StatelessWidget {
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // The group's header row, when this layer is the topmost member
+              // of one (K-702) — drawn *inside* the carrier's block, which is
+              // why the row list is still one entry per layer and every drag
+              // and window below it kept its shape.
+              if (rows[i].groupHeader != null)
+                GroupOutlineRow(
+                  key: ValueKey<String>(
+                      'tl-group-${rows[i].groupHeader!.id}'),
+                  header: rows[i].groupHeader!,
+                  groupOrder: groupOrder,
+                  widths: widths,
+                  actions: groupActions,
+                ),
+              // A shut fold draws the header and nothing else: the carrier's
+              // own row is one of the rows the fold hid.
+              if (rows[i].bodyDrawn)
               OutlineRow(
                 key: ValueKey<String>('tl-row-${rows[i].id}'),
                 comp: comp,
@@ -942,13 +964,14 @@ class Outline extends StatelessWidget {
               // sides of the Timeline and the halves stop lining up. Both sides
               // ask the same [LayerRow], so the gap and the view cannot be
               // opened by one half and not the other.
-              if (rows[i].sequenceExtra != null)
+              if (rows[i].bodyDrawn && rows[i].sequenceExtra != null)
                 SizedBox(
                   key: ValueKey<String>('tl-seq-room-${rows[i].id}'),
                   height: rows[i].sequenceExtra,
                 ),
               // The fold-out, from the same list the lanes leave room for.
-              for (final row in rows[i].drawnRows)
+              if (rows[i].bodyDrawn)
+                for (final row in rows[i].drawnRows)
                 // A raw pointer listener, not a gesture: touching a sub-item
                 // highlights its layer, and it must never fight the row's own
                 // taps and drags for the gesture arena.

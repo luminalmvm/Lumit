@@ -31,6 +31,7 @@ import 'timeline_outline_frb.dart';
 import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
+import 'timeline_group_row_frb.dart';
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
@@ -147,6 +148,11 @@ class LayerArea extends StatelessWidget {
 
   /// Open or close a Sequence layer's view (K-248).
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
+
+  /// What a group's combined bar can be asked to do (K-702) — the panel's own
+  /// set, shared with the outline's header row so the two halves of a group
+  /// act on one answer.
+  final GroupActions groupActions;
 
   /// The graph half of a sequence view has been dragged to a new height.
   final void Function(BridgeLayerEntry entry, double height)? onGraphHeight;
@@ -308,6 +314,7 @@ class LayerArea extends StatelessWidget {
     required this.cacheRevision,
     required this.dragPreview,
     required this.bounds,
+    required this.groupActions,
     required this.vScroll,
     required this.selectedKeys,
     required this.onKeysSelected,
@@ -724,7 +731,23 @@ class LayerArea extends StatelessWidget {
                                       // from its own layer's slice, so a click
                                       // that lights one bar rebuilds one bar
                                       // (docs/impl/ui-performance.md §4.4).
-                                      if (rows[i].sequenceExtra == null)
+                                      // The group's combined bar, level with
+                                      // its header row in the outline (K-702):
+                                      // the earliest member's in point to the
+                                      // latest one's out, and dragging it
+                                      // slides every member as one step.
+                                      if (rows[i].groupHeader != null)
+                                        GroupBar(
+                                          key: ValueKey<String>(
+                                              'tl-groupbar-${rows[i].groupHeader!.id}'),
+                                          header: rows[i].groupHeader!,
+                                          actions: groupActions,
+                                          xOfFrame: axis.xOf,
+                                          framesOfDx: (dx) =>
+                                              axis.framesOfPx(dx).round(),
+                                        ),
+                                      if (rows[i].bodyDrawn &&
+                                          rows[i].sequenceExtra == null)
                                         LayerBlock(
                                           selection: selection,
                                           layerId: rows[i].id,
