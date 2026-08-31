@@ -200,10 +200,13 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
         checked: picked?.mask.mode == mode,
       ),
     MenuEntry.divider(),
+    // Null with nothing picked, like every row above it: an enabled row that
+    // did nothing when pressed said "there is no mask" only to whoever pressed
+    // it twice, where a greyed one says it before the click.
     MenuEntry.toggle(
       l10n.tipInverted,
       picked == null
-          ? () {}
+          ? null
           : () => write(maskWith(picked.mask, inverted: !picked.mask.inverted)),
       checked: () => pickedMask(ui)?.mask.inverted ?? false,
     ),

@@ -267,6 +267,11 @@ void main() {
       await open(tester, 'Layer', under: 'Mask');
       expect(tester.widget<Text>(find.text('Subtract')).style?.color,
           t.textDisabled);
+      // Inverted is a tick row rather than a mode row, and it was the one that
+      // drew live and then swallowed the press.
+      expect(tester.widget<Text>(find.text('Inverted')).style?.color,
+          t.textDisabled,
+          reason: 'a row with no mask to invert greys like the rest of them');
       await dismiss(tester);
     });
 
