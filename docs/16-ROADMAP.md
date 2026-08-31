@@ -91,8 +91,9 @@ renders inside Lumit; a deliberately crashing test plugin takes down its process
 Ongoing, ordered by community demand: 2.5D cameras/lights/DOF in full, game camera-path
 import (HLAE and friends — absorbing the flow scene's external tool chain), the tracker and
 stabiliser, keying and matte tools, rotoscoping (the flow style leans on hand-roto and
-multi-pass footage; depth-pass-aware compositing belongs here), a particle system, tier-2
-effects, text animators, shape operators (repeater et al.), variable mask feather, the
+multi-pass footage; depth-pass-aware compositing belongs here), the Puppet tools
+([impl/puppet.md](impl/puppet.md) — mesh, pins, as-rigid-as-possible deformer, K-704), a
+particle system, tier-2 effects, text animators, shape operators (repeater et al.), variable mask feather, the
 **Composer** audio workspace ([09-AUDIO.md](09-AUDIO.md) §Composer), pitch-preserving audio
 retime, OFX GPU render suite, OCIO colour management, app scripting.
 

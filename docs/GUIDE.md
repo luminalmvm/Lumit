@@ -14178,7 +14178,7 @@ the original pixels it owns, and it carries that patch to wherever it ended up â
 here on the CPU because the layer's pixels are already in hand at that point in the render
 (right where paint strokes and masks are applied, for the same reason).
 
-## 51. Layer styles, or the wardrobe a layer wears, in plain terms
+## 52. Layer styles, or the wardrobe a layer wears, in plain terms
 
 Photoshop has a trick every title designer leans on: right-click a layer, add a
 drop shadow, a glow, a stroke around the edge â€” and the layer is dressed
