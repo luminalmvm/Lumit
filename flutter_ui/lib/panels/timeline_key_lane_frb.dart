@@ -4,6 +4,7 @@
 // Split out of timeline_panel_frb.dart.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -96,8 +97,28 @@ class KeyLane extends StatefulWidget {
   State<KeyLane> createState() => _KeyLaneState();
 }
 
+/// Past this many keys a lane stops building a widget per key and takes the
+/// hit-strip below instead. An imported After Effects camera arrives with a
+/// baked key per frame — thousands per property — and a `Positioned` +
+/// `MouseRegion` + `GestureDetector` per key made every rebuild, layout and
+/// hit-test of the panel pay for all of them (the ~10 fps "camera twirled
+/// open" report). Hand-keyed lanes stay under this and keep the per-key
+/// widgets, whose keys the tests drive by name.
+const int keyLaneSlotBudget = 64;
+
 class _KeyLaneState extends State<KeyLane> {
   int? _dragging;
+
+  /// Where each key draws, in lane pixels, for the frame being built — what
+  /// the dense strip resolves a pointer against. In key order, which is
+  /// x-sorted except while a stretch carries a subset; a drag in flight owns
+  /// the pointer, so nothing resolves against the moved marks anyway.
+  List<double> _xs = const [];
+
+  /// The dense strip's hovered key, feeding the painter directly
+  /// ([LaneKeysPainter.hoverOf]) so a hover crossing thousands of marks
+  /// repaints one lane and rebuilds nothing.
+  final ValueNotifier<int?> _hoverIx = ValueNotifier<int?>(null);
 
   /// The keys this drag is carrying, captured at its start (6.24) — the whole
   /// lane selection, which is spread across rows this lane cannot see.
@@ -136,7 +157,61 @@ class _KeyLaneState extends State<KeyLane> {
   @override
   void dispose() {
     _escape.dispose();
+    _hoverIx.dispose();
     super.dispose();
+  }
+
+  /// The key nearest [dx], within the twelve-pixel grab the per-key slots
+  /// give, or null on open ground. Binary search over [_xs].
+  int? _nearestKey(double dx) {
+    if (_xs.isEmpty) return null;
+    var lo = 0;
+    var hi = _xs.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (_xs[mid] < dx) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    int? best;
+    var span = 6.0 + 1e-9;
+    // The neighbour on each side of the insertion point; on a tie the later
+    // key wins, which is what the stacked per-key slots answered too.
+    for (final i in [lo - 1, lo]) {
+      if (i < 0 || i >= _xs.length) continue;
+      final d = (dx - _xs[i]).abs();
+      if (d <= span) {
+        span = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  /// A key drag begins — the strip and the per-key detectors share this.
+  void _beginKeyDrag(int i) {
+    final keyboard = HardwareKeyboard.instance;
+    // Read at the gesture's **start**, because the modifier decides what the
+    // gesture means when it begins (K-500 §2.1).
+    _additive = keyboard.isShiftPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isMetaPressed;
+    // **A key already in the catch keeps the catch** (6.24) — the rule the
+    // graph's own key drag follows, and the rule the key menu already
+    // followed. A key *outside* the catch takes it, so a drag always carries
+    // something that includes the key in hand.
+    _pickedAtStart = !widget.selectedKeys.contains('${widget.rowId}#$i');
+    if (_pickedAtStart) widget.onSelectKey(i, _additive);
+    setState(() {
+      _dragging = i;
+      _deltaPx = 0;
+      // Captured now so the set cannot change underneath the drag, exactly as
+      // the block stretch captures its own.
+      _held = {...widget.selectedKeys};
+    });
+    _escape.begin(_abandon);
   }
 
   /// Where key [i] draws — its own time, plus whichever gesture has hold of
@@ -282,8 +357,10 @@ class _KeyLaneState extends State<KeyLane> {
     // same question twice and leave the indicator depending on which of the
     // two calls ran last.
     final frames = [for (var i = 0; i < widget.keys.length; i++) _frameOf(i)];
+    _xs = [for (final f in frames) widget.axis.xOf(f)];
     final caught = _caught;
     final dragging = _dragging;
+    final dense = widget.keys.length > keyLaneSlotBudget;
     // **Every child of this Stack carries a key**, and the keys stay the same
     // whether or not a snap has been caught.
     //
@@ -311,7 +388,8 @@ class _KeyLaneState extends State<KeyLane> {
               axis: widget.axis,
               colour: t.animated,
               chosen: t.textPrimary,
-              hovered: _hovered,
+              hovered: dense ? null : _hovered,
+              hoverOf: dense ? _hoverIx : null,
               // The same size and the same shapes in both modes (K-457,
               // K-459): a key says its interpolation wherever it is drawn,
               // and says it at the size it is aimed at.
@@ -332,83 +410,102 @@ class _KeyLaneState extends State<KeyLane> {
               child: ColoredBox(color: t.accent),
             ),
           ),
-        for (var i = 0; i < widget.keys.length; i++)
-          Positioned(
-            key: ValueKey<String>('tl-key-slot-${widget.rowId}#$i'),
-            left: widget.axis.xOf(frames[i]) - 6,
-            top: 0,
-            width: 12,
-            height: t.density.laneRow,
+        if (dense)
+          // One widget for the whole lane past the slot budget: the strip's
+          // render object claims only the pixels a per-key slot would have
+          // (twelve around each mark, so the marquee keeps the ground), and
+          // the handlers resolve which key from the pointer instead of from a
+          // widget per key. Same grabs, same menu, same drag — minus the
+          // thousands of widgets an imported camera lane was paying to hold
+          // them.
+          Positioned.fill(
+            key: ValueKey<String>('tl-key-strip-${widget.rowId}'),
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeLeftRight,
-              // The grab slot is the hover target too: what brightens is
-              // exactly what a press would take (P5).
-              onEnter: (_) => setState(() => _hovered = i),
-              onExit: (_) => setState(() {
-                if (_hovered == i) _hovered = null;
-              }),
+              onHover: (d) => _hoverIx.value = _nearestKey(d.localPosition.dx),
+              onExit: (_) => _hoverIx.value = null,
               child: GestureDetector(
-                key: ValueKey<String>('tl-key-${widget.rowId}#$i'),
-                behavior: HitTestBehavior.opaque,
-                // Touching a diamond selects it, and a drag is a touch that
-                // went somewhere — so the drag's own start is where selection
-                // belongs. This recognizer is alone in the arena, which means
-                // it wins on release even when the pointer never moved: one
-                // callback covers the click and the drag, and no second
-                // recognizer competes for the sub-pixel-per-frame movements a
-                // lane drag is made of. Without a per-key selection only the
-                // marquee could fill the lane catch, so easing one key from
-                // the lanes (F9, the bottom bar's buttons) had nothing to act
-                // on and looked like it did nothing.
+                behavior: HitTestBehavior.deferToChild,
                 supportedDevices: dragDevices,
-                // The key's own menu (K-500 §2.1) — Linear / Easy ease / Hold
-                // / Ease… / Delete key, the graph key's menu, on the mark the
-                // lanes draw.
-                onSecondaryTapUp: (d) => widget.onKeyMenu(i, d.globalPosition),
-                onHorizontalDragStart: (_) {
-                  final keyboard = HardwareKeyboard.instance;
-                  // Read at the gesture's **start**, because the modifier
-                  // decides what the gesture means when it begins (K-500 §2.1).
-                  _additive = keyboard.isShiftPressed ||
-                      keyboard.isControlPressed ||
-                      keyboard.isMetaPressed;
-                  // **A key already in the catch keeps the catch** (6.24) — the
-                  // rule the graph's own key drag follows, and the rule the key
-                  // menu already followed. Narrowing the selection here would
-                  // make a whole-selection drag impossible to start, since this
-                  // recogniser fires the moment the pointer goes down. A key
-                  // *outside* the catch takes it, so a drag always carries
-                  // something that includes the key in hand.
-                  _pickedAtStart =
-                      !widget.selectedKeys.contains('${widget.rowId}#$i');
-                  if (_pickedAtStart) widget.onSelectKey(i, _additive);
-                  setState(() {
-                    _dragging = i;
-                    _deltaPx = 0;
-                    // Captured now so the set cannot change underneath the
-                    // drag, exactly as the block stretch captures its own.
-                    _held = {...widget.selectedKeys};
-                  });
-                  _escape.begin(_abandon);
+                onSecondaryTapUp: (d) {
+                  final i = _nearestKey(d.localPosition.dx);
+                  if (i != null) widget.onKeyMenu(i, d.globalPosition);
                 },
-                // Ignored once `Escape` has taken the drag: the pointer keeps
-                // travelling after it, and a key that started following again
-                // would make the way out look like a stutter.
+                onHorizontalDragStart: (d) {
+                  final i = _nearestKey(d.localPosition.dx);
+                  if (i != null) _beginKeyDrag(i);
+                },
                 onHorizontalDragUpdate: (d) {
-                  if (!_escape.running) return;
+                  if (!_escape.running || _dragging == null) return;
                   setState(() => _deltaPx += d.delta.dx);
                   _publish();
                 },
                 onHorizontalDragEnd: (_) {
-                  if (_escape.end()) _commit(i);
+                  final i = _dragging;
+                  if (_escape.end() && i != null) _commit(i);
                 },
                 onHorizontalDragCancel: () {
                   _escape.end();
                   _abandon();
                 },
+                child: _KeyStripHit(xs: _xs),
               ),
             ),
-          ),
+          )
+        else
+          for (var i = 0; i < widget.keys.length; i++)
+            Positioned(
+              key: ValueKey<String>('tl-key-slot-${widget.rowId}#$i'),
+              left: widget.axis.xOf(frames[i]) - 6,
+              top: 0,
+              width: 12,
+              height: t.density.laneRow,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeLeftRight,
+                // The grab slot is the hover target too: what brightens is
+                // exactly what a press would take (P5).
+                onEnter: (_) => setState(() => _hovered = i),
+                onExit: (_) => setState(() {
+                  if (_hovered == i) _hovered = null;
+                }),
+                child: GestureDetector(
+                  key: ValueKey<String>('tl-key-${widget.rowId}#$i'),
+                  behavior: HitTestBehavior.opaque,
+                  // Touching a diamond selects it, and a drag is a touch that
+                  // went somewhere — so the drag's own start is where selection
+                  // belongs. This recognizer is alone in the arena, which means
+                  // it wins on release even when the pointer never moved: one
+                  // callback covers the click and the drag, and no second
+                  // recognizer competes for the sub-pixel-per-frame movements a
+                  // lane drag is made of. Without a per-key selection only the
+                  // marquee could fill the lane catch, so easing one key from
+                  // the lanes (F9, the bottom bar's buttons) had nothing to act
+                  // on and looked like it did nothing.
+                  supportedDevices: dragDevices,
+                  // The key's own menu (K-500 §2.1) — Linear / Easy ease / Hold
+                  // / Ease… / Delete key, the graph key's menu, on the mark the
+                  // lanes draw.
+                  onSecondaryTapUp: (d) =>
+                      widget.onKeyMenu(i, d.globalPosition),
+                  onHorizontalDragStart: (_) => _beginKeyDrag(i),
+                  // Ignored once `Escape` has taken the drag: the pointer keeps
+                  // travelling after it, and a key that started following again
+                  // would make the way out look like a stutter.
+                  onHorizontalDragUpdate: (d) {
+                    if (!_escape.running) return;
+                    setState(() => _deltaPx += d.delta.dx);
+                    _publish();
+                  },
+                  onHorizontalDragEnd: (_) {
+                    if (_escape.end()) _commit(i);
+                  },
+                  onHorizontalDragCancel: () {
+                    _escape.end();
+                    _abandon();
+                  },
+                ),
+              ),
+            ),
         // The live readout, while the pointer is down: what frame the key has
         // reached and what it holds there (§4.2). Last in the stack so it is
         // over the diamonds, and gone the moment the drag ends — nothing at
@@ -439,6 +536,61 @@ class _KeyLaneState extends State<KeyLane> {
         text: l10n.timelineKeyDragHint(frame.round(), keysNumberText(value)),
       ),
     );
+  }
+}
+
+/// The dense lane's hit surface: a paintless box that claims only the pixels
+/// within a key slot's reach (six either side of a mark), so the marquee and
+/// the ground click keep everything between the keys — exactly the ground the
+/// per-key slots left uncovered.
+class _KeyStripHit extends LeafRenderObjectWidget {
+  /// Key positions in lane pixels, in key order (x-sorted at rest; see
+  /// [_KeyLaneState._xs]).
+  final List<double> xs;
+
+  const _KeyStripHit({required this.xs});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderKeyStripHit(xs);
+
+  @override
+  void updateRenderObject(
+          BuildContext context, covariant _RenderKeyStripHit renderObject) =>
+      renderObject.xs = xs;
+}
+
+class _RenderKeyStripHit extends RenderBox {
+  List<double> xs;
+
+  _RenderKeyStripHit(this.xs);
+
+  @override
+  bool get sizedByParent => true;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) => constraints.biggest;
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!size.contains(position)) return false;
+    // The nearest key by bisection; within six pixels the strip answers the
+    // hit, elsewhere the pointer falls through to the ground below.
+    var lo = 0;
+    var hi = xs.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (xs[mid] < position.dx) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    final near = (lo < xs.length && (xs[lo] - position.dx).abs() <= 6.0) ||
+        (lo > 0 && (position.dx - xs[lo - 1]).abs() <= 6.0);
+    if (!near) return false;
+    result.add(BoxHitTestEntry(this, position));
+    return true;
   }
 }
 

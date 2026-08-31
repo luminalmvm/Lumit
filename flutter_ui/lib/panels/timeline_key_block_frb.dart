@@ -494,6 +494,12 @@ class LaneKeysPainter extends CustomPainter {
   /// summary row, whose marks are a statement rather than a target (K-441).
   final int? hovered;
 
+  /// The hovered index as a listenable, for a dense lane whose hover must not
+  /// rebuild the widget ([KeyLane]'s strip): the painter repaints itself when
+  /// this moves and reads the index from it, and [hovered] is ignored while it
+  /// is set. Null everywhere else, and everything is as it was.
+  final ValueListenable<int?>? hoverOf;
+
   const LaneKeysPainter({
     required this.frames,
     required this.selected,
@@ -503,25 +509,55 @@ class LaneKeysPainter extends CustomPainter {
     this.half = laneKeyHalf,
     this.shapes,
     this.hovered,
-  });
+    this.hoverOf,
+  }) : super(repaint: hoverOf);
 
   @override
   void paint(Canvas canvas, Size size) {
     final mid = size.height / 2;
+    // Marks outside the recorded clip are invisible whatever they cost, and a
+    // lane can be tens of thousands of pixels wide with the window showing a
+    // few thousand of them — so the clip decides what is walked. A canvas with
+    // nothing to say about its clip answers an infinite rect, and every mark
+    // draws, exactly as before.
+    final clip = canvas.getLocalClipBounds();
+    final reach = half * 2;
+    // One Paint per state, not one per key: an imported camera lane carries
+    // thousands of marks, and the allocation per mark was most of the record.
+    final plain = Paint()..color = colour;
+    final caught = Paint()..color = chosen;
+    final under = Paint()..color = Color.lerp(colour, chosen, 0.5)!;
+    final hovered = hoverOf == null ? this.hovered : hoverOf!.value;
+    // Where the last plain mark of each shape was drawn: a mark within a pixel
+    // of an identical one adds nothing the eye can find — the marks are twelve
+    // pixels wide — so a lane of per-frame keys zoomed out to a solid band
+    // draws the band, not every diamond in it.
+    var lastX = double.negativeInfinity;
+    var lastShape = (KeyShape.diamond, KeyShape.diamond);
     for (var i = 0; i < frames.length; i++) {
       final x = axis.xOf(frames[i]);
-      final paint = Paint()
-        ..color = selected.contains(i)
-            ? chosen
-            : i == hovered
-                ? Color.lerp(colour, chosen, 0.5)!
-                : colour;
+      if (x < clip.left - reach || x > clip.right + reach) continue;
+      final state = selected.contains(i)
+          ? caught
+          : i == hovered
+              ? under
+              : plain;
       final (into, out) = shapes == null || i >= shapes!.length
           ? (KeyShape.diamond, KeyShape.diamond)
           : shapes![i];
+      if (identical(state, plain) &&
+          (into, out) == lastShape &&
+          x - lastX >= 0 &&
+          x - lastX < 1.0) {
+        continue;
+      }
+      if (identical(state, plain)) {
+        lastX = x;
+        lastShape = (into, out);
+      }
       // One path, one call: two anti-aliased halves meeting on the centre line
       // left a seam down the middle of every mark (§5).
-      canvas.drawPath(keyMarkPath((into, out), x, mid, half), paint);
+      canvas.drawPath(keyMarkPath((into, out), x, mid, half), state);
     }
   }
 
@@ -533,6 +569,7 @@ class LaneKeysPainter extends CustomPainter {
       old.chosen != chosen ||
       old.half != half ||
       old.hovered != hovered ||
+      old.hoverOf != hoverOf ||
       !listEquals(old.shapes, shapes) ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;
