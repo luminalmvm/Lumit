@@ -35,6 +35,23 @@ const double _badgeTextSize = 9;
 /// resolves to that colour at 28% over the panel, on both badges.
 const double _badgeBorderAlpha = 0.28;
 
+/// The label chip an untagged item's kind wears by default — the mockup's own
+/// per-type tints, which are the label palette's chips (K-188): azure for
+/// picture footage, indigo for sound, amber for solids. Folders and
+/// compositions stay muted, so they wear no chip at all (`0`).
+///
+/// One function because two places must agree on it: the row's glyph draws
+/// this colour, and the panel's swatch filter matches on it — the colour a
+/// fresh item is *wearing* is an answer the filter has to honour (K-634), and
+/// the two used to disagree, which made a just-imported clip invisible to the
+/// very colour it was showing.
+int projectDefaultLabel(ItemReference item, {required bool audio}) =>
+    switch (item) {
+      ItemReference_Footage() => audio ? 6 : 1,
+      ItemReference_Solid() => 2,
+      ItemReference_Folder() || ItemReference_Composition() => 0,
+    };
+
 /// What a click on a row does to the selection.
 enum SelectMode {
   /// Plain click: this row, and only this row.
@@ -660,18 +677,22 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         style: t.body.copyWith(color: colour), overflow: TextOverflow.ellipsis);
   }
 
-  (LumitIcon, Color) _iconFor(ItemReference item, LumitTheme t) =>
-      switch (item) {
-        // Sound has no picture, so the media probe's zero width is what tells
-        // the two apart — and it is the engine's answer, not a guess at the
-        // file name.
-        ItemReference_Footage() => widget.audio
-            ? (LumitIcon.audioFile, t.labelColour(6))
-            : (LumitIcon.footage, t.labelColour(1)),
-        ItemReference_Folder() => (LumitIcon.folder, t.textMuted),
-        ItemReference_Composition() => (LumitIcon.comp, t.textMuted),
-        ItemReference_Solid() => (LumitIcon.solid, t.labelColour(2)),
-      };
+  /// The per-type glyph and tint, off [projectDefaultLabel] so the filter
+  /// matches exactly what this draws. Sound has no picture — the media
+  /// probe's own answer, not a guess at the file name — which is what tells
+  /// the two footage tints apart.
+  (LumitIcon, Color) _iconFor(ItemReference item, LumitTheme t) {
+    final fallback = projectDefaultLabel(item, audio: widget.audio);
+    return switch (item) {
+      ItemReference_Footage() => (
+          widget.audio ? LumitIcon.audioFile : LumitIcon.footage,
+          t.labelColour(fallback),
+        ),
+      ItemReference_Folder() => (LumitIcon.folder, t.textMuted),
+      ItemReference_Composition() => (LumitIcon.comp, t.textMuted),
+      ItemReference_Solid() => (LumitIcon.solid, t.labelColour(fallback)),
+    };
+  }
 }
 
 /// The floating label shown under the pointer while a row is dragged.

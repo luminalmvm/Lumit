@@ -1070,9 +1070,11 @@ The library of assets: footage items, audio items, comps, folders.
   item a composition places, hidden switches included. A **colour tag** tints the row's
   glyph rather than adding a dot beside it, is set from the row menu's chip strip, and the
   **swatch filter inside the search well** — one square that opens the eight-colour picker
-  (K-726) — narrows the tree to one colour — on the colour a row is *wearing*, a folder's
-  handed down included (K-634, K-567), so a colour finds everything filed under a folder
-  of that colour. The preview card's second
+  (K-726) — narrows the tree to one colour — on the colour a row is *wearing*: its own
+  tag, else a folder's handed down (K-634, K-567), else the kind's default tint (K-188's
+  chips — azure for picture footage, indigo for sound, amber for solids), so a colour
+  finds everything filed under a folder of that colour and a just-imported clip is found
+  by the blue it visibly shows. The preview card's second
   line names the **codec** and the sound's rate and layout, and a **still** says so where
   a rate and a length would be — which retired the zero-picture-width guess that called a
   silent still an audio file.

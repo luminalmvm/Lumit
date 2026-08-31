@@ -1487,6 +1487,39 @@ void main() {
           reason: 'the neutral chip is the way back out');
     });
 
+    /// **A fresh item is found by the colour it visibly wears.** An untagged
+    /// clip's glyph is azure — the kind's default chip (K-188) — but the
+    /// filter used to compare stored tags only, so picking the very blue the
+    /// panel was showing found nothing. The filter matches the worn colour
+    /// (K-634): own tag, then the folder's handed down, then the kind's own
+    /// default.
+    testWidgets('a fresh item is found by the colour it visibly wears',
+        (tester) async {
+      final p = freshProject();
+      final project = p.state.project!;
+      project.importFootage(path: _probeableImageFile('fresh.bmp'));
+      project.newComposition(name: 'Scene');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      // Azure, the picture-footage default — the colour the fresh clip's
+      // glyph is drawn in.
+      await pickFilterColour(tester, 1);
+      expect(rowText('fresh.bmp'), findsOneWidget,
+          reason: 'an untagged clip wears azure, so azure must find it');
+      expect(rowText('Scene'), findsNothing,
+          reason: 'a comp wears no chip while untagged, so no colour finds it');
+
+      await pickFilterColour(tester, null);
+      expect(rowText('Scene'), findsOneWidget,
+          reason: 'the neutral chip shows everything again');
+    });
+
     /// **The swatch filter narrows on the colour a row is wearing** (K-634),
     /// which for an untagged item inside a tagged folder is the folder's
     /// (K-567). It used to read the row's own `u8` alone, so filing a clip

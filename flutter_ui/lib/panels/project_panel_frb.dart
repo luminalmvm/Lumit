@@ -541,14 +541,25 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final label = _labels[id] ??= _labelOf(item);
       final searchHit = selfMatched ||
           (item is ItemReference_Folder && _subtreeMatches(item));
+      // Sound with no picture at all — the probe's own answer, not the zero
+      // picture width the panel used to infer it from (K-451). A silent
+      // still has no sound and a picture that does not run; the old guess
+      // called it audio.
+      final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
       // Missing-only is matched on the row's own name alone (docs/07 §3.3).
       // The swatch filter narrows *with* whatever else is running, and on the
       // colour the row is actually **wearing** — its own tag where it has one,
-      // the nearest tagged folder's where it has not (K-634, K-567). Filing a
-      // shoot into a red folder colours the shoot, so picking red has to find
-      // it; the filter used to read the row's own `u8` and missed everything
-      // that got its colour from where it sits.
-      final worn = label != 0 ? label : inherited;
+      // the nearest tagged folder's where it has not (K-634, K-567), and the
+      // kind's own default tint where it has neither. Filing a shoot into a
+      // red folder colours the shoot, so picking red has to find it — and a
+      // just-imported clip visibly wears azure, so picking azure has to find
+      // *it*: the filter used to stop at the inherited tag and missed every
+      // untagged item showing its per-type colour.
+      final worn = label != 0
+          ? label
+          : inherited != 0
+              ? inherited
+              : projectDefaultLabel(item, audio: audio);
       final chipHit = _labelFilter == null || worn == _labelFilter;
       final show =
           chipHit && (missingOnly ? isMissingFootage && ownMatch : searchHit);
@@ -567,11 +578,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           name: name,
           depth: depth,
           missing: isMissingFootage,
-          // Sound with no picture at all — the probe's own answer, not the
-          // zero picture width the panel used to infer it from (K-451). A
-          // silent still has no sound and a picture that does not run; the
-          // old guess called it audio.
-          audio: _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null,
+          audio: audio,
           label: label,
           inherited: inherited,
           inUse: _used[id] ??= _isUsed(item),
