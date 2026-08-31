@@ -437,11 +437,12 @@ missing plugins as inert placeholders, a quirks table from day one.
 
 What is specific to audio: a plugin is an **insert on the layer, ahead of Volume and
 Pan** — an entry in the ordinary effect stack ("the stack is the rack": no separate FX
-panel), processed in fixed 512-frame blocks at the 48 kHz session rate by a per-layer
-chain worker that pre-renders ahead of the playhead, so the realtime callback never
-waits on a plugin process and a dying plugin costs one block (played dry, ramped), not
+panel), processed in fixed 512-frame blocks at the 48 kHz session rate. The blocks are
+counted from the layer's own first sample and the whole placed span is rendered on the
+background mix worker (K-700), so the realtime callback plays finished sound and never
+waits on a plugin process, and a dying plugin costs one block (played dry, ramped), not
 the session. Latency is compensated by placement; export processes offline on the same
-block schedule and stays deterministic. v1 hosts stereo effect plugins with
+block schedule and is the preview's own arithmetic rather than a second opinion. v1 hosts stereo effect plugins with
 parameters-only UI (derived rows); the plugin's own native editor window is a recorded
 follow-on, not a v1 promise.
 

@@ -2453,6 +2453,34 @@ fn driven_volume_of(
     })
 }
 
+/// The layer's **audio insert chain**, or `None` for a layer with an empty
+/// effect stack â€” which is most of them, and is what keeps a mix with no
+/// plugin in it exactly the mix it was (K-700).
+///
+/// Whether any entry in the stack is *audio* is deliberately not asked here:
+/// the catalogue answers that when the chain opens, and asking twice would put
+/// the question in two places that could disagree.
+fn audio_chain_of(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    offset_s: f64,
+    base_s: f64,
+) -> Option<std::sync::Arc<crate::export::AudioChain>> {
+    if layer.effects.is_empty() {
+        return None;
+    }
+    Some(std::sync::Arc::new(crate::export::AudioChain {
+        doc: Arc::clone(doc),
+        comp: comp.id,
+        layer: layer.id,
+        effects: layer.effects.clone(),
+        graph: layer.graph.clone(),
+        offset_s,
+        base_s,
+    }))
+}
+
 impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
@@ -2525,6 +2553,7 @@ impl AudioJobsBuilder {
                         carriers: carriers.to_vec(),
                         fade: None,
                         driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
+                        chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
                     });
                 }
                 LayerKind::Precomp { comp: nested_id } => {
@@ -2682,6 +2711,10 @@ impl AudioJobsBuilder {
                 // The row's own duck, riding every clip exactly as the row's
                 // Volume does — the layer's clock, not the clip's.
                 driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
+                // And the row's own rack, on each clip. See `AudioChain`: a
+                // chain per clip is not a chain on the row's mixed output, so a
+                // tail does not cross a join.
+                chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
             });
         }
     }

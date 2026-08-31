@@ -1590,6 +1590,7 @@ version = "0.2.0"
 dependencies = [
  "lumit-aplug",
  "lumit-aplug-testplug",
+ "lumit-core",
  "tempfile",
 ]
 
@@ -1646,6 +1647,7 @@ name = "lumit-core"
 version = "0.2.0"
 dependencies = [
  "arc-swap",
+ "hex",
  "i_overlay",
  "lumit-fx-macros",
  "parking_lot",
@@ -1852,6 +1854,7 @@ name = "lumit_bridge"
 version = "0.2.0"
 dependencies = [
  "flutter_rust_bridge",
+ "lumit-aplug",
  "lumit-audio",
  "lumit-core",
  "lumit-eval",

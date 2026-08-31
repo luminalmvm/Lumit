@@ -53,6 +53,12 @@ pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
 /// so the crate that writes it and the crate that reads it cannot drift.
 pub const OFX_MATCH_PREFIX: &str = "ofx:";
 
+/// What every **CLAP audio plugin's** `match_name` begins with (K-700) — the
+/// host mints `clap:<plugin id>`, and this is the one place the prefix is
+/// spelled, so the crate that writes it and the crates that read it cannot
+/// drift. VST3 will mint `vst3:` the same way in AP4.
+pub const CLAP_MATCH_PREFIX: &str = "clap:";
+
 /// Which namespace an entry in the catalogue belongs to, from its match name.
 ///
 /// Nothing on [`EffectSchema`] says where an effect came from — a declaration
@@ -62,6 +68,8 @@ pub const OFX_MATCH_PREFIX: &str = "ofx:";
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
+    } else if match_name.starts_with(CLAP_MATCH_PREFIX) {
+        EffectNamespace::Clap
     } else {
         EffectNamespace::Builtin
     }
@@ -600,6 +608,9 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
         // Unlinked (K-443): a fresh point's two halves move on their own, which
         // is what every effect did before there was a chain to close.
         linked_pairs: Vec::new(),
+        // A fresh audio plugin has no memory of itself yet; it is the plugin's
+        // own defaults until something saves one (K-700).
+        plugin_state: None,
         extra: serde_json::Map::new(),
     })
 }

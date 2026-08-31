@@ -391,7 +391,7 @@ pub fn resolve_stack_temporal_named(
 /// deliberately unbounded so it can turn, and a Colour declares a per-channel
 /// **edit** range rather than a bound, so none of them is clamped here.
 #[must_use]
-pub(super) fn hard_range(kind: &ParamKind) -> (Option<f64>, Option<f64>) {
+pub fn hard_range(kind: &ParamKind) -> (Option<f64>, Option<f64>) {
     match kind {
         ParamKind::Float { hard, .. } => *hard,
         ParamKind::Slider { range, .. } => (Some(range.0), Some(range.1)),

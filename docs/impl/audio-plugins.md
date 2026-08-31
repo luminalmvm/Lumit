@@ -1,8 +1,13 @@
 # Audio plugin hosting: CLAP and VST3 (K-683)
 
-**Built so far: AP1 (K-692) and AP2 (K-696).** §1–§5 and §7 plans 1, 2, 5, 6 and 7
-describe code that exists; §3's chain worker, §4's latency shift, §6 and AP3–AP5 are still
-design.
+**Built so far: AP1 (K-692), AP2 (K-696) and AP3 (K-700).** §1–§5 and §7 plans 1–7
+describe code that exists; §6 and AP4–AP5 are still design. **Two things AP3 settled
+differently from the words below, both recorded in K-700 and marked where they occur:**
+§3's per-layer chain worker and lookahead ring are *not* built — a layer's chain is baked
+over its whole placed span at plan-build time, which keeps the callback off the broker more
+firmly and makes preview == export structural; and §3's splice ramp is **linear**, not
+equal power, because the dry and wet signals are the same sound and an equal-power pair
+would put a 3 dB swell in the middle of a ramp meant to hide a click.
 
 [12-PLUGINS.md](../12-PLUGINS.md) §6 says Lumit hosts audio plugins; this note is the
 binding *how*: the two APIs, the isolation, where a plugin sits in the mix, the
@@ -64,11 +69,20 @@ a Master strip), and canvas decision 2 (layers + master, no buses in v1).
 **"The stack is the rack"** (canvas decision 1): there is no separate audio-FX list. The
 glossary's Effect already admits audio operations; an audio plugin instance is an entry
 in the layer's ordinary effect stack, and the layer's insert chain *is* the audio-typed
-subset of that stack in stack order. Effect controls shows its rows like any effect's; the
+subset of that stack in stack order. Which entries are audio is one question asked in one
+place: `EffectDef::open_audio`, which every built-in answers `None` (K-700). That is also
+why AP3 needed no bridge API — the effect-stack calls already read and write the chain. Effect controls shows its rows like any effect's; the
 Graph panel shows it as a node (mint audio family, K-472). An audio effect on a layer
 with no sound is inert with the same calm the visibility switch rules use (K-435).
 Sequence layers take the chain on the layer's mixed output (after clip retiming), exactly
 where visual effects already sit.
+
+**Two ceilings AP3 leaves standing (K-700).** A **Precomp** layer's own chain is not
+applied: Volume and Pan push down onto every contributing source because gain distributes
+over a sum, and a compressor does not, so honouring one means summing the nested comp
+first — a bus, which canvas decision 2 says v1 has none of. And a **Sequence** layer's
+chain runs per clip rather than on the row's mixed output, so a reverb does not tail across
+a join. Both want the same missing thing: a per-layer sum to insert on.
 
 ## 3. The block contract, and why the broker never meets the callback
 
@@ -86,9 +100,23 @@ instead of the raw decoded `Arc<AudioBuffer>`. A layer whose stack holds no audi
 keeps the decoded buffer untouched — the empty chain costs nothing, which keeps today's
 behaviour byte-identical (a regression test pins this).
 
+> **What AP3 built instead (K-700).** No worker thread and no ring: the chain is run over
+> the layer's **whole placed span** on the prepare worker, and the processed buffer
+> *replaces* the decoded one in the `MixPlan`. The ring's whole purpose is to keep the
+> callback off another process, and a span already rendered does that more firmly; the plan
+> already holds whole decoded buffers, so the ring buys nothing today and would cost a
+> thread, a mid-seek pre-roll, and a second answer to "which block is this". It also makes
+> preview == export a fact about the code — one `chain_bake`, one placement — rather than
+> two paths argued to agree. The cost is real and named: a long track through a plugin is
+> processed whole whenever the mix signature changes. When the plan streams instead of
+> holding buffers, the ring is the upgrade and `run_chain` is the block loop it wraps. The
+> empty-chain rule below is unchanged and is pinned by an `Arc::ptr_eq` test.
+
 **A dying plugin costs one block.** The chain worker gives each block a deadline (its
 remaining lookahead margin, never less than one block period). A miss ships that block
-**dry** — the chain's input, with a 5 ms equal-power ramp either side of the splice —
+**dry** — the chain's input, with a 5 ms ramp either side of the splice (**linear**, not
+equal power: the two signals are the same sound differently treated, so equal-power weights
+would swell 3 dB mid-ramp and would even alter a passthrough plugin's dry block; K-700) —
 and files a strike; three strikes disable the plugin for the session with the calm badge,
 the chain heals around it (identity), and `PluginPrefs`' per-plugin disable list is the
 same one OFX reads (K-594). Dry over silence because in a montage the music continuing
@@ -259,7 +287,7 @@ not broken. Recorded in K-683 so nobody discovers the gap in a release note.
 |---|---|---|
 | AP1 | CLAP host core ✅ | `lumit-aplug`: discovery, module load, describe → `AudioEffectDef`, params/state/latency/process against `LocalHost`; test plugin; plans 1, 2, 6, 7 (K-692) |
 | AP2 | Broker isolation ✅ | `lumit-aplug-broker`: pipe + block ring + watchdog + disable list + quirks table + brokered scan; plan 5 (K-696) |
-| AP3 | Mix-graph seam | chain worker, processed ring, dry fallback, latency shift, param envelopes, `.lum` persistence, offline bake; plans 3, 4 |
+| AP3 | Mix-graph seam ✅ | `EffectDef::open_audio` + `fx::audio_chain`: whole-span bake (no worker or ring, K-700), dry fallback with a linear splice, latency shift, per-block param envelopes read through the driver walk, `plugin_state` in the `.lum`, offline bake, CLAP registered from the bridge; plans 3, 4 (K-700) |
 | AP4 | VST3 host | `vst3_c_api` bindings, component/controller wiring, bus arrangement, queues, two-blob state, through the same broker and seam; plan 8 both APIs |
 | AP5 | Panel surface | Effects & presets audio category, rows in Effect controls, badges, per-plugin disable UI, arb keys; GUI window recorded as the follow-on |
 

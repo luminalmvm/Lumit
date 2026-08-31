@@ -99,6 +99,11 @@ pub struct AudioJob {
     /// Volume socket (the *Duck under* wire). `None` for the ordinary layer,
     /// whose Volume keyframes answer as ever.
     pub driven: Option<Arc<DrivenVolume>>,
+    /// The layer's **audio insert chain** â€” the audio-typed effects in its
+    /// stack, ahead of Volume and Pan (K-700). `None` for a layer carrying no
+    /// effects at all, which is what keeps every mix without a plugin
+    /// byte-identical to the one before this field existed.
+    pub chain: Option<Arc<AudioChain>>,
 }
 
 /// A wire onto a layer's Volume (the Audio workspace board's *Duck under*):
@@ -157,6 +162,227 @@ impl PartialEq for DrivenVolume {
             && self.offset_s == other.offset_s
             && self.base_s == other.base_s
     }
+}
+
+/// A layer's **audio insert chain**, as the mixer needs it (K-700,
+/// docs/impl/audio-plugins.md Â§2).
+///
+/// # In plain terms
+///
+/// "The stack is the rack": an audio plugin is an entry in the layer's ordinary
+/// effect stack, and this is that stack carried down to where the sound is,
+/// with the two things the bake cannot look up for itself â€” the document the
+/// plugin's rows are evaluated against, and where the layer's own clock sits on
+/// the mixed timeline.
+///
+/// Which entries are audio is not decided here: the catalogue is asked, once,
+/// when the chain opens ([`lumit_core::fx::EffectDef::open_audio`]). A stack
+/// full of blurs opens nothing and the sound goes through untouched.
+///
+/// ponytail: a **Precomp** layer's own chain is not applied. Volume and Pan
+/// push down onto every contributing source because gain distributes over a
+/// sum; a compressor does not, so honouring one would mean summing the nested
+/// comp first â€” which is a bus, and the canvas note says v1 has none. A
+/// **Sequence** layer's chain runs per clip rather than on the row's mixed
+/// output, so a reverb does not tail across a join. Both want the same thing:
+/// a per-layer sum to insert on.
+pub struct AudioChain {
+    pub doc: Arc<lumit_core::model::Document>,
+    /// The comp the layer sits in â€” not necessarily the comp being mixed.
+    pub comp: Uuid,
+    pub layer: Uuid,
+    /// The layer's whole effect stack, in order.
+    pub effects: Vec<lumit_core::model::EffectInstance>,
+    /// The layer's driver graph, so a **wired** plugin parameter reads the wire
+    /// instead of its keyframes, exactly as a wired effect parameter in the
+    /// picture does (K-471).
+    pub graph: lumit_core::graph::LayerGraph,
+    /// Comp time where the layer's own time 0 sits, so `t âˆ’ offset_s` is the
+    /// layer time its rows are read at.
+    pub offset_s: f64,
+    /// Where the layer's comp starts on the mixed timeline.
+    pub base_s: f64,
+}
+
+/// As [`DrivenVolume`]'s: two chains that would process the same sound compare
+/// equal, and the document handle is not part of that.
+impl PartialEq for AudioChain {
+    fn eq(&self, other: &Self) -> bool {
+        self.comp == other.comp
+            && self.layer == other.layer
+            && self.effects == other.effects
+            && self.graph == other.graph
+            && self.offset_s == other.offset_s
+            && self.base_s == other.base_s
+    }
+}
+
+/// Open the chain and play `samples` (interleaved stereo, the job's placed
+/// span) through it â€” the **one** function the live plan and the export both
+/// call, which is what makes preview == export a fact about the code rather
+/// than an argument about it (K-031).
+///
+/// `start_frame` is where the span lands on the mixed timeline, and is what the
+/// per-block parameter values are read at. `offline` says this is an export: no
+/// deadline, and the plugin may take its slower, better path.
+///
+/// `None` when the layer's stack holds nothing the catalogue will open as
+/// audio, which is the ordinary answer and the one that leaves the decoded
+/// buffer untouched. Otherwise the processed span and the chain's summed
+/// latency, in frames â€” the caller places the sound that many frames **earlier**
+/// so the wet lands where the dry did.
+///
+/// ponytail: the whole span is processed here, at plan-build time, rather than
+/// a block at a time into a lookahead ring on a chain worker
+/// (docs/impl/audio-plugins.md Â§3). The ring exists to keep the realtime
+/// callback off another process; a span already rendered keeps it off even more
+/// firmly, and the plan holds whole decoded buffers anyway, so the ring would
+/// buy nothing today and cost a thread, a seek pre-roll and a second answer to
+/// "which block is this". When the plan streams instead of holding buffers, the
+/// ring is the upgrade and this function is the block loop it wraps.
+#[must_use]
+pub fn chain_bake(
+    chain: &AudioChain,
+    samples: &[f32],
+    start_frame: i64,
+    rate: u32,
+    offline: bool,
+) -> Option<(Vec<f32>, u32)> {
+    use lumit_core::fx::AUDIO_BLOCK_FRAMES;
+
+    let frames = samples.len() / 2;
+    if frames == 0 {
+        return None;
+    }
+    // Open first, bake second. Opening answers the question "are you audio?",
+    // and only once every link has answered is the chain's summed latency â€”
+    // and therefore how many blocks the run is â€” known. Baking a whole
+    // envelope for a blur that turns out not to be a plugin would be work for
+    // nothing, so opening is handed one time point rather than the envelope.
+    let mut opened = Vec::new();
+    for instance in chain.effects.iter().filter(|e| e.enabled) {
+        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(&instance.effect.match_name) else {
+            continue;
+        };
+        let first = bake_values(chain, instance, def, start_frame, 1, rate)
+            .pop()
+            .unwrap_or_default();
+        if let Some(processor) = def.open_audio(instance.plugin_state_bytes(), &first, offline) {
+            opened.push((instance, def, processor));
+        }
+    }
+    if opened.is_empty() {
+        return None;
+    }
+    let latency = opened
+        .iter()
+        .map(|(_, _, processor)| processor.latency() as usize)
+        .sum::<usize>();
+    let blocks = (frames + latency).div_ceil(AUDIO_BLOCK_FRAMES);
+    let links: Vec<lumit_core::fx::ChainLink> = opened
+        .into_iter()
+        .map(|(instance, def, processor)| lumit_core::fx::ChainLink {
+            values: bake_values(chain, instance, def, start_frame, blocks, rate),
+            processor,
+        })
+        .collect();
+    let out = lumit_core::fx::run_chain(&links, samples);
+    Some((out.samples, out.latency))
+}
+
+/// What one effect instance's rows hold at each block start.
+///
+/// A row reads its own keyframes unless a wire feeds it, in which case it reads
+/// the wire â€” the same substitution the picture's resolve makes, held to the
+/// same declared hard range (K-471, K-510), so a plugin parameter is driven
+/// like everything else. An instance with nothing animated and nothing wired
+/// bakes **one** entry, which the chain then holds past the end: an
+/// un-automated plugin costs no per-block work at all.
+///
+/// ponytail: the driver walk is given no [`lumit_core::fx::AudioTap`], so an
+/// *Audio level* driver wired into a plugin parameter reads nothing here.
+/// Handing it the real tap would mix a window of the comp per block â€” tens of
+/// thousands of mixes for a song. Bake the tap's levels once at control rate
+/// and index them, when a duck-driven plugin is a thing somebody asks for.
+fn bake_values(
+    chain: &AudioChain,
+    instance: &lumit_core::model::EffectInstance,
+    def: &'static dyn lumit_core::fx::EffectDef,
+    start_frame: i64,
+    blocks: usize,
+    rate: u32,
+) -> Vec<Vec<(lumit_core::fx::ParamId, f64)>> {
+    use lumit_core::fx::{hard_range, ParamId, AUDIO_BLOCK_FRAMES};
+    use lumit_core::graph::{InputRef, NodeRef};
+    use lumit_core::model::EffectValue;
+
+    /// One automatable row: what it is called, what it holds, and how far it
+    /// may be pushed.
+    struct Row<'a> {
+        id: ParamId,
+        property: &'a lumit_core::anim::Property,
+        hard: (Option<f64>, Option<f64>),
+    }
+
+    let rows: Vec<Row<'_>> = def
+        .schema()
+        .params
+        .iter()
+        .filter_map(|row| {
+            let held = instance.params.iter().find(|p| p.id == row.id)?;
+            let EffectValue::Float(property) = &held.value else {
+                return None;
+            };
+            Some(Row {
+                id: ParamId::new(row.id),
+                property,
+                hard: hard_range(&row.kind),
+            })
+        })
+        .collect();
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    let node = NodeRef::Effect(instance.id);
+    let wired =
+        chain.graph.edges.iter().any(
+            |edge| matches!(&edge.to, InputRef::Param { node: target, .. } if *target == node),
+        );
+    let animated = wired || rows.iter().any(|row| row.property.is_animated());
+    let n = if animated { blocks.max(1) } else { 1 };
+
+    (0..n)
+        .map(|block| {
+            let t = (start_frame + (block * AUDIO_BLOCK_FRAMES) as i64) as f64 / f64::from(rate);
+            let lt = t - chain.offset_s;
+            let drivers = if wired {
+                let context = Arc::new(lumit_core::expression::ExpressionContext {
+                    document: Arc::clone(&chain.doc),
+                    comp: Some(chain.comp),
+                    layer: Some(chain.layer),
+                    comp_time: t - chain.base_s,
+                    current_depth: 0,
+                });
+                lumit_core::fx::resolve_drivers(&chain.graph, lt, context, None)
+            } else {
+                lumit_core::fx::ResolvedDrivers::default()
+            };
+            rows.iter()
+                .map(|row| {
+                    let value = drivers
+                        .param(node, row.id)
+                        .map(|v| f64::from(v.as_f32()))
+                        .unwrap_or_else(|| row.property.value_at(lt));
+                    // `max`/`min` rather than `clamp`, which panics on a
+                    // reversed pair (14-ENGINEERING-RULES Â§4).
+                    let value = value
+                        .max(row.hard.0.unwrap_or(f64::NEG_INFINITY))
+                        .min(row.hard.1.unwrap_or(f64::INFINITY));
+                    (row.id, value)
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A Sequence clip's own fade ramps, in **comp time** (K-695).
@@ -1877,7 +2103,19 @@ fn mix_decoded(
     master_gain: f32,
 ) -> Vec<f32> {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    let placements: Vec<lumit_audio::mix::PlacedAudio> = decoded
+    // The insert chain runs first, and its output has to outlive the borrowed
+    // placements below â€” so the two passes rather than one: process, then place
+    // over whichever buffer each job ended up with.
+    /// One job, placed, with the chain already run over it where it had one.
+    struct Placed<'a> {
+        start_frame: i64,
+        len: usize,
+        job: &'a AudioJob,
+        dry: &'a [f32],
+        wet: Option<Vec<f32>>,
+    }
+
+    let placed: Vec<Placed<'_>> = decoded
         .iter()
         .filter_map(|(buf, job)| {
             let (start_frame, src_start, len) = lumit_audio::mix::place_on_timeline(
@@ -1887,13 +2125,44 @@ fn mix_decoded(
                 buf.samples.len() / 2,
                 rate,
             )?;
-            let (gain, envelope) = volume_bake(job, start_frame, len, rate);
-            Some(lumit_audio::mix::PlacedAudio {
-                start_frame,
-                samples: &buf.samples[src_start * 2..(src_start + len) * 2],
+            let dry: &[f32] = &buf.samples[src_start * 2..(src_start + len) * 2];
+            // The export runs the chain **offline** (docs/impl/audio-plugins.md
+            // Â§3): no deadline, and the plugin may take its slower path.
+            match job
+                .chain
+                .as_ref()
+                .and_then(|chain| chain_bake(chain, dry, start_frame, rate, true))
+            {
+                // Latency compensation: the processed run is the placed span
+                // plus the chain's own delay, put down that many frames earlier
+                // so the wet sound lands where the dry did.
+                Some((samples, latency)) => Some(Placed {
+                    start_frame: start_frame - i64::from(latency),
+                    len: samples.len() / 2,
+                    job,
+                    dry,
+                    wet: Some(samples),
+                }),
+                None => Some(Placed {
+                    start_frame,
+                    len,
+                    job,
+                    dry,
+                    wet: None,
+                }),
+            }
+        })
+        .collect();
+    let placements: Vec<lumit_audio::mix::PlacedAudio> = placed
+        .iter()
+        .map(|p| {
+            let (gain, envelope) = volume_bake(p.job, p.start_frame, p.len, rate);
+            lumit_audio::mix::PlacedAudio {
+                start_frame: p.start_frame,
+                samples: p.wet.as_deref().unwrap_or(p.dry),
                 gain,
                 envelope,
-            })
+            }
         })
         .collect();
     lumit_audio::mix::mix_stereo_at(&placements, total_frames, master_gain)
@@ -2606,6 +2875,7 @@ mod tests {
             fade: None,
             driven: None,
         };
+            chain: None,
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
         assert!((g[0] - 0.501_19).abs() < 1e-3);
@@ -2801,6 +3071,7 @@ mod tests {
             }),
             driven: None,
         };
+            chain: None,
 
         let (gain, envelope) = volume_bake(&job, 0, frames, rate);
         let envelope = envelope.expect("a sweep and a ramp both force the envelope");

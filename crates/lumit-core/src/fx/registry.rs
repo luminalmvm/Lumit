@@ -358,6 +358,35 @@ pub trait EffectDef: Sync + Send + 'static {
     fn last_error(&self) -> Option<String> {
         None
     }
+
+    /// Open one **live audio instance** of this effect — the mixer's way of
+    /// asking "are you a plugin I can play sound through?" (K-700,
+    /// docs/impl/audio-plugins.md §2).
+    ///
+    /// `None` for everything that is not an audio plugin, which is every
+    /// built-in and every OFX entry, so a layer whose stack holds no plugin
+    /// costs one virtual call per effect and no chain at all. `None` **also**
+    /// for a plugin that would not come up — a broker that will not start, a
+    /// plugin switched off for the session — because there is exactly one thing
+    /// to do about either: leave that link out and let the sound through dry
+    /// (docs/12 §1's inert placeholder, in the mix rather than in the picture).
+    ///
+    /// `state` is the opaque blob the `.lum` kept for this instance, `values`
+    /// what its rows hold at the chain's first block, and `offline` says this
+    /// is an export — no deadline, and the plugin may take its slower, better
+    /// path. The order those are applied in is the host's business and is
+    /// pinned there; **properties win over a stale state blob** either way.
+    ///
+    /// Never called from a rebuild path: opening a plugin spawns or talks to
+    /// another process.
+    fn open_audio(
+        &self,
+        _state: Option<Vec<u8>>,
+        _values: &[(ParamId, f64)],
+        _offline: bool,
+    ) -> Option<std::sync::Arc<dyn super::audio_chain::AudioProcessor>> {
+        None
+    }
 }
 
 /// The stable name an effect is looked up by, and the schema that answers to it.

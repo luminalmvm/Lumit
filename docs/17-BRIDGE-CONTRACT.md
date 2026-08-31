@@ -575,6 +575,23 @@ one that would actually connect. Derived from `Signature::Data` and the schema's
 `ParamKind::port_type`, so the entry's sockets and the wires `LayerGraph::validate`
 accepts cannot disagree.
 
+### The audio insert chain has no surface of its own (K-700)
+
+An audio plugin is an entry in the layer's ordinary effect stack, so the chain is read and
+written by the calls that already exist and **nothing was added to this contract for it**:
+`LayerReference::get_effects` reads it, `add_effect` / `remove_effect` / `reorder_effect` /
+`set_effect_enabled` edit it, `set_effects` commits a staged parameter drag, and its knobs
+are ordinary schema rows, so `list_parameters`, `BridgeEffectInstance::get_value` /
+`set_value`, keyframes, expressions and the graph's wires reach them unchanged. Two
+existing calls simply see more: `rescan_plugins` now scans the machine's CLAP folders
+alongside its OFX ones and registers what it finds into the same catalogue, and
+`set_plugin_enabled` takes a `clap:` match name as readily as an `ofx:` one, writing to the
+one preference file both hosts read.
+
+The one thing that crosses **nowhere** is a plugin's opaque state blob: it is a field on
+the effect instance, written into the `.lum` and handed back to the plugin, and no panel
+has any business reading it.
+
 ### The camera track: an event down, readings up (K-417)
 
 `api::track` is the Camera track effect's whole surface, and it is shaped by one fact: the

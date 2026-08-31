@@ -1026,11 +1026,25 @@ repeater copies whatever the three of them drew.
 ```rust
 struct EffectInstance {
     id: Uuid,
-    effect: EffectKey,        // { namespace: Builtin|Ofx|Lfx|Placeholder, match_name, version }
+    effect: EffectKey,        // { namespace: Builtin|Ofx|Clap|Lfx|Placeholder, match_name, version }
     enabled: bool,
     params: PropertyGroup,    // declared by the effect; all animatable, expression-visible
+    plugin_state: Option<String>,  // an audio plugin's opaque blob, as hex (K-700)
 }
 ```
+
+**`Clap`** is the namespace of an **audio plugin** — a CLAP one today, a VST3 one on the
+same road (`docs/impl/audio-plugins.md`, K-700). One namespace for both standards: which is
+which is carried by the match name's prefix, the way the OFX provenance is. It is its own
+variant so the picture's walks keep filtering on `Builtin | Ofx` and an audio effect is
+never resolved as an image operation. There is **no separate audio-effect list**: a layer's
+audio insert chain is whichever entries of its own `effects` the catalogue will open as
+audio, in stack order, and it sounds ahead of Volume and Pan.
+
+**`plugin_state`** is that plugin's own memory of itself — bytes only it understands, hex
+in the file because the `.lum` is pretty-printed JSON. Never parsed, always round-tripped,
+absent (and unwritten) for every effect that has none, which today is every effect: v1 is
+parameters-only, so nothing but a state load changes plugin state.
 
 **Placeholder** effects (from AE import, or a missing plugin) keep `match_name` and the full
 parameter dump, render as identity with a badge, and round-trip through save untouched

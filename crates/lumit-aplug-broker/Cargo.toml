@@ -23,6 +23,10 @@ lumit-aplug = { path = "../lumit-aplug" }
 # `CARGO_BIN_EXE_lumit-aplug-broker` exists only for tests in the package that
 # owns the binary, and Cargo does not build a dependency's binaries.
 lumit-aplug-testplug = { path = "../lumit-aplug-testplug" }
+# The mix seam a chain is run through (K-700). Already in the graph under
+# lumit-aplug; named here so the dry-fallback test can drive the engine's own
+# `run_chain` over a broker that really dies, rather than over a stand-in.
+lumit-core = { path = "../lumit-core" }
 tempfile = "3"
 
 # A broker is the host, in another process: same C ABI, same override.

@@ -433,6 +433,11 @@ fn feed_effect_stack(
             lumit_core::model::EffectNamespace::Ofx => 1,
             lumit_core::model::EffectNamespace::Lfx => 2,
             lumit_core::model::EffectNamespace::Placeholder => 3,
+            // An audio plugin changes no pixel, so it never reaches a frame
+            // key in practice â€” it is here because the match is exhaustive and
+            // a silent `_` arm would give the next namespace somebody else's
+            // number (K-700).
+            lumit_core::model::EffectNamespace::Clap => 4,
         }]);
         h.update(e.effect.match_name.as_bytes());
         h.update(&e.effect.version.to_le_bytes());
@@ -2456,6 +2461,7 @@ mod tests {
             custom_name: None,
             linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
+            plugin_state: None,
         };
 
         let mut with_plugin = plain.clone();
@@ -2636,6 +2642,7 @@ mod tests {
             custom_name: None,
             linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
+            plugin_state: None,
         };
         let mut with_fx = plain.clone();
         with_fx.layers[0]
@@ -2744,6 +2751,7 @@ mod tests {
             custom_name: None,
             linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
+            plugin_state: None,
         };
 
         // None / Masks matte: the source's stack is not content — adding an

@@ -292,6 +292,7 @@ mod tests {
             custom_name: None,
             linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
+            plugin_state: None,
         }
     }
 

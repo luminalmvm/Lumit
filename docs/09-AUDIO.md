@@ -69,7 +69,10 @@ device's sample position, not a wall-clock timer. The audio callback MUST be rea
 safe: no locks shared with the UI or render threads, no allocation; it reads from a
 pre-mixed ring buffer filled by a dedicated audio thread (K-017).
 
-Mixing model in v1: per-layer gain (volume keyframes, §6) → sum of all audible layers →
+Mixing model in v1: per-layer **audio insert chain** (K-700 — the audio-typed entries of
+the layer's own effect stack, in stack order; empty on every layer that carries no audio
+plugin, and byte-identically absent when it is) → per-layer gain (volume keyframes, §6) →
+sum of all audible layers →
 **master fader** (K-691, amending this section: one gain stage on the sum,
 `Composition.master_volume_db`, 0 dB unity with the same −100 dB knee a layer's Volume has)
 → master limiter (a hard safety clip at −0.3 dBFS; the *limiter* remains not

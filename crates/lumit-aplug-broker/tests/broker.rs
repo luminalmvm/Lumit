@@ -277,6 +277,69 @@ fn a_crash_costs_exactly_one_block_and_the_blocks_after_it_flow() {
     assert!(held.restarts() >= 1, "the broker must have been restarted");
 }
 
+/// **The mix seam over a broker that really dies** (K-700, the note's §3 rule
+/// and §7 plan 5 met at the layer where sound is made).
+///
+/// The block above proves the *broker* survives a plugin aborting mid-block.
+/// This proves what the mixer does about it: the layer's chain is run through
+/// [`lumit_core::fx::run_chain`] — the same function the live plan and the
+/// export both call — and a plugin that dies costs exactly one block, shipped
+/// dry, with the sound either side of it unbroken. No hole, no stall, no
+/// second answer to what a failed block means.
+///
+/// The crash personality is a passthrough when it is not aborting, so this
+/// cannot compare a wet sample against a dry one — that arithmetic, and the
+/// splice ramp, are pinned in `lumit-core`'s own chain tests against a
+/// processor whose output differs from its input. What only a real second
+/// process can show is what is asserted here: the count, and the continuity.
+#[test]
+fn a_dying_broker_costs_the_chain_one_dry_block_and_no_hole() {
+    let Ok(root) = tempfile::tempdir() else {
+        return;
+    };
+    let Some(broker) = a_broker(
+        root.path(),
+        &[(CRASH_ON_BLOCK_ENV, "1")],
+        &nothing_disabled(),
+    ) else {
+        return skipped("a_dying_broker_costs_the_chain_one_dry_block_and_no_hole");
+    };
+    let broker = Arc::new(Mutex::new(broker));
+    let setup = InstanceSetup {
+        plugin_id: plugin_id(Kind::Crash),
+        ..InstanceSetup::default()
+    };
+    let host = BrokerHost::open(Arc::clone(&broker), &setup).expect("an instance");
+    let link = lumit_core::fx::ChainLink {
+        processor: Arc::new(lumit_aplug::HostedAudio::new(Box::new(host), Vec::new())),
+        values: Vec::new(),
+    };
+
+    // Three blocks of a steady tone; the plugin aborts during the second.
+    let frames = 3 * lumit_core::fx::AUDIO_BLOCK_FRAMES;
+    let input = vec![0.25f32; frames * lumit_core::fx::AUDIO_CHANNELS];
+    let out = lumit_core::fx::run_chain(&[link], &input);
+
+    assert_eq!(
+        out.dry_blocks, 1,
+        "a dying plugin costs the chain exactly one block"
+    );
+    assert_eq!(out.samples.len(), input.len(), "and no samples at all");
+    assert!(
+        out.samples.iter().all(|s| (*s - 0.25).abs() < 1e-6),
+        "the sound runs through unbroken — the dry block is the input, and the \
+         blocks either side are the plugin's own work through a process that \
+         did not exist a moment ago"
+    );
+
+    let held = broker.lock().expect("the broker");
+    assert!(!held.is_disabled(), "the session carries on");
+    assert!(
+        held.restarts() >= 1,
+        "and the broker was restarted under it"
+    );
+}
+
 #[test]
 fn a_hang_trips_the_deadline_and_the_third_strike_disables_the_plugin() {
     let Ok(root) = tempfile::tempdir() else {

@@ -447,6 +447,7 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
         // Nothing to link: a placeholder carries no schema, so it has no
         // `_x`/`_y` pairs for a chain to tie together (K-443).
         linked_pairs: Vec::new(),
+        plugin_state: None,
         extra: ae_map(vec![("params", serde_json::Value::Array(carried))]),
     }
 }

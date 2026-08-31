@@ -191,8 +191,8 @@ pub struct BridgePluginScan {
     pub skipped: Vec<String>,
 }
 
-/// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) and offer what is
-/// found as effects.
+/// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) **and the standard
+/// CLAP folders** (and `CLAP_PATH`), and offer what is found as effects.
 ///
 /// **Deliberately not `frb(sync)`**: this opens other people's bundles and
 /// spawns a broker process per bundle, which is tens of milliseconds at best
@@ -215,14 +215,54 @@ pub fn rescan_plugins() -> BridgePluginScan {
     };
     let outcome =
         lumit_ofx::discover::scan(&options, &mut |def| lumit_render::gpufx::ofx::register(def));
-    BridgePluginScan {
+    let mut scan = BridgePluginScan {
         registered: outcome
             .registered
             .iter()
             .map(|found| found.label.clone())
             .collect(),
         skipped: outcome.skipped,
+    };
+    scan_audio_plugins(&prefs, &mut scan);
+    scan
+}
+
+/// The **audio** half of a rescan: the machine's CLAP folders, described in a
+/// broker process, registered into the same catalogue (K-700).
+///
+/// One list of switched-off identifiers serves both hosts (K-594), and the
+/// session's copy is written before the scan for the same reason the OFX one
+/// is: a plugin switched off earlier must be switched off for *this* session's
+/// mixes too, not merely absent from the listing.
+///
+/// A machine with no CLAP folder scans nothing, registers nothing and reports
+/// nothing, which is what a build with no audio plugins installed should cost.
+fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePluginScan) {
+    lumit_aplug::set_disabled(&prefs.disabled);
+    let outcome = lumit_aplug::scan_brokered(
+        &lumit_aplug::search_paths(),
+        &lumit_aplug::session_disabled(),
+        None,
+    );
+    for found in outcome.found {
+        // A rescan is not a second effect. `register` would refuse the name
+        // anyway; asking first is what stops a rescan leaking the definition it
+        // built on the way to being refused, since a catalogue entry is
+        // `'static` and leaking is how that lifetime is spelled.
+        if lumit_core::fx::BUILTIN_DEFS
+            .get(&found.match_name)
+            .is_some()
+        {
+            continue;
+        }
+        // The definition and the mix seam arrive together, which is what AP1
+        // deliberately stopped short of: registering is what makes the layer's
+        // stack able to hold one, and `open_audio` is what makes it sound.
+        if lumit_core::fx::BUILTIN_DEFS.register(found.def.leak()) {
+            scan.registered.push(found.label);
+        }
     }
+    scan.skipped.extend(outcome.skipped);
 }
 
 /// Switch a discovered plugin on or off, by the `match_name` the listing hands
@@ -245,10 +285,22 @@ pub fn rescan_plugins() -> BridgePluginScan {
 /// answer still holds for this session.
 #[frb(sync)]
 pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeError> {
-    let Some(identifier) = effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX) else {
-        return Ok(());
+    // Two hosts, one preference file (K-594): the name's own prefix says which
+    // host is told, and the file is written the same way either way.
+    let identifier = match (
+        effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX),
+        effect.strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX),
+    ) {
+        (Some(ofx), _) => {
+            lumit_ofx::discover::set_enabled(ofx, enabled);
+            ofx
+        }
+        (_, Some(clap)) => {
+            lumit_aplug::set_enabled(clap, enabled);
+            clap
+        }
+        _ => return Ok(()),
     };
-    lumit_ofx::discover::set_enabled(identifier, enabled);
     let mut prefs = lumit_project::PluginPrefs::load_default();
     if !prefs.set_enabled(identifier, enabled) {
         return Ok(());
@@ -1583,12 +1635,16 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     if lumit_core::fx::BUILTIN_DEFS.get(name).is_some() {
         return (None, None);
     }
-    // Nothing answers to that name. An `ofx:` one is a plugin this machine
-    // has not got — uninstalled, switched off before the scan, or a project
-    // made on somebody else's machine; anything else is an effect from a
-    // newer Lumit. Both are inert placeholders and neither is an error
-    // (docs/12 §1, docs/08 §5).
-    if effect.effect.namespace == lumit_core::model::EffectNamespace::Ofx {
+    // Nothing answers to that name. An `ofx:` or `clap:` one is a plugin this
+    // machine has not got — uninstalled, switched off before the scan, or a
+    // project made on somebody else's machine; anything else is an effect from
+    // a newer Lumit. Both are inert placeholders and neither is an error
+    // (docs/12 §1, docs/08 §5) — an audio plugin's inertness being that its
+    // link is left out of the chain and the sound goes through dry (K-700).
+    if matches!(
+        effect.effect.namespace,
+        lumit_core::model::EffectNamespace::Ofx | lumit_core::model::EffectNamespace::Clap
+    ) {
         (Some("plugin_missing".to_owned()), None)
     } else {
         (Some("unknown_effect".to_owned()), None)

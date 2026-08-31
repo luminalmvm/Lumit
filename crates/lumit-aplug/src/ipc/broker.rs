@@ -90,6 +90,83 @@ pub fn nothing_disabled() -> DisableList {
     Arc::new(Mutex::new(BTreeSet::new()))
 }
 
+/// **This session's** switched-off list, which is the one a live instance
+/// reads (K-594, K-700).
+///
+/// A scan is handed its list by the caller, because a scan is a thing somebody
+/// asks for with options in hand. A *block* is not: the chain opens a plugin
+/// deep inside a mix, with nobody around to pass preferences down, so the
+/// process keeps one list and the composition root writes the user's answer
+/// into it ([`set_disabled`]) as it does for the OFX host.
+static SESSION_DISABLED: std::sync::OnceLock<DisableList> = std::sync::OnceLock::new();
+
+/// The session's switched-off list, empty until somebody writes to it.
+#[must_use]
+pub fn session_disabled() -> DisableList {
+    Arc::clone(SESSION_DISABLED.get_or_init(nothing_disabled))
+}
+
+/// Replace the session's switched-off list with `identifiers` — what the
+/// composition root calls once the preferences are read, and again whenever the
+/// user flicks a switch. A plugin already open keeps playing until the next
+/// batch, which is where the broker reads the list.
+pub fn set_disabled(identifiers: &BTreeSet<String>) {
+    if let Ok(mut list) = session_disabled().lock() {
+        list.clone_from(identifiers);
+    }
+}
+
+/// Switch one plugin on or off in the session's list.
+pub fn set_enabled(identifier: &str, enabled: bool) {
+    if let Ok(mut list) = session_disabled().lock() {
+        if enabled {
+            list.remove(identifier);
+        } else {
+            list.insert(identifier.to_owned());
+        }
+    }
+}
+
+/// The brokers this session has started, one per `.clap` module (K-592).
+///
+/// Strong handles, so a module's process lives as long as the session once
+/// anything in it has played: a chain is opened and dropped every time a mix is
+/// rebuilt, and spawning a process per rebuild would be the cost the whole
+/// broker design exists to avoid paying per block.
+///
+/// ponytail: nothing ever evicts one. A user who scans a folder of forty
+/// vendors and plays one layer from each ends the session holding forty idle
+/// processes; close the least-recently-used when that is a machine somebody
+/// actually has, rather than guessing at a ceiling now.
+static BROKERS: std::sync::OnceLock<Mutex<BTreeMap<PathBuf, Arc<Mutex<Broker>>>>> =
+    std::sync::OnceLock::new();
+
+/// The broker hosting `module`, started and described if this is the first
+/// plugin from it (K-592, K-700).
+///
+/// # Errors
+///
+/// [`BrokerError`] — the executable would not start, or the module would not
+/// describe. Either way the caller leaves that link out of the chain and the
+/// sound goes through dry.
+pub fn module_broker(module: &std::path::Path) -> Result<Arc<Mutex<Broker>>, BrokerError> {
+    let key = module.to_path_buf();
+    let table = BROKERS.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let mut held = table.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(existing) = held.get(&key) {
+        return Ok(Arc::clone(existing));
+    }
+    let mut config = BrokerConfig::new(&key);
+    config.disabled = session_disabled();
+    let mut broker = Broker::spawn(config)?;
+    // Describe before anything asks for an instance: the broker's own
+    // descriptor cache is what a restart replays from.
+    broker.describe()?;
+    let broker = Arc::new(Mutex::new(broker));
+    held.insert(key, Arc::clone(&broker));
+    Ok(broker)
+}
+
 /// The broker executable's file name.
 #[must_use]
 pub fn broker_exe_name() -> &'static str {

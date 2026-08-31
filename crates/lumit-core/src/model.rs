@@ -775,6 +775,21 @@ pub struct EffectKey {
     pub version: u32,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+    /// An **audio plugin** â€” a CLAP one today, a VST3 one on the same road in
+    /// AP4 (docs/impl/audio-plugins.md, K-700).
+    ///
+    /// One namespace for both standards on purpose: both collapse into one
+    /// internal definition and nothing downstream of describe knows which a
+    /// plugin speaks. Which it is, where anybody needs to know, is carried by
+    /// the match name's own prefix â€” the same place the OFX provenance is
+    /// carried, and for the same reason: the host minted the name.
+    ///
+    /// It is its own namespace rather than [`EffectNamespace::Ofx`]'s
+    /// neighbour-by-accident because the picture path filters on exactly this:
+    /// an audio effect must never be resolved as an image op, and saying so
+    /// once here is cheaper than every walk asking the catalogue what kind of
+    /// thing it just found.
+    Clap,
 }
 
 /// A file-valued parameter: the set of file paths it references plus a
@@ -952,11 +967,53 @@ impl EffectInstance {
     ///
     /// Takes any stem, including one this effect has no pair for: the
     /// declaration is what the panel offers a chain for, and a document that
+    /// An **audio plugin's own memory of itself**, as hex (K-700,
+    /// docs/impl/audio-plugins.md Â§4).
+    ///
+    /// # In plain terms
+    ///
+    /// A plugin's knobs are Lumit properties and keyframe like anything else,
+    /// but a plugin also keeps things no knob names â€” which impulse response a
+    /// reverb loaded, what a curve display was drawn as. It hands that over as
+    /// a run of bytes it alone understands. Lumit **never parses it**: the blob
+    /// is written into the project, handed back to the plugin when the layer
+    /// opens again, and that is the whole of the contract. A plugin that is no
+    /// longer installed keeps its blob, its rows and its keyframes, so
+    /// installing it again finds everything where it was (docs/12 Â§1).
+    ///
+    /// Hex rather than raw bytes because the `.lum` is pretty-printed JSON, and
+    /// a `Vec<u8>` there is one number per line.
+    /// ponytail: base64 if a vendor's blob ever makes the doubling matter â€”
+    /// it is a string either way, so the field does not move.
+    ///
+    /// **Nothing in Lumit writes one yet.** v1 is parameters-only (Â§6): no
+    /// plugin GUI, so nothing but a state load changes plugin state, and a
+    /// round-trip is the whole of what the format owes. The plugin's own
+    /// floating window â€” the package after AP5 â€” is what makes reading the
+    /// blob back off a live instance necessary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_state: Option<String>,
     /// names a pair a later build removed is a stale line to ignore, never a
     /// fault (14-ENGINEERING-RULES §4).
     pub fn set_pair_linked(&mut self, stem: &str, linked: bool) -> bool {
         match (self.pair_linked(stem), linked) {
             (true, true) | (false, false) => false,
+    /// The plugin state blob as bytes, or `None` for the overwhelmingly
+    /// ordinary instance that has none.
+    ///
+    /// Hex that will not decode answers `None` â€” a hand-edited or truncated
+    /// blob opens the project without it rather than refusing the project
+    /// (14-ENGINEERING-RULES Â§4).
+    #[must_use]
+    pub fn plugin_state_bytes(&self) -> Option<Vec<u8>> {
+        hex::decode(self.plugin_state.as_ref()?).ok()
+    }
+
+    /// Write a plugin's blob onto this instance.
+    pub fn set_plugin_state(&mut self, bytes: &[u8]) {
+        self.plugin_state = (!bytes.is_empty()).then(|| hex::encode(bytes));
+    }
+
             (false, true) => {
                 self.linked_pairs.push(stem.to_owned());
                 self.linked_pairs.sort();

@@ -67,8 +67,8 @@ pub mod schema;
 mod tests;
 
 pub use def::{
-    AudioEffectDef, AudioHost, BlockJob, BrokerHost, InstanceSetup, LocalHost, BLOCK_SAMPLES,
-    LOOKAHEAD_MARGIN,
+    AudioEffectDef, AudioHost, BlockJob, BrokerHost, HostedAudio, InstanceSetup, LocalHost,
+    BLOCK_SAMPLES, LOOKAHEAD_MARGIN,
 };
 pub use describe::{
     describe, describe_module, describe_module_except, ParamDescription, PluginDescriptor,
@@ -79,7 +79,8 @@ pub use discover::{
 };
 pub use instance::{HostError, HostFlags, Instance};
 pub use ipc::broker::{
-    nothing_disabled, Broker, BrokerConfig, BrokerError, DisableList, STRIKES_BEFORE_DISABLED,
+    module_broker, nothing_disabled, session_disabled, set_disabled, set_enabled, Broker,
+    BrokerConfig, BrokerError, DisableList, STRIKES_BEFORE_DISABLED,
 };
 pub use module::{Module, ModuleEntry, ModuleError};
 pub use process::{

@@ -58,8 +58,10 @@ use lumit_core::fx::{
 
 use crate::describe::{ParamDescription, PluginDescriptor, Rejection};
 
-/// The catalogue name prefix an audio plugin's effect answers to.
-pub const MATCH_PREFIX: &str = "clap:";
+/// The catalogue name prefix an audio plugin's effect answers to — spelled
+/// once, in the engine, so the crate that mints the name and the walks that
+/// read it cannot drift (K-700).
+pub const MATCH_PREFIX: &str = lumit_core::fx::CLAP_MATCH_PREFIX;
 
 /// The schema row id one CLAP parameter mints.
 ///

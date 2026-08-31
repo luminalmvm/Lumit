@@ -3014,3 +3014,156 @@ mod tests {
         assert!(journal.read().unwrap().is_empty());
     }
 }
+
+    /// **A layer's audio insert chain survives the file** (K-700,
+    /// docs/impl/audio-plugins.md Â§4; the note's Â§7 plan 6).
+    ///
+    /// The chain *is* the layer's effect stack â€” "the stack is the rack" â€” so
+    /// what has to round-trip is the order, each instance's keyframed rows, and
+    /// the one thing that is new: the plugin's **opaque state blob**, which
+    /// Lumit never parses and must hand back byte for byte. The plugin itself
+    /// is deliberately not installed in this test: a missing plugin is docs/12
+    /// Â§1's inert placeholder and must lose nothing, which is exactly what a
+    /// project made on somebody else's machine looks like.
+    ///
+    /// And an instance with no blob writes no line for one, so every project
+    /// that has never met an audio plugin is byte-identical to what it was.
+    #[test]
+    fn an_audio_insert_chain_round_trips_with_its_state_blob() {
+        use lumit_core::model::{
+            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue,
+        };
+
+        let clap = |id: &str, value: f64, blob: Option<&[u8]>| {
+            let mut instance = EffectInstance {
+                id: Uuid::now_v7(),
+                effect: EffectKey {
+                    namespace: EffectNamespace::Clap,
+                    match_name: format!("clap:{id}"),
+                    version: 1,
+                    extra: serde_json::Map::new(),
+                },
+                enabled: true,
+                params: vec![EffectParam {
+                    id: "p1234".into(),
+                    value: EffectValue::Float(lumit_core::anim::Property::fixed(value)),
+                    extra: serde_json::Map::new(),
+                }],
+                sample_temporally: true,
+                custom_name: None,
+                linked_pairs: Vec::new(),
+                plugin_state: None,
+                extra: serde_json::Map::new(),
+            };
+            if let Some(bytes) = blob {
+                instance.set_plugin_state(bytes);
+            }
+            instance
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut doc = doc_with_item();
+        let mut comp = lumit_core::model::Composition {
+            master_volume_db: 0.0,
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "Comp 1".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: lumit_core::time::FrameRate::new(25, 1).unwrap(),
+            duration: lumit_core::time::Duration(lumit_core::time::Rational::new(10, 1).unwrap()),
+            background: lumit_core::model::LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        // Two plugins in order, the second holding a blob with a byte that is
+        // not printable ASCII â€” the case a naive text encoding would mangle.
+        let blob: Vec<u8> = vec![0x00, 0xff, 0x7f, 0x80, b'{', b'"'];
+        let chain = vec![
+            clap("com.nobody.eq", -6.5, None),
+            clap("com.nobody.reverb", 0.25, Some(&blob)),
+        ];
+        let names: Vec<String> = chain.iter().map(|e| e.effect.match_name.clone()).collect();
+        let mut layer = lumit_core::model::Layer {
+            id: Uuid::now_v7(),
+            name: "Music".into(),
+            kind: lumit_core::model::LayerKind::Solid {
+                def: Uuid::now_v7(),
+            },
+            in_point: lumit_core::time::CompTime(lumit_core::time::Rational::ZERO),
+            out_point: lumit_core::time::CompTime(lumit_core::time::Rational::new(10, 1).unwrap()),
+            start_offset: lumit_core::time::CompTime(lumit_core::time::Rational::ZERO),
+            transform: Default::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            markers: Vec::new(),
+            volume_db: lumit_core::anim::Property::zero(),
+            pan: lumit_core::anim::Property::zero(),
+            audio_only: true,
+            adjustment: false,
+            retime: None,
+            interpolation: Default::default(),
+            parked_flow: None,
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: chain,
+            graph: Default::default(),
+            switches: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        comp.layers.push(layer.clone());
+        doc.items
+            .push(lumit_core::model::ProjectItem::Composition(comp));
+
+        let path = dir.path().join("chain.lum");
+        save(&doc, &path).unwrap();
+        let (loaded, _) = open(&path).unwrap();
+        let reloaded = loaded
+            .items
+            .iter()
+            .find_map(|i| match i {
+                lumit_core::model::ProjectItem::Composition(c) => c.layers.first(),
+                _ => None,
+            })
+            .expect("the layer comes back");
+
+        assert_eq!(
+            reloaded
+                .effects
+                .iter()
+                .map(|e| e.effect.match_name.clone())
+                .collect::<Vec<_>>(),
+            names,
+            "the chain comes back in the order it was written"
+        );
+        assert_eq!(reloaded.effects, layer.effects, "rows, ids and blob alike");
+        assert_eq!(
+            reloaded.effects[1].plugin_state_bytes().as_deref(),
+            Some(&blob[..]),
+            "the blob is handed back byte for byte, never parsed"
+        );
+        assert!(
+            reloaded.effects[0].plugin_state.is_none(),
+            "a plugin with nothing to remember keeps nothing"
+        );
+
+        // A project with no blob anywhere writes no line for one.
+        layer.effects = vec![clap("com.nobody.eq", 0.0, None)];
+        let mut plain = doc.clone();
+        if let Some(lumit_core::model::ProjectItem::Composition(c)) = plain.items.last_mut() {
+            c.layers = vec![layer];
+        }
+        let bare = dir.path().join("bare.lum");
+        save(&plain, &bare).unwrap();
+        let json = String::from_utf8(entry_bytes(&bare, "project.json")).unwrap();
+        assert!(
+            !json.contains("plugin_state"),
+            "an instance with no blob must write no key for one:
+{json}"
+        );
+    }

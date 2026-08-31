@@ -243,6 +243,13 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
     /// starting at the window rather than at the clip — a hair off the sound
     /// the file will carry, identical in every render of the picture, which is
     /// the property that matters here.
+    ///
+    /// ponytail: the layers' **audio insert chains** are deliberately not run
+    /// (K-700). A driver reading the mix is asked once per picture frame, and a
+    /// plugin cannot answer a window of a track thousands of times in a render
+    /// â€” so a glow that follows the music follows the *dry* music. Bake each
+    /// chain once at control rate and read the tap off that, if a plugin ever
+    /// changes a level enough for the picture to notice.
     fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
         if half <= 0.0 || half.is_nan() || !self.t_comp.is_finite() {
             return None;

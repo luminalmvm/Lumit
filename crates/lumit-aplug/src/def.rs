@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use lumit_core::fx::{EffectDef, EffectSchema, ParamId};
+use lumit_core::fx::{AudioProcessor, EffectDef, EffectSchema, ParamId};
 use serde::{Deserialize, Serialize};
 
 use crate::describe::PluginDescriptor;
@@ -546,5 +546,82 @@ impl EffectDef for AudioEffectDef {
     /// and the registry-agreement test excuses it from needing a GPU entry.
     fn is_image_op(&self) -> bool {
         false
+    }
+
+    /// One live instance of this plugin, in a broker process (K-700).
+    ///
+    /// This is the whole of the mix seam from the catalogue's side: the mixer
+    /// walks a layer's stack, asks every definition in it this question, and
+    /// the ones that answer *are* the layer's insert chain, in stack order.
+    ///
+    /// `None` rather than an error for every way it can fail to come up — the
+    /// broker will not start, the module will not describe, the plugin is
+    /// switched off — because there is one thing to do about any of them: leave
+    /// the link out and let the sound through dry.
+    fn open_audio(
+        &self,
+        state: Option<Vec<u8>>,
+        values: &[(ParamId, f64)],
+        offline: bool,
+    ) -> Option<Arc<dyn AudioProcessor>> {
+        let broker = crate::ipc::broker::module_broker(&self.module).ok()?;
+        let mut setup = self.setup(state, values);
+        setup.offline = offline;
+        let host = BrokerHost::open(broker, &setup).ok()?;
+        Some(Arc::new(HostedAudio {
+            host: Box::new(host),
+            routes: self.routes.clone(),
+        }))
+    }
+}
+
+/// One open plugin, wearing the engine's own words.
+///
+/// The whole of the translation is the parameter ids: the engine addresses a
+/// row by its [`ParamId`] hash and the plugin by its own stable `u32`, and
+/// [`ValueRoute`] is the map between them, worked out once at describe. Both
+/// standards land here — VST3's front end in AP4 fills the same routes from its
+/// own `ParamID`s and nothing below this line changes.
+pub struct HostedAudio {
+    host: Box<dyn AudioHost>,
+    routes: Vec<ValueRoute>,
+}
+
+impl HostedAudio {
+    /// A processor over any host — what a test uses to drive a
+    /// [`LocalHost`] through the mixer's own seam without a broker process.
+    #[must_use]
+    pub fn new(host: Box<dyn AudioHost>, routes: Vec<ValueRoute>) -> Self {
+        Self { host, routes }
+    }
+}
+
+impl AudioProcessor for HostedAudio {
+    fn process(
+        &self,
+        input: &[f32],
+        output: &mut [f32],
+        values: &[(ParamId, f64)],
+        steady: i64,
+    ) -> bool {
+        // One event per row this block carries a number for, at the block's
+        // first frame — the ~10 ms control rate the Volume envelope already
+        // uses (K-172). A row the plugin does not know is simply not routed.
+        let events: Vec<ParamEvent> = values
+            .iter()
+            .filter_map(|(id, value)| {
+                let route = self.routes.iter().find(|route| route.id == *id)?;
+                Some(ParamEvent {
+                    time: 0,
+                    id: route.param,
+                    value: *value,
+                })
+            })
+            .collect();
+        self.host.process(input, output, &events, steady).is_ok()
+    }
+
+    fn latency(&self) -> u32 {
+        self.host.latency()
     }
 }

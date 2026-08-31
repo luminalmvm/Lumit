@@ -919,6 +919,7 @@ mod tests {
                     custom_name: None,
                     linked_pairs: Vec::new(),
                     extra: serde_json::Map::new(),
+                    plugin_state: None,
                 });
             }
             let outer = comp(vec![consumer, matte_layer]);

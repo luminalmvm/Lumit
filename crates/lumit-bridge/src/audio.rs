@@ -192,6 +192,16 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
         if let Some(d) = &j.driven {
             format!("{:?}", d.graph).hash(&mut h);
         }
+        // The layer's insert chain, the same way and for the same reason
+        // (K-700): dropping a plugin on the row, dragging one of its knobs or
+        // bypassing it all change what the comp sounds like without touching a
+        // Volume keyframe, so the whole stack and its wiring fold in. Debug
+        // text, like the graph above — session-only, and a stack is a handful
+        // of entries.
+        if let Some(c) = &j.chain {
+            format!("{:?}", c.effects).hash(&mut h);
+            format!("{:?}", c.graph).hash(&mut h);
+        }
     }
     h.finish()
 }
@@ -246,6 +256,36 @@ pub(crate) fn build_plan(
                 buffer.samples.len() / 2,
                 rate,
             )?;
+            // The layer's insert chain, ahead of Volume and Pan (K-700). The
+            // processed span **replaces** the decoded buffer in the plan, so
+            // the realtime callback plays finished sound and never waits on a
+            // plugin's process; a layer whose stack opens nothing keeps the
+            // shared decoded `Arc` untouched. Realtime rather than offline
+            // here, which is the one thing this path and the export's say
+            // differently — the arithmetic in between is the same function.
+            let wet = job.chain.as_ref().and_then(|chain| {
+                lumit_render::export::chain_bake(
+                    chain,
+                    &buffer.samples[src_start * 2..(src_start + len) * 2],
+                    start_frame,
+                    rate,
+                    false,
+                )
+            });
+            let (buffer, start_frame, src_start, len) = match wet {
+                // Placed the chain's summed latency earlier, so the wet lands
+                // where the dry did.
+                Some((samples, latency)) => {
+                    let frames = samples.len() / 2;
+                    (
+                        Arc::new(lumit_media::AudioBuffer { rate, samples }),
+                        start_frame - i64::from(latency),
+                        0,
+                        frames,
+                    )
+                }
+                None => (Arc::clone(buffer), start_frame, src_start, len),
+            };
             let (gain, envelope) = lumit_render::export::volume_bake(job, start_frame, len, rate);
             let slot = match strips.iter().position(|s| *s == job.layer) {
                 Some(at) => at,
@@ -255,7 +295,7 @@ pub(crate) fn build_plan(
                 }
             };
             Some(lumit_audio::mix::PlacedClip {
-                buffer: Arc::clone(buffer),
+                buffer,
                 start_frame,
                 src_start,
                 len,
@@ -735,6 +775,7 @@ mod tests {
             carriers: Vec::new(),
             fade: None,
             driven: None,
+            chain: None,
         }
     }
 
@@ -947,5 +988,416 @@ mod tests {
         // Put the shared state back for whatever else runs in this process.
         set_device(None);
         assert!(!devices().2, "the system default is never a fallback");
+    }
+
+    // ------------------------------------------- the audio insert chain --
+
+    /// A stand-in audio plugin: it multiplies by its one row and then **hard
+    /// clips**, which is what makes it useful for the order-of-stages test —
+    /// a plain gain would commute with the fader and prove nothing about where
+    /// the insert sits.
+    struct TestInsert {
+        /// The block to refuse, which is what a crashed or hung plugin costs.
+        refuse: Option<usize>,
+        latency: u32,
+    }
+
+    impl lumit_core::fx::AudioProcessor for TestInsert {
+        fn process(
+            &self,
+            input: &[f32],
+            output: &mut [f32],
+            values: &[(lumit_core::fx::ParamId, f64)],
+            steady: i64,
+        ) -> bool {
+            if self.refuse == Some(steady as usize / lumit_core::fx::AUDIO_BLOCK_FRAMES) {
+                return false;
+            }
+            let g = values
+                .iter()
+                .find(|(id, _)| *id == lumit_core::fx::ParamId::new("p1"))
+                .map_or(1.0, |(_, v)| *v) as f32;
+            for (o, i) in output.iter_mut().zip(input) {
+                *o = (i * g).clamp(-0.5, 0.5);
+            }
+            true
+        }
+
+        fn latency(&self) -> u32 {
+            self.latency
+        }
+    }
+
+    struct TestInsertDef {
+        schema: &'static lumit_core::fx::EffectSchema,
+        refuse: Option<usize>,
+        latency: u32,
+    }
+
+    impl lumit_core::fx::EffectDef for TestInsertDef {
+        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+            self.schema
+        }
+
+        fn is_image_op(&self) -> bool {
+            false
+        }
+
+        fn open_audio(
+            &self,
+            _state: Option<Vec<u8>>,
+            _values: &[(lumit_core::fx::ParamId, f64)],
+            _offline: bool,
+        ) -> Option<Arc<dyn lumit_core::fx::AudioProcessor>> {
+            Some(Arc::new(TestInsert {
+                refuse: self.refuse,
+                latency: self.latency,
+            }))
+        }
+    }
+
+    /// Register one stand-in plugin under `name`. Registration is additive and
+    /// by name, so each test takes a name of its own and they cannot tread on
+    /// one another.
+    fn register_insert(name: &'static str, refuse: Option<usize>, latency: u32) {
+        let schema: &'static lumit_core::fx::EffectSchema =
+            Box::leak(Box::new(lumit_core::fx::EffectSchema {
+                match_name: name,
+                label: "Test insert",
+                version: 1,
+                category: lumit_core::fx::FxCategory::Utility,
+                traits: lumit_core::fx::EffectTraits {
+                    cost: lumit_core::fx::CostClass::Heavy,
+                    roi: lumit_core::fx::Roi::FullFrame,
+                    temporal: &[0],
+                    premultiplied: true,
+                    seeded: false,
+                    beat_input: false,
+                },
+                params: Box::leak(Box::new([lumit_core::fx::ParamSchema {
+                    id: "p1",
+                    label: "Gain",
+                    kind: lumit_core::fx::ParamKind::Slider {
+                        default: 1.0,
+                        range: (0.0, 4.0),
+                    },
+                    unit: lumit_core::fx::Unit::Raw,
+                }])),
+                groups: &[],
+                enabled_when: &[],
+                matte: lumit_core::fx::MatteRole::None,
+            }));
+        lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(TestInsertDef {
+            schema,
+            refuse,
+            latency,
+        })));
+    }
+
+    /// One instance of a stand-in plugin, its `p1` row holding `value`.
+    fn insert_instance(name: &str, value: Property) -> lumit_core::model::EffectInstance {
+        lumit_core::model::EffectInstance {
+            id: Uuid::now_v7(),
+            effect: lumit_core::model::EffectKey {
+                namespace: lumit_core::model::EffectNamespace::Clap,
+                match_name: name.to_owned(),
+                version: 1,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![lumit_core::model::EffectParam {
+                id: "p1".into(),
+                value: lumit_core::model::EffectValue::Float(value),
+                extra: serde_json::Map::new(),
+            }],
+            sample_temporally: true,
+            custom_name: None,
+            linked_pairs: Vec::new(),
+            plugin_state: None,
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// The chain a job carries for `effects`.
+    fn chain_of(
+        effects: Vec<lumit_core::model::EffectInstance>,
+    ) -> Arc<lumit_render::export::AudioChain> {
+        Arc::new(lumit_render::export::AudioChain {
+            doc: Arc::new(lumit_core::Document::new()),
+            comp: Uuid::now_v7(),
+            layer: Uuid::now_v7(),
+            effects,
+            graph: Default::default(),
+            offset_s: 0.0,
+            base_s: 0.0,
+        })
+    }
+
+    fn tone(rate: u32, seconds: f64, value: f32) -> Arc<lumit_media::AudioBuffer> {
+        Arc::new(lumit_media::AudioBuffer {
+            rate,
+            samples: vec![value; (f64::from(rate) * seconds) as usize * 2],
+        })
+    }
+
+    /// **A layer with no audio effect is the mix it always was** (K-700, the
+    /// note's §7 plan 3): the plan holds the *same* decoded buffer, not a copy
+    /// of it, so an empty chain costs no memory, no arithmetic and no chance of
+    /// drift. A stack full of picture effects is the same thing — the catalogue
+    /// opens none of them as audio.
+    #[test]
+    fn an_empty_chain_leaves_the_decoded_buffer_untouched() {
+        let rate = 48_000u32;
+        let source = tone(rate, 1.0, 0.25);
+        let bare = job("a.mp4", 0.0, 1.0, 0.0);
+        let mut blurred = bare.clone();
+        blurred.chain = Some(chain_of(vec![lumit_core::fx::instantiate("blur").unwrap()]));
+
+        let mut decoded = HashMap::new();
+        decoded.insert(bare.item, Arc::clone(&source));
+        for one in [bare, blurred] {
+            let (plan, _) = build_plan(&[one], &decoded, rate, 1.0, 0.0);
+            assert!(
+                Arc::ptr_eq(&plan.clips[0].buffer, &source),
+                "the plan must hold the decoded buffer itself"
+            );
+        }
+    }
+
+    /// **Preview is export** through a plugin (K-031, the note's §7 plan 3).
+    ///
+    /// Not "they agree to within a tolerance": the live plan and the baked
+    /// mixdown run the *same* chain over the *same* placement, so the two are
+    /// equal sample for sample — and the sound really did go through the
+    /// plugin, which the clip at ±0.5 proves.
+    #[test]
+    fn a_plugin_sounds_identical_through_the_live_plan_and_the_bake() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.preview", None, 0);
+        let source = tone(rate, 1.0, 0.8);
+        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.preview",
+            Property::fixed(1.0),
+        )]));
+
+        let mut decoded = HashMap::new();
+        decoded.insert(one.item, Arc::clone(&source));
+        let (plan, _) = build_plan(&[one.clone()], &decoded, rate, 1.0, 0.0);
+        let baked =
+            lumit_render::export::mixdown_prepared(&[(Arc::clone(&source), one)], rate, 1.0, 1.0);
+
+        assert!(
+            (baked[0] - 0.5).abs() < 1e-6,
+            "the insert really ran: 0.8 held at the clipper's ±0.5, got {}",
+            baked[0]
+        );
+        for i in 0..rate as usize {
+            let (l, r) = plan.frame_at(i);
+            assert!(
+                (l - baked[i * 2]).abs() < 1e-9 && (r - baked[i * 2 + 1]).abs() < 1e-9,
+                "frame {i}: the live plan and the export disagree"
+            );
+        }
+    }
+
+    /// **The insert sits ahead of Volume** (docs/impl/audio-plugins.md §2, the
+    /// decided position).
+    ///
+    /// The fader is put down 6 dB on a layer whose plugin clips at ±0.5.
+    /// Insert first gives `fade × clip(x)`; fader first would give
+    /// `clip(fade × x)`, and with a hot source those are different numbers —
+    /// which is exactly why the order is decided rather than incidental.
+    #[test]
+    fn the_insert_runs_before_the_fader_not_after_it() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.prefader", None, 0);
+        let source = tone(rate, 1.0, 0.8);
+        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
+        one.volume = Property::fixed(-6.0);
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.prefader",
+            Property::fixed(1.0),
+        )]));
+
+        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+        let half = lumit_audio::mix::db_to_gain(-6.0);
+        assert!(
+            (baked[0] - 0.5 * half).abs() < 1e-5,
+            "the fade rides the processed sound: expected {}, got {}",
+            0.5 * half,
+            baked[0]
+        );
+        assert!(
+            (baked[0] - 0.5).abs() > 1e-3,
+            "and the fader is not being swallowed by the clipper"
+        );
+    }
+
+    /// **An animated plugin parameter renders deterministically** (the note's
+    /// §7 plans 4 and 7): the sweep is baked at one value per 512-frame block,
+    /// those blocks are a fact about the layer rather than about the playhead,
+    /// and two bakes of the same project are byte-identical.
+    #[test]
+    fn an_animated_plugin_parameter_bakes_per_block_and_repeats_exactly() {
+        use lumit_core::anim::{Animation, Keyframe, SideInterp};
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.sweep", None, 0);
+        // 0 → 1 across the second, on a quiet source so the clipper never bites.
+        let key = |t: i64, v: f64| Keyframe {
+            time: lumit_core::Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let sweep = Property {
+            animation: Animation::Keyframed(vec![key(0, 0.0), key(1, 1.0)]),
+            extra: serde_json::Map::new(),
+        };
+        let source = tone(rate, 1.0, 0.2);
+        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.sweep",
+            sweep,
+        )]));
+
+        let bake = || {
+            lumit_render::export::mixdown_prepared(
+                &[(Arc::clone(&source), one.clone())],
+                rate,
+                1.0,
+                1.0,
+            )
+        };
+        let first = bake();
+        assert_eq!(first, bake(), "two bakes of one project are identical");
+
+        // Block b was handed the value at its own first frame, and held it for
+        // the whole block — a step per 512 frames, not a slope per sample.
+        let block = lumit_core::fx::AUDIO_BLOCK_FRAMES;
+        for b in [0usize, 1, 10, 80] {
+            let want = 0.2 * (b * block) as f32 / rate as f32;
+            let at = b * block * 2;
+            assert!(
+                (first[at] - want).abs() < 1e-5,
+                "block {b}: expected {want}, got {}",
+                first[at]
+            );
+            assert!(
+                (first[at] - first[at + (block - 1) * 2]).abs() < 1e-9,
+                "block {b} holds one value all the way across"
+            );
+        }
+    }
+
+    /// **A block the plugin refuses ships dry, and the sound goes on**
+    /// (docs/impl/audio-plugins.md §3): the refused block carries the chain's
+    /// input unchanged, everything either side is processed, and the splice is
+    /// ramped rather than cut — a hole in the music would be worse than a block
+    /// of it slightly wrong, and a click worse than either.
+    #[test]
+    fn a_refused_block_ships_dry_and_the_rest_still_plays() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.refuse", Some(4), 0);
+        let source = tone(rate, 1.0, 0.8);
+        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.refuse",
+            Property::fixed(1.0),
+        )]));
+        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
+
+        let block = lumit_core::fx::AUDIO_BLOCK_FRAMES;
+        let inside = (4 * block + block / 2) * 2;
+        assert!(
+            (baked[inside] - 0.8).abs() < 1e-6,
+            "the refused block is the input, dry: got {}",
+            baked[inside]
+        );
+        assert!(
+            (baked[0] - 0.5).abs() < 1e-6,
+            "and every other block is still processed"
+        );
+        let worst = baked
+            .chunks_exact(2)
+            .zip(baked.chunks_exact(2).skip(1))
+            .map(|(a, b)| (b[0] - a[0]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(
+            worst < 0.02,
+            "the splice must not click: worst step {worst}"
+        );
+    }
+
+    /// **Latency is compensated by placing the sound earlier** (the note's §7
+    /// plan 3): a plugin that answers N frames late has its run put down N
+    /// frames sooner and made N frames longer, so the wet lands where the dry
+    /// did and a lookahead limiter simply works.
+    #[test]
+    fn a_latent_plugin_is_placed_earlier_by_exactly_its_latency() {
+        let rate = 48_000u32;
+        let latency = 128u32;
+        register_insert("clap:lumit.test.latent", None, latency);
+        let source = tone(rate, 2.0, 0.2);
+        let mut one = job("a.mp4", 1.0, 2.0, 0.0);
+        one.chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.latent",
+            Property::fixed(1.0),
+        )]));
+        let mut decoded = HashMap::new();
+        decoded.insert(one.item, source);
+        let (plan, _) = build_plan(&[one], &decoded, rate, 3.0, 0.0);
+
+        let clip = &plan.clips[0];
+        assert_eq!(
+            clip.start_frame,
+            i64::from(rate) - i64::from(latency),
+            "placed earlier by the chain's own delay"
+        );
+        assert_eq!(
+            clip.src_start, 0,
+            "the processed run starts at its own zero"
+        );
+        assert_eq!(
+            clip.len,
+            rate as usize + latency as usize,
+            "and is long enough for the delayed tail to come out"
+        );
+    }
+
+    /// The mix signature hears the rack, not only the fader (K-700): dropping a
+    /// plugin on the row, nudging one of its knobs, bypassing it or reordering
+    /// the stack each change what the comp sounds like, and each must re-plan.
+    #[test]
+    fn the_signature_changes_when_the_insert_chain_does() {
+        let plain = vec![job("a.mp4", 0.0, 5.0, 0.0)];
+        let sig = jobs_signature(&plain, 10.0, 0.0);
+
+        let eq = insert_instance("clap:lumit.test.sig", Property::fixed(1.0));
+        let comp = insert_instance("clap:lumit.test.sig2", Property::fixed(1.0));
+        let with = |effects: Vec<lumit_core::model::EffectInstance>| {
+            let mut jobs = plain.clone();
+            jobs[0].chain = Some(chain_of(effects));
+            jobs_signature(&jobs, 10.0, 0.0)
+        };
+        let dropped = with(vec![eq.clone(), comp.clone()]);
+        assert_ne!(sig, dropped, "dropping a plugin re-plans");
+        assert_ne!(
+            dropped,
+            with(vec![comp.clone(), eq.clone()]),
+            "reordering the rack re-plans"
+        );
+
+        let mut nudged = eq.clone();
+        nudged.params[0].value = lumit_core::model::EffectValue::Float(Property::fixed(2.0));
+        assert_ne!(
+            dropped,
+            with(vec![nudged, comp.clone()]),
+            "a knob nudge re-plans"
+        );
+
+        let mut bypassed = eq;
+        bypassed.enabled = false;
+        assert_ne!(dropped, with(vec![bypassed, comp]), "a bypass re-plans");
     }
 }

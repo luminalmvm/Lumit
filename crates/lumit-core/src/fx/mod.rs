@@ -14,6 +14,9 @@
 //! and these CPU functions both consume, which is what makes "the GPU must
 //! agree with the CPU" a testable promise.
 
+/// The layer's audio insert chain: sound through the plugins in its stack,
+/// ahead of Volume and Pan (docs/impl/audio-plugins.md §2, K-700).
+pub mod audio_chain;
 mod builtins;
 /// Registration: the list of effects this build has (§2.6).
 mod catalogue;
@@ -63,6 +66,10 @@ pub mod cpu;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
+pub use audio_chain::{
+    run_chain, AudioProcessor, ChainLink, ChainOutput, AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES,
+    AUDIO_CHANNELS, AUDIO_SPLICE_FRAMES,
+};
 pub use builtins::*;
 pub use catalogue::*;
 pub use drivers::{

@@ -13956,3 +13956,85 @@ In the Timeline it is simply a third way to draw the lane you already have: the 
 a layer's Waveform row cycles plain wave → three-band stack → spectrogram, per layer,
 and the choice is remembered for the session the way an open twirl is. Nothing about
 the sound changes — it is the same audio wearing a different picture.
+
+## 49. Where somebody else's audio plugin sits in the mix, in plain terms
+
+Sections 43 and 44 got a plugin *found*, *described* and *played a block of sound* — in a
+program of its own, so a crash costs a block rather than the evening. What was missing was
+the last step: putting what it hands back where the layer's own sound used to be. That is
+what this is.
+
+### The rack is the stack you already have
+
+There is no separate list of audio effects. A plugin lands in the layer's ordinary effect
+stack, beside the blurs, and Lumit works out which entries are audio by asking each one a
+single question — "can I open you as something to play sound through?" A blur says no. A
+plugin says yes, and hands back a live copy of itself in the broker process. The ones that
+say yes, in stack order, **are** that layer's chain.
+
+Two useful things fall out of that. Nothing new had to cross to the interface: adding,
+removing, reordering, bypassing and renaming an effect already worked, and a plugin's
+knobs are ordinary properties, so the stopwatch, the graph editor, expressions and the
+wires from the node graph all reach them by the road they already take. And a layer with an
+empty stack costs exactly nothing — the mixer keeps the very same decoded sound it had
+before, not a copy of it.
+
+### Ahead of the fader, and why that is not a detail
+
+The chain runs **before** Volume and Pan. Fading a layer out has to fade the sound the
+plugin already treated; the other way round, riding the fader down into a compressor would
+change how hard the compressor squeezed halfway through the fade, and the music would
+audibly pump. Every mixing desk ever built puts inserts before the fader for this reason,
+and there is a test that would fail if the two swapped: the stand-in plugin in it clips the
+sound flat, and a clipper and a fader give different numbers depending on which goes first.
+
+### Rendered whole, rather than chased
+
+The plan the sound card plays from already holds each layer's audio as one decoded run in
+memory. So Lumit takes the run, feeds it through the chain in fixed 512-sample pieces
+counted from the layer's own first sample, and puts the *processed* run into the plan in
+its place. The sound card is then playing finished audio and never waits on another program
+at all.
+
+The nice consequence is that the preview and the export stop being two things that agree.
+They are one function called twice: same placement, same pieces, same numbers. A test walks
+a whole second of both and asserts every sample matches — not "close enough", but the same.
+
+The honest cost is that a five-minute track through a plugin takes five minutes of that
+plugin's time whenever the mix genuinely changes. That work happens on the background
+worker that already rebuilds the mix, and a fingerprint of the whole rack decides whether
+it needs doing, so dragging an unrelated slider does not pay for it.
+
+### Automation, one value per piece
+
+A keyframed plugin knob is read once per 512-sample piece — about every eleven
+milliseconds, the same rate the volume envelope already uses — and handed over as an event
+at the start of that piece. A knob nobody has animated is read once and held, so an
+untouched plugin costs nothing per piece. If a wire from the node graph feeds the knob, the
+wire wins over the keyframes, which is exactly what a wire does to any other parameter.
+
+### When a plugin dies mid-song
+
+It costs one piece. That piece ships **dry** — the sound that went in, unchanged — the
+broker restarts underneath, and the next piece is processed again. In a montage, music
+continuing slightly wrong is far better than a hole in it.
+
+A hard join between treated and untreated sound would click, though, so the five
+milliseconds either side of the join are faded across. That fade is a plain straight line,
+not the curved one a crossfade between two different shots uses. The reason is worth
+knowing: the curved fade is built for two *unrelated* sounds and deliberately keeps the
+energy up in the middle, which for two versions of the *same* sound means a 3 dB bump
+exactly where you were trying to hide a click — and a plugin that happens to pass sound
+straight through would have its "dry" piece quietly altered by the fade around it. A
+straight line adds to one everywhere, so identical in means identical out. There is a test
+for precisely that.
+
+### The plugin's private notebook
+
+Beyond its knobs, a plugin keeps things no knob names — which impulse response a reverb
+loaded, how a curve display was drawn. It hands that over as a run of bytes only it
+understands. Lumit writes those bytes into the project as text, never looks inside them,
+and hands them back when the layer opens again. If the plugin is not installed on the
+machine that opens the project, the entry stays in the stack with its knobs, its keyframes
+and its bytes intact and the sound simply passes through untouched — install the plugin and
+everything is where it was.
