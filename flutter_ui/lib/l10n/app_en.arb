@@ -228,9 +228,17 @@
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."
   },
+  "foldStyles": "Styles",
+  "@foldStyles": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
+  },
   "fxAddGrain": "Add grain",
   "@fxAddGrain": {
     "description": "Effect name in the Add effect menu — lays film grain on the picture."
+  },
+  "fxAltitude": "Altitude",
+  "@fxAltitude": {
+    "description": "A Bevel and emboss layer style's Altitude parameter: how high above the surface the light sits, in degrees."
   },
   "fxBackwards": "Backwards",
   "@fxBackwards": {
@@ -239,6 +247,14 @@
   "fxBeam": "Beam",
   "@fxBeam": {
     "description": "Effect name in the Add effect menu — draws a tapered shaft of light."
+  },
+  "fxBevelAndEmboss": "Bevel and emboss",
+  "@fxBevelAndEmboss": {
+    "description": "Name of the Bevel and emboss layer style, shown on its card and its Timeline row."
+  },
+  "fxBevelStyle": "Bevel style",
+  "@fxBevelStyle": {
+    "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
   },
   "fxBottomToTop": "Bottom to top",
   "@fxBottomToTop": {
@@ -271,6 +287,30 @@
   "fxCardWipe": "Card wipe",
   "@fxCardWipe": {
     "description": "Effect name in the Add effect menu — turns the frame away as a grid of cards."
+  },
+  "fxChiselHard": "Chisel hard",
+  "@fxChiselHard": {
+    "description": "Option of a Bevel and emboss layer style's Technique: a hard-chiselled edge profile."
+  },
+  "fxChiselSoft": "Chisel soft",
+  "@fxChiselSoft": {
+    "description": "Option of a Bevel and emboss layer style's Technique: a soft-chiselled edge profile."
+  },
+  "fxChoke": "Choke",
+  "@fxChoke": {
+    "description": "An Inner shadow or Inner glow layer style's Choke parameter: how far the softened edge is pulled back in, per cent."
+  },
+  "fxColourA": "Colour A",
+  "@fxColourA": {
+    "description": "A Gradient overlay layer style's first colour, at the start of the ramp."
+  },
+  "fxColourB": "Colour B",
+  "@fxColourB": {
+    "description": "A Gradient overlay layer style's second colour, at the end of the ramp."
+  },
+  "fxColourOverlay": "Colour overlay",
+  "@fxColourOverlay": {
+    "description": "Name of the Colour overlay layer style: one flat colour painted across the layer."
   },
   "fxColumns": "Columns",
   "@fxColumns": {
@@ -312,6 +352,14 @@
   "@fxCreateCornerPin": {
     "description": "Effect controls — a button on Planar track: puts a Corner pin effect on the chosen layer, keyframed to the tracked surface."
   },
+  "fxDown": "Down",
+  "@fxDown": {
+    "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
+  },
+  "fxEdge": "Edge",
+  "@fxEdge": {
+    "description": "Option of an Inner glow layer style's Source: the glow grows in from the shape's edge."
+  },
   "fxFlowResolution": "Flow resolution",
   "@fxFlowResolution": {
     "description": "Effect controls — a control on Roto brush: the resolution the propagation's optical flow is measured at."
@@ -320,9 +368,45 @@
   "@fxFlowSmoothness": {
     "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
   },
+  "fxGradientOverlay": "Gradient overlay",
+  "@fxGradientOverlay": {
+    "description": "Name of the Gradient overlay layer style: a two-colour ramp across the layer."
+  },
+  "fxGradientType": "Gradient type",
+  "@fxGradientType": {
+    "description": "A Gradient overlay layer style's Gradient type parameter: linear or radial."
+  },
   "fxHalf": "Half",
   "@fxHalf": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at half the source size."
+  },
+  "fxHighlightColour": "Highlight colour",
+  "@fxHighlightColour": {
+    "description": "A Bevel and emboss layer style's Highlight colour: the colour of the lit face."
+  },
+  "fxHighlightOpacity": "Highlight opacity",
+  "@fxHighlightOpacity": {
+    "description": "A Bevel and emboss layer style's Highlight opacity: how strong the lit face is, per cent."
+  },
+  "fxInnerBevel": "Inner bevel",
+  "@fxInnerBevel": {
+    "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits inside the shape's edge."
+  },
+  "fxInnerGlow": "Inner glow",
+  "@fxInnerGlow": {
+    "description": "Name of the Inner glow layer style, shown on its card and its Timeline row."
+  },
+  "fxInnerShadow": "Inner shadow",
+  "@fxInnerShadow": {
+    "description": "Name of the Inner shadow layer style, shown on its card and its Timeline row."
+  },
+  "fxInside": "Inside",
+  "@fxInside": {
+    "description": "Option of a Stroke layer style's Position: the stroke's thickness sits inside the layer's edge."
+  },
+  "fxLayerKnocksOutShadow": "Layer knocks out shadow",
+  "@fxLayerKnocksOutShadow": {
+    "description": "A Drop shadow layer style's toggle: whether the layer's own shape removes the shadow behind it."
   },
   "fxMatteInverted": "Matte inverted",
   "@fxMatteInverted": {
@@ -335,6 +419,22 @@
   "fxNative": "Native",
   "@fxNative": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at the source's own size."
+  },
+  "fxOuterBevel": "Outer bevel",
+  "@fxOuterBevel": {
+    "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits outside the shape's edge."
+  },
+  "fxOuterGlow": "Outer glow",
+  "@fxOuterGlow": {
+    "description": "Name of the Outer glow layer style, shown on its card and its Timeline row."
+  },
+  "fxOutside": "Outside",
+  "@fxOutside": {
+    "description": "Option of a Stroke layer style's Position: the stroke's thickness sits outside the layer's edge."
+  },
+  "fxPillowEmboss": "Pillow emboss",
+  "@fxPillowEmboss": {
+    "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
   },
   "fxPinLayer": "Pin layer",
   "@fxPinLayer": {
@@ -564,6 +664,10 @@
   "@fxPolarToRectangular": {
     "description": "Effect controls — a Conversion option on Polar coordinates."
   },
+  "fxPosition": "Position",
+  "@fxPosition": {
+    "description": "A Stroke layer style's Position parameter: which side of the layer's edge the thickness is spent on."
+  },
   "fxProducerX": "Producer x",
   "@fxProducerX": {
     "description": "Effect controls — a control on Radio waves: where the waves are emitted, horizontally."
@@ -624,6 +728,14 @@
   "@fxRows": {
     "description": "Effect controls — a control on Card wipe: how many cards down the frame."
   },
+  "fxSatin": "Satin",
+  "@fxSatin": {
+    "description": "Name of the Satin layer style, shown on its card and its Timeline row."
+  },
+  "fxSatinColour": "Satin colour",
+  "@fxSatinColour": {
+    "description": "A Satin layer style's colour parameter: the colour of the sheen."
+  },
   "fxScribble": "Scribble",
   "@fxScribble": {
     "description": "Effect name — fills a mask with pencil strokes."
@@ -631,6 +743,10 @@
   "fxSegmentLength": "Segment length",
   "@fxSegmentLength": {
     "description": "Effect controls — a control on Vegas: one dash and its gap along the contour."
+  },
+  "fxShadowOpacity": "Shadow opacity",
+  "@fxShadowOpacity": {
+    "description": "A Bevel and emboss layer style's Shadow opacity: how strong the shaded face is, per cent."
   },
   "fxSides": "Sides",
   "@fxSides": {
@@ -688,9 +804,21 @@
   "@fxStroke": {
     "description": "Effect name — walks a brush along a mask’s path."
   },
+  "fxStrokeColour": "Stroke colour",
+  "@fxStrokeColour": {
+    "description": "A Stroke layer style's colour parameter: the colour of the outline."
+  },
+  "fxStrokeEmboss": "Stroke emboss",
+  "@fxStrokeEmboss": {
+    "description": "Option of a Bevel and emboss layer style's Bevel style: the relief is applied to the layer's stroke."
+  },
   "fxStrokeWidth": "Stroke width",
   "@fxStrokeWidth": {
     "description": "Effect controls — a control on Radio waves: how thick each wave's outline is."
+  },
+  "fxTechnique": "Technique",
+  "@fxTechnique": {
+    "description": "A Bevel and emboss layer style's Technique parameter: how the edge profile is found."
   },
   "fxTime": "Time",
   "@fxTime": {
@@ -711,6 +839,10 @@
   "fxTwoWayStrike": "Two-way strike",
   "@fxTwoWayStrike": {
     "description": "Effect controls — a Type option on Lightning: two bolts meeting in the middle."
+  },
+  "fxUp": "Up",
+  "@fxUp": {
+    "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as raised."
   },
   "fxUpperLeftX": "Upper left x",
   "@fxUpperLeftX": {
@@ -767,6 +899,10 @@
   "fxWiggly": "Wiggly",
   "@fxWiggly": {
     "description": "Effect controls — an option of Scribble’s Wiggle type: the waver drifts continuously."
+  },
+  "histEditLayerStyles": "Edit layer styles",
+  "@histEditLayerStyles": {
+    "description": "A row of the Edit > History window: the name of one edit that was made — a layer style added, removed, switched off or dialled. Sent by the engine as English and looked up here."
   },
   "openingProject": "Opening project…",
   "@openingProject": {
@@ -5882,6 +6018,10 @@
   "tipAddKeyframe": "Add keyframe",
   "@tipAddKeyframe": {
     "description": "Tooltip. One or two words."
+  },
+  "tipAddLayerStyle": "Add a layer style",
+  "@tipAddLayerStyle": {
+    "description": "Tooltip on the plus button beside the Styles heading in the Effect controls panel. A few words."
   },
   "tipAdjustmentOff": "Adjustment off",
   "@tipAdjustmentOff": {

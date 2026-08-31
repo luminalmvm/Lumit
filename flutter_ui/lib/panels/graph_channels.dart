@@ -255,13 +255,18 @@ List<GraphChannel> graphChannels({
       continue;
     }
 
-    if (path.startsWith('${effectsPath(layerId)}/')) {
-      final rest = path.substring(effectsPath(layerId).length + 1);
+    // An effect's parameters, and a **layer style's** on the same road (K-706):
+    // a style is an effect instance in a second list, so its curve is drawn,
+    // edited and coloured by this branch rather than by a copy of it.
+    final styles = path.startsWith('${stylesPath(layerId)}/');
+    if (styles || path.startsWith('${effectsPath(layerId)}/')) {
+      final head = styles ? stylesPath(layerId) : effectsPath(layerId);
+      final rest = path.substring(head.length + 1);
       final slash = rest.indexOf('/');
       if (slash <= 0) continue;
       final effectId = rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in entry.info.effects) {
+      for (final fx in styles ? entry.info.styles : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
         for (final param in cachedListParameters(fx.name)) {
           if (param.id != paramId) continue;

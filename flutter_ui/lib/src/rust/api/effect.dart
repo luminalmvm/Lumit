@@ -32,14 +32,20 @@ part 'effect.freezed.dart';
 List<BridgeEffectInfo> listEffects() =>
     BridgeLib.instance.api.crateApiEffectListEffects();
 
-/// The **layer styles** the Add-style menu offers (docs/impl/layer-styles.md
-/// §6, K-706): the seven that render, in §2's pinned painting order.
+/// **All nine layer styles** (docs/impl/layer-styles.md §1, K-706), in §2's
+/// pinned painting order.
 ///
 /// Deliberately **not** part of [`list_effects`]: the effect browser, the
 /// command palette and the Add-effect menu all walk that list, and offering
 /// "Drop shadow (style)" there beside the Drop shadow effect would be the wrong
 /// answer to every search for a shadow. A style is added from the Layer menu and
 /// from the panel's own Styles heading, and both read this.
+///
+/// Nine rather than the seven a menu offers, because the frontend asks this two
+/// questions and only one of them is about menus: **what may be added** (the
+/// seven [`BridgeStyleInfo::offered`] marks) and **what is this style called**
+/// (all nine — an imported project can carry a Satin, and a heading reading
+/// `style_satin` is what leaving it out looks like).
 ///
 /// Its own tiny shape rather than [`BridgeEffectInfo`], because a style has none
 /// of what that carries: no browse category (they are one fixed family), no
@@ -1376,21 +1382,29 @@ sealed class BridgeSideInterp with _$BridgeSideInterp {
   ) = BridgeSideInterp_Auto;
 }
 
-/// One entry of [`list_styles`]: the match name [`add_style`] takes, and the
-/// English label the menu row shows through the engine-label table.
+/// One entry of [`list_styles`]: the match name [`add_style`] takes, the
+/// English label the menu row shows through the engine-label table, and whether
+/// a menu should offer it at all.
 ///
 /// [`add_style`]: crate::api::layer::LayerReference::add_style
 class BridgeStyleInfo {
   final String name;
   final String label;
 
+  /// Whether this style **renders** in this version (§8) — false for Satin
+  /// and Bevel and emboss, which are declared and imported losslessly but
+  /// draw nothing. A menu must not offer a style that changes no picture; a
+  /// heading still has to be able to name one.
+  final bool offered;
+
   const BridgeStyleInfo({
     required this.name,
     required this.label,
+    required this.offered,
   });
 
   @override
-  int get hashCode => name.hashCode ^ label.hashCode;
+  int get hashCode => name.hashCode ^ label.hashCode ^ offered.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1398,7 +1412,8 @@ class BridgeStyleInfo {
       other is BridgeStyleInfo &&
           runtimeType == other.runtimeType &&
           name == other.name &&
-          label == other.label;
+          label == other.label &&
+          offered == other.offered;
 }
 
 /// The unit a parameter's number is in (K-443) — what the row draws as its

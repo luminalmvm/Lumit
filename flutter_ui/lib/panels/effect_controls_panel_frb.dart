@@ -744,6 +744,17 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             _effectCard(context, ui, comp, layer, info, index),
                       ],
                     ],
+                    // Styles under the stack, because that is where they render
+                    // (docs/impl/layer-styles.md §3) — and only once the layer
+                    // wears one: an empty heading is a promise the row cannot
+                    // keep, and the Layer menu is where the first one is added.
+                    if (info.styles.isNotEmpty) ...[
+                      _stylesGroupHeading(context, ui, layer, info),
+                      if (_isOpen('styles-group'))
+                        for (var i = 0; i < info.styles.length; i++)
+                          _effectCard(context, ui, comp, layer, info, i,
+                              style: true),
+                    ],
                   ],
                 ),
               ),
@@ -794,38 +805,156 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
+  /// The **Styles** heading over the layer's styles (K-706,
+  /// docs/impl/layer-styles.md §6), twirling like the Audio one, with the
+  /// add-a-style menu on its own button.
+  ///
+  /// The menu lists the seven Lumit draws, each greyed once the layer wears it
+  /// — the same rule the Layer menu's rows follow, because it is the engine's:
+  /// `add_style` refuses a second copy of a style, and a menu that offered one
+  /// would be offering a refusal.
+  Widget _stylesGroupHeading(
+    BuildContext context,
+    LumitUiState ui,
+    LayerReference layer,
+    BridgeLayerInfo info,
+  ) {
+    final t = ThemeScope.of(context).theme;
+    final open = _isOpen('styles-group');
+    final worn = {for (final s in info.styles) s.name};
+    return Padding(
+      key: const ValueKey('fx-styles-group'),
+      padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+      child: Row(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggle('styles-group'),
+            child: Row(
+              children: [
+                lumitIcon(
+                  open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                  size: iconSize,
+                  color: t.textMuted,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  l10n.foldStyles,
+                  style: t.small.copyWith(color: t.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          LumitTooltip(
+            message: l10n.tipAddLayerStyle,
+            child: HouseButton(
+              key: const ValueKey<String>('fx-add-style'),
+              frameless: true,
+              small: true,
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              onPressed: worn.length < offeredStyles().length
+                  ? () => _addStyleMenu(context, ui, layer, worn)
+                  : null,
+              child: Text('+',
+                  style: t.small.copyWith(
+                      color: worn.length < offeredStyles().length
+                          ? t.textMuted
+                          : t.textDisabled)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The add-a-style popup: the seven, in §2's order, greyed where worn.
+  void _addStyleMenu(BuildContext context, LumitUiState ui,
+      LayerReference layer, Set<String> worn) {
+    final box = context.findRenderObject() as RenderBox?;
+    final at = box == null
+        ? Offset.zero
+        : box.localToGlobal(box.size.bottomLeft(Offset.zero));
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        width: 190,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Only the styles this layer can still take. A menu of dead rows
+            // tells you what you cannot do, which is not what a menu is for
+            // (docs/15, no punishment UI) — and the Layer menu, whose rows do
+            // grey, is where the whole family is always visible.
+            for (final style in offeredStyles())
+              if (!worn.contains(style.name))
+                MenuRow(
+                  key: ValueKey<String>('fx-add-style-${style.name}'),
+                  onPressed: () {
+                    close(null);
+                    try {
+                      layer.addStyle(name: style.name);
+                    } catch (_) {
+                      // The style arrived from somewhere else between the menu
+                      // opening and the row being chosen; a thrown error about
+                      // a style the layer now has helps nobody.
+                    }
+                    Provider.of<LumitState>(context, listen: false)
+                        .notifyDocumentChanged();
+                    ui.model.refresh();
+                  },
+                  child: Text(engineLabel(style.label)),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// One effect's card, wherever it is listed — under the stack or under the
   /// Audio heading. `index` is the effect's **stack** position, which is what
   /// every command on the card acts through.
+  ///
+  /// With `style` set it draws a **layer style** instead (K-706): the same
+  /// card, indexing the layer's other list. A style takes no part in the effect
+  /// selection — Copy, Paste, Delete and the reorder all act on the stack, and
+  /// nine fixed slots can do none of the four — so it is drawn unpicked and its
+  /// heading only twirls.
   Widget _effectCard(
     BuildContext context,
     LumitUiState ui,
     CompositionReference comp,
     LayerReference layer,
     BridgeLayerInfo info,
-    int index,
-  ) {
+    int index, {
+    bool style = false,
+  }) {
     final playhead = ui.playheadFrame.value;
+    final fx = style ? info.styles[index] : info.effects[index];
     return _WhenPicked(
-                          key: ValueKey<String>('fx-pick-$index'),
+                          key: ValueKey<String>('fx-pick-${style ? 'style-' : ''}$index'),
                           picked: ui.selectedEffects,
-                          id: info.effects[index].id,
+                          id: fx.id,
                           builder: (context, selected) => _EffectSection(
-                          key: ValueKey<String>('fx-card-$index'),
-                          info: info.effects[index],
-                          open: _isOpen('fx-${info.effects[index].id}'),
-                          onToggle: () => _toggleEffect(
-                              info.effects[index].id, ui.selectedEffects.value),
-                          selected: selected,
+                          key: ValueKey<String>('fx-card-${style ? 'style-' : ''}$index'),
+                          info: fx,
+                          style: style,
+                          open: _isOpen('fx-${fx.id}'),
+                          onToggle: () =>
+                              _toggleEffect(fx.id, ui.selectedEffects.value),
+                          selected: selected && !style,
                           driven: _driven,
-                          renaming: _renamingEffect == info.effects[index].id,
+                          renaming: _renamingEffect == fx.id,
                           onRenamed: (name) {
                             // Stage the name on a fresh handle and commit the
-                            // stack — one SetLayerEffects, one undo step, the
-                            // same shape every stack edit has.
-                            final stack = layer.getEffects();
+                            // list — one op, one undo step, the same shape
+                            // every stack edit has.
+                            final stack =
+                                style ? layer.getStyles() : layer.getEffects();
                             for (final instance in stack) {
-                              if (instance.id() == info.effects[index].id) {
+                              if (instance.id() == fx.id) {
                                 instance.setCustomName(name: name);
                                 try {
                                   layer.setEffects(effects: stack);
@@ -842,12 +971,13 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           // Escape: close the editor, write nothing (K-323).
                           onRenameCancelled: () =>
                               setState(() => _renamingEffect = null),
-                          onStartRename: () => setState(
-                              () => _renamingEffect = info.effects[index].id),
+                          onStartRename: () =>
+                              setState(() => _renamingEffect = fx.id),
                           onSelect: () {
+                            if (style) return;
                             ui.pickEffect(
                               layer,
-                              info.effects[index].id,
+                              fx.id,
                               order: [for (final e in info.effects) e.id],
                             );
                             // **Double-clicking a Custom shader's heading
@@ -855,7 +985,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             // heading and the Graph panel's box are one
                             // selection (K-300), so they are one door. The
                             // first click still picks, exactly as it did.
-                            final fx = info.effects[index];
                             if (fx.name == 'custom_shader' &&
                                 _headingTaps
                                     .putIfAbsent(fx.id, DoubleTap.new)
@@ -868,7 +997,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           stagedValue: _effects.stagedValue,
                           trackCorrected: info.trackCorrected,
                           index: index,
-                          count: info.effects.length,
+                          count: style ? info.styles.length : info.effects.length,
                           onStackChanged: ui.model.refresh,
                           onWrite: (id, param, value) {
                             _effects.write(layer, id, param, value);
@@ -901,7 +1030,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             // other the editor window, and neither is an event
                             // the engine could answer. Every other Action row
                             // goes back as one, which is what the kind is.
-                            if (info.effects[index].name == 'custom_shader') {
+                            if (fx.name == 'custom_shader') {
                               if (param == 'load_from_file') {
                                 _loadShaderInto(layer, effect);
                                 return;
@@ -1148,6 +1277,17 @@ class _EffectSection extends StatelessWidget {
   final BridgeEffectValue? Function(UuidValue effect, String param) stagedValue;
   final int index;
   final int count;
+
+  /// This card is a **layer style** rather than a stack entry (K-706,
+  /// docs/impl/layer-styles.md §6).
+  ///
+  /// One bit, and everything the card draws is unchanged by it: a style is an
+  /// `EffectInstance`, so the heading, the enable tick, Reset, the removal
+  /// cross and every parameter row are the same widgets doing the same thing.
+  /// What it changes is which of the layer's two lists a command reads
+  /// ([_instances]) and which three commands are absent — reorder, copy and
+  /// paste, none of which nine fixed slots in a pinned order can perform.
+  final bool style;
   final LayerReference layer;
 
   /// Every layer in the comp, from the read model — what a layer-valued
@@ -1224,6 +1364,7 @@ class _EffectSection extends StatelessWidget {
     required this.stagedValue,
     required this.index,
     required this.count,
+    this.style = false,
     required this.layer,
     required this.allLayers,
     required this.comp,
@@ -1257,6 +1398,15 @@ class _EffectSection extends StatelessWidget {
   /// to hold together: the seam matches them by id, so removing one does not
   /// stale the next.
   List<BridgeEffectInstance> _handles(BuildContext context) {
+    // A style is never part of a picked *run*: the effect selection is the
+    // stack's, and a style has no place in it. So this card's own instance is
+    // the whole answer (K-706).
+    if (style) {
+      return [
+        for (final candidate in layer.getStyles())
+          if (candidate.id() == info.id) candidate,
+      ];
+    }
     final ids = Provider.of<LumitUiState>(context, listen: false)
         .effectsToCopy(layer, info.id)
         .toSet();
@@ -1265,6 +1415,12 @@ class _EffectSection extends StatelessWidget {
         if (ids.contains(candidate.getInfo().id)) candidate,
     ];
   }
+
+  /// The layer's list this card's instance is on — its style list, or its
+  /// effect stack (K-706). Written back through `setEffects` either way: the
+  /// engine routes a staged list to the list its ids name.
+  List<BridgeEffectInstance> _instances() =>
+      style ? layer.getStyles() : layer.getEffects();
 
   /// Run [op] on each of them, in stack order.
   void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,
@@ -1293,7 +1449,7 @@ class _EffectSection extends StatelessWidget {
   /// arithmetic the row does while a gesture is live, and the document's
   /// business is only which pairs are tied together.
   void _togglePairLink(String stem) {
-    final stack = layer.getEffects();
+    final stack = _instances();
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
       // The engine answers whether anything moved, so a toggle that would
@@ -1330,7 +1486,7 @@ class _EffectSection extends StatelessWidget {
   /// which stages exactly one parameter: a reset is every parameter at once, and
   /// staging them one at a time would be one undo entry each.
   void _reset() {
-    final stack = layer.getEffects();
+    final stack = _instances();
     for (final instance in stack) {
       if (instance.id() != info.id) continue;
       for (final param in _rows) {
@@ -1426,7 +1582,9 @@ class _EffectSection extends StatelessWidget {
       // Drag the heading to move the effect (docs/07 §6): the gesture the rest
       // of the application already uses to reorder a list, and the one the
       // owner asked for.
-      dragIndex: index,
+      // A style is not draggable: its place in the list is Photoshop's, not
+      // the user's (docs/impl/layer-styles.md §2).
+      dragIndex: style ? null : index,
       onDropped: (from) {
         final stack = layer.getEffects();
         if (from < 0 || from >= stack.length) return;
@@ -1806,7 +1964,10 @@ class _EffectSection extends StatelessWidget {
                 },
                 child: Text(l10n.rename),
               ),
-            if (index > 0) ...[
+            // The move rows and Copy are the *stack*'s: nine named slots in a
+            // pinned order have nowhere to move to and no clipboard to go on
+            // (K-706), so a style's menu is Rename and Remove.
+            if (!style && index > 0) ...[
               MenuRow(
                 key: ValueKey<String>('fx-menu-up-$id'),
                 onPressed: () {
@@ -1824,7 +1985,7 @@ class _EffectSection extends StatelessWidget {
                 child: Text(l10n.moveToTop),
               ),
             ],
-            if (index < count - 1) ...[
+            if (!style && index < count - 1) ...[
               MenuRow(
                 key: ValueKey<String>('fx-menu-down-$id'),
                 onPressed: () {
@@ -1848,14 +2009,15 @@ class _EffectSection extends StatelessWidget {
             // was no way to pick a single effect and no way to reach the call.
             // It goes on the same clipboard a stack does: both are `.lumfx`, so
             // both paste the same way, and Paste needs no idea which it holds.
-            MenuRow(
-              key: ValueKey<String>('fx-menu-copy-$id'),
-              onPressed: () {
-                close(null);
-                _copyEffect(context);
-              },
-              child: Text(l10n.copyEffect),
-            ),
+            if (!style)
+              MenuRow(
+                key: ValueKey<String>('fx-menu-copy-$id'),
+                onPressed: () {
+                  close(null);
+                  _copyEffect(context);
+                },
+                child: Text(l10n.copyEffect),
+              ),
             MenuRow(
               key: ValueKey<String>('fx-menu-remove-$id'),
               onPressed: () {

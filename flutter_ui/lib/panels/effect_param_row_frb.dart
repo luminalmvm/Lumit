@@ -1801,6 +1801,20 @@ class EffectPointRowFrb extends StatelessWidget {
 List<BridgeEffectInfo>? _effectSchema;
 List<BridgeEffectInfo> cachedListEffects() => _effectSchema ??= listEffects();
 
+/// All nine layer styles (K-706), memoised for exactly [cachedListEffects]'
+/// reason: a fixed table that was crossing the bridge every time a menu tree or
+/// a panel heading was rebuilt.
+///
+/// Nine, because two questions are asked of it. [offeredStyles] is the menus'
+/// answer; this one is the *naming* answer, and an imported Satin has to be
+/// nameable even though nothing may add one.
+List<BridgeStyleInfo>? _styleSchema;
+List<BridgeStyleInfo> styleCatalogue() => _styleSchema ??= listStyles();
+
+/// The styles a menu may offer — the seven this version renders (§8).
+Iterable<BridgeStyleInfo> offeredStyles() =>
+    styleCatalogue().where((s) => s.offered);
+
 final Map<String, List<BridgeParamInfo>> _paramSchema = {};
 List<BridgeParamInfo> cachedListParameters(String effect) =>
     _paramSchema[effect] ??= listParameters(effect: effect);
@@ -1897,9 +1911,19 @@ Set<String> disabledParams(
 
 /// An effect's display label from the schema, falling back to its match name
 /// for an effect this build does not know.
+///
+/// **The layer styles answer here too** (K-706). They are deliberately not in
+/// the effect catalogue — the Add-effect menu must never offer "Drop shadow
+/// (style)" beside the Drop shadow effect — but a style's card, its Timeline
+/// heading and the dope sheet's flat list all ask this one question, and a
+/// heading reading `style_drop_shadow` is what leaving them out looks like.
+/// The engine makes the same join in `fx::def`, and for the same reason.
 String effectLabelOf(String name) {
   for (final info in cachedListEffects()) {
     if (info.name == name) return engineLabel(info.label);
+  }
+  for (final style in styleCatalogue()) {
+    if (style.name == name) return engineLabel(style.label);
   }
   return name;
 }
@@ -2008,9 +2032,20 @@ class EffectStackEditor {
   BridgeEffectValue? stagedValue(UuidValue effect, String param) =>
       _staged[(effect, param)];
 
-  /// The layer's stack with the drag in progress written into it, freshly read.
+  /// The layer's stack with the drag in progress written into it, freshly read
+  /// — **or its style list**, when that is where the staged parameter lives
+  /// (K-706, docs/impl/layer-styles.md §5).
+  ///
+  /// Which one is read off the ids, here and only here, so a style row's drag,
+  /// its typed value, its keyframe and its preview are the effect row's code
+  /// unchanged. The second read costs nothing on the ordinary path: every
+  /// staged id being in the stack is the common case and settles it.
   List<BridgeEffectInstance> stackWith(LayerReference layer) {
-    final stack = layer.getEffects();
+    final effects = layer.getEffects();
+    final ids = {for (final instance in effects) instance.id()};
+    final stack = _staged.keys.every((key) => ids.contains(key.$1))
+        ? effects
+        : layer.getStyles();
     for (final instance in stack) {
       final id = instance.id();
       for (final entry in _staged.entries) {

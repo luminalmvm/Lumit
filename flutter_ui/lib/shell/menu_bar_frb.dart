@@ -1000,7 +1000,7 @@ List<MenuSection> lumitMenus(
         blendStepRow(app, ui, by: 1),
         blendStepRow(app, ui, by: -1),
         MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
-        MenuEntry.todo(l10n.menuLayerStyles),
+        MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
         MenuEntry.divider(),
         MenuEntry.todo(l10n.menuReveal),
         // Create ▸ — what a layer can be turned *into*, keeping the layer it

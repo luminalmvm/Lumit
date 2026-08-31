@@ -14681,11 +14681,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeStyleInfo dco_decode_bridge_style_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeStyleInfo(
       name: dco_decode_String(arr[0]),
       label: dco_decode_String(arr[1]),
+      offered: dco_decode_bool(arr[2]),
     );
   }
 
@@ -18464,7 +18465,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_name = sse_decode_String(deserializer);
     var var_label = sse_decode_String(deserializer);
-    return BridgeStyleInfo(name: var_name, label: var_label);
+    var var_offered = sse_decode_bool(deserializer);
+    return BridgeStyleInfo(
+        name: var_name, label: var_label, offered: var_offered);
   }
 
   @protected
@@ -22314,6 +22317,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.name, serializer);
     sse_encode_String(self.label, serializer);
+    sse_encode_bool(self.offered, serializer);
   }
 
   @protected

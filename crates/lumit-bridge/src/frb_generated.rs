@@ -16179,9 +16179,11 @@ impl SseDecode for crate::api::effect::BridgeStyleInfo {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_label = <String>::sse_decode(deserializer);
+        let mut var_offered = <bool>::sse_decode(deserializer);
         return crate::api::effect::BridgeStyleInfo {
             name: var_name,
             label: var_label,
+            offered: var_offered,
         };
     }
 }
@@ -22242,6 +22244,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeStyleInfo {
         [
             self.name.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
+            self.offered.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -25065,6 +25068,7 @@ impl SseEncode for crate::api::effect::BridgeStyleInfo {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.name, serializer);
         <String>::sse_encode(self.label, serializer);
+        <bool>::sse_encode(self.offered, serializer);
     }
 }
 

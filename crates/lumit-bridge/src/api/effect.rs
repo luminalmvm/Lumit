@@ -82,8 +82,8 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
     catalogue(|_| true)
 }
 
-/// The **layer styles** the Add-style menu offers (docs/impl/layer-styles.md
-/// §6, K-706): the seven that render, in §2's pinned painting order.
+/// **All nine layer styles** (docs/impl/layer-styles.md §1, K-706), in §2's
+/// pinned painting order.
 ///
 /// Deliberately **not** part of [`list_effects`]: the effect browser, the
 /// command palette and the Add-effect menu all walk that list, and offering
@@ -91,22 +91,31 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
 /// answer to every search for a shadow. A style is added from the Layer menu and
 /// from the panel's own Styles heading, and both read this.
 ///
+/// Nine rather than the seven a menu offers, because the frontend asks this two
+/// questions and only one of them is about menus: **what may be added** (the
+/// seven [`BridgeStyleInfo::offered`] marks) and **what is this style called**
+/// (all nine — an imported project can carry a Satin, and a heading reading
+/// `style_satin` is what leaving it out looks like).
+///
 /// Its own tiny shape rather than [`BridgeEffectInfo`], because a style has none
 /// of what that carries: no browse category (they are one fixed family), no
 /// sockets (nothing wires to a style's declaration before it is on a layer), and
 /// no provenance (all nine are Lumit's).
 #[frb(sync)]
 pub fn list_styles() -> Vec<BridgeStyleInfo> {
-    lumit_core::fx::offered_styles()
+    lumit_core::fx::STYLE_DEFS
+        .builtins()
         .map(|def| BridgeStyleInfo {
             name: def.schema().match_name.to_owned(),
             label: def.schema().label.to_owned(),
+            offered: !lumit_core::fx::UNRENDERED_STYLES.contains(&def.schema().match_name),
         })
         .collect()
 }
 
-/// One entry of [`list_styles`]: the match name [`add_style`] takes, and the
-/// English label the menu row shows through the engine-label table.
+/// One entry of [`list_styles`]: the match name [`add_style`] takes, the
+/// English label the menu row shows through the engine-label table, and whether
+/// a menu should offer it at all.
 ///
 /// [`add_style`]: crate::api::layer::LayerReference::add_style
 #[frb(non_opaque)]
@@ -114,6 +123,11 @@ pub fn list_styles() -> Vec<BridgeStyleInfo> {
 pub struct BridgeStyleInfo {
     pub name: String,
     pub label: String,
+    /// Whether this style **renders** in this version (§8) — false for Satin
+    /// and Bevel and emboss, which are declared and imported losslessly but
+    /// draw nothing. A menu must not offer a style that changes no picture; a
+    /// heading still has to be able to name one.
+    pub offered: bool,
 }
 
 /// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
@@ -788,11 +802,10 @@ pub enum BridgeParamKind {
 pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594).
-    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
-        .get(&effect)
-        .map(lumit_core::fx::EffectDef::schema)
-    else {
+    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
+    // **layer style** answers here too (K-706): styles are a second list, and a
+    // style's rows are drawn by these same widgets.
+    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
     };
 
@@ -960,11 +973,10 @@ pub struct BridgeParamPair {
 pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594).
-    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
-        .get(&effect)
-        .map(lumit_core::fx::EffectDef::schema)
-    else {
+    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
+    // **layer style** answers here too (K-706): styles are a second list, and a
+    // style's rows are drawn by these same widgets.
+    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
     };
     schema
@@ -1022,11 +1034,10 @@ pub(crate) const LENS_PICK_PARAM: &str = "lens_model";
 pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594).
-    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
-        .get(&effect)
-        .map(lumit_core::fx::EffectDef::schema)
-    else {
+    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
+    // **layer style** answers here too (K-706): styles are a second list, and a
+    // style's rows are drawn by these same widgets.
+    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
     };
     schema
@@ -1105,11 +1116,10 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
 
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
-    // half alone (K-593/K-594).
-    let Some(schema) = lumit_core::fx::BUILTIN_DEFS
-        .get(&effect)
-        .map(lumit_core::fx::EffectDef::schema)
-    else {
+    // half alone (K-593/K-594). `def` rather than the catalogue itself, so a
+    // **layer style** answers here too (K-706): styles are a second list, and a
+    // style's rows are drawn by these same widgets.
+    let Some(schema) = lumit_core::fx::def(&effect).map(lumit_core::fx::EffectDef::schema) else {
         return Vec::new();
     };
     schema
@@ -1723,7 +1733,9 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     if let Some(why) = shader_error(effect) {
         return (Some("shader_failed".to_owned()), Some(why));
     }
-    if lumit_core::fx::BUILTIN_DEFS.get(name).is_some() {
+    // `def`, so a **layer style** is an instance this build knows rather than
+    // one wearing the "never heard of it" badge (K-706).
+    if lumit_core::fx::def(name).is_some() {
         return (None, None);
     }
     // Nothing answers to that name. An `ofx:` or `clap:` one is a plugin this
@@ -2000,7 +2012,7 @@ fn validated(program: &lumit_core::fx::shader::ShaderProgram) -> &'static Option
 /// the user's act rather than the panel's.
 #[frb(ignore)]
 fn fill_derived(effect: &mut EffectInstance) {
-    let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(effect.effect.match_name.as_str()) else {
+    let Some(def) = lumit_core::fx::def(effect.effect.match_name.as_str()) else {
         return;
     };
     // `derived` answers `&'static [ParamSchema]` — a session-lived parse cache,
@@ -2022,8 +2034,7 @@ fn fill_derived(effect: &mut EffectInstance) {
 /// The rows an instance's own source declares, as the panel reads them.
 #[frb(ignore)]
 fn derived_params_of(effect: &EffectInstance) -> Vec<BridgeParamInfo> {
-    lumit_core::fx::BUILTIN_DEFS
-        .get(effect.effect.match_name.as_str())
+    lumit_core::fx::def(effect.effect.match_name.as_str())
         .map(|def| def.derived(effect).iter().map(bridge_param).collect())
         .unwrap_or_default()
 }
@@ -2180,8 +2191,7 @@ impl BridgeEffectInstance {
     /// is the one-piece answer for a caller that has a handle and no read model.
     #[frb(sync)]
     pub fn list_parameters(&self) -> Vec<BridgeParamInfo> {
-        let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(self.effect.effect.match_name.as_str())
-        else {
+        let Some(def) = lumit_core::fx::def(self.effect.effect.match_name.as_str()) else {
             return Vec::new();
         };
         def.schema()

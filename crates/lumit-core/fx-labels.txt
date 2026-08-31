@@ -10,6 +10,7 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Altitude
 Amount
 Amplitude
 Analyse
@@ -37,6 +38,8 @@ Basic
 Beam
 Behind
 Bend
+Bevel and emboss
+Bevel style
 Bezier warp
 Black and white
 Blades
@@ -77,6 +80,9 @@ Channel blur
 Channel offset
 Checkbox
 Checkbox control
+Chisel hard
+Chisel soft
+Choke
 Chromatic aberration
 Circle
 Clamp
@@ -91,6 +97,8 @@ Colour
 Colour 1
 Colour 2
 Colour 3
+Colour A
+Colour B
 Colour balance
 Colour burn
 Colour control
@@ -99,6 +107,7 @@ Colour cycle
 Colour dodge
 Colour edge
 Colour noise
+Colour overlay
 Columns
 Combine
 Combine with existing alpha
@@ -165,6 +174,7 @@ Distribution
 Divide
 Dominant motion
 Dots
+Down
 Draft
 Drag
 Drivers
@@ -172,6 +182,7 @@ Drop shadow
 Duration
 Echo
 Echoes
+Edge
 Edge colour
 Edge sharpness
 Edge type
@@ -273,6 +284,8 @@ Glow opacity
 Glow radius
 Glow size
 Gradient
+Gradient overlay
+Gradient type
 Gravity
 Green
 Green blur
@@ -288,7 +301,9 @@ Hardness
 Height
 High
 Highlight amount
+Highlight colour
 Highlight exposure
+Highlight opacity
 Highlight threshold
 Highlight tonal width
 Highlights
@@ -309,11 +324,15 @@ In high
 In low
 Inflate
 Initial speed
+Inner bevel
+Inner glow
 Inner radius
+Inner shadow
 Input
 Input black
 Input space
 Input white
+Inside
 Inside colour
 Inside mask
 Intensity
@@ -334,6 +353,7 @@ Jitter z
 Key out safe
 Key out unsafe
 LUT
+Layer knocks out shadow
 Layer out
 Layer points
 Left and right
@@ -443,12 +463,15 @@ Origin x
 Origin y
 Out high
 Out low
+Outer bevel
+Outer glow
 Outer radius
 Output
 Output black
 Output height
 Output white
 Output width
+Outside
 Outside colour
 Outside mask
 Overlay
@@ -462,6 +485,7 @@ Perlin
 Phase
 Phase offset
 Photo filter
+Pillow emboss
 Pin layer
 Pin light
 Pinning
@@ -477,6 +501,7 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Position
 Position x
 Position y
 Position z
@@ -546,6 +571,8 @@ Roundness
 Rows
 Rows/columns jitter
 Samples
+Satin
+Satin colour
 Saturation
 Sawtooth
 Scale
@@ -575,6 +602,7 @@ Shadow amount
 Shadow colour
 Shadow highlight
 Shadow only
+Shadow opacity
 Shadow tonal width
 Shadows
 Shake
@@ -648,6 +676,8 @@ Stretch
 Strike
 Strobe
 Stroke
+Stroke colour
+Stroke emboss
 Stroke width
 Style
 Stylise
@@ -657,6 +687,7 @@ Sub settings
 Subtract
 Symmetric
 Taper
+Technique
 Temperature
 Temporal
 Texture
@@ -703,6 +734,7 @@ Underwater
 Uniform
 Uniform scaling
 Unsharp mask
+Up
 Upper left x
 Upper left y
 Upper right x

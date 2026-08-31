@@ -19,6 +19,7 @@
 import 'dart:collection';
 
 import 'package:flutter/services.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -81,8 +82,18 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// Read once per document revision by the panel and carried here, like every
   /// other answer on a fold row (K-184).
   final DrivenParam? driven;
+
+  /// This row's instance is a **layer style** rather than a stack entry
+  /// (K-706, docs/impl/layer-styles.md §5).
+  ///
+  /// One bit, and it buys the whole group: a style is an `EffectInstance` like
+  /// any other, so the row draws, keys, drags and reads exactly as an effect
+  /// parameter's does — the only two things that differ are which path it sits
+  /// under ([foldRowPath]) and which of the layer's two lists a write reads
+  /// first ([instancesHolding]).
+  final bool style;
   const FoldEffectParamRow(this.info, this.param, this.value,
-      {required int depth, this.driven})
+      {required int depth, this.driven, this.style = false})
       : super(depth);
 }
 
@@ -696,10 +707,11 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
         },
       FoldEffectParamRow(:final param, :final value) =>
         value != null && value != defaultEffectValue(param.kind),
-      // A heading is a container, save for an effect's own: an effect on a
-      // layer is a modification even with every parameter left alone, so its
-      // name shows and the untouched parameters under it do not.
-      FoldGroupRow(:final path) => effectIdOfPath(path) != null,
+      // A heading is a container, save for an effect's or a style's own: one
+      // of either on a layer is a modification even with every parameter left
+      // alone, so its name shows and the untouched parameters under it do not.
+      FoldGroupRow(:final path) =>
+        effectIdOfPath(path) != null || styleIdOfPath(path) != null,
       FoldRetimeRow() ||
       FoldFlowRow() ||
       FoldMaskRow() ||
@@ -1181,7 +1193,9 @@ bool moveLaneKeys({
       return true;
 
     case FoldEffectParamRow(:final info, :final param):
-      final stack = entry.layer.getEffects();
+      // Whichever of the layer's two lists holds it — a style's keys move
+      // exactly as an effect's do (K-706).
+      final stack = instancesHolding(entry.layer, info.id);
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
@@ -1326,8 +1340,9 @@ bool moveLaneKeys({
 String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldGroupRow(:final path) => path,
       FoldTransformRow(:final group) => transformGroupPath(layerId, group),
-      FoldEffectParamRow(:final info, :final param) =>
-        '${effectPath(layerId, info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, :final style) =>
+        '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
+            '/${param.id}',
       FoldVolumeRow() => '${audioPath(layerId)}/volume',
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
@@ -1387,6 +1402,29 @@ String effectsPath(String layerId) => '$layerId/effects';
 String effectPath(String layerId, String effectId) =>
     '$layerId/effects/$effectId';
 
+/// The path of a layer's **Styles** group (K-706).
+String stylesPath(String layerId) => '$layerId/styles';
+
+/// The path of one style within it. Its own prefix rather than the Effects
+/// one, because a group's path has to contain its rows' — that is what tells
+/// the outline which heading to light and what `startsWith` tests everywhere
+/// else.
+String stylePath(String layerId, String styleId) =>
+    '${stylesPath(layerId)}/$styleId';
+
+/// The layer's list that holds the instance `id` names — **the frontend's half
+/// of the engine's shared lookup** (docs/impl/layer-styles.md §5).
+///
+/// The effect stack is read first because it is the common case and usually the
+/// only one; the styles are asked for only when the id is not in it. What comes
+/// back is committed through `setEffects` either way — the engine routes it to
+/// the list the ids name, so there is no second write path here to keep in step.
+List<BridgeEffectInstance> instancesHolding(
+    LayerReference layer, UuidValue id) {
+  final stack = layer.getEffects();
+  return stack.any((i) => i.id() == id) ? stack : layer.getStyles();
+}
+
 /// The effect instance a fold path names, or null when the path is not one
 /// effect's heading (it is the Effects group itself, one parameter under an
 /// effect, or something else entirely). Used by the render-time indicator to
@@ -1404,6 +1442,18 @@ bool get isModifiedClick =>
 String? effectIdOfPath(String path) {
   final parts = path.split('/');
   if (parts.length != 3 || parts[1] != 'effects') return null;
+  return parts[2];
+}
+
+/// The **style** a fold path names, on exactly [effectIdOfPath]'s terms, or
+/// null for anything else (K-706).
+///
+/// Kept apart from the effect answer rather than folded into it: the callers of
+/// that one offer copy, paste and a stack reorder, and none of the three is a
+/// thing nine fixed slots can do.
+String? styleIdOfPath(String path) {
+  final parts = path.split('/');
+  if (parts.length != 3 || parts[1] != 'styles') return null;
   return parts[2];
 }
 
@@ -1711,6 +1761,50 @@ List<LayerFoldRow> layerFoldRows({
           for (final param in cachedListParameters(fx.name)) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));
+          }
+        }
+      }
+    }
+  }
+
+  // Styles, directly after Effects — where After Effects lists them, and where
+  // they render (docs/impl/layer-styles.md §3: the style ops are appended to
+  // the layer's own chain after the effect stack). Only once the layer wears
+  // one, on the Effects heading's own rule.
+  //
+  // One subgroup per style in §2's pinned painting order, which is the order
+  // the engine hands them over in — the fold does not sort, because there is
+  // nothing here for a user to reorder. The rows underneath are the ordinary
+  // [FoldEffectParamRow]s: a style is an effect instance, so its stopwatches,
+  // lane diamonds, value wells, drivers and expressions all arrive with it and
+  // no new row type was needed.
+  if (info.styles.isNotEmpty) {
+    final stylesOpen = open.contains(stylesPath(id));
+    rows.add(FoldGroupRow(
+      path: stylesPath(id),
+      label: l10n.foldStyles,
+      open: stylesOpen,
+      depth: 1,
+    ));
+    if (stylesOpen) {
+      for (final style in info.styles) {
+        final path = stylePath(id, style.id.toString());
+        final styleOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          // A style has no custom name of its own to set, but one carried in
+          // from an import is still the name the user was looking at (K-321).
+          label: style.customName ?? effectLabelOf(style.name),
+          open: styleOpen,
+          depth: 2,
+        ));
+        if (styleOpen) {
+          final values = {for (final v in style.values) v.id: v.value};
+          for (final param in cachedListParameters(style.name)) {
+            rows.add(FoldEffectParamRow(style, param, values[param.id],
+                depth: 3,
+                style: true,
+                driven: driven['${style.id}/${param.id}']));
           }
         }
       }

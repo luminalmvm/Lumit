@@ -29,6 +29,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/keyframe_controls_frb.dart'
     show scalarWithValueAt, scaledScalar;
+import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
@@ -589,3 +590,25 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
     set(l10n.menuMatteLumaInverted, luma: true, inverted: true),
   ];
 }
+
+/// Layer ▸ Layer styles: the seven Lumit draws (K-706,
+/// docs/impl/layer-styles.md §6 and §8), in Photoshop's own painting order.
+///
+/// **Greyed once the layer wears it**, because that is the engine's rule rather
+/// than this menu's opinion: the family is nine named slots and `add_style`
+/// refuses a second copy of one, so a live row here would be a row that
+/// refuses. Satin and Bevel and emboss are not listed at all — they are
+/// modelled so an import keeps them losslessly, and offering a style that draws
+/// nothing would be worse than not offering it.
+List<MenuEntry> styleRows(LumitState app, LumitUiState ui) => [
+      for (final style in offeredStyles())
+        MenuEntry(
+          engineLabel(style.label),
+          onSelection(
+            app,
+            ui,
+            (entry) => entry.layer.addStyle(name: style.name),
+            when: (entry) => !entry.info.styles.any((s) => s.name == style.name),
+          ),
+        ),
+    ];

@@ -26,7 +26,17 @@ use super::schema::{FxCategory, ParamKind};
 #[must_use]
 pub fn user_facing_labels() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for schema in super::BUILTINS {
+    // The catalogue, then the **layer styles** (K-706): a style is not in the
+    // catalogue on purpose — the Add-effect menu must never offer "Drop shadow
+    // (style)" beside the Drop shadow effect — but its name, its parameter
+    // labels and its Choice options reach the Timeline fold and the Effect
+    // controls panel over exactly the same seam, so the gate has to see them
+    // or the seven shipped styles ship in English inside a translated
+    // application.
+    let schemas = super::BUILTINS
+        .iter()
+        .chain(super::STYLE_DEFS.builtins().map(super::EffectDef::schema));
+    for schema in schemas {
         out.insert(schema.label.to_owned());
         for param in schema.params {
             out.insert(param.label.to_owned());

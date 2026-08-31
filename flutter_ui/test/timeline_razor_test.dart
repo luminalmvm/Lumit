@@ -74,6 +74,7 @@ void main() {
           scale: BridgeAxisMode.linked,
         ),
         effects: const [],
+        styles: const [],
         label: 0,
         masks: const [],
         paint: const [],
