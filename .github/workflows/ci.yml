@@ -29,21 +29,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # ffmpeg@7 is keg-only, so pkg-config cannot find it on its default search
-      # path; the build is pointed at the keg explicitly. This lives here, not in
-      # .cargo/config.toml, because Cargo's [env] has no per-target form and the
-      # macOS path injected on Linux made rusty_ffmpeg's build script panic (K-204).
-      - name: Install FFmpeg (keg-only) and point pkg-config at it
-        run: |
-          brew install ffmpeg@7
-          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
-      - name: FFmpeg version for the cache key (Cellar paths are versioned;
-              a cached rusty_ffmpeg build script must not outlive its keg)
-        id: ffver
-        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # Homebrew has no ffmpeg@8 formula (only @2.8, @4, @5, @6, @7) and its
+      # plain `ffmpeg` is already 9.x, which no published rsmpeg supports — so
+      # macOS gets FFmpeg 8 from a formula extracted out of homebrew-core's own
+      # history (8.1.2, the last 8.x it carried) and built from source, cached
+      # between runs. That whole dance, and the assertion that ends it, lives in
+      # the composite action; read .github/actions/ffmpeg8-macos/action.yml
+      # before changing anything here. The assertion is the load-bearing part:
+      # rsmpeg's `ffmpeg8` feature generates bindings for avcodec 62 / avutil
+      # 60, and linking those against any other major is a struct-layout
+      # mismatch, not a warning.
+      #
+      # The action exports FFMPEG_PKG_CONFIG_PATH itself. Setting it from a
+      # step rather than .cargo/config.toml stays deliberate (K-204): Cargo's
+      # [env] has no per-target form, and the macOS path injected on Linux made
+      # rusty_ffmpeg's build script panic.
+      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
+        id: ffmpeg
+        uses: ./.github/actions/ffmpeg8-macos
+      # Cellar paths are versioned; a cached rusty_ffmpeg build script must not
+      # outlive its keg, so the keg's version is part of the Rust cache key.
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ffmpeg-${{ steps.ffver.outputs.v }}
+          key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
@@ -60,25 +68,25 @@ jobs:
     runs-on: windows-latest
     env:
       # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the
-      # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
-      # Pinned to a dated autobuild, not the rolling "latest" tag: latest rotated
-      # its n7.1 assets out on 2026-08-17 and every job 404'd. A dated tag's
-      # assets are immutable; moving to FFmpeg 8 is a crate-feature migration,
-      # not a URL edit.
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-win64-gpl-shared-7.1
+      # import libs + DLLs rsmpeg links against, n8.1 matches the crate's
+      # `ffmpeg8` feature. Pinned to a dated autobuild, not the rolling "latest"
+      # tag: latest rotated its n7.1 assets out on 2026-08-17 and every job 404'd.
+      # A dated tag's assets are immutable, so re-pin deliberately rather than
+      # tracking a moving URL.
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-win64-gpl-shared-8.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # FFmpeg 7.1 dev libs for lumit-media. rusty_ffmpeg links the import libs in
+      # FFmpeg 8.1 dev libs for lumit-media. rusty_ffmpeg links the import libs in
       # FFMPEG_LIBS_DIR and reads headers from FFMPEG_INCLUDE_DIR (it ignores
       # pkg-config on Windows); the DLLs and the ffmpeg CLI (test fixtures) go on
       # PATH. See docs/impl/phase-0-kickoff.md slice 4 and docs/GUIDE.md.
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         shell: pwsh
         run: |
-          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/$env:FFMPEG_ASSET.zip"
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$env:FFMPEG_ASSET.zip"
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
           Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
           $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
@@ -126,10 +134,10 @@ jobs:
     name: tests (Linux, with media)
     runs-on: ubuntu-latest
     env:
-      # The same BtbN "shared, GPL" n7.1 build the Windows job takes, so all
+      # The same BtbN "shared, GPL" n8.1 build the Windows job takes, so all
       # three platforms link an identical FFmpeg. The distro's own is 6.x,
-      # which the crate's `ffmpeg7_1` feature does not match.
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      # which the crate's `ffmpeg8` feature does not match.
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
       # This runner installs Mesa's lavapipe below, so every GPU test MUST run
       # here: a missing adapter is a broken runner, not a machine without a
       # graphics card, and `lumit_gpu::no_adapter` turns the polite skip into a
@@ -160,9 +168,9 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
             libwayland-dev mesa-vulkan-drivers libclang-18-dev
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -178,7 +186,7 @@ jobs:
           # leaves the variable unset. Exporting the override here was masking
           # exactly that — it is how a broken .cargo/config.toml passed CI while
           # every fresh Linux clone failed. Adding to PKG_CONFIG_PATH exercises
-          # the contributor's code path with a pinned FFmpeg 7.1 (the runner's
+          # the contributor's code path with a pinned FFmpeg 8.1 (the runner's
           # own distro still ships FFmpeg 6, so the tarball stays).
           echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
@@ -317,9 +325,9 @@ jobs:
     name: flutter frontend (Linux build + analyze + test)
     runs-on: ubuntu-latest
     env:
-      # The same BtbN "shared, GPL" n7.1 build the other jobs take, so the
+      # The same BtbN "shared, GPL" n8.1 build the other jobs take, so the
       # bridge .so links the identical FFmpeg lumit-media expects.
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -341,11 +349,11 @@ jobs:
           # EGL/egl*.h + egl.pc. The Linux zero-copy Viewer plugin
           # (linux/runner/viewer_texture_bridge.cc, K-177) imports engine DMA-BUF
           # frames into GL external textures, so it links EGL + GLESv2.
-      # Same FFmpeg 7.1 install the `linux` job uses (its .pc prefix rewrite +
+      # Same FFmpeg 8.1 install the `linux` job uses (its .pc prefix rewrite +
       # env exports), so the bridge's `media` feature links here identically.
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -452,23 +460,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      # Same keg-only FFmpeg the macOS Rust jobs install. The build_pod.sh phase
-      # inside the Xcode build compiles the bridge crate, so rusty_ffmpeg needs
-      # the same formula here, and the podspec's -L flags need the keg present.
-      # The keg is not on pkg-config's default search path, so point the build at
-      # it explicitly, exactly as the `check` and `coverage` jobs do (K-204).
-      # Xcode's build environment inherits this from $GITHUB_ENV; it is not
-      # supplied by .cargo/config.toml, which deliberately sets no [env] block.
-      - name: Install FFmpeg (keg-only) and point pkg-config at it
-        run: |
-          brew install ffmpeg@7
-          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
-      - name: FFmpeg version for the cache key
-        id: ffver
-        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # The same extracted FFmpeg 8 keg the macOS Rust jobs take (the `check`
+      # job explains it). The build_pod.sh phase inside the Xcode build compiles
+      # the bridge crate, so rusty_ffmpeg needs the keg here, and the podspec's
+      # -L flags name its opt prefix — which the action creates on both the
+      # build and the cache-restore path. The exported pkg-config path stays for
+      # the same reason as the `check` and `coverage` jobs (K-204). Xcode's
+      # build environment inherits it from $GITHUB_ENV; it is not supplied by
+      # .cargo/config.toml, which deliberately sets no [env] block.
+      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
+        id: ffmpeg
+        uses: ./.github/actions/ffmpeg8-macos
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ffmpeg-${{ steps.ffver.outputs.v }}
+          key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # The same pinned Flutter the Linux job takes, so the two agree.
       - uses: subosito/flutter-action@v2
         with:
@@ -497,7 +502,7 @@ jobs:
       # (x86_64 + arm64), and on an arm64 runner the x86_64 slice counts as
       # cross-compilation, which pkg-config-rs refuses outright ("has not been
       # configured to support cross-compilation"). Forcing it with
-      # PKG_CONFIG_ALLOW_CROSS would be the wrong answer: Homebrew's ffmpeg@7 keg
+      # PKG_CONFIG_ALLOW_CROSS would be the wrong answer: Homebrew's ffmpeg
       # holds one architecture, so it would hand arm64 link flags to an x86_64
       # link. A universal build needs both kegs present and is out of scope for
       # this gate, which exists to compile the Swift runner and resolve the
@@ -538,7 +543,7 @@ jobs:
     name: bridge codegen is fresh (generate produces no diff)
     runs-on: ubuntu-latest
     env:
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -561,9 +566,9 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
             libwayland-dev mesa-vulkan-drivers libclang-18-dev
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -626,18 +631,15 @@ jobs:
         with:
           components: llvm-tools-preview
       - uses: taiki-e/install-action@cargo-llvm-cov
-      # Keg-only, as in the `check` job above: point pkg-config at the keg here
-      # rather than in .cargo/config.toml (K-204).
-      - name: Install FFmpeg (keg-only) and point pkg-config at it
-        run: |
-          brew install ffmpeg@7
-          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
-      - name: FFmpeg version for the cache key
-        id: ffver
-        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # As in the `check` job above, which explains the extracted formula: the
+      # action exports the pkg-config path rather than .cargo/config.toml
+      # carrying it (K-204).
+      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
+        id: ffmpeg
+        uses: ./.github/actions/ffmpeg8-macos
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ffmpeg-${{ steps.ffver.outputs.v }}
+          key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
       # The FFmpeg-free engine crates are all gated (measured 87–99% locally).
       # lumit-gpu is held out while its kernel tests skip on adapterless runners.

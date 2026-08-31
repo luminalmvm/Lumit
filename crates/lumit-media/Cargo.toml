@@ -14,7 +14,7 @@ test-fixtures = []
 [dependencies]
 bincode = "1"
 blake3 = "1"
-rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg7_1", "link_system_ffmpeg"] }
+rsmpeg = { version = "0.18", default-features = false, features = ["ffmpeg8", "link_system_ffmpeg"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 

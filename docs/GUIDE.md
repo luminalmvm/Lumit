@@ -5627,7 +5627,12 @@ FFmpeg present, and everyday `cargo` commands need to know where it is.
 
 There are two moving parts, and it helps to know why each exists:
 
-- **FFmpeg itself** — the video/audio engine. We use version 7.1. On Windows it comes as a
+- **FFmpeg itself** — the video/audio engine. We use version 8.1, and the major number
+  matters: the Rust side generates its FFmpeg bindings from the headers of whichever
+  build you point it at, and those bindings describe FFmpeg 8's data structures. Point
+  the build at FFmpeg 7 or 9 and it will compile against one shape and run against
+  another, which is the kind of fault that shows up as nonsense rather than an error
+  message. On Windows it comes as a
   folder with three important sub-folders: `lib` (the "how to call in" stubs the build links
   against), `include` (the description of what's callable), and `bin` (the actual `.dll`
   files the finished app loads while it runs, plus the `ffmpeg` command-line tool the tests
@@ -5641,7 +5646,7 @@ There are two moving parts, and it helps to know why each exists:
 
 ### On Windows (the shipping platform)
 
-1. Download `ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip` from the
+1. Download `ffmpeg-n8.1-latest-win64-gpl-shared-8.1.zip` from the
    [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases) page and unzip it
    under your user folder, e.g. `C:\Users\you\ffmpeg\`. (GPL because Lumit is GPL; "shared"
    because we want the `.dll` files.)
@@ -5657,18 +5662,26 @@ There are two moving parts, and it helps to know why each exists:
 
 ### On macOS
 
-FFmpeg comes from Homebrew: `brew install ffmpeg@7`. That formula is *keg-only* — Homebrew
-deliberately does not put it where the system looks by default, because it is an older
-version than the plain `ffmpeg` formula and linking it would shadow that. So the build has
-to be told where it went, once, in the terminal you build from:
+FFmpeg comes from Homebrew: `brew install ffmpeg`, then tell the build where it went, once,
+in the terminal you build from:
 
 ```sh
-export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg@7)/lib/pkgconfig"
+export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 ```
 
 Put that in your shell profile and every future terminal has it. macOS ships the translator
 (libclang) as part of its developer tools, so there is nothing else to set up — then
 `cargo test --workspace` works.
+
+**Check the version first, though: `brew list --versions ffmpeg` has to say 8-something.**
+Homebrew keeps older majors as separate formulas — `ffmpeg@7`, `ffmpeg@6` and so on — but
+at the time of writing there is no `ffmpeg@8`, and the plain formula has already moved on
+to 9. So macOS currently has no route to the version Lumit needs, and this is the one
+platform where the build genuinely cannot be set up today. It resolves either when
+Homebrew adds `ffmpeg@8` (at which point swap both `ffmpeg` above for `ffmpeg@8`, and note
+that a versioned formula is *keg-only*, which is exactly why the export line above exists),
+or when the Rust binding crate learns FFmpeg 9 and Lumit follows it there. Windows and
+Linux are unaffected.
 
 This line used to live in the repo's `.cargo/config.toml` instead, so nobody had to type
 it. It was removed (K-204) because Cargo offers no way to make such a setting apply to one
@@ -5680,7 +5693,7 @@ requirement, so macOS is the one that says it out loud.
 ### On Linux (K-082)
 
 Linux finds FFmpeg the same way macOS does — by asking the system's package registry
-(`pkg-config`) where the libraries live — so the setup is: install the FFmpeg 7
+(`pkg-config`) where the libraries live — so the setup is: install the FFmpeg 8
 *development* packages (the ones ending `-dev`, which carry the headers the binding
 generator reads), plus `pkg-config` and `clang`. On Debian 13 or Ubuntu 24.10 and newer
 that is one line: `sudo apt install pkg-config clang libavcodec-dev libavformat-dev
@@ -5708,11 +5721,13 @@ Linux used to need a second export here, to undo a macOS folder the repo's
 plain again; if you are looking at an older checkout, deleting the `[env]` block from
 `.cargo/config.toml` is what the fix amounted to.
 
-One honest caveat: the build needs FFmpeg **7**, and some distributions still ship
-FFmpeg 6 — Ubuntu 24.04 LTS is the big one. On those, `cargo build` will complain about
-"ffmpeg stuff" (a version the binding doesn't accept, or missing headers). The fix is a
-newer distribution release, or building FFmpeg 7.1 from source and letting `pkg-config`
-find it.
+One honest caveat: the build needs FFmpeg **8**, and most distributions still ship 6 or 7 —
+Ubuntu 24.04 LTS is the big one. On those, `cargo build` will complain about "ffmpeg stuff"
+(a version the binding doesn't accept, or missing headers). Three ways out: a newer
+distribution release, building FFmpeg 8.1 from source and letting `pkg-config` find it, or
+the route CI takes — download BtbN's `ffmpeg-n8.1-*-linux64-gpl-shared-8.1` tarball, rewrite
+the `prefix=` line in its `lib/pkgconfig/*.pc` files to wherever you unpacked it, and add
+that folder to `PKG_CONFIG_PATH`. See `.github/workflows/ci.yml` for the exact commands.
 
 (A **Flatpak** — a ready-to-install Linux bundle — is how releases ship for Linux, and
 since K-290 it is the *only* way they do. An earlier one packaged the old egui application

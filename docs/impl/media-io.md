@@ -7,7 +7,7 @@ classic NLE bugs: "scrubbing shows the wrong frame" and "4K playback melts the C
 ## 1. Linking ffmpeg
 
 - Crate: **rsmpeg** (maintained) over ffmpeg-next (maintenance-only). Build against
-  **FFmpeg 7.x shared libs**; on Windows fetch gyan.dev/BtbN release builds in CI and ship
+  **FFmpeg 8.x shared libs**; on Windows fetch gyan.dev/BtbN release builds in CI and ship
   the DLLs (LGPL build, dynamic linking — required for GPLv3-compatibility comfort and to
   swap builds); on the dev Mac, Homebrew ffmpeg. Pin the major version; wrap all direct
   `ffi::` calls in one `lumit-media::av` module so version bumps touch one file.

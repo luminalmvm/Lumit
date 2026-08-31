@@ -248,7 +248,6 @@ pub mod tests_support {
     pub fn ffmpeg_bin() -> Option<&'static str> {
         [
             "ffmpeg",
-            "/opt/homebrew/opt/ffmpeg@7/bin/ffmpeg",
             "/opt/homebrew/bin/ffmpeg",
             "/usr/local/bin/ffmpeg",
         ]

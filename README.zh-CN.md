@@ -47,12 +47,12 @@ Lumit 还想为创作者提供几个目标，让它足以满足你的所有剪�
 
 ## 构建
 
-需要 Rust 稳定版（由 `rust-toolchain.toml` 固定）外加两个外部依赖：用于媒体处理的 **FFmpeg 7.x**，以及用于绑定生成器的 **LLVM 18**——较新的 LLVM 会静默生成有问题的绑定，因此所有平台都固定在 18。
+需要 Rust 稳定版（由 `rust-toolchain.toml` 固定）外加两个外部依赖：用于媒体处理的 **FFmpeg 8.x**，以及用于绑定生成器的 **LLVM 18**——较新的 LLVM 会静默生成有问题的绑定，因此所有平台都固定在 18。
 
 <details>
 <summary><b>Windows</b></summary>
 
-在 `%USERPROFILE%\ffmpeg\`, 下解压[BtbN FFmpeg 7.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)，然后运行:
+在 `%USERPROFILE%\ffmpeg\`, 下解压[BtbN FFmpeg 8.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)，然后运行:
 
 ```powershell
 winget install LLVM.LLVM --version 18.1.8
@@ -66,9 +66,9 @@ cargo test --workspace
 运行：
 
 ```sh
-brew install ffmpeg@7
-# The formula is keg-only, so point the build at it (K-204):
-export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg@7)/lib/pkgconfig"
+brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
+# Point the build at it (K-204):
+export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
 cargo test --workspace
 ```
 </details>

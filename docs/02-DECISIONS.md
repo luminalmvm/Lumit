@@ -23323,3 +23323,61 @@ commit for the translation page.
 Owed: on-canvas handles for the points, as for the quad. A third point, which would make an
 affine fit possible — refused for now because two is what was asked and a row nobody uses is
 a row to keep working. And one **Region size** for both boxes rather than one each.
+## K-736 — FFmpeg is pinned to 8.1, and macOS has no route to it yet
+
+**DECIDED** (2026-08-18). Supersedes the FFmpeg 7.x half of **K-082** and the
+`ffmpeg@7` naming in **K-204**; both entries' actual rules — pkg-config on
+Linux/macOS, `FFMPEG_LIBS_DIR`/`FFMPEG_INCLUDE_DIR` on Windows, and no `[env]`
+block in `.cargo/config.toml` — are unchanged and still binding.
+
+`crates/lumit-media` now selects rsmpeg's `ffmpeg8` feature (was `ffmpeg7_1`) and
+CI installs FFmpeg **8.1**. The trigger was the pin going stale: BtbN's rolling
+`latest` tag rotated its n7.1 assets out on 2026-08-17 and every media job 404'd,
+which forced a dated-tag pin and made the version an explicit choice rather than
+an inherited default.
+
+Three things this entry exists to record:
+
+- **No source changes were needed.** `lumit-media` already used the modern
+  spellings on every seam FFmpeg 8 tightened — `AVChannelLayout` rather than the
+  old channel-count/mask pair, `send_packet`/`receive_frame` rather than the
+  one-shot decode calls, `AV_PROFILE_*` rather than `FF_PROFILE_*` — so the
+  crate compiles unmodified against the 8.1 headers. Nothing was renamed away
+  underneath it.
+- **Decode semantics are proven identical, not assumed.** A 600-frame 1080p60
+  clip was decoded under 7.1 and 8.1, software and D3D11VA, and all four blake3
+  sets match byte for byte. That is the oracle this migration turned on, and a
+  future major bump is expected to clear the same bar before it lands.
+- **macOS gets 8.1.2 from an extracted formula, built from source and cached.**
+  Homebrew has no `ffmpeg@8` formula (only @2.8, @4, @5, @6, @7) and its plain
+  `ffmpeg` has already moved to 9.0.1, which no published rsmpeg supports —
+  0.18.0+ffmpeg.8.0 is the newest, and there is no `ffmpeg9` feature anywhere.
+  There is no bottle to reach for. But homebrew-core's git history still holds
+  the 8.1.2 formula (last touched by commit c7348004c5, "ffmpeg: update 8.1.2_1
+  bottle"), and `brew extract --version=8.1.2 ffmpeg <tap>` lifts it back out
+  into a local tap. That is the route macOS takes:
+  `.github/actions/ffmpeg8-macos` taps, extracts, builds from source
+  (`--build-from-source` is deliberate — an extracted formula can still carry
+  homebrew-core's `bottle` block, whose binaries were built for the `ffmpeg`
+  keg path and not for `ffmpeg@8.1.2`), and caches the finished keg on
+  os+architecture+version so only the first run pays the twenty-to-forty-minute
+  build. The keg's runtime dependencies are *not* cached with it — they live in
+  their own kegs, and libavcodec names them by absolute path — so a cache hit
+  reinstalls the list recorded in the keg's own install receipt from bottles.
+  Because the cache-restore path never taps anything, the opt symlink
+  (`…/opt/ffmpeg@8.1.2`) is made directly rather than by `brew link`; that is
+  the fixed path the podspec's `-L` flags and `make-dmg.sh` both name.
+
+  **Nothing falls back.** The last step of the action reads `libavutil.pc` from
+  the keg that will actually be linked and fails unless it is 60.x, which is
+  FFmpeg 8's and the ABI rsmpeg's `ffmpeg8` bindings were generated for.
+  Linking 8-shaped bindings against 9-shaped libraries is undefined behaviour
+  that compiles, and staying on `ffmpeg@7` to keep the job green would have
+  been the same mistake in the other direction: a mismatched major is the one
+  failure mode worse than a red job. `make-dmg.sh` applies the same test by
+  probing three prefixes in order — a future real `ffmpeg@8` keg, the extracted
+  `ffmpeg@8.1.2`, and plain `ffmpeg` — and taking the first whose libavutil is
+  60.x. The formula name is a hint; the `.pc` version is the evidence.
+
+  This retires when Homebrew ships `ffmpeg@8` (drop the action, name the keg),
+  or when rsmpeg learns FFmpeg 9 and Lumit follows.

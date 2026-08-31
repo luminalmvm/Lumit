@@ -8,9 +8,21 @@
 # before a fresh clone would build. Two of them did.
 #
 # The arrangement now: each platform points the build at FFmpeg from outside this file.
-# macOS exports FFMPEG_PKG_CONFIG_PATH at the keg-only ffmpeg@7 (CI does it per job,
-# developers per shell — docs/GUIDE.md §8). Linux needs nothing: the distro's FFmpeg 7
+# macOS exports FFMPEG_PKG_CONFIG_PATH at the Homebrew ffmpeg formula (CI does it per job,
+# developers per shell — docs/GUIDE.md §8). Linux needs nothing: the distro's FFmpeg 8
 # development packages sit on pkg-config's default search path, which is exactly what
 # rusty_ffmpeg probes when the variable is unset. Windows uses FFMPEG_LIBS_DIR /
 # FFMPEG_INCLUDE_DIR (rusty_ffmpeg's pkg-config branch is cfg(not(windows)), so it never
 # reads this variable there) — see scripts/win-dev-env.ps1.
+
+# Linux release bundles carry FFmpeg's .so files beside the app in lib/, and
+# liblumit_bridge.so is what actually links them (DT_NEEDED libavcodec.so.62,
+# loaded by name through frb). The launcher's own CMake rpath is DT_RUNPATH,
+# which ELF does not extend to a loaded library's transitive needs - so the
+# bridge carries its own $ORIGIN rpath, or the loader falls back to the
+# system's FFmpeg (absent on a user machine; masked in CI, which exports
+# LD_LIBRARY_PATH everywhere). $ORIGIN resolves to wherever the .so sits, so
+# a bundle laying it beside lib/ works and a dev build is unaffected - the
+# extra rpath entry simply finds nothing and the default search proceeds.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN", "-C", "link-arg=-Wl,-rpath,$ORIGIN/lib"]

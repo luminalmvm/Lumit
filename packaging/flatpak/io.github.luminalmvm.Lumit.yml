@@ -4,7 +4,7 @@
 # libraries it needs, so it does not care whether the user runs Ubuntu, Fedora
 # or Arch. Unlike the buried egui-era manifest (K-182), this one does not
 # build anything: CI has already built the Flutter bundle and packed the
-# FFmpeg 7.1 libraries into its lib/ directory (the launcher's rpath covers
+# FFmpeg 8.1 libraries into its lib/ directory (the launcher's rpath covers
 # them), so the manifest just repacks that staged bundle. The GNOME runtime
 # supplies GTK 3, which the Flutter Linux embedder needs and the plain
 # freedesktop runtime does not ship.
