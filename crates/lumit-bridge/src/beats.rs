@@ -331,10 +331,7 @@ mod tests {
         let document = Arc::new(lumit_core::Document::new());
         let answer = detect(document, Uuid::now_v7(), 1.0, BridgeBeatOptions::standard());
         assert!(
-            matches!(
-                answer,
-                Err(BridgeError::NoAudio) | Err(BridgeError::NoAudioPipeline)
-            ),
+            matches!(answer, Err(BridgeError::NoAudio)),
             "a comp with nothing to hear has no beats to find"
         );
         assert_eq!(queue_depth(), 0, "the job is done and off the queue");

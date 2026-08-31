@@ -93,8 +93,6 @@ pub enum BridgeError {
     /// The export could not start — already running, no GPU, or a spec the
     /// encoder will not take. Carries the engine's own words.
     ExportFailed(String),
-    /// No audio pipeline on this machine (no adapter, or a build without one).
-    NoAudioPipeline,
     /// Nothing here makes a sound: a composition with no audible sources to
     /// analyse, or a layer with none to detach.
     NoAudio,
@@ -234,9 +232,6 @@ impl fmt::Display for BridgeError {
             }
             BridgeError::InvalidKeymapFile(why) => write!(f, "That is not a keymap file: {why}"),
             BridgeError::ExportFailed(why) => write!(f, "{why}"),
-            BridgeError::NoAudioPipeline => {
-                write!(f, "This machine has no audio pipeline")
-            }
             BridgeError::NoAudio => {
                 write!(f, "There is no audio in this composition")
             }
