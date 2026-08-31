@@ -22122,3 +22122,79 @@ light fold and the heavy one belong under the same finger.
 Terminology: **layer group**, distinct from the **property group** already in the glossary
 (Transform, Masks) and from the Timeline's **column groups**. The glossary carries the
 entry.
+
+## K-703 — Roto brush ships classical: geodesic segmentation carried by the in-tree flow; the network is a seam, not a v1
+
+**Status: DECIDED (2026-08-31).** Scoping commissioned by the owner for the largest unbuilt
+feature on the tool strip (the Roto pair, disabled since K-228; docs/07 §1's table;
+16-ROADMAP Phase 5). The binding design is [docs/impl/roto.md](impl/roto.md); this entry
+records the decisions in it that are decision-sized. Reverses nothing.
+
+**No neural network in v1, and the reasoning is recorded rather than assumed.** Adobe's
+current Roto Brush is a model, and no classical method matches it on hair and translucency
+— the note says so in its own §0 instead of promising parity. But there is no model Lumit
+can train, redistributing someone else's inside a GPLv3 native app is a licence and size
+decision of its own, and inference is non-deterministic across GPUs and runtime versions,
+colliding with docs/14 exactly as RIFE does for flow (optical-flow.md §0). The honest v1 is
+the classical machine built on the asset the project already owns — the deterministic DIS
+flow engine — with the neural upgrade recorded as growth on a defined seam (the note's §9:
+an ONNX model proposing per-frame seeds, opt-in, licence-checked, backend recorded in the
+cache key), in the exact stance `rife` already holds.
+
+**The algorithms are pinned, one each, with ceilings named.** Segmentation is the
+**geodesic distance transform** (Bai & Sapiro / GeoS) over colour-and-stroke seeds,
+computed by fixed-count raster-scan chamfer passes — O(N), deterministic by scan order,
+soft output for free — chosen over graph cut, which is sequential, super-linear in the
+worst case, tie-ambiguous, and hard-labelled so it needs a softening pass anyway. Refine
+edge is the **guided filter** (He et al. 2010), O(N) by box sums, applied in a band around
+the boundary and snapped to 0/1 outside it. Both are pass-structured and therefore
+WGSL-portable if the measured budget (≤ 60 ms per propagated 1080p frame, end to end,
+flow included) ever demands it.
+
+**Strokes are the document; mattes are derived.** Strokes live on a Roto brush effect
+instance — thinned polylines like paint's, in source raster pixels like the tracker's
+measurements (the K-248 stance, so one shot's mattes serve every comp that cuts it) —
+and the per-frame mattes go to a new global `roto/` sidecar tier shaped exactly like
+`track/` (K-417): keyed by content, delete-safe, refuse-newer, rebuild byte-identical.
+
+**Influence flows outward from a base frame, which buys a one-sentence cache rule.** The
+first stroked frame is the base; propagation runs both directions from it; corrections on
+any frame carry onward away from the base and never back toward it. The matte at frame F
+is therefore a pure function of (media, settings, base, strokes between base and F on F's
+side), so editing frame n invalidates exactly the frames at least as far from the base on
+n's side — enforced by a per-frame chain hash that also lets a re-propagation copy every
+still-valid frame instead of re-solving it. A cancel finalises the solved prefix rather
+than discarding it (the K-540 pattern), and outside the propagated span the effect is
+passthrough with an honest span reading, never a held neighbouring matte.
+
+**Build order: RB1 (engine crate `lumit-roto`, flow handed in as slices), RB2 (job,
+sidecar, document, bridge), RB3 (tools, overlay, panel — arming `tool.roto` at last).**
+Each package carries its slice of the note's §10 test plan, on synthetic moving shapes
+with known mattes.
+
+## K-703 — Layer styles are a second, order-locked effect list on the layer, run at the end of its own raster pass
+
+**DECIDED** (design, docs/impl/layer-styles.md). AE's nine layer styles (Drop shadow,
+Inner shadow, Outer glow, Inner glow, Bevel and emboss, Satin, Colour overlay, Gradient
+overlay, Stroke) come to Lumit as `Layer::styles: Vec<EffectInstance>` — the same typed,
+keyframeable instance shape as the effect stack, holding structs from a separate
+`STYLE_DEFS` table (`style_*` match names) that never appears in the Add-effect
+catalogue. At most one instance per style; the list is always sorted in Photoshop's
+documented compositing order (shadow furthest back … bevel on top), which is pinned in
+the impl note and is not user-reorderable — the fixed order is the feature.
+
+**The seam:** build resolves `styles` as a second stack and appends its ops after the
+effect stack's in `CompLayerDraw::fx` — styles run on the layer's own linear raster
+after masks and effects, before the transform, matte and blend. No new compositor pass.
+The recorded deviation from AE: AE styles render post-transform (screen-fixed on a
+rotated layer); Lumit v1 styles inherit the transform, exactly as the Drop shadow
+*effect* does on both sides. The importer reports styled layers where this is visible,
+and the upgrade path (comp-space seeded intermediate) is named in the note.
+
+**Scope:** v1 renders seven styles, four of them one generalised drop-shadow kernel
+(blur-the-alpha with invert/offset/spread switches), overlays on the Fill and Gradient
+kernels, plus one new separable dilate for Stroke. Satin and Bevel and emboss are
+modelled and imported (no file migration when their kernels land) but not rendered —
+the panel does not offer them and the AE import report says so. Global light is baked
+into per-style angles at import. Timeline grows a Styles fold after Effects; the panel
+a Styles section; both reuse the effect parameter row machinery unchanged.

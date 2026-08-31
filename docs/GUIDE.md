@@ -14131,3 +14131,86 @@ The bar beside the band is the same idea in time. It stretches from the earliest
 the group to the latest end, and dragging it slides every member together, keeping their
 timing relative to one another. You cannot trim it, only move it — trimming a band would
 have to decide which member's edge you meant, and there is no honest answer to that.
+
+## 51. Puppet pins, in plain terms
+
+You have a cutout of a character on a layer, and you want the arm to wave without cutting
+the layer into pieces. The Puppet tools (designed in `docs/impl/puppet.md`, not built yet)
+do it the way a real puppet does: with a skeleton of sorts, and strings.
+
+The skeleton is a **mesh** — a net of small triangles laid over the opaque part of the
+picture, bent to fit the silhouette, like chicken wire pressed onto the shape. Lumit finds
+the silhouette by looking at the layer's transparency: wherever the picture is solid
+enough, that is inside the shape. It traces the outline of that region (a well-known trick
+called *marching squares* — walk a little window over the pixels and note where "solid"
+turns to "clear"), smooths the traced line so it is not one point per pixel, and then fills
+the inside with triangles using a small library made for exactly that job. Two things
+matter about this net. First, it follows the shape: two legs with a gap between them get
+two separate pieces of net, so pulling one leg never drags the other. Second, it is never
+saved in your project — only the recipe for it is (which frame it was traced from, how fine
+the triangles are), so a future version of Lumit with a better tracer changes nothing in an
+old project.
+
+The strings are the **pins**. A pin says "this spot of the picture is under my thumb". Drag
+a pin — or keyframe it, like any other property — and the engine has to answer a question:
+the pinned spots must land where the thumbs are, so where does everything *between* them
+go? The answer it uses is a piece of maths called **as-rigid-as-possible**: every triangle
+tries to keep its own shape — happy to turn, happy to slide, reluctant to stretch — and the
+engine finds the one arrangement that makes all the triangles as content as possible while
+still obeying the pins. That reluctance to stretch is the whole magic. It is why the arm
+*bends at the elbow* instead of smearing like taffy: bending is turning, and turning is
+free. Conveniently, this maths does not need trial and error — it is two rounds of exactly
+the kind of "solve a big system of linked equations" the camera tracker already does, and
+the expensive part depends only on the net and on *which* spots are pinned, not on where
+you have dragged them. So it is worked out once, remembered, and each frame of animation
+costs almost nothing on top.
+
+The other three pins adjust that behaviour. A **starch** pin makes the triangles around it
+extra reluctant — the torso stays stiff while the limbs bend (starch, as in an ironed
+shirt). An **overlap** pin answers "which part is in front?" when the picture folds over
+itself, so a hand crossing the body passes in front of it instead of tearing. A **bend**
+pin turns its neighbourhood around itself, so a hand waves from the wrist without the wrist
+travelling.
+
+Last step: the picture is redrawn through the moved net. Each triangle knows which patch of
+the original pixels it owns, and it carries that patch to wherever it ended up — the same
+"stretch a picture over triangles" that every 3D game does thousands of times a frame, done
+here on the CPU because the layer's pixels are already in hand at that point in the render
+(right where paint strokes and masks are applied, for the same reason).
+
+## 51. Layer styles, or the wardrobe a layer wears, in plain terms
+
+Photoshop has a trick every title designer leans on: right-click a layer, add a
+drop shadow, a glow, a stroke around the edge — and the layer is dressed
+without a single effect being applied. After Effects inherited the same family
+and calls them **layer styles**. Lumit is getting them too, and this section
+explains what they are and why they are not simply nine more effects.
+
+An effect stack is a free-for-all: any effect, any order, as many copies as you
+like. Layer styles are the opposite — nine named slots (drop shadow, inner
+shadow, outer glow, inner glow, bevel and emboss, satin, colour overlay,
+gradient overlay, stroke), at most one of each, always composited in the same
+fixed order, because that is the order Photoshop fixed and every imported
+project and every user's muscle memory depends on it. A shadow always sits
+furthest behind; a stroke always draws on top of the colour inside; you never
+get to shuffle them. That fixed order is the whole personality of the feature.
+
+Under the hood Lumit is lazy about it in the best way: a style is stored as the
+same kind of object as an effect, so everything effects already know how to do
+— keyframes, expressions, undo, the rows in the panel, the diamonds in the
+Timeline — works on styles without new machinery. The layer simply carries a
+second, order-locked list beside its effect stack, and when a frame is drawn
+the styles run right after the effects, on the layer's own pixels, before the
+layer is placed and blended into the comp. The shadow a style draws uses the
+same blur-the-alpha kernel the Drop shadow effect has used all along; the
+colour overlay is the Fill effect's painting arm; most of the family is old
+code wearing new labels.
+
+In the Timeline, a layer that has styles grows a **Styles** group next to
+Effects, folding open like Transform does. Importing an After Effects project
+brings styles across with their keyframes; the two exotic ones — satin, and
+bevel and emboss — are carried and remembered but not drawn yet, and the import
+report says so rather than drawing them wrong.
+
+The details — the exact order, which kernel serves which style, what an import
+keeps — are pinned in `docs/impl/layer-styles.md`.
