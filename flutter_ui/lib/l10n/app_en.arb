@@ -6186,7 +6186,7 @@
   },
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {
-    "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. One or two words."
+    "description": "Tooltip on a layer's colour swatch in the Timeline, on the glyph heading that column, and on the small hue square at the right of each Project panel row — all open the colour picker. One or two words."
   },
   "tipLabelInherit": "Inherit",
   "@tipLabelInherit": {

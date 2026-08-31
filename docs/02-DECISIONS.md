@@ -22973,6 +22973,26 @@ Strings: `tipFilterColour` ("Filter colour") replaces `tipFilterByLabel`.
 Tests: `project_panel_frb_test` (filter and clear through the picker),
 `project_panel_metrics_test` 8d/8e (one 10px square inside the well; the picker's chips).
 
+## K-727 — Every Project row carries a hue square that sets its label
+
+**Status:** DECIDED — 2026-08-31 (owner ruling; a drawn-beyond-the-mockup control, on the
+owner's own ask: "add a square with the hues on it, which opens the color picker to add
+the color to the folder/item").
+
+The colour tag's only mouse path was the right-click menu's chip strip — a control you
+had to know about. Each row now carries a small **hue-quartered square** at its right,
+before the metadata columns, so the squares stand in their own column whatever the
+indent. Clicking it opens the shared eight-colour picker (`showLabelPicker`) and the
+picked chip tags the row — and the rest of the selection when the row is part of one,
+the same reach the menu strip has. The square always wears the hues, never the current
+colour: the row's glyph already wears the answer, so the square stays the control that
+says "a colour is set here". The menu's chip strip stays — two roads, one choice.
+
+No new strings: the square wears `tipLabelColour`, the Timeline swatch's own name.
+
+Tests: `project_panel_frb_test` ("the row's hue square tags the item, and the folder
+hands it down").
+
 ## K-728 — Applying the Audio workspace opens the sound lanes
 
 **Status:** DECIDED — 2026-08-31 (owner finding: "the audio workspace's timeline doesn't

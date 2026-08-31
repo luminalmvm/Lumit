@@ -21,8 +21,10 @@ import '../state/drag_payloads.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'project_chrome_frb.dart' show projectHueSquare;
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
+import 'timeline_extras_frb.dart' show showLabelPicker;
 
 /// The state badge ("missing"): 14 tall, 4px of padding either side, its text
 /// mono at 9 with no tracking — a badge is not a container label, so it is not
@@ -34,6 +36,12 @@ const double _badgeTextSize = 9;
 /// The badge's outline is its own text colour, hushed: the mockup's border
 /// resolves to that colour at 28% over the panel, on both badges.
 const double _badgeBorderAlpha = 0.28;
+
+/// The row's label square (K-727): an 8px hue-quartered mark in a 14px slot —
+/// the slot is the hit target (K-452), and its width is fixed so the squares
+/// stand in a column however deep the rows are indented.
+const double _labelSquareSize = 8;
+const double _labelSquareHit = 14;
 
 /// The label chip an untagged item's kind wears by default — the mockup's own
 /// per-type tints, which are the label palette's chips (K-188): azure for
@@ -506,6 +514,16 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 ],
+                // **The row's own label square** (K-727, the owner's ask): a
+                // hue-quartered mark that opens the eight-colour picker to
+                // tag this row — and the rest of the selection when the row
+                // is part of one, the same reach the menu's chip strip has.
+                // At the row's right, before the metadata columns, so the
+                // squares stand in their own column and the mockup's name
+                // cluster keeps its measured places. No gap of its own: the
+                // slot's inset either side of the 8px square is the standoff,
+                // and the first cell brings the usual row gap with it.
+                _labelSquare(t),
                 ...widget.columns.cells(
                   items: widget.cells.items,
                   size: widget.cells.size,
@@ -641,6 +659,30 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       ),
     );
   }
+
+  /// The label square: always the hues, never the row's current colour — the
+  /// glyph two cells left already wears that, so this stays the mark that
+  /// says "a colour is set here" rather than a second copy of the answer.
+  /// Opens the same eight-colour picker every label control does.
+  Widget _labelSquare(LumitTheme t) => LumitTooltip(
+        message: l10n.tipLabelColour,
+        child: GestureDetector(
+          key: ValueKey<String>('project-label-swatch-${projectItemId(item)}'),
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) async {
+            final picked = await showLabelPicker(context, d.globalPosition,
+                keyPrefix: 'project-label');
+            if (picked != null) widget.onSetLabel(picked);
+          },
+          child: SizedBox(
+            width: _labelSquareHit,
+            height: projectRowHeight,
+            child: Center(
+              child: projectHueSquare(t, size: _labelSquareSize),
+            ),
+          ),
+        ),
+      );
 
   Widget _nameOrEditor(LumitTheme t) {
     final controller = _rename;

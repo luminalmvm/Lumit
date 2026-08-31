@@ -1068,7 +1068,8 @@ The library of assets: footage items, audio items, comps, folders.
   records the file by bare name — the Name column two cells left already says the file
   name, and a column repeating it would not be context. The **`in use`** badge marks any
   item a composition places, hidden switches included. A **colour tag** tints the row's
-  glyph rather than adding a dot beside it, is set from the row menu's chip strip, and the
+  glyph rather than adding a dot beside it, is set from the row's own hue square at its
+  right (K-727) or the row menu's chip strip — both raise the same choice — and the
   **swatch filter inside the search well** — one square that opens the eight-colour picker
   (K-726) — narrows the tree to one colour — on the colour a row is *wearing*: its own
   tag, else a folder's handed down (K-634, K-567), else the kind's default tint (K-188's

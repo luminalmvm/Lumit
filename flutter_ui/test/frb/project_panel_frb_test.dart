@@ -1520,6 +1520,54 @@ void main() {
           reason: 'the neutral chip shows everything again');
     });
 
+    /// **The row's own hue square** (K-727): every row carries a small
+    /// hue-quartered square at its right that opens the eight-colour picker,
+    /// and the picked chip tags the item — the mouse path that used to live
+    /// only behind the right-click menu.
+    testWidgets("the row's hue square tags the item, and the folder hands it down",
+        (tester) async {
+      final p = freshProject();
+      final project = p.state.project!;
+      final folder = project.newFolder(name: 'Rushes', parent: null);
+      final inside = project.importFootage(path: 'C:/clips/inside.mov');
+      ItemReference.footage(inside).moveToFolder(folder: folder.internalid);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      // The folder's square tags the folder. The row above the square claims
+      // double-clicks, so the tap only resolves once that window has passed —
+      // the same wait the twirl test sits out.
+      await tester.tap(find
+          .byKey(ValueKey<String>('project-label-swatch-${folder.internalid}')));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
+      await tester.pumpAndSettle();
+      expect(ItemReference.folder(folder).label(), 4,
+          reason: 'the engine holds the tag the square picked');
+
+      // The tag hands down (A12), so the filter finds what the folder holds.
+      await pickFilterColour(tester, 4);
+      expect(rowText('inside.mov'), findsOneWidget,
+          reason: 'what the folder holds wears the folder\'s colour');
+      await pickFilterColour(tester, null);
+
+      // A row's own square overrides what it inherits.
+      await tester.tap(find
+          .byKey(ValueKey<String>('project-label-swatch-${inside.internalid}')));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-2')));
+      await tester.pumpAndSettle();
+      expect(ItemReference.footage(inside).label(), 2,
+          reason: 'an explicit tag wins over the inherited one');
+    });
+
     /// **The swatch filter narrows on the colour a row is wearing** (K-634),
     /// which for an untagged item inside a tagged folder is the folder's
     /// (K-567). It used to read the row's own `u8` alone, so filing a clip
