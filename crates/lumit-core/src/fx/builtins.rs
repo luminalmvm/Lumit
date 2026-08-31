@@ -88,6 +88,19 @@ pub const CLAP_MATCH_PREFIX: &str = "clap:";
 /// (docs/impl/audio-plugins.md §4).
 pub const VST3_MATCH_PREFIX: &str = "vst3:";
 
+/// The plugin identifier inside an audio plugin's match name — a CLAP plugin id
+/// or a VST3 class id — or `None` for a name that is not an audio plugin's.
+///
+/// The pair of prefixes is spelled here and nowhere else, which is what this
+/// file already promises for each of them separately: every reader asks this
+/// rather than testing two prefixes of its own.
+#[must_use]
+pub fn audio_plugin_id(match_name: &str) -> Option<&str> {
+    match_name
+        .strip_prefix(CLAP_MATCH_PREFIX)
+        .or_else(|| match_name.strip_prefix(VST3_MATCH_PREFIX))
+}
+
 /// Which namespace an entry in the catalogue belongs to, from its match name.
 ///
 /// Nothing on [`EffectSchema`] says where an effect came from — a declaration
@@ -97,8 +110,7 @@ pub const VST3_MATCH_PREFIX: &str = "vst3:";
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
-    } else if match_name.starts_with(CLAP_MATCH_PREFIX) || match_name.starts_with(VST3_MATCH_PREFIX)
-    {
+    } else if audio_plugin_id(match_name).is_some() {
         EffectNamespace::Clap
     } else {
         EffectNamespace::Builtin

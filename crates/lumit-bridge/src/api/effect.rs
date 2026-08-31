@@ -157,8 +157,7 @@ pub const NAMESPACE_AUDIO: &str = "audio";
 /// which is the one place provenance is carried (K-707).
 #[frb(ignore)]
 fn is_audio_match_name(match_name: &str) -> bool {
-    match_name.starts_with(lumit_core::fx::CLAP_MATCH_PREFIX)
-        || match_name.starts_with(lumit_core::fx::VST3_MATCH_PREFIX)
+    lumit_core::fx::audio_plugin_id(match_name).is_some()
 }
 
 /// The category key a plugin's own menu path becomes.
@@ -373,9 +372,7 @@ pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeErr
     // own prefix says which host is told, and the file is written the same way
     // whichever it was. CLAP and VST3 are one host and one switched-off list —
     // the identifier is a plugin id or a class id, and the list holds either.
-    let audio = effect
-        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
-        .or_else(|| effect.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX));
+    let audio = lumit_core::fx::audio_plugin_id(&effect);
     let identifier = match (effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX), audio) {
         (Some(ofx), _) => {
             lumit_ofx::discover::set_enabled(ofx, enabled);
@@ -1706,10 +1703,7 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     // bake filed before the switch was flicked (AP5). The identifier is the
     // match name shorn of its prefix — exactly what `set_plugin_enabled`
     // wrote into the list.
-    if let Some(identifier) = name
-        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
-        .or_else(|| name.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX))
-    {
+    if let Some(identifier) = lumit_core::fx::audio_plugin_id(name) {
         if lumit_aplug::session_disabled()
             .lock()
             .is_ok_and(|list| list.contains(identifier))
