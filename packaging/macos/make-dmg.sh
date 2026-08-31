@@ -226,6 +226,18 @@ for f in "$app/Contents/Frameworks/"*; do
     # shellcheck disable=SC2086 # $signopts is a flag list, not a filename
     codesign --force $signopts --sign "$identity" "$f"
 done
+# The brokers are executables of their own in Contents/MacOS (K-592, K-696),
+# not libraries in Frameworks, and an outer bundle signature does not cover a
+# nested executable: notarisation named both by path and refused the whole app
+# for a Developer ID, a timestamp and a hardened runtime each of them lacked.
+# They take the app's own entitlements, because each one dlopens third-party
+# plugins and the hardened runtime refuses that without library validation off.
+for broker in "$app/Contents/MacOS/"lumit-*-broker; do
+    [ -e "$broker" ] || continue
+    # shellcheck disable=SC2086 # as above
+    codesign --force $signopts --sign "$identity" \
+        --entitlements "$root/flutter_ui/macos/Runner/Release.entitlements" "$broker"
+done
 # Re-signing drops whatever entitlements the build applied, so they are named
 # again here rather than silently lost.
 # shellcheck disable=SC2086 # as above
