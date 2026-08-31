@@ -4996,6 +4996,119 @@ fn a_puppet_is_made_pinned_moved_and_undone_a_step_at_a_time() {
     assert!(layer.get_puppet().expect("puppet").is_none());
 }
 
+/// Test 15 of docs/impl/puppet.md: a pin placed by *aiming at the picture*
+/// round-trips through the document, moves, is deleted, and each of those is one
+/// undo step.
+///
+/// The mesh comes from the render, which is where it is built — so the test
+/// leaves one where the render would ([`lumit_render::puppet::publish`]) and
+/// then does what the Viewer's click does. That is the whole seam PU3 added: no
+/// ghost is a refusal, a point outside it is a refusal, and a point inside it
+/// makes the block and the pin together.
+#[test]
+fn a_pin_is_aimed_at_the_mesh_placed_moved_and_undone() {
+    use crate::api::layer::BridgePuppetPinKind;
+    let (project, layer) = project_with_layer();
+
+    // No mesh under the click: refused, and no block invented.
+    assert!(matches!(
+        layer.add_puppet_pin_at(0, BridgePuppetPinKind::Position, "Pin 1".into(), 5.0, 5.0),
+        Err(BridgeError::PuppetNoMesh)
+    ));
+    assert!(layer.get_puppet().expect("puppet").is_none());
+
+    // One triangle, the corner of a layer, deformed eight pixels to the right of
+    // where it rests — so a click has a rest position to be carried back to.
+    let mesh = std::sync::Arc::new(lumit_core::puppet::PuppetMesh {
+        vertices: vec![[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]],
+        triangles: vec![[0, 1, 2]],
+        hash: [0u8; 32],
+    });
+    lumit_render::puppet::publish(
+        layer.layer_id,
+        lumit_render::puppet::Ghost {
+            mesh,
+            deformed: vec![[8.0, 0.0], [108.0, 0.0], [8.0, 100.0]],
+            inert: Vec::new(),
+        },
+    );
+
+    // Outside the deformed triangle: refused, still no block, never a floating
+    // pin.
+    assert!(matches!(
+        layer.add_puppet_pin_at(
+            0,
+            BridgePuppetPinKind::Position,
+            "Pin 1".into(),
+            900.0,
+            900.0
+        ),
+        Err(BridgeError::PuppetOutsideMesh)
+    ));
+    assert!(layer.get_puppet().expect("puppet").is_none());
+
+    // Inside it: the block and the pin land together, and the pin is stored
+    // where that spot sits at **rest** — eight pixels left of where it was
+    // clicked, which is exactly the deformation.
+    let id = layer
+        .add_puppet_pin_at(
+            0,
+            BridgePuppetPinKind::Starch,
+            "Shoulder".into(),
+            28.0,
+            20.0,
+        )
+        .expect("pinned");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(read.pins.len(), 1);
+    assert_eq!(read.pins[0].id, id);
+    assert_eq!(read.pins[0].kind, BridgePuppetPinKind::Starch);
+    assert_eq!(
+        read.pins[0].x,
+        crate::api::effect::BridgeScalar::Static(20.0)
+    );
+    assert_eq!(
+        read.pins[0].y,
+        crate::api::effect::BridgeScalar::Static(20.0)
+    );
+
+    // The wireframe the overlay draws is that same mesh, flat.
+    let ghost = layer.puppet_ghost().expect("ghost").expect("published");
+    assert_eq!(ghost.triangles, vec![0, 1, 2]);
+    assert_eq!(ghost.vertices, vec![8.0, 0.0, 108.0, 0.0, 8.0, 100.0]);
+
+    // A drag, then a delete, then back a step at a time.
+    let mut moved = read.pins[0].clone();
+    moved.x = crate::api::effect::BridgeScalar::Static(60.0);
+    layer.set_puppet_pin(moved).expect("moved");
+    layer.delete_puppet_pin(id).expect("deleted");
+    assert!(layer
+        .get_puppet()
+        .expect("puppet")
+        .expect("a block")
+        .pins
+        .is_empty());
+
+    project.undo().expect("the delete");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(read.pins.len(), 1);
+    assert_eq!(
+        read.pins[0].x,
+        crate::api::effect::BridgeScalar::Static(60.0)
+    );
+
+    project.undo().expect("the drag");
+    let read = layer.get_puppet().expect("puppet").expect("a block");
+    assert_eq!(
+        read.pins[0].x,
+        crate::api::effect::BridgeScalar::Static(20.0)
+    );
+
+    // And the first pin's undo takes the block it made with it.
+    project.undo().expect("the first pin");
+    assert!(layer.get_puppet().expect("puppet").is_none());
+}
+
 // --- Paint: strokes on a layer (K-227) ------------------------------------
 
 fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke {

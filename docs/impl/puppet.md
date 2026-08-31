@@ -1,15 +1,18 @@
 # The Puppet tools (K-704)
 
-**Status: PU1 and PU2 built (`lumit_core::puppet`, the seam in `lumit-render`'s `build.rs`,
-`Layer::puppet`, the frame-cache key, `lumit-bench`'s B15–B17, the bridge's five calls);
-PU3 — the tools, the overlay and the panel — outstanding.**
+**Status: PU1, PU2 and PU3 built.** The engine (`lumit_core::puppet`), the seam in
+`lumit-render`'s `build.rs`, `Layer::puppet`, the frame-cache key, `lumit-bench`'s
+B15–B17, the bridge's calls, and — since K-716 — the four armed tools, the Density
+and Expansion options, the mesh ghost and pin overlay, the gestures and the Timeline
+rows. What §5 below still describes as coming is done; the two ceilings PU3 took are
+marked in the code with their triggers (a pin placed on an already-deformed puppet is
+stored at rest, and a pin drag deforms the picture on release rather than under the
+pointer).
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1.7 names the four tools — Puppet position pin, Puppet
-starch pin, Puppet overlap pin, Puppet bend pin — and K-228 keeps them on the strip,
-disabled, until there is an engine behind them. This note is the binding *how* for that
-engine: the mesh, the deformer, the storage, the render seam, the overlay, the refusals, the
-tests, and the ordered work packages PU1–PU3. The mesh, the two-step solve and the warp
-function exist and carry §7's tests 1–12; nothing is stored, wired to the render seam, or
-reachable from the UI yet.
+starch pin, Puppet overlap pin, Puppet bend pin — which K-228 kept on the strip, disabled,
+until there was an engine behind them. This note is the binding *how* for that engine: the
+mesh, the deformer, the storage, the render seam, the overlay, the refusals, the tests, and
+the ordered work packages PU1–PU3, all three of which have landed.
 
 ## In plain terms
 
@@ -442,11 +445,24 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
   `set_puppet` / `add_puppet_pin` / `set_puppet_pin` / `delete_puppet_pin` over one
   `Op::SetLayerPuppet`. Tests 13–14, plus an end-to-end one the plan did not name: a pinned
   solid whose painted mark the build closure carries eight pixels down.
-- **PU3 — tools, overlay, panel**: arm the four tools (K-228 flip), tool options (Density,
-  Expansion), the mesh ghost and pin overlay, gestures and document commands, the Timeline
-  rows, every string through `app_en.arb` (refusal messages, pin lane labels, options) —
-  arb last, keys listed in the commit; test 15 plus the K-681 redraw and bridge-budget
-  gates for the new overlay.
+- **PU3 — tools, overlay, panel** — **built** (K-716): the four tools armed, Density and
+  Expansion on the options strip, the mesh ghost and the pin overlay, the gestures and their
+  document commands, the Timeline's Puppet group and its per-pin rows, and test 15.
+
+  One thing the plan did not name and the build needed: **the mesh has to exist before the
+  first pin does.** A click can only be aimed at a mesh, and a mesh is only built for a layer
+  that already has a block — so arming a puppet tool on a layer *arms a preview*
+  (`lumit_render::puppet::arm`), and the seam builds the mesh from the alpha it already has in
+  hand at that frame and publishes it unwarped. No extra render: the pixels are the ones the
+  layer was going to draw anyway. The same pigeonhole carries the deformed mesh out of every
+  warped frame, which is what the wireframe draws — so the overlay cannot disagree with the
+  picture, and the frontend holds it against the layer, the frame and the revision (one call
+  when one of those moves, none on a hover).
+
+  The refusals of §6 are the bridge's: `add_puppet_pin_at` looks the click up in the
+  **deformed** mesh, carries it back to rest through the same barycentric coordinates, and
+  answers `PuppetNoMesh` or `PuppetOutsideMesh` as a value — so no block is made and no pin
+  floats. The first pin and the block it creates are one op and one undo step.
 
 Each package leaves the tree green on its own; PU2 and PU3 must not start ahead of the
 package before them, because each consumes the previous one's public seam.

@@ -32,6 +32,7 @@ import 'fx_section.dart';
 import 'timeline_timings.dart';
 import 'transform_rows_frb.dart';
 import 'timeline_mask_rows_frb.dart';
+import 'timeline_puppet_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
 import 'timeline_retime_row_frb.dart';
 
@@ -541,6 +542,22 @@ class FoldRow extends StatelessWidget {
           layer: layer,
           stroke: stroke,
           valueColumn: valueColumn,
+          onChanged: onChanged,
+        ),
+      FoldPuppetPinRow(:final pin) => PuppetPinRow(
+          layer: layer,
+          pin: pin,
+          valueColumn: valueColumn,
+          onChanged: onChanged,
+        ),
+      FoldPuppetValueRow(:final pin, :final value) => PuppetPinValueRow(
+          comp: comp,
+          layer: layer,
+          pin: pin,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
           onChanged: onChanged,
         ),
     };

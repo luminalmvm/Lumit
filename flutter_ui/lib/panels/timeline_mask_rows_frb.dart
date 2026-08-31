@@ -595,15 +595,21 @@ class ItemOpacityRow extends StatefulWidget {
   /// as the two original rows spelt them.
   final String keyPrefix;
   final String id;
-  final double opacity;
+
+  /// The item's opacity, or **null** for a kind that has none — a puppet pin
+  /// (K-704), which is a place rather than a mark and has nothing to be see
+  /// through. A null leaves the value column empty and drops the preview and
+  /// the commit with it; everything else about the row — the icon, the inline
+  /// rename, the right-click menu, the Delete row — is the same.
+  final double? opacity;
   final ValueColumn valueColumn;
 
   /// Render the picture with [opacity] in place of the stored one; called
-  /// from inside the row's own throttle.
-  final void Function(double opacity) onPreview;
+  /// from inside the row's own throttle. Unused when [opacity] is null.
+  final void Function(double opacity)? onPreview;
 
-  /// Commit [opacity] as one op.
-  final void Function(double opacity) onCommit;
+  /// Commit [opacity] as one op. Unused when [opacity] is null.
+  final void Function(double opacity)? onCommit;
 
   /// Write a new name, or null when this kind's name is not renamed here —
   /// which also drops the menu's Rename row.
@@ -621,10 +627,10 @@ class ItemOpacityRow extends StatefulWidget {
     required this.name,
     required this.keyPrefix,
     required this.id,
-    required this.opacity,
+    this.opacity,
     required this.valueColumn,
-    required this.onPreview,
-    required this.onCommit,
+    this.onPreview,
+    this.onCommit,
     this.onRename,
     required this.onDelete,
     required this.deleteLabel,
@@ -657,11 +663,11 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
   }
 
   void _preview(double opacity) =>
-      _throttle.request(() => widget.onPreview(opacity));
+      _throttle.request(() => widget.onPreview?.call(opacity));
 
   void _commitOpacity(num v) {
     setState(() => _staged = null);
-    widget.onCommit(v.toDouble());
+    widget.onCommit?.call(v.toDouble());
   }
 
   @override
@@ -695,32 +701,33 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                SizedBox(
-                  width: 56,
-                  // Staged and previewed, like every other dragged value
-                  // here: the drag shows live and commits once on release,
-                  // so it is one op and one undo step.
-                  child: DragValueField(
-                    key: ValueKey<String>(
-                        '${widget.keyPrefix}-opacity-${widget.id}'),
-                    value: _staged ?? widget.opacity,
-                    min: 0,
-                    max: 100,
-                    suffix: '%',
-                    onChanged: _commitOpacity,
-                    onChangeLive: (v) {
-                      setState(() => _staged = v.toDouble());
-                      _preview(v.toDouble());
-                    },
-                    onChangeEnd: _commitOpacity,
-                    onDragCancel: () {
-                      setState(() => _staged = null);
-                      // The picture is showing a value nobody committed; put
-                      // the document's own back on screen.
-                      _preview(widget.opacity);
-                    },
+                if (widget.opacity case final opacity?)
+                  SizedBox(
+                    width: 56,
+                    // Staged and previewed, like every other dragged value
+                    // here: the drag shows live and commits once on release,
+                    // so it is one op and one undo step.
+                    child: DragValueField(
+                      key: ValueKey<String>(
+                          '${widget.keyPrefix}-opacity-${widget.id}'),
+                      value: _staged ?? opacity,
+                      min: 0,
+                      max: 100,
+                      suffix: '%',
+                      onChanged: _commitOpacity,
+                      onChangeLive: (v) {
+                        setState(() => _staged = v.toDouble());
+                        _preview(v.toDouble());
+                      },
+                      onChangeEnd: _commitOpacity,
+                      onDragCancel: () {
+                        setState(() => _staged = null);
+                        // The picture is showing a value nobody committed; put
+                        // the document's own back on screen.
+                        _preview(opacity);
+                      },
+                    ),
                   ),
-                ),
               ],
             ),
           ),

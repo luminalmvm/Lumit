@@ -288,6 +288,91 @@ final class FoldStrokeRow extends LayerFoldRow {
   const FoldStrokeRow(this.stroke, {required int depth}) : super(depth);
 }
 
+/// One puppet pin on the layer (K-704): its name, and — for the three kinds
+/// that reach — how far it reaches, in the value column where a mask's opacity
+/// sits.
+final class FoldPuppetPinRow extends LayerFoldRow {
+  final BridgePuppetPin pin;
+  const FoldPuppetPinRow(this.pin, {required int depth}) : super(depth);
+}
+
+/// Which of a pin's numbers a [FoldPuppetValueRow] carries (K-704).
+///
+/// Not every kind shows every one: a position pin has only a place, a starch or
+/// overlap pin adds how much it stiffens or how far in front it draws, and a
+/// bend pin adds the turn and the size it makes. [puppetValuesFor] is the list.
+enum PuppetValue { positionX, positionY, rotation, scale, amount }
+
+/// One of a pin's numbers on a row of its own under it (K-704) — a place, a
+/// turn, an amount. A row rather than a second number squeezed onto the pin's
+/// own row, for the reason [FoldMaskValueRow] gives: a property without a row
+/// has nowhere to put the stopwatch that animates it.
+final class FoldPuppetValueRow extends LayerFoldRow {
+  final BridgePuppetPin pin;
+  final PuppetValue value;
+  const FoldPuppetValueRow(this.pin, this.value, {required int depth})
+      : super(depth);
+}
+
+/// Which of a pin's numbers a pin of that kind shows.
+///
+/// The extent is not on the list because it is not animatable — which vertices
+/// a pin reaches is a fact about the mesh at rest, and that is what lets the
+/// solver factor its matrices once (docs/impl/puppet.md §2.2). It sits in the
+/// pin row's own value column instead.
+List<PuppetValue> puppetValuesFor(BridgePuppetPinKind kind) => switch (kind) {
+      BridgePuppetPinKind.position => const [
+          PuppetValue.positionX,
+          PuppetValue.positionY,
+        ],
+      BridgePuppetPinKind.starch || BridgePuppetPinKind.overlap => const [
+          PuppetValue.positionX,
+          PuppetValue.positionY,
+          PuppetValue.amount,
+        ],
+      BridgePuppetPinKind.bend => const [
+          PuppetValue.positionX,
+          PuppetValue.positionY,
+          PuppetValue.rotation,
+          PuppetValue.scale,
+        ],
+    };
+
+/// What a pin's value row is called — shared by the row and the graph channel,
+/// exactly as [maskValueLabel] is.
+String puppetValueLabel(PuppetValue value) => switch (value) {
+      PuppetValue.positionX => l10n.transformPositionX,
+      PuppetValue.positionY => l10n.transformPositionY,
+      PuppetValue.rotation => l10n.transformRotation,
+      PuppetValue.scale => l10n.transformScale,
+      PuppetValue.amount => l10n.puppetAmount,
+    };
+
+/// Which of a pin's animatable numbers [value] names.
+BridgeScalar puppetScalarOf(BridgePuppetPin pin, PuppetValue value) =>
+    switch (value) {
+      PuppetValue.positionX => pin.x,
+      PuppetValue.positionY => pin.y,
+      PuppetValue.rotation => pin.rotation,
+      PuppetValue.scale => pin.scale,
+      PuppetValue.amount => pin.amount,
+    };
+
+/// [pin] with the one number [value] names replaced.
+BridgePuppetPin puppetPinWithScalar(
+        BridgePuppetPin pin, PuppetValue value, BridgeScalar to) =>
+    BridgePuppetPin(
+      id: pin.id,
+      name: pin.name,
+      kind: pin.kind,
+      x: value == PuppetValue.positionX ? to : pin.x,
+      y: value == PuppetValue.positionY ? to : pin.y,
+      rotation: value == PuppetValue.rotation ? to : pin.rotation,
+      scale: value == PuppetValue.scale ? to : pin.scale,
+      amount: value == PuppetValue.amount ? to : pin.amount,
+      extent: pin.extent,
+    );
+
 /// Which of a stroke's animatable values a [FoldStrokeValueRow] carries
 /// (K-549). Both are a per cent of the stroke's own length.
 enum StrokeValue { start, end }
@@ -418,6 +503,11 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
               },
       FoldStrokeValueRow(:final stroke, :final value) => switch (
             strokeScalarOf(stroke, value)) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
+      FoldPuppetValueRow(:final pin, :final value) => switch (
+            puppetScalarOf(pin, value)) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
@@ -567,6 +657,7 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
         value == MaskValue.path ? null : maskScalarOf(mask, value, vertex),
       FoldStrokeValueRow(:final stroke, :final value) =>
         strokeScalarOf(stroke, value),
+      FoldPuppetValueRow(:final pin, :final value) => puppetScalarOf(pin, value),
       FoldAnimatorValueRow(:final animator, :final value) =>
         textAnimatorScalarOf(animator, value),
       FoldShapeValueRow(:final item, :final value) =>
@@ -615,6 +706,8 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       FoldMaskValueRow() ||
       FoldStrokeRow() ||
       FoldStrokeValueRow() ||
+      FoldPuppetPinRow() ||
+      FoldPuppetValueRow() ||
       FoldShapeRow() ||
       FoldShapeValueRow() ||
       FoldShapePaintRow() ||
@@ -1208,6 +1301,16 @@ bool moveLaneKeys({
       );
       return true;
 
+    case FoldPuppetValueRow(:final pin, :final value):
+      final scalar = puppetScalarOf(pin, value);
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      entry.layer.setPuppetPin(
+        pin: puppetPinWithScalar(pin, value, BridgeScalar.keyframed(next)),
+      );
+      return true;
+
     case _:
       return false;
   }
@@ -1238,6 +1341,9 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldStrokeRow(:final stroke) => '${paintPath(layerId)}/${stroke.id}',
       FoldStrokeValueRow(:final stroke, :final value) =>
         '${paintPath(layerId)}/${stroke.id}/${value.name}',
+      FoldPuppetPinRow(:final pin) => '${puppetPath(layerId)}/${pin.id}',
+      FoldPuppetValueRow(:final pin, :final value) =>
+        '${puppetPath(layerId)}/${pin.id}/${value.name}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
       FoldShapeValueRow(:final item, :final value) =>
         '${contentsPath(layerId)}/${item.id}/${value.name}',
@@ -1319,6 +1425,9 @@ String contentsPath(String layerId) => '$layerId/contents';
 
 /// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
+
+/// The path of a layer's Puppet group (K-704).
+String puppetPath(String layerId) => '$layerId/puppet';
 
 /// The path of a layer's Audio group.
 String audioPath(String layerId) => '$layerId/audio';
@@ -1546,6 +1655,30 @@ List<LayerFoldRow> layerFoldRows({
         // begins, then where it ends.
         for (final value in StrokeValue.values) {
           rows.add(FoldStrokeValueRow(stroke, value, depth: 3));
+        }
+      }
+    }
+  }
+
+  // Puppet, after Paint and before Effects, because that is the order the
+  // picture is built in: the paint is stamped into the layer's pixels, the
+  // masks gate them, the puppet carries the result through its mesh, and the
+  // effects then process what comes out (docs/impl/puppet.md §3). A group row
+  // with a child row per pin, as the masks are, and only once there is a pin —
+  // a block with none of them is a heading with nothing under it.
+  if (info.puppet case final puppet? when puppet.pins.isNotEmpty) {
+    final puppetOpen = open.contains(puppetPath(id));
+    rows.add(FoldGroupRow(
+      path: puppetPath(id),
+      label: l10n.foldPuppet,
+      open: puppetOpen,
+      depth: 1,
+    ));
+    if (puppetOpen) {
+      for (final pin in puppet.pins) {
+        rows.add(FoldPuppetPinRow(pin, depth: 2));
+        for (final value in puppetValuesFor(pin.kind)) {
+          rows.add(FoldPuppetValueRow(pin, value, depth: 3));
         }
       }
     }

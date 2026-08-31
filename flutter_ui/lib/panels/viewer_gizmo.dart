@@ -173,6 +173,11 @@ class LayerBox {
   /// back to its first turn the moment the knob was touched.
   final double rotationDegrees;
 
+  /// The layer's puppet (K-704), or null on a layer nobody has pinned — which
+  /// is most layers. Read from the model with everything else, so drawing the
+  /// pins over the picture costs no bridge calls.
+  final BridgePuppet? puppet;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -184,6 +189,7 @@ class LayerBox {
     this.masks = const [],
     this.shapeContents = const [],
     this.artOrigin = Offset.zero,
+    this.puppet,
   });
 
   /// A point of the layer's **art** on screen (K-308).
@@ -211,6 +217,7 @@ class LayerBox {
         masks: masks,
         shapeContents: shapeContents,
         artOrigin: artOrigin,
+        puppet: puppet,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
