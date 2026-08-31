@@ -285,8 +285,8 @@ The warp, exactly:
 Cost: one bilinear-resample pass over the covered pixels — the same order of work as a
 paint stamp or a mask apply at the same size. **Budgets, gated in `lumit-bench` as
 docs/13 §2's B15–B17** (PU2, `scenarios::puppet`, fixture: a 1920×1080 layer fully
-covered at default density): warp ≤ 80 ms, mesh build ≤ 100 ms, per-frame solve ≤ 8 ms at
-the vertex cap.
+covered at default density): warp ≤ 120 ms, mesh build ≤ 100 ms, per-frame solve ≤ 12 ms
+at the vertex cap.
 
 Two of those three are **looser than this note first wrote them** (8 ms and 1 ms), and
 PU2's measurements are why — K-712 records the change and docs/13 §2 carries the reasoning.

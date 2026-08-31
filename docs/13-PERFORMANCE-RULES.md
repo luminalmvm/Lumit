@@ -63,9 +63,9 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 | B12 | Particulate, default parameters (≈ 300 live particles), evaluate + draw **above the pass floor** | ≲ 0.2 ms | ≲ 0.6 ms |
 | B13 | Particulate, 20 000 live discs at the default cap, evaluate + draw above the pass floor | ≤ 1 ms | ≤ 4 ms |
 | B14 | Particulate at the 1 000 000 hard cap, evaluate + draw above the pass floor, one comp frame | ≤ 16 ms | — |
-| B15 | Puppet warp of a **fully covered** 1080p layer, single-threaded (≈ 40 ns a pixel warped) | ≤ 80 ms | ≤ 200 ms |
+| B15 | Puppet warp of a **fully covered** 1080p layer, single-threaded (≈ 40 ns a pixel warped) | ≤ 120 ms | ≤ 300 ms |
 | B16 | Puppet mesh build at natural 1080p, fully covered, default density | ≤ 100 ms | ≤ 250 ms |
-| B17 | Puppet per-frame solve at the 1500-vertex cap, factorisation held | ≤ 8 ms | ≤ 20 ms |
+| B17 | Puppet per-frame solve at the 1500-vertex cap, factorisation held | ≤ 12 ms | ≤ 30 ms |
 
 ### 2.1 Document-scale budgets (the "thousands of layers" mandate)
 

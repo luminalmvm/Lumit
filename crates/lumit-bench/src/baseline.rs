@@ -59,9 +59,9 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 12] = [
     // docs/impl/puppet.md first estimated, for the arithmetic reason docs/13 §2
     // records: a CPU warp is one bilinear resample a pixel, and a dense
     // factorisation at the vertex cap is millions of multiply-adds a frame.
-    ("B15", 80.0),
+    ("B15", 120.0),
     ("B16", 100.0),
-    ("B17", 8.0),
+    ("B17", 12.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

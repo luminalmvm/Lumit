@@ -22474,8 +22474,11 @@ cap is a forward and back substitution through a dense 3000×3000 factor plus tw
 1500×1500 ones: about eighteen million multiply-adds, which is milliseconds however it is
 written. K-704's estimates were not measured; these are.
 
-**The budgets are therefore B15 ≤ 80 ms, B16 ≤ 100 ms, B17 ≤ 8 ms on the reference
-desktop**, and each is read as a *rate* rather than a per-frame promise: the fixture covers
+**The budgets are therefore B15 ≤ 120 ms, B16 ≤ 100 ms, B17 ≤ 12 ms on the reference
+desktop** — those measurements with room for the machine the column names, which is an
+i3-12100-class part against the development desktop they were taken on, and a budget that
+failed on its own reference machine would be a wish rather than a gate. Each is read as a
+*rate* rather than a per-frame promise: the fixture covers
 the whole frame, which is the shape puppet is not for. About 40 ns a pixel warped means a
 400×600 cutout — an arm, a character — costs about 10 ms and scrubs inside B3.
 
