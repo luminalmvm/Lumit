@@ -354,7 +354,10 @@ pub fn resolve_stack_temporal_named(
         // build does not know resolves to nothing, which is how an unknown
         // effect stays an inert placeholder (K-065). The arena's own op order
         // *is* the stack order, so there is no second list to keep in step.
-        if let Some(def) = BUILTIN_DEFS.get(&e.effect.match_name) {
+        // The catalogue, then the layer styles (K-706): a style resolves through
+        // this very walk, so the lookup asks for "the definition of this name"
+        // rather than picking a list (`fx::def`).
+        if let Some(def) = super::def(&e.effect.match_name) {
             // An orchestration-only effect (Posterize time, Accumulation motion
             // blur) resolves to nothing at all: it changes *what time* the layers
             // it covers render at, which the frame walk reads straight off the

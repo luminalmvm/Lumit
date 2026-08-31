@@ -749,6 +749,10 @@ pub struct DropShadowOp {
     pub shadow_only: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Spread's threshold-remap slope (K-706); 1.0 is no spread and no branch.
+    pub spread_scale: f32,
+    /// The layer's own shape knocks the shadow out before the composite (K-706).
+    pub knockout: bool,
 }
 
 #[repr(C)]
@@ -761,7 +765,10 @@ struct DropShadowParams {
     shadow_only: u32,
     /// 1 = the matte scales the shadow's Opacity per pixel (K-428).
     matte_on: f32,
-    _pad: [u32; 2],
+    /// Spread's threshold-remap slope (K-706); 1.0 takes no branch.
+    spread_scale: f32,
+    /// 1 = the layer's shape knocks the shadow out before the composite (K-706).
+    knockout: u32,
 }
 
 impl FxEngine {
@@ -862,7 +869,8 @@ impl FxEngine {
                 mix_amt: op.mix,
                 shadow_only: u32::from(op.shadow_only),
                 matte_on: f32::from(matte.is_some()),
-                _pad: [0; 2],
+                spread_scale: op.spread_scale,
+                knockout: u32::from(op.knockout),
             }),
         );
         out

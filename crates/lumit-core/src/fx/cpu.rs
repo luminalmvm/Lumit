@@ -5896,6 +5896,32 @@ pub struct DropShadowParams {
     pub shadow_only: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// **Spread** (K-706), as the slope of the threshold remap the softened
+    /// alpha is put through: `1 ÷ (1 − Spread)`, taken host-side by
+    /// [`spread_scale`]. `1.0` is no spread and takes no branch at all, which is
+    /// what keeps the Drop shadow *effect* — which never asks for one — the
+    /// picture it always drew, to the bit.
+    pub spread_scale: f32,
+    /// **Layer knocks out shadow** (K-706): the layer's own shape removes the
+    /// shadow before the layer is composited over it.
+    ///
+    /// On an opaque layer this changes nothing — the shadow is hidden behind the
+    /// shape either way. On a semi-transparent one it is the difference between
+    /// a shadow that shows through and one that does not.
+    pub knockout: bool,
+}
+
+/// The [`DropShadowParams::spread_scale`] a Spread per cent asks for.
+///
+/// One expression, host-side, so the CPU reference and the WGSL kernel cannot
+/// disagree about it and neither divides per pixel. Floored just under 1 so a
+/// Spread of 100 % is a very steep slope rather than a division by zero
+/// (docs/14 §4); at that slope the remap is a hard cut at half coverage, which
+/// is what "a spread of 100 %" means — a solid drop with the gaussian's own edge
+/// position and none of its ramp.
+#[must_use]
+pub fn spread_scale(spread_percent: f32) -> f32 {
+    1.0 / (1.0 - (spread_percent / 100.0).clamp(0.0, 0.999_9))
 }
 
 /// Drop shadow (docs/08 §3.43) — the CPU reference and §1.6 oracle.
@@ -5934,16 +5960,33 @@ pub fn drop_shadow_matted(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams
     for y in 0..h {
         for x in 0..w {
             let d = ((y * w + x) * 4) as usize;
-            let k = bilinear_edge(
+            let src_a = original[d + 3];
+            let mut cover = bilinear_edge(
                 &soft,
                 w,
                 h,
                 x as f32 + 0.5 - p.offset[0],
                 y as f32 + 0.5 - p.offset[1],
                 0,
-            )[3] * matte_toward(p.opacity, 0.0, matte_strength(matte, d));
+            )[3];
+            // Spread (K-706): the gaussian's ramp re-cut about its half-way
+            // line, which is where the original edge was — so the shadow grows
+            // outward and hardens rather than moving. Skipped whole at slope 1,
+            // because `(a − ½)·1 + ½` is not `a` in floating point and a shadow
+            // with no spread must be the bytes it always was.
+            if p.spread_scale != 1.0 {
+                cover = ((cover - 0.5) * p.spread_scale + 0.5).clamp(0.0, 1.0);
+            }
+            // Layer knocks out shadow (K-706): the shape takes the shadow away
+            // first, and the composite below then puts the layer over what is
+            // left. Two attenuations by the same coverage, deliberately — that
+            // is what "knocked out AND behind" is, and on an opaque layer both
+            // spellings are zero.
+            if p.knockout {
+                cover *= 1.0 - src_a;
+            }
+            let k = cover * matte_toward(p.opacity, 0.0, matte_strength(matte, d));
             let shadow = [p.colour[0] * k, p.colour[1] * k, p.colour[2] * k, k];
-            let src_a = original[d + 3];
             for c in 0..4 {
                 // Source OVER shadow, premultiplied — the shadow is BELOW,
                 // which is the whole reason this is an effect and not a

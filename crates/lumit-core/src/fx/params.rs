@@ -580,6 +580,27 @@ impl ResolvedStack {
         }
     }
 
+    /// Append another resolved stack's ops after this one's, in order (K-706).
+    ///
+    /// **In plain terms.** A layer's styles resolve in a second walk of their
+    /// own, and their ops then run after the effect stack's on the same raster
+    /// (docs/impl/layer-styles.md §3). This is the join. Each incoming op's
+    /// parameters are copied into this arena and its range moved to where they
+    /// landed, so the result is one arena and one order — indistinguishable
+    /// downstream from a stack that resolved in a single walk.
+    ///
+    /// The one thing to know: an op's `span` is an index into the arena it came
+    /// from, so it cannot simply be carried across. Shifting by the number of
+    /// entries already here is what re-points it.
+    pub fn append(&mut self, other: Self) {
+        let shift = self.entries.len() as u32;
+        self.entries.extend(other.entries);
+        self.ops.extend(other.ops.into_iter().map(|mut op| {
+            op.span = (op.span.start + shift)..(op.span.end + shift);
+            op
+        }));
+    }
+
     /// How many ops the stack resolved to.
     pub fn len(&self) -> usize {
         self.ops.len()

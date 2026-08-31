@@ -56,6 +56,10 @@ mod schema;
 /// The Custom shader's text side: the declaration grammar, the assembler and
 /// the uniform layout (docs/impl/custom-shader.md, K-650).
 pub mod shader;
+/// The layer styles (docs/impl/layer-styles.md, K-706): nine named slots a
+/// layer wears, in one pinned order — a second, order-locked list beside the
+/// effect stack rather than entries in the catalogue.
+pub mod styles;
 mod temporal;
 
 /// CPU reference implementations (docs/08 §1.6): identical semantics to the
@@ -82,4 +86,5 @@ pub use params::*;
 pub use registry::*;
 pub use resolved::*;
 pub use schema::*;
+pub use styles::{normalise_styles, style_index, style_is_outer, STYLE_DEFS};
 pub use temporal::*;

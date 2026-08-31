@@ -18,8 +18,8 @@ struct Params {
     mix_amt: f32,          // 0..1, blended against the unprocessed input
     shadow_only: u32,
     matte_on: f32,         // 1 = the matte scales the shadow's Opacity (K-428)
-    _pad1: u32,
-    _pad2: u32,
+    spread_scale: f32,     // Spread's threshold-remap slope (K-706); 1 = none
+    knockout: u32,         // 1 = the layer's shape knocks the shadow out (K-706)
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -89,9 +89,21 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (p.matte_on != 0.0) {
         opacity = matte_toward(opacity, 0.0, matte_k(xy));
     }
-    let k = bilinear_transparent(f32(xy.x) + 0.5 - p.offset.x,
-                                 f32(xy.y) + 0.5 - p.offset.y,
-                                 size).a * opacity;
+    var cover = bilinear_transparent(f32(xy.x) + 0.5 - p.offset.x,
+                                     f32(xy.y) + 0.5 - p.offset.y,
+                                     size).a;
+    // Spread (K-706, == cpu::drop_shadow_matted): the gaussian's ramp re-cut
+    // about its half-way line, which is where the original edge was. Skipped
+    // whole at slope 1, so a shadow with no spread is the bytes it always was.
+    if (p.spread_scale != 1.0) {
+        cover = clamp((cover - 0.5) * p.spread_scale + 0.5, 0.0, 1.0);
+    }
+    // Layer knocks out shadow (K-706): the shape takes the shadow away first,
+    // and the composite below then puts the layer over what is left.
+    if (p.knockout != 0u) {
+        cover = cover * (1.0 - o.a);
+    }
+    let k = cover * opacity;
     let shadow = vec4<f32>(p.colour.rgb * k, k);
     // Source OVER shadow, premultiplied — the shadow is BELOW, which is the
     // whole reason this is an effect and not a duplicated layer.

@@ -415,6 +415,13 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Trail,
     &ConnectPoints,
     &EmitFromImage,
+    // The layer styles that render (K-706, docs/impl/layer-styles.md §10's
+    // first package): one outer, one interior. The other seven are declared in
+    // `lumit_core::fx::styles` but have no pass here yet, so an instance of one
+    // resolves to an op this table misses and the picture passes through
+    // untouched — the same calm degrade a missing LUT takes, never a fault.
+    &StyleDropShadow,
+    &StyleColourOverlay,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -2400,8 +2407,78 @@ impl GpuEffect for DropShadow {
                 softness_px: d.softness_px,
                 shadow_only: d.shadow_only,
                 mix: d.mix,
+                spread_scale: d.spread_scale,
+                knockout: d.knockout,
             },
         )
+    }
+}
+
+/// Drop shadow (**style**, K-706) — the same kernel, two more uniforms.
+///
+/// A separate entry rather than a second name on the one above, because the
+/// table is keyed by match name and a style is a different declaration: its
+/// Spread and its knockout are read out of its own typed struct, and neither
+/// exists on the effect.
+struct StyleDropShadow;
+impl GpuEffect for StyleDropShadow {
+    fn match_name(&self) -> &'static str {
+        "style_drop_shadow"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let d = lumit_core::fx::styles::defs::DropShadowStyle::read(p).packed();
+        fx.drop_shadow(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::DropShadowOp {
+                colour: d.colour,
+                opacity: d.opacity,
+                offset: d.offset,
+                softness_px: d.softness_px,
+                shadow_only: d.shadow_only,
+                mix: d.mix,
+                spread_scale: d.spread_scale,
+                knockout: d.knockout,
+            },
+        )
+    }
+}
+
+/// Colour overlay (**style**, K-706) — the Fill kernel, unchanged.
+///
+/// The style's blend mode is not read here: it rides the per-op Mix blend stage
+/// every effect instance already carries (K-425, `fx_blend_mix.wgsl`), which
+/// `run_ops` applies after this returns. That is what makes "Multiply at 40 %"
+/// mean on a style exactly what it means on an effect, with no second seam.
+struct StyleColourOverlay;
+impl GpuEffect for StyleColourOverlay {
+    fn match_name(&self) -> &'static str {
+        "style_colour_overlay"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let (colour, mix) = lumit_core::fx::styles::defs::ColourOverlay::read(p).packed();
+        fx.fill(ctx, tex, w, h, &lumit_gpu::fx::FillOp { colour, mix })
     }
 }
 
@@ -6091,12 +6168,19 @@ mod tests {
     fn every_migrated_effect_has_a_gpu_entry() {
         for def in BUILTIN_DEFS.builtins() {
             let name = def.schema().match_name;
-            if def.is_image_op() {
+            // **The Roto brush is the one argued exception** (K-713). It draws
+            // pixels, so it is an image op; it has no entry here because its
+            // pass is Set matte's, run inline in `run_ops` over a matte nobody
+            // picked. A `GpuEffect` of its own would be a kernel wrapper round
+            // another effect's kernel, and the table would then name two ways of
+            // multiplying an alpha. Anything else that wants to opt out is
+            // argued for here, in these words, before it may.
+            if def.is_image_op() && name != lumit_core::roto::ROTO_BRUSH {
                 assert!(
                     gpu_effect(name).is_some(),
                     "{name} is migrated and draws pixels, but has no GPU pass"
                 );
-            } else {
+            } else if !def.is_image_op() {
                 assert!(
                     gpu_effect(name).is_none(),
                     "{name} is orchestration-only and must not have a GPU pass"
@@ -6105,9 +6189,21 @@ mod tests {
         }
         for pass in GPU_EFFECTS {
             let name = pass.match_name();
+            // `fx::def`, not `BUILTIN_DEFS`: since K-706 the table also carries
+            // the layer styles, which declare themselves on their own list
+            // rather than in the catalogue.
             assert!(
-                BUILTIN_DEFS.get(name).is_some(),
-                "the GPU table names {name}, which no effect declares"
+                lumit_core::fx::def(name).is_some(),
+                "the GPU table names {name}, which no effect or style declares"
+            );
+        }
+        // And the styles that ship a kernel have one (docs/impl/layer-styles.md
+        // §8): the seven that do not are named here so that adding a pass for
+        // one is a one-line edit rather than a hunt.
+        for name in ["style_drop_shadow", "style_colour_overlay"] {
+            assert!(
+                gpu_effect(name).is_some(),
+                "{name} is one of v1's rendered styles but has no GPU pass"
             );
         }
     }

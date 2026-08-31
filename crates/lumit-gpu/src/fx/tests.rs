@@ -8250,6 +8250,8 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
             softness_px: p.softness_px,
             shadow_only: p.shadow_only,
             mix: p.mix,
+            spread_scale: p.spread_scale,
+            knockout: p.knockout,
         }
     };
 
@@ -14770,6 +14772,8 @@ fn the_matte_scales_the_drop_shadow_opacity() {
         softness_px: p.softness_px,
         shadow_only: p.shadow_only,
         mix: p.mix,
+        spread_scale: p.spread_scale,
+        knockout: p.knockout,
     };
     check_matte_claim(
         &ctx,

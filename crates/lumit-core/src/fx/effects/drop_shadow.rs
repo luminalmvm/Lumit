@@ -111,6 +111,12 @@ impl DropShadow {
             softness_px: self.softness.max(0.0),
             shadow_only: self.shadow_only,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            // The effect has no Spread and no knockout: those two are the Drop
+            // shadow *style*'s (K-706, docs/impl/layer-styles.md §4), and the
+            // neutral pair here is what makes the shared kernel draw exactly the
+            // picture it drew before the style generalised it.
+            spread_scale: 1.0,
+            knockout: false,
         }
     }
 }

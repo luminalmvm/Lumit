@@ -1,6 +1,8 @@
 # Layer styles
 
-Decision: K-706. Status: design note — no code yet; the packages in §10 build it.
+Decision: K-706. Status: §10's first package has landed — the model, all nine
+declarations, the render seam and two rendering styles. Packages 2 and 3 are
+still to build.
 
 **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
 behind it, a glow around it, a colour or gradient painted across its face, a
@@ -90,6 +92,18 @@ Gradient overlay is two colour stops in v1, matching the Gradient effect's own
 two-stop model (`gradient.rs`) — a ramp editor is that effect's upgrade to
 inherit, not ours.
 
+**Where the two overlays' Opacity lives.** Colour overlay and Gradient overlay
+have no Opacity row of their own: their **Mix row is labelled "Opacity" and is
+it**. That is not a saving, it is the only place the number can sit and mean what
+Photoshop means. The K-425 seam applies Mix *after* the style's Blend mode —
+"blend the overlay in, then take this much of the result" — whereas a separate
+opacity inside the kernel would fade the overlay *before* it was blended, which
+is a different picture on every mode but Normal. The styles that draw new pixels
+rather than recolouring existing ones — the shadows, the glows, the stroke —
+keep their own Opacity, because there it says how dark the shadow is and not how
+much of the style you take. Import maps AE's `opacity` onto whichever of the two
+the style carries.
+
 ## 2. The order — pinned
 
 Photoshop composites styles in a fixed order and AE inherits it (AE's style
@@ -108,9 +122,20 @@ back). Painting order, first = furthest behind:
 9. **Stroke** — straddles the edge, over the interiors
 10. **Bevel and emboss** — topmost (its highlights sit on everything, stroke included)
 
-This is also the stored order of `Layer::styles` and the order the ops run.
-Interior styles (4–8) read and write only where the layer's alpha is; 1–2 add
-premultiplied pixels underneath; 9–10 may touch both sides of the edge.
+This is the stored order of `Layer::styles`, the order the panel and the
+Timeline list them in, and the order the pixels end up in. Interior styles (4–8)
+read and write only where the layer's alpha is; 1–2 add premultiplied pixels
+underneath; 9–10 may touch both sides of the edge.
+
+**It is not, quite, the order the ops run** — the one place the implementation
+corrected the design. The ops run one after another on a single raster, and an
+interior style floods whatever alpha it finds: run the Drop shadow first and the
+Colour overlay above it would paint the shadow too. So the seam emits the
+interiors first, on the layer's own alpha, and then the outer styles — which
+composite *underneath* — in reverse, so that the last one run ends up furthest
+back and the Drop shadow is where §2 puts it. Because the stored list is sorted,
+the outers are exactly its leading run and the split costs a `take_while`. The
+picture is §2's; only the arithmetic order differs.
 
 ## 3. The render seam
 
@@ -125,13 +150,19 @@ gates and blends the styled raster as one picture. Styles therefore render
 **after the layer's effect stack and before the transform photograph, the track
 matte, and the blend into the comp** — one seam, no new pass.
 
-The parallel per-op lists stay 1:1 by construction: styles declare no matte,
-layer-input, mask-path or points rows, so the `mattes` / `dof_inputs` /
-`mask_paths` / `points_schedules` builders (which walk `layer.effects` only
-today) walk the combined list and emit `Absent`/empty slots for style ops — the
-same one-predicate-one-order rule those lists already follow. (The K-395
-injected Matte row is suppressed on style schemas: a style dresses the layer's
-own alpha; gating a shadow by another layer is an effect's job.)
+The parallel per-op lists stay 1:1 **by construction, and with no change at
+all**: `run_ops` advances each of those counters on the *op's own schema* — a
+matte slot for an op whose schema names a matte parameter, a polyline per
+declared mask-path row, a schedule for an op with a points port — and a style
+declares none of them. So the `mattes` / `dof_inputs` / `mask_paths` /
+`points_schedules` builders go on walking `layer.effects` alone, the style ops
+consume no slot, and because styles are appended *after* the effect stack no
+earlier index moves. (The K-395 injected Matte row is suppressed on style
+schemas: a style dresses the layer's own alpha; gating a shadow by another layer
+is an effect's job.) The rule that makes this safe is a test rather than a
+convention — `no_style_declares_a_row_the_render_would_have_to_fill`, in
+`lumit-core/src/fx/styles/tests.rs`, fails the build for the first style that
+grows one of those rows.
 
 **The deviation, stated honestly:** AE renders layer styles *after*
 transformations — rotate an AE layer and its style shadow keeps its screen
@@ -304,11 +335,13 @@ UI (only the touched test files):
 
 ## 10. Packages, in order
 
-1. **Engine model + two anchor styles.** `Layer::styles`, the `STYLE_DEFS`
-   module with all nine structs (two rendered: Drop shadow and Colour overlay —
-   one outer, one interior, proving both seam halves), the build.rs appended
-   resolve walk with the 1:1 parallel-list slots, cache-key inclusion, the
-   generalised drop-shadow kernel uniforms, identity/order/cache tests.
+1. ~~**Engine model + two anchor styles.**~~ **Landed.** `Layer::styles`, the
+   `STYLE_DEFS` module with all nine structs (two rendered: Drop shadow and
+   Colour overlay — one outer, one interior, proving both seam halves), the
+   build.rs appended resolve walk (`resolve_layer_fx`), cache-key inclusion, the
+   generalised drop-shadow kernel uniforms (`spread_scale`, `knockout`), and the
+   identity/order/cache/parity tests in `fx/styles/tests.rs` and
+   `lumit-render/tests/layer_styles.rs`.
 2. **The remaining five kernels + order pinning.** Inner shadow, Outer glow,
    Inner glow, Gradient overlay, Stroke (the new dilate), the full §2 order
    pixel tests, CPU/GPU agreement, padding tests.
