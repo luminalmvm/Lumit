@@ -22288,3 +22288,41 @@ wait on `IUnitInfo`, which is AP5's panel question. The conformance bench and th
 pass against real plugins (§7 plans 8 and 9) are unchanged and still owed: the in-tree
 fixture now wears both faces, so every AP1 assertion is asked of VST3 too, but a fixture
 cannot prove a binding against somebody else's binary.
+
+## K-708 — `lumit-roto` is the roto arithmetic, pure CPU and flow-agnostic: the engine crate lands before the effect, the job or the tool
+
+**Status: DECIDED (2026-08-31).** Package RB1 of [docs/impl/roto.md](impl/roto.md) §11,
+built. Implements K-705's pinned algorithms and nothing else; no engine crate depends on it
+yet. Reverses nothing.
+
+**The crate takes flow as plain slices, not as `lumit-flow`.** `crates/lumit-roto` holds
+the stroke model, the seed stamping, the geodesic distance transform, the guided filter and
+the warp-and-seed derivation — and it does not name the flow crate, because `lumit-flow`
+carries wgpu with it and this crate is CPU arithmetic with no business owning a graphics
+device. The flow, its validity and its forward–backward confidence arrive as three borrowed
+slices through a `FlowField` that checks them against the frame size. That is `lumit-track`'s
+stance for `lumit-track`'s reason, and it is what keeps the whole segmentation testable
+against **written-down** flow fields — the RB1 suite propagates thirty frames on analytic
+motion with no GPU anywhere near it. RB2 hands `FlowEngine`'s output in; nothing in this
+crate learns where it came from.
+
+**Determinism is structural, and pinned by test.** Fixed scan orders, a fixed pass count
+(three pairs, no convergence test), f32 arithmetic in that order, no `HashMap` on any path
+that reaches a result: two propagation runs over one shot are bit-identical, asserted on
+the f32 bit patterns rather than within a tolerance. Buffers are sized when the frame size
+first arrives and reused for every frame after, so a six-hundred-frame run allocates once
+(docs/14 §5); the colour guided filter's fifteen frame-sized planes are the honest price of
+its 3×3 covariance and are named as such at the type.
+
+**Three things building it taught, now written into the note rather than left in the
+code.** A correction stroke overrides a warped seed only on the pixels it covers, so a
+correction is a scribble across the wrong region and holds permanently only where that
+region has real colour edges (§12). An occluder that severs the subject, or one that floats
+inside it touching no background, is outside §10.3's claim — the first leaves a piece no
+path can reach, the second is absorbed, and both are the correction loop rather than a
+defect (§10 item 3). And γ prices *every* neighbouring colour step, not just the subject's
+edge, so per-pixel noise costs real distance — the fixtures use spatially smooth texture
+and say why (§12).
+
+**Coverage.** The crate joins CI's engine-crate coverage gate on the day it lands (93.7%
+lines measured, threshold 80), which is the K-007 policy applied rather than deferred.

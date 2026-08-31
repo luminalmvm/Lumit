@@ -1,0 +1,19 @@
+[package]
+name = "lumit-roto"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# No `lumit-flow`: it pulls wgpu, and this crate is pure CPU arithmetic
+# (docs/impl/roto.md §11, the same stance lumit-track takes). Flow arrives as
+# plain slices.
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[lints]
+workspace = true

@@ -14291,3 +14291,73 @@ What that cannot prove is the binding itself against somebody else's real, shipp
 a fixture agrees with the host by construction. That is what the conformance run against
 free plugin suites, and a hands-on pass with a couple of commercial ones, are for, and they
 are still owed before any release claims VST3 hosting.
+
+## 53. Cutting a moving thing out of a shot, in plain terms
+
+Rotoscoping is the most tedious job in compositing: drawing round a moving subject, frame
+after frame, so it can be lifted out of its background. The picture you are drawing is
+called a **matte** — a grey image, white where the subject is and black where it is not,
+which the compositor then uses as a stencil.
+
+Lumit's Roto brush shortens that job, and `crates/lumit-roto` is the arithmetic behind it.
+The crate does four things, and each one is worth understanding on its own.
+
+**One: a scribble is a claim, not an outline.** You drag a stroke through the subject and
+another through the background. Those strokes are the whole of your edit — they are what
+gets saved, undone and journaled — and the pixels under them become **seeds**: pixels whose
+answer is known. Everything else is still an open question. (If you scribble on the subject
+and never touch the background, a two-pixel ring round the edge of the frame is taken as
+background, because nobody paints the background first and a question with only one known
+answer has none.)
+
+**Two: every other pixel joins whichever seed it can reach most cheaply.** Imagine walking
+from a pixel to the nearest seed. Each step costs a little for the distance — and a lot if
+the colour changes as you step. Walking along a flat wall is nearly free; stepping across
+the edge of a person costs about as much as fifty pixels of travel. So a pixel deep inside
+the subject reaches the subject's scribble cheaply and can only reach the background's
+scribble by paying for the crossing, and comparing the two prices decides it. Every pixel
+gets both prices worked out by six sweeps over the picture — three going down and right,
+three going up and left, each pixel taking the best price its already-visited neighbours
+can offer. Six sweeps, always: no "keep going until it settles", because a fixed number of
+passes is what makes two runs of the same shot come out identical to the last bit.
+
+That method has one famous weakness, and Lumit's test suite deliberately keeps it on
+record: if the subject touches something the same colour, walking between them costs
+nothing, so the matte swallows it. There is a test in the crate with a dumbbell shape whose
+low-contrast neck leaks by design, and it fails if the leak ever silently stops — because
+that would mean the algorithm changed underneath. The cure is not a cleverer sweep, it is
+you: another stroke, on the frame where you see it go wrong.
+
+**Three: the next frame is not solved from scratch.** Lumit already works out, for other
+features, how far every pixel moved between two frames (the optical flow). Roto drags the
+previous frame's matte along that motion, and wherever the dragged matte is confidently
+solid or confidently empty, those pixels become the next frame's seeds — shrunk by two
+pixels first, so a motion boundary the flow smeared can never plant a seed on the wrong
+side of the edge. Where the flow is not trusted at all — something was hidden and has just
+been revealed, or the motion made no sense — nothing is seeded, deliberately: those are
+exactly the pixels that must be decided afresh from the new frame's own colours. Then the
+same six sweeps run again. So the motion carries the *decision* and each frame re-decides
+its own *edge*, which is why the matte does not slowly smear the way pure dragging would.
+
+Two consequences fall out of that and are worth knowing before you use it. A frame's own
+strokes always outrank the dragged-in seeds — but only on the pixels they actually cover,
+so a correction is a scribble *across* the thing you are fixing, not a dab near it. And
+where the mistake has no colour edge behind it at all, a correction may need repeating a
+few frames later; where it does have one — a distinct object wrongly claimed — one stroke
+fixes it and every frame after.
+
+**Four: the edge is finished separately.** Real edges are soft: hair, motion blur, smoke.
+The sweeps above give a decisive answer, which is right in the middle of a solid subject and
+too crude at its boundary. So a second pass — the **guided filter** — looks at a narrow band
+around the boundary and asks, inside each small window, what mixture of the actual colours
+there would explain the matte. Where the true edge is a blend of subject and background, the
+mixture is exactly the softness that was wanted, and it comes back. Outside that band the
+answer is snapped hard to solid or empty, which is a fence rather than a detail: run the
+filter everywhere and a textured interior goes grey.
+
+The crate is pure arithmetic — no graphics card, no files, no threads of its own. It never
+even mentions the flow engine: the motion arrives as plain lists of numbers, because the
+flow crate carries the GPU with it and this one has no business owning a graphics device
+(the camera tracker keeps its distance for the same reason). Every buffer it needs is
+allocated when the frame size first arrives and reused for every frame after, so a
+six-hundred-frame job does its allocating once.

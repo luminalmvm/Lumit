@@ -1,6 +1,7 @@
 # Roto brush and Refine edge: flow-propagated segmentation (K-705)
 
-**Design only until built.** [07-UI-SPEC.md](../07-UI-SPEC.md) §1 puts the Roto pair on the
+**RB1 is built (K-708: `crates/lumit-roto`); RB2 and RB3 are design until they are.**
+[07-UI-SPEC.md](../07-UI-SPEC.md) §1 puts the Roto pair on the
 tool strip (Alt+W, disabled since K-228); [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
 rotoscoping; this note is the binding *how*: the algorithms (pinned, with their ceilings
 named), the stroke model, the propagation and correction loop, the sidecar cache and its
@@ -302,7 +303,13 @@ fixture philosophy — so every claim is an assertion, not a look:
    frame 15, both directions solved, both ends' floors held.
 3. **Occlusion:** a second shape crossing in front — the matte neither leaks onto the
    occluder nor loses the subject when it re-emerges (the low-confidence-seeds-nothing
-   rule doing its job).
+   rule doing its job). **Two shapes of occluder are outside that claim, and RB1's test
+   states which it uses:** one that *severs* the subject (a full-height pole across it)
+   leaves a piece with no seeds that no path can reach from the piece that has them, since
+   every route crosses the occluder's colour; and one that floats *inside* the subject,
+   touching no background, is absorbed, because no seed and no colour step says otherwise.
+   Both are a correction stroke — §6's loop — not a defect, and the RB1 fixture is
+   therefore a pole hanging in from the top of frame across the subject's upper half.
 4. **Correction loop:** a deliberate wrong stroke at the base, IoU low downstream; a
    correction at frame k — frames beyond k recover, frames between base and k
    **byte-identical** to before the correction (the invalidation rule asserted in both
@@ -322,7 +329,7 @@ fixture philosophy — so every claim is an assertion, not a look:
 
 ## 11. Ordered work packages
 
-**RB1 — the engine crate.** `crates/lumit-roto`: `RotoStroke`, seed stamping, the §2 GDT
+**RB1 — the engine crate. Built (K-708).** `crates/lumit-roto`: `RotoStroke`, seed stamping, the §2 GDT
 solve, the §4 guided filter, the §3 warp-and-seed derivation taking flow, validity and
 confidence as plain slices — **no `lumit-flow` dependency** (it pulls wgpu; the tracker's
 §1 stance, for the same reason). Pure CPU, deterministic, no panics. Tests 1–5 of §10 in
@@ -357,6 +364,20 @@ strokes, the overlay draws from the store's answer once per frame and not per re
 - **Keying the cache by anything reachable from the comp** (transform, retime, preview
   tier) breaks the one-shot-many-comps sharing that source-raster strokes buy; the key
   is §1's purity sentence and nothing else.
+- **Expecting a correction stroke to outrank a warped seed it does not cover.** The
+  override in §3 stage 4 is per pixel, so a dab beside a leak leaves the leak's own warped
+  foreground seeds in place and the solve keeps them: a correction is a scribble *across*
+  the wrong region, not near it. Where the region has real colour edges — a distinct
+  object wrongly claimed — one covering stroke holds for every frame after it, because the
+  corrected matte reseeds itself from evidence; where it has none (a same-coloured lobe
+  joined to the subject) the boundary has nothing to anchor it and the leak creeps back
+  over a handful of frames. That is the §2 ceiling seen from the correction side, and the
+  reason the panel must make re-stroking cheap rather than promise one-and-done.
+- **Reading γ as if it only priced the subject's edge.** It prices *every* neighbouring
+  colour step, so per-pixel sensor noise costs real distance and heavily textured footage
+  walks more slowly than flat footage does. The default is honest for ordinary material
+  and the setting exists for the rest; RB1's fixtures use spatially smooth texture for the
+  same reason, and say so.
 - **Letting corrections influence toward the base** feels symmetric and destroys the
   one-sentence invalidation rule; influence flows outward, and a user who wants the base
   re-decided moves the base.
