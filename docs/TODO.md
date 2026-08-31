@@ -38,6 +38,11 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
+- **The Crowdin branch's last translations are not in the files.** `origin/translation/main` (c5845a78) was merged, and its five `.arb`s lost to the
+    site tool's own output, which is newer and much fuller. What it had and ours do
+    not: 152 keys in Kazakh, 134 in Ukrainian, 42 in German, 37 in each Chinese. Their
+    words are in that commit; offer those keys on the translation page rather than
+    hand-editing a translation (CLAUDE.md, K-653).
 - The front page's hero picture (web/src/assets/shots/hero.png) is a placeholder -
     a capture of the owner's own project standing in for the owner's own screenshot,
     and for the clip that replaces it after that. The video slots the three unrecorded
