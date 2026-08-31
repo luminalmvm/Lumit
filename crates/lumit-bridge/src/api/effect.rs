@@ -99,6 +99,19 @@ pub fn list_drivers() -> Vec<BridgeEffectInfo> {
 pub const NAMESPACE_BUILTIN: &str = "builtin";
 /// An entry that came out of an OFX plugin on this machine (docs/12 §2.6).
 pub const NAMESPACE_OFX: &str = "ofx";
+/// An entry that came out of an **audio plugin** — CLAP or VST3, told apart
+/// only by the match name's own prefix (K-707, AP5). One value for both
+/// standards because the browser draws them the same: one Audio plugins
+/// group, one switch-off command, one provenance line.
+pub const NAMESPACE_AUDIO: &str = "audio";
+
+/// Whether a catalogue name is an audio plugin's — the match name's own prefix,
+/// which is the one place provenance is carried (K-707).
+#[frb(ignore)]
+fn is_audio_match_name(match_name: &str) -> bool {
+    match_name.starts_with(lumit_core::fx::CLAP_MATCH_PREFIX)
+        || match_name.starts_with(lumit_core::fx::VST3_MATCH_PREFIX)
+}
 
 /// The category key a plugin's own menu path becomes.
 ///
@@ -138,6 +151,21 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
             // call — a browser that had to ask a second question per row would
             // be one call per effect per rebuild.
             let plugin = lumit_ofx::discover::plugin_of(schema.match_name);
+            // An audio plugin is one group, not one per vendor (AP5): neither
+            // standard declares a menu path the way OFX does, so the browser
+            // gets a single Audio plugins heading, worded by the frontend —
+            // which is what an empty `category_label` means.
+            if is_audio_match_name(schema.match_name) {
+                return BridgeEffectInfo {
+                    name: schema.match_name.to_owned(),
+                    label: schema.label.to_owned(),
+                    category: NAMESPACE_AUDIO.to_owned(),
+                    category_label: String::new(),
+                    namespace: NAMESPACE_AUDIO.to_owned(),
+                    inputs,
+                    outputs,
+                };
+            }
             BridgeEffectInfo {
                 name: schema.match_name.to_owned(),
                 label: schema.label.to_owned(),
@@ -1626,6 +1654,22 @@ pub const BADGE_REASONS: &[&str] = &[
 #[frb(ignore)]
 fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
     let name = effect.effect.match_name.as_str();
+    // A switched-off **audio** plugin, first: the answer is the session's own
+    // list rather than a recorded failure, and it outranks any stale note a
+    // bake filed before the switch was flicked (AP5). The identifier is the
+    // match name shorn of its prefix — exactly what `set_plugin_enabled`
+    // wrote into the list.
+    if let Some(identifier) = name
+        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
+        .or_else(|| name.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX))
+    {
+        if lumit_aplug::session_disabled()
+            .lock()
+            .is_ok_and(|list| list.contains(identifier))
+        {
+            return (Some("plugin_disabled".to_owned()), None);
+        }
+    }
     if let Some(why) = lumit_render::gpufx::ofx::error_of(effect.id) {
         // A switched-off plugin files the reason key itself, so the badge says
         // "switched off" rather than reporting it as a failure.

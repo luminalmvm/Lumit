@@ -201,6 +201,23 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
         if let Some(c) = &j.chain {
             format!("{:?}", c.effects).hash(&mut h);
             format!("{:?}", c.graph).hash(&mut h);
+            // Whether each of THIS chain's plugins is switched off folds in
+            // too (AP5): flicking the switch changes what the chain opens
+            // without touching the document, and the rebake this provokes is
+            // what actually silences the plugin rather than only badging it.
+            // This chain's plugins, not the whole list, so switching off a
+            // plugin no comp uses re-plans nothing.
+            if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
+                for effect in &c.effects {
+                    let name = effect.effect.match_name.as_str();
+                    if let Some(id) = name
+                        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
+                        .or_else(|| name.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX))
+                    {
+                        disabled.contains(id).hash(&mut h);
+                    }
+                }
+            }
         }
     }
     h.finish()
@@ -1399,5 +1416,89 @@ mod tests {
         let mut bypassed = eq;
         bypassed.enabled = false;
         assert_ne!(dropped, with(vec![bypassed, comp]), "a bypass re-plans");
+    }
+
+    /// **The calm badge lands on the plugin that refused** (AP5, docs/12
+    /// §2.3, the OFX badge grammar): a bake that ships any of a link's blocks
+    /// dry files the failure against *that instance*, the bridge's
+    /// `read_instance_info` turns it into `plugin_failed`, and a later bake
+    /// whose every block comes back takes the badge off again.
+    #[test]
+    fn a_dying_plugin_badges_its_own_instance_and_a_clean_bake_heals_it() {
+        let rate = 48_000u32;
+        register_insert("clap:lumit.test.badge.dying", Some(0), 0);
+        register_insert("clap:lumit.test.badge.well", None, 0);
+        let dying = insert_instance("clap:lumit.test.badge.dying", Property::fixed(2.0));
+        let well = insert_instance("clap:lumit.test.badge.well", Property::fixed(1.0));
+
+        // One block of sound, whose one block the dying plugin refuses; the
+        // well one beside it in the same chain processes every block.
+        let seconds = lumit_core::fx::AUDIO_BLOCK_FRAMES as f64 / f64::from(rate);
+        let source = tone(rate, seconds, 0.25);
+        let mut one = job("a.mp4", 0.0, seconds, 0.0);
+        one.chain = Some(chain_of(vec![dying.clone(), well.clone()]));
+        let mut decoded = HashMap::new();
+        decoded.insert(one.item, source);
+        build_plan(&[one.clone()], &decoded, rate, 1.0, 0.0);
+
+        let badged =
+            crate::api::effect::read_instance_info(&dying, lumit_core::time::Rational::ZERO);
+        assert_eq!(badged.badge_reason.as_deref(), Some("plugin_failed"));
+        assert_eq!(
+            badged.badge_detail.as_deref(),
+            Some("the plugin did not process this sound"),
+            "a processor with no sentence of its own still explains itself"
+        );
+        let neighbour =
+            crate::api::effect::read_instance_info(&well, lumit_core::time::Rational::ZERO);
+        assert_eq!(
+            neighbour.badge_reason, None,
+            "the badge lands on the link that refused, not on the rack"
+        );
+
+        // Healing: a bake whose every block comes back clears the note. The
+        // same instance id, moved onto the plugin that answers.
+        let mut healed = well.clone();
+        healed.id = dying.id;
+        let mut again = one;
+        again.chain = Some(chain_of(vec![healed.clone()]));
+        build_plan(&[again], &decoded, rate, 1.0, 0.0);
+        let cleared =
+            crate::api::effect::read_instance_info(&healed, lumit_core::time::Rational::ZERO);
+        assert_eq!(
+            cleared.badge_reason, None,
+            "a clean bake takes the badge off"
+        );
+    }
+
+    /// Flicking a plugin's switch re-plans the comps whose chains hold it, and
+    /// only those (AP5): the switched-off list is not in the document, so the
+    /// signature is where the change is heard.
+    #[test]
+    fn the_signature_hears_the_switched_off_list_for_its_own_chain() {
+        let mut with_chain = vec![job("a.mp4", 0.0, 5.0, 0.0)];
+        with_chain[0].chain = Some(chain_of(vec![insert_instance(
+            "clap:lumit.test.switched",
+            Property::fixed(1.0),
+        )]));
+        let bystander = vec![job("b.mp4", 0.0, 5.0, 0.0)];
+
+        let on = jobs_signature(&with_chain, 10.0, 0.0);
+        let bystander_on = jobs_signature(&bystander, 10.0, 0.0);
+        lumit_aplug::set_enabled("lumit.test.switched", false);
+        let off = jobs_signature(&with_chain, 10.0, 0.0);
+        let bystander_off = jobs_signature(&bystander, 10.0, 0.0);
+        lumit_aplug::set_enabled("lumit.test.switched", true);
+
+        assert_ne!(on, off, "the flick is a mix change for this comp");
+        assert_eq!(
+            bystander_on, bystander_off,
+            "and a no-op for a comp that never plays the plugin"
+        );
+        assert_eq!(
+            on,
+            jobs_signature(&with_chain, 10.0, 0.0),
+            "switching back on restores the signature"
+        );
     }
 }

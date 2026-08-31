@@ -164,9 +164,13 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
       // category (docs/12 §2.6), so it groups and folds through exactly this
       // map — no second list, no plugin branch. A plugin that declared no
       // grouping at all has nothing to head it with, and this is the only place
-      // that knows the word for that.
+      // that knows the word for that — audio plugins deliberately declare none
+      // (neither standard has OFX's menu path), so the one Audio plugins group
+      // sits beside the OFX ones (AP5, K-594's grammar).
       final heading = effect.categoryLabel.isEmpty
-          ? l10n.effectsPlugins
+          ? (effect.namespace == _audioNamespace
+              ? l10n.effectsAudioPlugins
+              : l10n.effectsPlugins)
           : engineLabel(effect.categoryLabel);
       if (needle.isNotEmpty &&
           !effect.label.toLowerCase().contains(needle) &&
@@ -514,6 +518,10 @@ class _PresetRow extends StatelessWidget {
 /// engine's own spelling (`NAMESPACE_OFX`).
 const String _ofxNamespace = 'ofx';
 
+/// And the one an audio plugin carries (`NAMESPACE_AUDIO`, AP5) — CLAP or
+/// VST3, which the browser has no reason to tell apart.
+const String _audioNamespace = 'audio';
+
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
@@ -541,7 +549,8 @@ class _EffectRow extends StatelessWidget {
   /// preference docs/12 §2.6 asks for, and this is where a person is already
   /// looking when they wonder what a plugin is doing in their list.
   void _menu(BuildContext context, Offset at) {
-    final plugin = effect.namespace == _ofxNamespace;
+    final audio = effect.namespace == _audioNamespace;
+    final plugin = effect.namespace == _ofxNamespace || audio;
     showLumitPopup<void>(
       context: context,
       position: at,
@@ -554,7 +563,11 @@ class _EffectRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
                 child: Text(
-                  plugin ? l10n.effectFromPlugin : l10n.effectBuiltIn,
+                  audio
+                      ? l10n.effectFromAudioPlugin
+                      : plugin
+                          ? l10n.effectFromPlugin
+                          : l10n.effectBuiltIn,
                   key: ValueKey<String>('fx-provenance-${effect.name}'),
                   style: ThemeScope.of(context)
                       .theme
@@ -572,6 +585,15 @@ class _EffectRow extends StatelessWidget {
                     } catch (_) {
                       // The preference file would not take it. The plugin is
                       // still off for this session, which is what was asked.
+                    }
+                    // An audio plugin plays from a baked mix, so the switch
+                    // asks for a re-prepare — the switched-off list is part
+                    // of the mix signature, and the rebake is what actually
+                    // silences it (AP5).
+                    if (audio) {
+                      Provider.of<LumitUiState>(context, listen: false)
+                          .selectedComp
+                          ?.audioPrepare();
                     }
                     onCatalogueChanged();
                   },

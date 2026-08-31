@@ -68,6 +68,7 @@ import 'shader_editor.dart';
 import 'fx_section.dart';
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'transform_rows_frb.dart';
+import '../state/audio_effects.dart';
 import '../state/clipboard.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
@@ -724,9 +725,87 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           textAlign: TextAlign.center,
                         ),
                       )
-                    else
-                      for (var index = 0; index < info.effects.length; index++)
-                        _WhenPicked(
+                    else ...[
+                      // The rack sits under its own Audio heading at the foot
+                      // of the stack (AP5, "the stack is the rack"): an audio
+                      // plugin is an ordinary stack entry, so its card is the
+                      // same card, and only where it is *listed* changes. The
+                      // indices stay stack indices, which is what keeps a drag
+                      // within the group a reorder of the chain.
+                      for (final index in _stackIndices(info.effects,
+                          audio: false))
+                        _effectCard(context, ui, comp, layer, info, index),
+                      if (_stackIndices(info.effects, audio: true)
+                          case final rack when rack.isNotEmpty) ...[
+                        _audioGroupHeading(context),
+                        if (_isOpen('audio-group'))
+                          for (final index in rack)
+                            _effectCard(context, ui, comp, layer, info, index),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The stack positions of the audio-typed entries, or of everything else —
+  /// two walks of a list the model already holds, no bridge call (K-184).
+  List<int> _stackIndices(List<BridgeEffectInstanceInfo> effects,
+          {required bool audio}) =>
+      [
+        for (var i = 0; i < effects.length; i++)
+          if (isAudioEffectName(effects[i].name) == audio) i,
+      ];
+
+  /// The Audio heading over the rack, twirling like every other heading.
+  Widget _audioGroupHeading(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final open = _isOpen('audio-group');
+    return GestureDetector(
+      key: const ValueKey('fx-audio-group'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _toggle('audio-group'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+        child: Row(
+          children: [
+            lumitIcon(
+              open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+              size: iconSize,
+              color: t.textMuted,
+            ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: Text(
+                l10n.workspaceAudio,
+                style: t.small.copyWith(color: t.textMuted),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One effect's card, wherever it is listed — under the stack or under the
+  /// Audio heading. `index` is the effect's **stack** position, which is what
+  /// every command on the card acts through.
+  Widget _effectCard(
+    BuildContext context,
+    LumitUiState ui,
+    CompositionReference comp,
+    LayerReference layer,
+    BridgeLayerInfo info,
+    int index,
+  ) {
+    final playhead = ui.playheadFrame.value;
+    return _WhenPicked(
                           key: ValueKey<String>('fx-pick-$index'),
                           picked: ui.selectedEffects,
                           id: info.effects[index].id,
@@ -842,16 +921,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             }
                             setState(() => _actionPressed += 1);
                           },
-                        ),
-                        ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+                        ));
   }
 }
 
@@ -1000,7 +1070,15 @@ Future<void> _showAddMenu(
   final headings = <String, String>{};
   for (final e in listEffects()) {
     grouped.putIfAbsent(e.category, () => []).add(e);
-    headings[e.category] = engineLabel(e.categoryLabel);
+    // A plugin group can arrive unheaded — audio plugins always do, an OFX
+    // one that declared no grouping can — and a submenu with a blank name is
+    // a door nobody can find, so the panel words it the way the browser does
+    // (AP5).
+    headings[e.category] = e.categoryLabel.isEmpty
+        ? (e.namespace == 'audio'
+            ? l10n.effectsAudioPlugins
+            : l10n.effectsPlugins)
+        : engineLabel(e.categoryLabel);
   }
 
   await showLumitPopup<void>(

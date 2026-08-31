@@ -279,6 +279,7 @@ pub fn chain_bake(
         .map(|(_, _, processor)| processor.latency() as usize)
         .sum::<usize>();
     let blocks = (frames + latency).div_ceil(AUDIO_BLOCK_FRAMES);
+    let ids: Vec<Uuid> = opened.iter().map(|(instance, _, _)| instance.id).collect();
     let links: Vec<lumit_core::fx::ChainLink> = opened
         .into_iter()
         .map(|(instance, def, processor)| lumit_core::fx::ChainLink {
@@ -287,6 +288,19 @@ pub fn chain_bake(
         })
         .collect();
     let out = lumit_core::fx::run_chain(&links, samples);
+    // The badge, per link (AP5, docs/12 §2.3): a link that shipped any block
+    // dry files the host's own sentence against *its* instance — the same
+    // table an OFX frame files into, read by the same `badge_of` — and a link
+    // whose every block came back takes any stale badge off. Filed here, on
+    // the bake, because this is the one place that knows which link refused.
+    for ((id, dry), link) in ids.iter().zip(&out.dry_by_link).zip(&links) {
+        let sentence = (*dry > 0).then(|| {
+            link.processor
+                .last_error()
+                .unwrap_or_else(|| "the plugin did not process this sound".to_owned())
+        });
+        crate::gpufx::ofx::note(*id, sentence);
+    }
     Some((out.samples, out.latency))
 }
 
@@ -2708,7 +2722,9 @@ mod tests {
                 blend: Default::default(),
                 masks: Vec::new(),
                 paint: Vec::new(),
+                puppet: None,
                 effects: Vec::new(),
+                styles: Vec::new(),
                 switches: Switches::default(),
                 extra: serde_json::Map::new(),
             }],

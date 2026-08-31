@@ -67,6 +67,15 @@ List<BridgeEffectInfo> aCatalogueWithPlugins() => [
         categoryLabel: '',
         namespace: 'ofx',
       ),
+      // An audio plugin (AP5): one Audio plugins group for the lot, unheaded
+      // by the engine so the panel words it, beside the OFX groups.
+      entry(
+        name: 'clap:com.example.eq',
+        label: 'Example EQ',
+        category: 'audio',
+        categoryLabel: '',
+        namespace: 'audio',
+      ),
     ];
 
 void main() {
@@ -173,6 +182,121 @@ void main() {
       await rightClick('blur');
       expect(find.text('Built in'), findsOneWidget);
       expect(find.text('Switch this plugin off'), findsNothing);
+    });
+
+    /// The browser's share of AP5: an audio plugin lists under the one Audio
+    /// plugins heading — K-594's grammar, a group that folds like any other —
+    /// and its context menu says where it came from and offers the switch.
+    testWidgets(
+        'an audio plugin heads the Audio plugins group and can be '
+        'switched off', (tester) async {
+      final p = freshProject();
+      await mount(tester, p);
+
+      expect(find.text('Audio plugins'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
+          findsOneWidget);
+
+      // The group folds exactly as a category does.
+      await tester.tap(find.byKey(const ValueKey('fx-group-audio')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('fx-item-clap:com.example.eq')),
+          findsNothing);
+      await tester.tap(find.byKey(const ValueKey('fx-group-audio')));
+      await tester.pump();
+
+      final gesture = await tester.startGesture(
+          tester.getCenter(
+              find.byKey(const ValueKey('fx-item-clap:com.example.eq'))),
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton);
+      await gesture.up();
+      await tester.pump();
+      expect(find.text('From an audio plugin'), findsOneWidget,
+          reason: 'the provenance names the kind of plugin');
+      expect(find.text('Switch this plugin off'), findsOneWidget,
+          reason: 'the disable toggle is per plugin, in the same menu');
+      closeLumitPopups();
+      await tester.pump();
+    });
+  }, skip: !engineAvailable);
+
+  group('the Audio group in Effect controls (frb)', () {
+    /// A layer whose stack holds one picture effect and one audio plugin —
+    /// the plugin as a saved project would carry it, so no plugin need be
+    /// installed on the machine running this (docs/12 §1's placeholder).
+    ({LumitState state, LumitUiState uiState, dynamic layer}) withRack() {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      comp.addFootageLayer(footage: footage, asSequence: false);
+      final layer = comp.getLayers().single;
+      layer.addEffect(name: 'blur');
+      layer.loadPreset(
+          text: '{"format":1,"name":"rack","effects":[{'
+              '"id":"018f0000-0000-7000-8000-000000000001",'
+              '"effect":{"namespace":"Clap",'
+              '"match_name":"clap:com.example.eq","version":1},'
+              '"enabled":true,"params":[]}]}');
+      p.uiState
+        ..setSelectedComp(comp)
+        ..selectedLayer.value = layer;
+      p.uiState.model.refresh();
+      return (state: p.state, uiState: p.uiState, layer: layer);
+    }
+
+    testWidgets(
+        'an audio plugin card sits under the Audio heading, wears the calm '
+        'badge for a missing plugin, and the heading twirls', (tester) async {
+      final p = withRack();
+      await tester.pumpWidget(hostPanel(
+        child: const EffectControlsPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('fx-audio-group')), findsOneWidget,
+          reason: 'a stack with an audio entry grows the Audio heading');
+      expect(find.byKey(const ValueKey('fx-card-1')), findsOneWidget,
+          reason: 'the plugin card is an ordinary card, at its stack index');
+      expect(find.byKey(const ValueKey('fx-card-0')), findsOneWidget,
+          reason: 'the picture effect stays in the stack above');
+
+      // The machine running this has no such plugin, so the card wears the
+      // calm badge the OFX grammar defined — rows kept, nothing lost.
+      expect(find.text('This plugin is not installed on this machine'),
+          findsOneWidget);
+
+      // The heading twirls its rack away and back, leaving the stack alone.
+      await tester.tap(find.byKey(const ValueKey('fx-audio-group')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('fx-card-1')), findsNothing);
+      expect(find.byKey(const ValueKey('fx-card-0')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('fx-audio-group')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('fx-card-1')), findsOneWidget);
+    });
+
+    testWidgets('a stack with no audio entry grows no Audio heading',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      comp.addFootageLayer(footage: footage, asSequence: false);
+      final layer = comp.getLayers().single;
+      layer.addEffect(name: 'blur');
+      p.uiState
+        ..setSelectedComp(comp)
+        ..selectedLayer.value = layer;
+      p.uiState.model.refresh();
+      await tester.pumpWidget(hostPanel(
+        child: const EffectControlsPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('fx-audio-group')), findsNothing);
     });
   }, skip: !engineAvailable);
 

@@ -444,7 +444,10 @@ waits on a plugin process, and a dying plugin costs one block (played dry, rampe
 the session. Latency is compensated by placement; export processes offline on the same
 block schedule and is the preview's own arithmetic rather than a second opinion. v1 hosts stereo effect plugins with
 parameters-only UI (derived rows); the plugin's own native editor window is a recorded
-follow-on, not a v1 promise.
+follow-on, not a v1 promise. The surface (K-709): one **Audio plugins** group in the
+browser with §2.6's provenance-and-switch-off menu, the layer's rack under an Audio
+heading in Effect controls as ordinary cards, the §2.3 calm badge fed by the mix bake,
+and a small chain chip on the Mixer strip.
 
 [impl/audio-plugins.md](impl/audio-plugins.md) is the binding note: APIs, isolation,
 mix seam, contracts, traps, test plans, and the work packages AP1–AP5.

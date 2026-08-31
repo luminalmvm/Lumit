@@ -10903,6 +10903,163 @@ fn a_plugin_can_be_switched_off_and_the_answer_holds_immediately() {
     assert!(!lumit_ofx::discover::is_disabled("blur"));
 }
 
+/// Register one stand-in **audio** plugin definition under `name` — the shape
+/// the scan registers, minus the broker, so these tests need no plugin
+/// installed. Registration is by name and additive, so each test takes names
+/// of its own.
+fn register_audio_def(name: &'static str, label: &'static str) {
+    struct AudioDef(&'static lumit_core::fx::EffectSchema);
+    impl lumit_core::fx::EffectDef for AudioDef {
+        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+            self.0
+        }
+        fn is_image_op(&self) -> bool {
+            false
+        }
+    }
+    let schema: &'static lumit_core::fx::EffectSchema =
+        Box::leak(Box::new(lumit_core::fx::EffectSchema {
+            match_name: name,
+            label,
+            version: 1,
+            category: lumit_core::fx::FxCategory::Utility,
+            traits: lumit_core::fx::EffectTraits {
+                cost: lumit_core::fx::CostClass::Heavy,
+                roi: lumit_core::fx::Roi::FullFrame,
+                temporal: &[0],
+                premultiplied: true,
+                seeded: false,
+                beat_input: false,
+            },
+            params: Box::leak(Box::new([lumit_core::fx::ParamSchema {
+                id: "p1",
+                label: "Gain",
+                kind: lumit_core::fx::ParamKind::Slider {
+                    default: 1.0,
+                    range: (0.0, 4.0),
+                },
+                unit: lumit_core::fx::Unit::Raw,
+            }])),
+            groups: &[],
+            enabled_when: &[],
+            matte: lumit_core::fx::MatteRole::None,
+        }));
+    lumit_core::fx::BUILTIN_DEFS.register(Box::leak(Box::new(AudioDef(schema))));
+}
+
+/// **The browser's share of AP5, bridge side**: an audio plugin lists under
+/// the one Audio plugins group with its provenance, its rows appear and take
+/// a write like any effect's, and the switch-off answers at once with the
+/// calm `plugin_disabled` badge on every instance — then comes off again.
+#[test]
+fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
+    register_audio_def("clap:com.lumitlab.aptest", "Test EQ");
+
+    let plugin = list_effects()
+        .into_iter()
+        .find(|e| e.name == "clap:com.lumitlab.aptest")
+        .expect("the registered audio plugin is in the one listing the browser reads");
+    assert_eq!(
+        plugin.namespace,
+        crate::api::effect::NAMESPACE_AUDIO,
+        "the provenance rides on the listing"
+    );
+    assert_eq!(
+        plugin.category, "audio",
+        "one group for every audio plugin, beside the OFX ones"
+    );
+    assert_eq!(
+        plugin.category_label, "",
+        "unheaded on purpose: the frontend words the Audio plugins heading"
+    );
+
+    // Its rows appear on an instance and take a write, exactly as a
+    // built-in's do — the stack is the rack.
+    let (_project, layer) = project_with_layer();
+    layer
+        .add_effect("clap:com.lumitlab.aptest".into())
+        .expect("an audio plugin is an ordinary stack entry");
+    let stack = layer.get_effects().expect("stack");
+    let info = stack[0].get_info();
+    assert!(
+        info.values.iter().any(|v| v.id == "p1"),
+        "the plugin's own row crossed with a value to draw"
+    );
+    assert_eq!(info.badge_reason, None, "a working plugin wears no badge");
+    let mut stack = stack;
+    stack[0]
+        .set_value(
+            "p1".to_owned(),
+            BridgeEffectValue::Float(BridgeScalar::Static(2.5)),
+        )
+        .expect("a plugin row takes a write like any other");
+    layer.set_effects(stack).expect("committed");
+    assert_eq!(
+        layer.get_effects().expect("stack")[0]
+            .get_value("p1".to_owned())
+            .expect("read back"),
+        BridgeEffectValue::Float(BridgeScalar::Static(2.5))
+    );
+
+    // Switch it off: the session list holds the bare identifier, and every
+    // instance wears the calm badge at once — the layer keeps its rows.
+    let _ = crate::api::effect::set_plugin_enabled("clap:com.lumitlab.aptest".to_owned(), false);
+    assert!(lumit_aplug::session_disabled()
+        .lock()
+        .expect("list")
+        .contains("com.lumitlab.aptest"));
+    let off = crate::api::effect::read_instance_info(
+        &stack_of(&layer)[0],
+        lumit_core::time::Rational::ZERO,
+    );
+    assert_eq!(off.badge_reason.as_deref(), Some("plugin_disabled"));
+    assert_eq!(off.badge_detail, None);
+
+    let _ = crate::api::effect::set_plugin_enabled("clap:com.lumitlab.aptest".to_owned(), true);
+    let back = crate::api::effect::read_instance_info(
+        &stack_of(&layer)[0],
+        lumit_core::time::Rational::ZERO,
+    );
+    assert_eq!(back.badge_reason, None, "switching back on lifts the badge");
+}
+
+/// **Reordering the insert chain is one undo step** (AP5): the chain is the
+/// audio-typed subset of the stack in stack order, a reorder is the same
+/// `SetLayerEffects` every stack edit is, and one undo puts the whole rack
+/// back.
+#[test]
+fn reordering_the_insert_chain_is_one_undo_step() {
+    register_audio_def("clap:com.lumitlab.chain.eq", "Chain EQ");
+    register_audio_def("clap:com.lumitlab.chain.comp", "Chain compressor");
+
+    let (project, layer) = project_with_layer();
+    layer
+        .add_effect("clap:com.lumitlab.chain.eq".into())
+        .expect("added");
+    layer
+        .add_effect("clap:com.lumitlab.chain.comp".into())
+        .expect("added");
+    let rack = stack_of(&layer);
+    assert_eq!(rack.len(), 2);
+
+    layer
+        .reorder_effect(&layer.get_effects().expect("stack")[0], 1)
+        .expect("reordered");
+    let swapped = stack_of(&layer);
+    assert_eq!(
+        (swapped[0].id, swapped[1].id),
+        (rack[1].id, rack[0].id),
+        "the chain plays in the new order"
+    );
+
+    undo_once(&project);
+    assert_eq!(
+        stack_of(&layer),
+        rack,
+        "one undo restores the whole rack, not half of it"
+    );
+}
+
 /// The badge path, end to end through the bridge: a plugin whose render fails
 /// hands back its input unchanged, the comp carries on, and **the layer wears a
 /// badge with the plugin's own sentence under it** (docs/12 §2.3, the Gate-4

@@ -562,14 +562,24 @@ impl EffectDef for AudioEffectDef {
         values: &[(ParamId, f64)],
         offline: bool,
     ) -> Option<Arc<dyn AudioProcessor>> {
+        // A switched-off plugin is refused before any of its code runs (K-594's
+        // rule, kept for audio): the chain heals around the missing link, the
+        // sound goes through dry, and the badge comes from the bridge reading
+        // the same list rather than from a block that was never asked for.
+        if crate::ipc::broker::session_disabled()
+            .lock()
+            .is_ok_and(|list| list.contains(&self.plugin_id))
+        {
+            return None;
+        }
         let broker = crate::ipc::broker::module_broker(&self.module).ok()?;
         let mut setup = self.setup(state, values);
         setup.offline = offline;
         let host = BrokerHost::open(broker, &setup).ok()?;
-        Some(Arc::new(HostedAudio {
-            host: Box::new(host),
-            routes: self.routes.clone(),
-        }))
+        Some(Arc::new(HostedAudio::new(
+            Box::new(host),
+            self.routes.clone(),
+        )))
     }
 }
 
@@ -583,6 +593,10 @@ impl EffectDef for AudioEffectDef {
 pub struct HostedAudio {
     host: Box<dyn AudioHost>,
     routes: Vec<ValueRoute>,
+    /// The sentence the most recent refused block carried, for the calm badge
+    /// (AP5). Behind a mutex because [`AudioProcessor::process`] takes `&self`;
+    /// uncontended by construction — one instance is driven by one bake.
+    last_error: Mutex<Option<String>>,
 }
 
 impl HostedAudio {
@@ -590,7 +604,11 @@ impl HostedAudio {
     /// [`LocalHost`] through the mixer's own seam without a broker process.
     #[must_use]
     pub fn new(host: Box<dyn AudioHost>, routes: Vec<ValueRoute>) -> Self {
-        Self { host, routes }
+        Self {
+            host,
+            routes,
+            last_error: Mutex::new(None),
+        }
     }
 }
 
@@ -616,10 +634,24 @@ impl AudioProcessor for HostedAudio {
                 })
             })
             .collect();
-        self.host.process(input, output, &events, steady).is_ok()
+        match self.host.process(input, output, &events, steady) {
+            Ok(()) => true,
+            Err(error) => {
+                // Kept, not shown: the bake that ships the block dry reads it
+                // off the link and files the badge (AP5).
+                if let Ok(mut held) = self.last_error.lock() {
+                    *held = Some(error.to_string());
+                }
+                false
+            }
+        }
     }
 
     fn latency(&self) -> u32 {
         self.host.latency()
+    }
+
+    fn last_error(&self) -> Option<String> {
+        self.last_error.lock().ok()?.clone()
     }
 }

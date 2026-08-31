@@ -624,9 +624,50 @@ a plugin speaks is carried by the match name's prefix and by nothing else: the n
 `EffectKey` is `Clap` for both, because the namespace answers "is this an audio plugin",
 which is the only question anything downstream asks.
 
+**The panel surface added no calls either (K-709, AP5).** What changed is what existing
+answers say: `list_effects` gives an audio plugin `namespace: "audio"`, `category:
+"audio"` and an **empty** `category_label` — one group for every audio plugin, worded by
+the frontend ("Audio plugins"), because neither standard declares a menu path the way OFX
+does. The calm badge reads through the same two fields OFX uses: a chain bake that
+shipped a link's block dry files `plugin_failed` with the host's sentence against that
+instance, and a switched-off audio plugin answers `plugin_disabled` straight off the
+session list. Switching one off also changes the mix signature of any comp whose chain
+holds it, so the next `audio_prepare` re-bakes without it — the frontend calls that after
+flicking the switch.
+
 The one thing that crosses **nowhere** is a plugin's opaque state blob: it is a field on
 the effect instance, written into the `.lum` and handed back to the plugin, and no panel
 has any business reading it.
+
+### The puppet: pins cross, triangles never do (K-704)
+
+`docs/impl/puppet.md` §4's block reaches the frontend as `BridgePuppet` — a reference time,
+a density, an expansion and a list of `BridgePuppetPin` — and **no mesh crosses this seam
+in either direction**. The triangles are rebuilt engine-side from the layer's own alpha and
+cached there, so a future triangulator changes nothing in any saved project *and* nothing
+in any panel; the overlay's ghost will ride the per-frame overlay data the transform gizmos
+already use (PU3), not a mesh fetched per rebuild.
+
+Five calls on `LayerReference`, all shaped like the mask ones and for the same reason —
+each commits one `Op::SetLayerPuppet`, which replaces the whole block and is exactly
+invertible, so every puppet edit is one undo step:
+
+- `get_puppet()` answers `None` on a layer nobody has pinned, which is most layers.
+- `set_puppet(Some(block))` makes the block, changes its density or expansion, or replaces
+  it wholesale; `set_puppet(None)` takes it away, which is what undoing the first pin
+  means. The **first pin is what creates the block**, because only the click that places it
+  knows the reference time — so `add_puppet_pin` on a layer with no block is a calm
+  `NoPuppet`, not an invented one.
+- `add_puppet_pin(pin)`, `set_puppet_pin(pin)` and `delete_puppet_pin(id)` are the pin
+  edits. **Moving a pin is `set_puppet_pin`**: its `x`/`y` are ordinary `BridgeScalar`
+  channels, so a drag with the stopwatch on lands a keyframe through exactly the machinery
+  a mask's opacity uses, and `NoSuchPin` is the calm answer to a stale id.
+
+Two conventions this seam keeps rather than invents. Every time on it is **composition**
+time, carried across the layer's start offset (K-213) — the pins' keyframes and the block's
+reference time alike. And every position is **layer pixels**, never per cent: a point
+parameter is pixels everywhere in Lumit, and the mesh lives in the layer's own pixels at
+natural size.
 
 ### The camera track: an event down, readings up (K-417)
 

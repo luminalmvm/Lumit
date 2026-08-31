@@ -99,6 +99,15 @@ pub trait AudioProcessor: Send + Sync {
     fn latency(&self) -> u32 {
         0
     }
+
+    /// The sentence the most recent refused block carried, where the host kept
+    /// one — what the calm badge shows underneath its reason (AP5,
+    /// docs/12 §2.3). `None` for a processor that has never refused a block,
+    /// and for one with no words about it, which the badge draws as the reason
+    /// alone.
+    fn last_error(&self) -> Option<String> {
+        None
+    }
 }
 
 /// One link of a chain: a live processor and what its rows hold, block by
@@ -120,6 +129,10 @@ pub struct ChainOutput {
     /// How many blocks came back dry — nought is the ordinary answer, and
     /// anything else is what badges the layer.
     pub dry_blocks: usize,
+    /// The same count told per link, in chain order — which is what lets the
+    /// badge land on the effect that refused rather than on the whole rack
+    /// (AP5). Empty for an empty chain.
+    pub dry_by_link: Vec<usize>,
     /// The chain's summed latency in frames. The caller places the processed
     /// sound this many frames earlier.
     pub latency: u32,
@@ -141,6 +154,7 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
         return ChainOutput {
             samples: input.to_vec(),
             dry_blocks: 0,
+            dry_by_link: vec![0; chain.len()],
             latency: 0,
         };
     }
@@ -158,8 +172,9 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
     let mut dst = vec![0.0f32; padded];
     let mut wet = vec![false; blocks];
     let mut dry_blocks = 0usize;
+    let mut dry_by_link = vec![0usize; chain.len()];
 
-    for link in chain {
+    for (li, link) in chain.iter().enumerate() {
         for (b, flag) in wet.iter_mut().enumerate() {
             let at = b * AUDIO_BLOCK_SAMPLES;
             let end = at + AUDIO_BLOCK_SAMPLES;
@@ -175,6 +190,7 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
             if !*flag {
                 dst[at..end].copy_from_slice(&src[at..end]);
                 dry_blocks += 1;
+                dry_by_link[li] += 1;
             }
         }
         splice(&mut dst, &src, &wet);
@@ -185,6 +201,7 @@ pub fn run_chain(chain: &[ChainLink], input: &[f32]) -> ChainOutput {
     ChainOutput {
         samples: src,
         dry_blocks,
+        dry_by_link,
         latency,
     }
 }

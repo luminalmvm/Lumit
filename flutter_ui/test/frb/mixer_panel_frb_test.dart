@@ -2,6 +2,9 @@
 // there, the fader that writes the master gain (K-691), and the K-681 gate —
 // a meter tick repaints the meter band and nothing else.
 
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -152,5 +155,89 @@ void main() {
       // The engine has no mix loaded in a test, so the reset is a no-op —
       // the point is that the tap route exists and does not throw.
     });
+
+    /// The chain indicator (AP5): a strip whose layer plays through audio
+    /// plugins wears a small FX chip saying how many; bypassing the whole
+    /// rack takes it off, because a chip about sound that is not in the sound
+    /// would be a lie.
+    testWidgets('a strip wears the chain chip while its rack plays',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Mix');
+      final music = p.state.project!.importFootage(path: _toneWavFile());
+      comp.addFootageLayer(footage: music, asSequence: false);
+      final layer = comp.getLayers().single;
+      // The plugin as a saved project carries it — no plugin installed on
+      // this machine, which is exactly the placeholder whose chain entry the
+      // chip still counts: the rack is the stack, not the broker.
+      layer.loadPreset(
+          text: '{"format":1,"name":"rack","effects":[{'
+              '"id":"018f0000-0000-7000-8000-000000000002",'
+              '"effect":{"namespace":"Clap",'
+              '"match_name":"clap:com.example.eq","version":1},'
+              '"enabled":true,"params":[]}]}');
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+      final feed = handFeed();
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: MixerPanelFrb(feed: feed),
+      ));
+      // The has-audio probe is a real trip into FFmpeg; the strip appears
+      // once it answers.
+      await settleFrb(tester, minRounds: 8);
+
+      final id = layer.internallayerId;
+      expect(find.byKey(ValueKey('chain-$id')), findsOneWidget,
+          reason: 'the layer plays through one plugin, so the strip says so');
+      expect(find.text('FX 1'), findsOneWidget);
+
+      // Bypass the one link: the rack is empty of playing plugins, and the
+      // chip goes with it.
+      final stack = layer.getEffects();
+      layer.setEffectEnabled(effect: stack.single, enabled: false);
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(find.byKey(ValueKey('chain-$id')), findsNothing);
+    });
   });
+}
+
+/// A real, probeable WAV: half a second of 8 kHz mono square wave, the same
+/// fixture the volume band test writes. Synchronous on purpose — an awaited
+/// async `dart:io` call in a `testWidgets` body hangs the test outright.
+String _toneWavFile() {
+  final dir = Directory.systemTemp.createTempSync('lumit-mixer');
+  final file = File('${dir.path}/tone.wav');
+  const rate = 8000;
+  const samples = 4000;
+  const dataBytes = samples * 2;
+  final out = BytesBuilder();
+  void ascii(String s) => out.add(s.codeUnits);
+  void u16(int v) => out.add([v & 0xff, (v >> 8) & 0xff]);
+  void u32(int v) =>
+      out.add([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff]);
+  ascii('RIFF');
+  u32(36 + dataBytes);
+  ascii('WAVE');
+  ascii('fmt ');
+  u32(16);
+  u16(1);
+  u16(1);
+  u32(rate);
+  u32(rate * 2);
+  u16(2);
+  u16(16);
+  ascii('data');
+  u32(dataBytes);
+  final data = Uint8List(dataBytes);
+  for (var i = 0; i < samples; i++) {
+    final v = (i ~/ 9).isEven ? 12000 : -12000;
+    data[i * 2] = v & 0xff;
+    data[i * 2 + 1] = (v >> 8) & 0xff;
+  }
+  out.add(data);
+  file.writeAsBytesSync(out.toBytes());
+  return file.path;
 }

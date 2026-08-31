@@ -29,6 +29,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/audio_effects.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
@@ -257,6 +258,34 @@ class _MixerStripState extends State<_MixerStrip> {
                 ),
               ),
               const SizedBox(height: 6),
+              // The chain indicator (AP5, the board's small mark): the strip
+              // says the layer's sound goes through plugins without listing
+              // them — the stack is the rack, and Effect controls is where the
+              // rack is worked. Enabled entries only, because a fully bypassed
+              // chain is not in the sound.
+              if (info.effects
+                      .where((e) => e.enabled && isAudioEffectName(e.name))
+                      .length
+                  case final chain when chain > 0) ...[
+                LumitTooltip(
+                  message: l10n.mixerChain(chain),
+                  child: Container(
+                    key: ValueKey('chain-$id'),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: t.hairlineStrong),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      'FX $chain',
+                      style: t.mono
+                          .copyWith(fontSize: 9, color: t.textMuted),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               _PanPot(
                 key: ValueKey('pot-$id'),
                 value: panValue,

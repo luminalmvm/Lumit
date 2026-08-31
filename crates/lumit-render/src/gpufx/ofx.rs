@@ -104,7 +104,12 @@ pub fn apply_and_note(
 }
 
 /// Record, or clear, one op's failure.
-fn note(instance: Uuid, error: Option<String>) {
+///
+/// Public because the **audio** chain files into the same table (AP5): a plugin
+/// whose block shipped dry is the same kind of news as a plugin whose frame
+/// did, `badge_of` reads one table, and a second table would be a second answer
+/// to "did this instance do its own work".
+pub fn note(instance: Uuid, error: Option<String>) {
     let Ok(mut table) = ERRORED.lock() else {
         return;
     };

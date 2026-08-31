@@ -1,7 +1,8 @@
 # Audio plugin hosting: CLAP and VST3 (K-683)
 
-**Built so far: AP1 (K-692), AP2 (K-696), AP3 (K-700) and AP4 (K-707).** §1–§5 and §7
-plans 1–7 describe code that exists, for **both** standards; §6 and AP5 are still design.
+**Built so far: AP1 (K-692), AP2 (K-696), AP3 (K-700), AP4 (K-707) and AP5 (K-709) —
+every numbered package.** §1–§5 and §7 plans 1–7 describe code that exists, for **both**
+standards; §6's plugin GUI window is the one remaining design, recorded as the follow-on.
 **Two things AP3 settled differently from the words below, both recorded in K-700 and
 marked where they occur:**
 §3's per-layer chain worker and lookahead ring are *not* built — a layer's chain is baked
@@ -87,7 +88,9 @@ glossary's Effect already admits audio operations; an audio plugin instance is a
 in the layer's ordinary effect stack, and the layer's insert chain *is* the audio-typed
 subset of that stack in stack order. Which entries are audio is one question asked in one
 place: `EffectDef::open_audio`, which every built-in answers `None` (K-700). That is also
-why AP3 needed no bridge API — the effect-stack calls already read and write the chain. Effect controls shows its rows like any effect's; the
+why AP3 needed no bridge API — the effect-stack calls already read and write the chain. Effect controls shows its rows like any effect's — since AP5
+gathered under an **Audio** heading at the foot of the stack, ordinary cards at their
+stack indices, so a drag within the group is a reorder of the chain (K-709); the
 Graph panel shows it as a node (mint audio family, K-472). An audio effect on a layer
 with no sound is inert with the same calm the visibility switch rules use (K-435).
 Sequence layers take the chain on the layer's mixed output (after clip retiming), exactly
@@ -185,8 +188,9 @@ a stable id string of its own; a VST3 class has a 16-byte class id, so a VST3 pl
 identifier is **that class id as 32 hex digits**, its match name is `vst3:<those digits>`,
 and that is what the switched-off list holds and a saved project stores (K-707). Neither
 standard's parameter *groups* fully survive in v1: CLAP's `module` path becomes the panel's
-twirls, and VST3's units need `IUnitInfo`, which is AP5's question — its rows are top-level
-until then.
+twirls, and VST3's rows are **top-level** — AP5 answered its own question by not binding
+`IUnitInfo` (K-709): the rows read fine flat, and a whole extra COM interface for twirl
+headings is not v1 weight. Bind it when a real plugin's panel is unusable without it.
 
 Latency is asked for **only while the plugin is active**: CLAP's `latency.get` is an
 active-state call and a describe never activates, so a descriptor records *whether* a
@@ -331,7 +335,7 @@ not broken. Recorded in K-683 so nobody discovers the gap in a release note.
 | AP2 | Broker isolation ✅ | `lumit-aplug-broker`: pipe + block ring + watchdog + disable list + quirks table + brokered scan; plan 5 (K-696) |
 | AP3 | Mix-graph seam ✅ | `EffectDef::open_audio` + `fx::audio_chain`: whole-span bake (no worker or ring, K-700), dry fallback with a linear splice, latency shift, per-block param envelopes read through the driver walk, `plugin_state` in the `.lum`, offline bake, CLAP registered from the bridge; plans 3, 4 (K-700) |
 | AP4 | VST3 host ✅ | `lumit-aplug::vst3` + `abi`: bundle layout, factory, component/controller wiring, stereo bus arrangement, normalised/plain at the boundary, per-block queues, two-blob state, through the same broker binary and the same seam; the in-tree fixture wears both faces; plans 1, 2, 6, 7 for VST3 and plan 5 through `run_chain` (K-707). Plans 8 and 9 — the conformance bench and the manual pass against real plugins — still owed |
-| AP5 | Panel surface | Effects & presets audio category, rows in Effect controls, badges, per-plugin disable UI, arb keys; GUI window recorded as the follow-on |
+| AP5 | Panel surface ✅ | One Audio plugins group in Effects & presets and the Add effect menu (namespace `audio`, heading worded by the frontend), provenance + switch-off in the row's menu; the rack under an Audio heading at the foot of Effect controls' stack, ordinary cards at their stack indices; the calm badge fed by the chain bake (per-link dry blocks → the OFX errored table) and by the switched-off list; the switch folded into the mix signature so flicking it re-bakes; the Mixer strip's FX chip; VST3 rows stay top-level (no `IUnitInfo`); GUI window recorded as the follow-on (K-709) |
 
 ## 9. Traps, collected
 
