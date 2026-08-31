@@ -817,23 +817,27 @@ on every continuous gesture; WP-5 then removes the one remaining >17 ms frame cl
 ### 7.1 The upstream issue, drafted (WP-1) — not filed
 
 Ready to file at `flutter/flutter` when the owner chooses to; nobody posts it on the
-owner's behalf. Re-measure before filing if the Flutter version has moved.
+owner's behalf. Re-measure before filing if the Flutter version has moved. Rewritten
+2026-08-31 after the engine-build session: the MSAA hypothesis is now tested and out,
+the partial-repaint diagnosis is now tested and in.
 
-> **Title:** Impeller (OpenGLES) on Windows: ~25 ms raster per maximised frame vs
-> Skia's ~5 ms, +18 ms more while an external texture republishes
+> **Title:** Impeller (OpenGLES) on Windows: ~25–30 ms raster per maximised frame vs
+> Skia's ~5 ms — the whole window repaints every frame; a partial-repaint prototype
+> collapses it
 >
-> **Flutter:** 3.47, Windows 11, `flutter run --profile -d windows`.
+> **Flutter:** 3.47.1 (engine `5d531788…`), Windows 11, profile builds.
 > **Machine:** RTX 5080, 2560×1440 @ 165 Hz, OS scale 1.0 (dPR 1.0).
 > **App:** a desktop editor with a timeline panel of ~57 visible rows and a Viewer
 > showing engine-rendered frames through an external texture (`FlutterDesktopTexture`,
 > D3D shared surfaces).
 >
 > **What happens.** With the default backend, every continuous UI gesture (Ctrl+wheel
-> zoom, a playhead drag, a handle drag) spends 30–49 ms on the raster thread per frame
-> at a maximised window, landing many vsyncs late — 20–30 fps. UI-thread build times
-> for the same frames are 4–11 ms, so the app is not the bottleneck. Passing
-> `--no-enable-impeller` runs the identical build and identical gestures at 99–146 fps
-> with 5 ms raster.
+> zoom, a playhead drag, a handle drag) costs ~25–30 ms on the raster thread per frame
+> at a maximised window, landing many vsyncs late — 20–36 fps. UI-thread build times
+> for the same frames are 4–11 ms, so the app is not the bottleneck; a view reduced to
+> a single `CustomPaint` pays nearly the same, so it is not widget count either.
+> Passing `--no-enable-impeller` runs the identical build and identical gestures at
+> 99–146 fps with ~5 ms raster.
 >
 > | Gesture (maximised, live preview) | Impeller GLES — fps / raster med / span med | Skia — fps / raster med / span med |
 > |---|---|---|
@@ -843,36 +847,67 @@ owner's behalf. Re-measure before filing if the Flutter version has moved.
 > | Single-`CustomPaint` view, same gestures | 27.9 / 33.0 ms / 63.7 ms | 114.3 / 4.8 ms / 9.9 ms |
 > | Frames > 17 ms, one 2.5 s drag | 72 of 72 | 0 of 409 |
 >
-> **Two separable costs, both raster-thread.** (1) *Window area:* the same gesture in a
-> 1280×720 window rasters 10.5 ms and at 2560×1369 rasters 30.0 ms, with nothing else
-> changed — ~3×, roughly area-proportional, while Skia's stays ~5 ms at both.
-> (2) *A republishing external texture:* with the same maximised window, media missing
-> so the texture presents a static placeholder, raster is 30.0 ms; with the texture
-> republishing each rendered frame it is 48.8 ms — **~18 ms per frame** for the presence
-> of new texture content. Skia pays ~nothing for the same traffic (5.1 vs 5.0 ms), and
-> the split is the same whether frames are freshly rendered or replayed from a cache,
-> which points at the compositor's handling of the updated texture rather than at
-> production of the frames.
+> (Measured before a round of app-side paint reductions; after them the same gestures
+> sit at 25–30 ms raster — the floor moves a little, the ratio to Skia does not.)
 >
-> **Repro sketch.** A maximised Windows window; a scrolling/zooming widget band covering
-> most of it; an external texture updated every frame via
-> `TextureRegistrar::MarkTextureFrameAvailable`; drive a continuous pointer drag and read
-> `FrameTiming.rasterDuration`. The ~3× window-area term reproduces without the texture;
-> the ~18 ms term needs the texture republishing.
+> **The cost scales with window area.** The same gesture in a 1280×720 window rasters
+> 10.5 ms and at 2560×1369 rasters 30.0 ms with nothing else changed — roughly
+> area-proportional, ≈ 8 ms per megapixel, while Skia stays ~5 ms at both sizes. An
+> earlier session also measured ~18 ms per frame attributable to a republishing
+> external texture; the latest session could not reproduce that term (live and empty
+> preview within 1 ms of each other on the same build and layout), so treat it as
+> unconfirmed — the area-proportional floor is the reproducible cost.
 >
-> **Two embedder details that look implicated**, from
-> `shell/platform/windows/compositor_opengl.cc`: with Impeller the backing store is a
-> 4× MSAA offscreen colour renderbuffer plus a 4× MSAA depth/stencil renderbuffer at
-> full window size, resolve-blitted to the window in `Present` every frame, where the
-> Skia branch of the same function uses a single-sample texture FBO; and the Windows
-> embedder has no damage/partial-repaint plumbing on either backend, so every frame
-> pays the whole window. The measured cost works out at ≈ 8 ms per megapixel.
+> **The MSAA resolve is not the cost — tested.** A plausible reading of
+> `shell/platform/windows/compositor_opengl.cc` blames the Impeller path's 4× MSAA
+> offscreen (colour + depth/stencil renderbuffers at full window size,
+> resolve-blitted in `Present` each frame) against the Skia branch's single-sample
+> texture FBO. A local engine build of the shipped commit with the backing store
+> forced single-sample — no MSAA renderbuffers, no resolve — was A/B'd by swapping
+> `flutter_windows.dll` under the identical built app: the single-sample path
+> measured consistently ~5 ms *worse* (e.g. zoom 25.5 → 33.7 ms raster), visually
+> indistinguishable. The resolve is not where the time goes.
 >
-> **Impact.** The app ships on Impeller by choice and takes a factor of 5–7 in interface
-> frame rate for it on a high-end GPU — its 60 fps interface mandate is unreachable on
-> Windows today, and `--no-enable-impeller` is kept only as a reference measurement.
-> Happy to re-run this A/B, or a narrowed one, against any build you would like numbers
-> from.
+> **What the floor actually is: the whole window re-renders every frame.** The Windows
+> embedder runs the `FlutterCompositor` path, and on that path the engine's existing
+> partial-repaint machinery is unreachable: the rasterizer only computes frame damage
+> for surfaces that advertise `supports_partial_repaint` (the compositor's placeholder
+> frame does not), it force-disables partial repaint whenever an external view embedder
+> submits the frame (`shell/common/rasterizer.cc`), and
+> `EmbedderExternalViewEmbedder` re-records and re-renders the full display list into
+> the backing store unconditionally. So a one-pixel change repaints 3.5 megapixels.
+>
+> **A prototype confirms the diagnosis.** A local engine patch (~200 lines, gated
+> behind an environment variable) wires the existing layer-diff damage through the
+> compositor path: the placeholder frame advertises partial repaint, the rasterizer's
+> external-view-embedder exclusion is lifted, the cached backing store is treated as a
+> persistent buffer (`LoadAction::kLoad` on its colour attachment, no clear when
+> damage is partial, full-repaint fallback whenever backing-store continuity breaks —
+> new target, resize, failed present), and `Present` blits as before. Two Impeller
+> internals needed matching one-line exceptions: the first render pass of a frame
+> force-clears its colour attachment (`impeller/entity/inline_pass_context.cc`), and
+> full-cover background draws are folded into a pass clear colour that a loading pass
+> never applies (`impeller/display_list/canvas.cc`). With it, a test app with a heavy
+> static scene and one small animating widget goes from **62.5 ms to 1.85 ms** median
+> raster, pixel-identical output against stock (automated screenshot diff, zero
+> difference over 194k sampled pixels), surviving window resize. The prototype cuts
+> corners a proper implementation would not (single-view/no-platform-view guard, a
+> process-global continuity flag, no per-layer damage regions in `FlutterPresentInfo`)
+> — it is evidence, not a PR — but it shows the machinery is nearly all present and
+> the win on this backend is enormous.
+>
+> **Impact.** The app ships on Impeller by choice and takes a factor of 5–7 in
+> interface frame rate for it on a high-end GPU — its 60 fps interface mandate is
+> unreachable on Windows today, and `--no-enable-impeller` is kept only as a reference
+> measurement. Happy to re-run any A/B against a build you'd like numbers from, and to
+> share the spike patch.
+>
+> **Separate datum, possibly its own issue:** under an extreme widget-load bug (since
+> fixed app-side), the stock 3.47.1 `flutter_windows.dll` crashed four times in one
+> session (2026-08-31, 01:34–02:22) with `0xc0000005` at the identical offset
+> `0x2c57c7`, profile build — recorded in the Windows Event Log. An access violation
+> at one fixed offset under memory pressure looks diagnosable; the event records are
+> available on request.
 
 ### 7.2 WP-7 — the Impeller gap, still open
 
