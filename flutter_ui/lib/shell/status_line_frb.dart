@@ -9,6 +9,7 @@
 // the export dialogue can both ask without stealing each other's answer.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -19,9 +20,12 @@ import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../panels/audio_meters_feed.dart' show amplitudeDb;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'package:lumit_flutter/panels/timeline_timings.dart';
+import 'package:lumit_flutter/src/rust/api/audio.dart'
+    show BridgeAudioMeter, audioMeters;
 
 import 'cache_confirm_frb.dart';
 
@@ -54,8 +58,16 @@ class StatusLineFrb extends StatefulWidget {
   /// raise a plugin message without a plugin.
   final List<String> Function()? pluginMessagesFn;
 
+  /// The same seam for the engine's meter tap, so a test can hand the strip a
+  /// level without a device.
+  final List<BridgeAudioMeter> Function()? metersFn;
+
   const StatusLineFrb(
-      {super.key, this.poll, this.proxyPollFn, this.pluginMessagesFn});
+      {super.key,
+      this.poll,
+      this.proxyPollFn,
+      this.pluginMessagesFn,
+      this.metersFn});
 
   @override
   State<StatusLineFrb> createState() => _StatusLineFrbState();
@@ -104,6 +116,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     _export = (widget.poll ?? exportPoll)();
     final was = _proxy is BridgeProxyState_Running;
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
+    _outputPeakDb = _readOutputPeak();
     _sayWhatThePluginsSaid();
     _syncTimer();
     if (mounted) setState(() {});
@@ -151,6 +164,24 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       _timer?.cancel();
       _timer = null;
     }
+  }
+
+  /// What the output just peaked at, in dB, or null while the transport is
+  /// still — the strip's far-right reading (the AudioWorkspace board's own
+  /// status caption). Read on the tick that already runs during playback, off
+  /// the same lock-free tap the meters read (docs/09 §3.1), so an idle strip
+  /// keeps costing nothing.
+  double? _outputPeakDb;
+
+  double? _readOutputPeak() {
+    if (!_ui.playing.value) return null;
+    for (final meter in (widget.metersFn ?? audioMeters)()) {
+      // The empty id is the master: what the device is handed.
+      if (meter.layer.isEmpty) {
+        return amplitudeDb(math.max(meter.peakLeft, meter.peakRight));
+      }
+    }
+    return null;
   }
 
   /// A cache bump while the tick is off: one coalesced repaint.
@@ -217,6 +248,14 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 const Spacer(),
                 ..._proxySection(t),
                 ..._exportSection(t),
+                if (_outputPeakDb case final db?) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.statusOutputPeak(db.toStringAsFixed(1)),
+                    key: const ValueKey('status-output-peak'),
+                    style: t.small.copyWith(color: t.textMuted),
+                  ),
+                ],
               ],
             ),
           ),

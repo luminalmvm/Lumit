@@ -11543,6 +11543,36 @@
   "@beatsNoneFound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection ran over audio that was there but placed no markers - the sound has no clear rhythm, the sensitivity is too low, or the work area holds none. Calm, not an error."
   },
+  "beatsGridConfirmed": "Beat grid confirmed at {bpm} BPM · {count} markers",
+  "@beatsGridConfirmed": {
+    "description": "One line in the status bar at the bottom of the window, after beat detection finished and committed a tempo grid beside its markers. {bpm} is the confirmed tempo as a whole number, {count} how many beat markers were placed. BPM is the musical unit (beats per minute) and stays as it is.",
+    "placeholders": {
+      "bpm": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "beatsPlaced": "{count} beat markers placed",
+  "@beatsPlaced": {
+    "description": "One line in the status bar at the bottom of the window, after beat detection finished without a tempo grid: only the count of placed markers can be said. {count} is that number.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "statusOutputPeak": "Output {db} dB peak",
+  "@statusOutputPeak": {
+    "description": "Right-hand end of the status bar while the composition is playing: the loudest sample the audio output just reached. {db} is the level in decibels, one decimal, usually negative (e.g. -2.1). dB is the unit symbol and stays as it is.",
+    "placeholders": {
+      "db": {
+        "type": "String"
+      }
+    }
+  },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Duck under…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."

@@ -30,6 +30,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/splash.dart';
 import '../state/app_state.dart';
+import '../state/beats_notice.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
@@ -385,7 +386,10 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         ui.model.refresh();
         // A run that placed nothing is a legitimate answer (docs/09 §5) and
         // used to be an indistinguishable one: no markers, no grid, no word.
-        if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
+        // A run that placed markers says so too — the board's own status
+        // caption — because the markers land off-screen as easily as on.
+        app.postNotice(
+            found.placed == 0 ? l10n.beatsNoneFound : beatsFoundNotice(found));
       },
           onError: (_) => app.postNotice(
               _source.isEmpty ? l10n.beatsNoSound : l10n.beatsLayerNoSound)),

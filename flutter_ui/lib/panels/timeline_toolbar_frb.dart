@@ -16,6 +16,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/splash.dart';
+import '../state/beats_notice.dart';
 import '../state/comp_model.dart';
 import '../state/settings.dart';
 import '../state/timecode.dart';
@@ -404,7 +405,9 @@ Future<void> _showMoreMenu(
         comp.detectBeats(options: BridgeBeatOptions.standard()).then<void>(
           (found) {
             onChanged();
-            if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
+            app.postNotice(found.placed == 0
+                ? l10n.beatsNoneFound
+                : beatsFoundNotice(found));
           },
           onError: (_) => app.postNotice(l10n.beatsNoSound),
         ),

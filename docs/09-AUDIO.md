@@ -264,7 +264,9 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   nothing to listen to, and a run that placed no markers, each leave one calm line on the
   status line. A composition can be silenced by a switch some way from the Audio panel — a
   soloed picture row takes the whole mix down — so a *Generate* that changed nothing on
-  screen and explained nothing read as a button that did not work.
+  screen and explained nothing read as a button that did not work. A run that placed
+  markers is said the same way — the confirmed tempo and the count, the board's own
+  status caption — because the markers land off-screen as easily as on.
 - **Snapping**: when snap is enabled, edit points, layer in/out points, keyframes, the
   work area, and marker-trigger effects ([08-EFFECTS.md](08-EFFECTS.md) §1.4) snap to beat
   markers during drags, with the standard snap affordance from

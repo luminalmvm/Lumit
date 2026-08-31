@@ -43,6 +43,7 @@ import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
+import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
 import '../state/dock.dart';
 import '../state/external_links.dart';
@@ -893,7 +894,9 @@ List<MenuSection> lumitMenus(
             onComp((c) => c
                 .detectBeats(options: BridgeBeatOptions.standard())
                 .then((found) {
-              if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
+              app.postNotice(found.placed == 0
+                  ? l10n.beatsNoneFound
+                  : beatsFoundNotice(found));
             }, onError: (_) => app.postNotice(l10n.beatsNoSound)))),
         MenuEntry(
             l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
