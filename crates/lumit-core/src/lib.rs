@@ -14,6 +14,7 @@ pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers (K-700).
 pub mod group;
 pub mod lighting;
+pub mod linalg;
 pub mod lut;
 pub mod markers;
 pub mod mask;

@@ -228,8 +228,10 @@ the rest are filled in directly.
 ### 2.4 The solver
 
 Dense Cholesky, in-tree — the ~40-line factor/solve pair `lumit-track`'s `bundle.rs`
-already contains is the pattern (it is `pub(crate)` there; the puppet module carries its
-own copy in `lumit-core` rather than growing a cross-crate seam for forty lines). At the
+already contains is the pattern. This note originally had the puppet module carry its own
+copy rather than grow a cross-crate seam for forty lines; that argument was moot, because
+`lumit-track` already depends on `lumit-core`, so there was no new seam to grow. The pair
+now lives once, in `lumit_core::linalg`, and both callers use it. At the
 default density a mesh is ~200 vertices → a 400×400 factor, well under a millisecond; at
 the 1500-vertex cap the 3000×3000 factor costs on the order of a second, once.
 

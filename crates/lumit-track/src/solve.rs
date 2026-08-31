@@ -52,6 +52,8 @@
 //! bounded call — every loop in it has a fixed iteration cap — and is meant to
 //! run on a worker, not the UI thread.
 
+use lumit_core::linalg::{cholesky, cholesky_solve, Dense};
+
 use crate::bundle::{self, BundleCamera, BundleObs};
 use crate::geom::{self, eigen_ascending, invert3, mat_vec, mul3, transpose3, Mat3};
 use crate::pairs::{PairGeometry, PairVerdict};
@@ -1161,7 +1163,7 @@ fn average_rotations(views: usize, rels: &[Relative], iterations: usize) -> Vec<
                 so3_log(&mul3(&r.rot, &mul3(ri, &transpose3(rj))))
             })
             .collect();
-        let mut a = bundle::Dense::zero(width);
+        let mut a = Dense::zero(width);
         let mut b = vec![0.0f64; width];
         for (r, e) in rels.iter().zip(residual.iter()) {
             // L2 for the first two sweeps to get near the answer, then L1-style
@@ -1209,8 +1211,8 @@ fn average_rotations(views: usize, rels: &[Relative], iterations: usize) -> Vec<
         for i in 0..width {
             a.add(i, i, 1e-9 * a.at(i, i) + 1e-12);
         }
-        let Some(l) = bundle::cholesky(&a) else { break };
-        let delta = bundle::cholesky_solve(&l, &b);
+        let Some(l) = cholesky(&a) else { break };
+        let delta = cholesky_solve(&l, &b);
         if delta.iter().any(|v| !v.is_finite()) {
             break;
         }
@@ -1377,7 +1379,7 @@ fn average_positions(
             .collect();
         let knee = (1.5 * geom::median(&mut residuals).unwrap_or(0.0)).max(1e-6);
 
-        let mut a = bundle::Dense::zero(width);
+        let mut a = Dense::zero(width);
         let mut rhs = [
             vec![0.0f64; width],
             vec![0.0f64; width],
@@ -1417,10 +1419,10 @@ fn average_positions(
         for i in 0..width {
             a.add(i, i, 1e-9 * a.at(i, i) + 1e-12);
         }
-        let Some(l) = bundle::cholesky(&a) else { break };
+        let Some(l) = cholesky(&a) else { break };
         let mut moved = false;
         for (k, row) in rhs.iter().enumerate() {
-            let x = bundle::cholesky_solve(&l, row);
+            let x = cholesky_solve(&l, row);
             if x.iter().any(|v| !v.is_finite()) {
                 return pos;
             }

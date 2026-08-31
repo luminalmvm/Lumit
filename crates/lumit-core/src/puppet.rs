@@ -43,6 +43,7 @@ use spade::{
 use uuid::Uuid;
 
 use crate::anim::{Animation, Property};
+use crate::linalg::{cholesky, cholesky_solve, Dense};
 use crate::mask::signed_distance;
 use crate::time::Rational;
 
@@ -723,111 +724,6 @@ fn barycentric(a: [f64; 2], b: [f64; 2], c: [f64; 2], p: [f64; 2]) -> Option<[f6
     let l0 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / d;
     let l1 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / d;
     Some([l0, l1, 1.0 - l0 - l1])
-}
-
-// --- Dense linear algebra ---------------------------------------------------
-//
-// The ~40-line factor/solve pair `lumit-track`'s `bundle.rs` already carries,
-// copied here rather than growing a cross-crate seam for forty lines
-// (docs/impl/puppet.md §2.4).
-
-/// A square dense matrix, row-major, with bounds-checked accessors so an index
-/// slip is a zero rather than a panic (docs/14 §4).
-struct Dense {
-    n: usize,
-    a: Vec<f64>,
-}
-
-impl Dense {
-    fn zero(n: usize) -> Dense {
-        Dense {
-            n,
-            a: vec![0.0; n.saturating_mul(n)],
-        }
-    }
-
-    fn at(&self, r: usize, c: usize) -> f64 {
-        if r >= self.n || c >= self.n {
-            return 0.0;
-        }
-        self.a.get(r * self.n + c).copied().unwrap_or(0.0)
-    }
-
-    fn add(&mut self, r: usize, c: usize, v: f64) {
-        if r >= self.n || c >= self.n {
-            return;
-        }
-        let i = r * self.n + c;
-        if let Some(x) = self.a.get_mut(i) {
-            *x += v;
-        }
-    }
-
-    fn set(&mut self, r: usize, c: usize, v: f64) {
-        if r >= self.n || c >= self.n {
-            return;
-        }
-        let i = r * self.n + c;
-        if let Some(x) = self.a.get_mut(i) {
-            *x = v;
-        }
-    }
-}
-
-/// Cholesky factor `L` with `A = L·Lᵀ`, or `None` when `A` is not positive
-/// definite — the caller's signal to fall back, not an error.
-fn cholesky(a: &Dense) -> Option<Dense> {
-    let n = a.n;
-    let mut l = Dense::zero(n);
-    for i in 0..n {
-        for j in 0..=i {
-            let mut s = a.at(i, j);
-            for k in 0..j {
-                s -= l.at(i, k) * l.at(j, k);
-            }
-            if i == j {
-                if !s.is_finite() || s <= 0.0 {
-                    return None;
-                }
-                l.set(i, j, s.sqrt());
-            } else {
-                let d = l.at(j, j);
-                if d.abs() < 1e-300 {
-                    return None;
-                }
-                l.set(i, j, s / d);
-            }
-        }
-    }
-    Some(l)
-}
-
-/// Solve `L·Lᵀ·x = b` for the factor `L` from [`cholesky`].
-fn cholesky_solve(l: &Dense, b: &[f64]) -> Vec<f64> {
-    let n = l.n;
-    let mut y = vec![0.0f64; n];
-    for i in 0..n {
-        let mut s = b.get(i).copied().unwrap_or(0.0);
-        for k in 0..i {
-            s -= l.at(i, k) * y.get(k).copied().unwrap_or(0.0);
-        }
-        let d = l.at(i, i);
-        if let Some(slot) = y.get_mut(i) {
-            *slot = if d.abs() > 1e-300 { s / d } else { 0.0 };
-        }
-    }
-    let mut x = vec![0.0f64; n];
-    for i in (0..n).rev() {
-        let mut s = y.get(i).copied().unwrap_or(0.0);
-        for k in (i + 1)..n {
-            s -= l.at(k, i) * x.get(k).copied().unwrap_or(0.0);
-        }
-        let d = l.at(i, i);
-        if let Some(slot) = x.get_mut(i) {
-            *slot = if d.abs() > 1e-300 { s / d } else { 0.0 };
-        }
-    }
-    x
 }
 
 // ponytail: dense Cholesky, O((2n)³) at (re)factorisation — a sparse
