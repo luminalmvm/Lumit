@@ -753,6 +753,12 @@ pub struct DropShadowOp {
     pub spread_scale: f32,
     /// The layer's own shape knocks the shadow out before the composite (K-706).
     pub knockout: bool,
+    /// Read the coverage from the **inverted** alpha (K-706) — Inner shadow's
+    /// geometry, and the Edge source of Inner glow.
+    pub invert: bool,
+    /// Composite **inside** the shape and over it, rather than underneath
+    /// (K-706) — the other half of what makes an inner style inner.
+    pub inner: bool,
 }
 
 #[repr(C)]
@@ -769,6 +775,12 @@ struct DropShadowParams {
     spread_scale: f32,
     /// 1 = the layer's shape knocks the shadow out before the composite (K-706).
     knockout: u32,
+    /// 1 = read the coverage from the inverted alpha (K-706).
+    invert: u32,
+    /// 1 = composite inside the shape and over it, not underneath (K-706).
+    inner: u32,
+    /// The uniform's size has to be a multiple of 16 bytes.
+    _pad: [u32; 2],
 }
 
 impl FxEngine {
@@ -871,6 +883,9 @@ impl FxEngine {
                 matte_on: f32::from(matte.is_some()),
                 spread_scale: op.spread_scale,
                 knockout: u32::from(op.knockout),
+                invert: u32::from(op.invert),
+                inner: u32::from(op.inner),
+                _pad: [0; 2],
             }),
         );
         out

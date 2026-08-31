@@ -7073,6 +7073,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
             scatter: p.scatter,
             seed: p.seed,
             mix: p.mix,
+            clip_to_alpha: p.clip_to_alpha,
         };
 
         let mut cpu = img.clone();
@@ -8252,6 +8253,8 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
             mix: p.mix,
             spread_scale: p.spread_scale,
             knockout: p.knockout,
+            invert: p.invert,
+            inner: p.inner,
         }
     };
 
@@ -14774,6 +14777,8 @@ fn the_matte_scales_the_drop_shadow_opacity() {
         mix: p.mix,
         spread_scale: p.spread_scale,
         knockout: p.knockout,
+        invert: p.invert,
+        inner: p.inner,
     };
     check_matte_claim(
         &ctx,

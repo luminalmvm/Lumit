@@ -415,13 +415,18 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Trail,
     &ConnectPoints,
     &EmitFromImage,
-    // The layer styles that render (K-706, docs/impl/layer-styles.md §10's
-    // first package): one outer, one interior. The other seven are declared in
-    // `lumit_core::fx::styles` but have no pass here yet, so an instance of one
-    // resolves to an op this table misses and the picture passes through
-    // untouched — the same calm degrade a missing LUT takes, never a fault.
+    // The seven layer styles that render (K-706, docs/impl/layer-styles.md §8).
+    // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
+    // have no pass here, so an instance of one resolves to an op this table
+    // misses and the picture passes through untouched — the same calm degrade a
+    // missing LUT takes, never a fault.
     &StyleDropShadow,
+    &StyleOuterGlow,
+    &StyleGradientOverlay,
     &StyleColourOverlay,
+    &StyleInnerGlow,
+    &StyleInnerShadow,
+    &StyleStroke,
 ];
 
 /// The passes registered while the program runs (K-593) — an OFX plugin's,
@@ -1329,6 +1334,7 @@ impl GpuEffect for Gradient {
                 scatter: g.scatter,
                 seed: g.seed,
                 mix: g.mix,
+                clip_to_alpha: g.clip_to_alpha,
             },
         )
     }
@@ -2409,12 +2415,15 @@ impl GpuEffect for DropShadow {
                 mix: d.mix,
                 spread_scale: d.spread_scale,
                 knockout: d.knockout,
+                invert: d.invert,
+                inner: d.inner,
             },
         )
     }
 }
 
-/// Drop shadow (**style**, K-706) — the same kernel, two more uniforms.
+/// Drop shadow (**style**, K-706) — the same kernel, with Spread and the
+/// knockout on top of it.
 ///
 /// A separate entry rather than a second name on the one above, because the
 /// table is keyed by match name and a style is a different declaration: its
@@ -2451,6 +2460,147 @@ impl GpuEffect for StyleDropShadow {
                 mix: d.mix,
                 spread_scale: d.spread_scale,
                 knockout: d.knockout,
+                invert: d.invert,
+                inner: d.inner,
+            },
+        )
+    }
+}
+
+/// The four styles that ride the generalised drop-shadow core (K-706,
+/// docs/impl/layer-styles.md §4) share one body: read the style's own typed
+/// struct, hand the bundle it packs to the one kernel.
+///
+/// A macro rather than four transcriptions of the same twenty lines, and a
+/// macro rather than one `GpuEffect` with a match on the name, because the
+/// table is keyed by match name and each style reads a *different* struct —
+/// which is exactly the shape a macro is for and a runtime branch is not.
+macro_rules! drop_shadow_core_style {
+    ($pass:ident, $name:literal, $ty:ident) => {
+        struct $pass;
+        impl GpuEffect for $pass {
+            fn match_name(&self) -> &'static str {
+                $name
+            }
+            fn run(
+                &self,
+                fx: &FxEngine,
+                ctx: &GpuContext,
+                tex: &Tex,
+                w: u32,
+                h: u32,
+                p: Params<'_>,
+                aux: AuxSlot<'_>,
+            ) -> Tex {
+                let d = lumit_core::fx::styles::defs::$ty::read(p).packed();
+                fx.drop_shadow(
+                    ctx,
+                    tex,
+                    w,
+                    h,
+                    aux.matte(),
+                    &lumit_gpu::fx::DropShadowOp {
+                        colour: d.colour,
+                        opacity: d.opacity,
+                        offset: d.offset,
+                        softness_px: d.softness_px,
+                        shadow_only: d.shadow_only,
+                        mix: d.mix,
+                        spread_scale: d.spread_scale,
+                        knockout: d.knockout,
+                        invert: d.invert,
+                        inner: d.inner,
+                    },
+                )
+            }
+        }
+    };
+}
+
+// Outer glow is the core at zero offset — which is why the pixel test that
+// pins it against a Drop shadow at distance 0 is a *bit* test and not a
+// tolerance one: it is the same dispatch with the same numbers.
+drop_shadow_core_style!(StyleOuterGlow, "style_outer_glow", OuterGlow);
+// And the two inner styles are the core reading the inverted alpha and
+// compositing inside the shape; Inner glow is Inner shadow at zero offset,
+// with the Centre source declining the inversion.
+drop_shadow_core_style!(StyleInnerShadow, "style_inner_shadow", InnerShadow);
+drop_shadow_core_style!(StyleInnerGlow, "style_inner_glow", InnerGlow);
+
+/// Gradient overlay (**style**, K-706) — the Gradient kernel with its ramp
+/// clipped to the layer's coverage.
+///
+/// The style names an angle and a scale where the effect names two points, and
+/// the raster is what those turn into points *against*, so `packed` takes the
+/// size. Everything downstream of that is the effect's own pass.
+struct StyleGradientOverlay;
+impl GpuEffect for StyleGradientOverlay {
+    fn match_name(&self) -> &'static str {
+        "style_gradient_overlay"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let d = lumit_core::fx::styles::defs::GradientOverlay::read(p).packed(w, h);
+        fx.gradient(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::GradientOp {
+                radial: d.radial,
+                start: d.start,
+                axis: d.axis,
+                inv_len2: d.inv_len2,
+                inv_len: d.inv_len,
+                c0: d.c0,
+                c1: d.c1,
+                scatter: d.scatter,
+                seed: d.seed,
+                mix: d.mix,
+                clip_to_alpha: d.clip_to_alpha,
+            },
+        )
+    }
+}
+
+/// Stroke (**style**, K-706) — the one kernel this package brings that nothing
+/// else in the tree already had: a separable dilate and erode of the layer's
+/// alpha, with the band between them painted and laid over the layer.
+struct StyleStroke;
+impl GpuEffect for StyleStroke {
+    fn match_name(&self) -> &'static str {
+        "style_stroke"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let d = lumit_core::fx::styles::defs::StrokeStyle::read(p).packed();
+        fx.stroke_contour(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::StrokeOp {
+                colour: d.colour,
+                opacity: d.opacity,
+                grow_px: d.grow_px,
+                shrink_px: d.shrink_px,
+                mix: d.mix,
             },
         )
     }
@@ -6198,12 +6348,30 @@ mod tests {
             );
         }
         // And the styles that ship a kernel have one (docs/impl/layer-styles.md
-        // §8): the seven that do not are named here so that adding a pass for
-        // one is a one-line edit rather than a hunt.
-        for name in ["style_drop_shadow", "style_colour_overlay"] {
+        // §8): the two that do not are named below, so that promoting one is a
+        // two-line edit rather than a hunt.
+        for name in [
+            "style_drop_shadow",
+            "style_outer_glow",
+            "style_gradient_overlay",
+            "style_colour_overlay",
+            "style_inner_glow",
+            "style_inner_shadow",
+            "style_stroke",
+        ] {
             assert!(
                 gpu_effect(name).is_some(),
                 "{name} is one of v1's rendered styles but has no GPU pass"
+            );
+        }
+        // Satin and Bevel and emboss are modelled, imported and reported, and
+        // render as the identity on both paths (§8). A pass appearing for one
+        // without the note and the list above moving with it is exactly the
+        // half-landed style this catches.
+        for name in ["style_satin", "style_bevel_emboss"] {
+            assert!(
+                gpu_effect(name).is_none(),
+                "{name} is not rendered in v1, but something gave it a GPU pass"
             );
         }
     }

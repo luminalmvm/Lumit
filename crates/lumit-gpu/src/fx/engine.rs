@@ -266,6 +266,7 @@ impl FxEngine {
         let vibrancy_mod = module(include_str!("../fx_vibrancy.wgsl"), "fx-vibrancy");
         let matte_key_mod = module(include_str!("../fx_matte_key.wgsl"), "fx-matte-key");
         let matte_tidy_mod = module(include_str!("../fx_matte_tidy.wgsl"), "fx-matte-tidy");
+        let stroke_mod = module(include_str!("../fx_stroke.wgsl"), "fx-stroke");
         let matte_mask_mod = module(include_str!("../fx_matte_mask.wgsl"), "fx-matte-mask");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
@@ -408,6 +409,8 @@ impl FxEngine {
             pipeline(&matte_key_mod, "fx-matte-key-combine", "matte_key_combine");
         let matte_morph = pipeline(&matte_tidy_mod, "fx-matte-morph", "matte_morph");
         let matte_despot = pipeline(&matte_tidy_mod, "fx-matte-despot", "matte_despot");
+        let stroke_morph = pipeline(&stroke_mod, "fx-stroke-morph", "stroke_morph");
+        let stroke_combine = pipeline(&stroke_mod, "fx-stroke-combine", "stroke_combine");
         let matte_mask = pipeline(&matte_mask_mod, "fx-matte-mask", "matte_mask");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
@@ -638,6 +641,8 @@ impl FxEngine {
             matte_key_combine,
             matte_morph,
             matte_despot,
+            stroke_morph,
+            stroke_combine,
             matte_mask,
             vignette,
             exposure,

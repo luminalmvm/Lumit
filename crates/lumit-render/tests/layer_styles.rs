@@ -2,11 +2,12 @@
 //!
 //! # In plain terms
 //!
-//! The unit tests in `lumit-core` prove the model: the order, the one-of-each
-//! cap, the two new uniforms on the drop-shadow core. They never render
-//! anything. This file does — it builds documents the way a user would, dresses
-//! a layer with a shadow and a colour overlay, and pushes them through the same
-//! public entries the Viewer and the exporter use.
+//! The unit tests in `lumit-core` prove the model and the kernels: the order,
+//! the one-of-each cap, the uniforms on the shared drop-shadow core, the
+//! stroke's two morphological copies. They never render anything. This file
+//! does — it builds documents the way a user would, dresses a layer with real
+//! styles, and pushes them through the same public entries the Viewer and the
+//! exporter use.
 //!
 //! What it is here to catch, all of it silent if it broke:
 //!
@@ -15,7 +16,9 @@
 //!   assertion about pixels would still *render* — just without the style.
 //! - **The order.** Interior styles have to run before the outer ones, or a
 //!   Colour overlay floods the shadow the Drop shadow just laid down. That is a
-//!   picture, not a crash.
+//!   picture, not a crash. §2's own order is pinned the same way: the Colour
+//!   overlay covers the Gradient overlay, the Drop shadow sits under the Outer
+//!   glow, the Stroke draws over the interiors.
 //! - **The name.** A style is picture, so editing one has to change the frame
 //!   key and taking the last one off has to give the old key back — otherwise
 //!   the cache serves the undressed frame for the dressed layer.
@@ -329,12 +332,12 @@ fn a_style_edit_renames_the_frame_and_removing_it_restores_the_name() {
     );
 }
 
-/// **The two paths agree**, for both shipped styles, through the real seam: the
+/// **The two paths agree**, for every shipped style, through the real seam: the
 /// draw builder resolves them, `run_ops` runs the GPU kernels, `cpu::apply_stack`
 /// runs the references, and the two pictures are the same within the fp16
 /// working format's own tolerance.
 #[test]
-fn cpu_and_gpu_agree_on_both_shipped_styles() {
+fn cpu_and_gpu_agree_on_every_shipped_style() {
     let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
         lumit_gpu::no_adapter();
         return;
@@ -354,12 +357,43 @@ fn cpu_and_gpu_agree_on_both_shipped_styles() {
         }
     }
 
+    // One instance of each shipped style, each with its own controls off their
+    // defaults so the kernel is asked a real question rather than a neutral one.
+    let inner_glow_centre = {
+        let mut s = style("style_inner_glow", &[("softness", 5.0)]);
+        choose(&mut s, "source", 1);
+        s
+    };
+    let stroke_centre = {
+        let mut s = style("style_stroke", &[("size", 3.5), ("opacity", 80.0)]);
+        choose(&mut s, "position", 2);
+        s
+    };
     for styles in [
         vec![style(
             "style_drop_shadow",
             &[("distance", 5.0), ("softness", 3.0), ("spread", 40.0)],
         )],
+        vec![style(
+            "style_outer_glow",
+            &[("softness", 4.0), ("spread", 30.0)],
+        )],
+        vec![style(
+            "style_gradient_overlay",
+            &[("angle", 60.0), ("scale", 140.0)],
+        )],
         vec![style("style_colour_overlay", &[("mix", 60.0)])],
+        vec![style(
+            "style_inner_glow",
+            &[("softness", 5.0), ("choke", 20.0)],
+        )],
+        vec![inner_glow_centre],
+        vec![style(
+            "style_inner_shadow",
+            &[("distance", 4.0), ("softness", 3.0)],
+        )],
+        vec![style("style_stroke", &[("size", 3.0)])],
+        vec![stroke_centre],
     ] {
         let name = styles[0].effect.match_name.clone();
         let ops = lumit_core::fx::resolve_stack(
@@ -443,4 +477,210 @@ fn a_shuffled_style_list_comes_back_in_order_from_a_saved_project() {
         vec!["style_drop_shadow", "style_colour_overlay", "style_stroke"],
         "the load path restores §2's order and the one-of-each cap"
     );
+}
+
+// ---------------------------------------------------------------------------
+// §2's order, pinned in pixels (docs/impl/layer-styles.md §9).
+//
+// The order is the whole promise of a layer style: everyone's muscle memory
+// expects Photoshop's, and getting it wrong is not a crash but a picture that is
+// subtly wrong in a way nobody can name. Each test below picks two styles whose
+// disagreement is a colour, so a swapped order fails on a channel rather than on
+// a tolerance.
+// ---------------------------------------------------------------------------
+
+/// Set one of a style's Choice rows — Position, Source, the gradient's Type.
+fn choose(inst: &mut EffectInstance, id: &str, value: u32) {
+    for p in &mut inst.params {
+        if p.id == id {
+            p.value = EffectValue::Choice(value);
+        }
+    }
+}
+
+/// **§2 entries 4 and 5.** The Colour overlay sits *over* the Gradient overlay,
+/// so a flooding colour overlay leaves the interior flat and the ramp underneath
+/// it is gone. Run the other way round the ramp would win and the interior would
+/// still be graded.
+#[test]
+fn a_colour_overlay_covers_the_gradient_overlay_beneath_it() {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut gradient = style("style_gradient_overlay", &[]);
+    tint(&mut gradient, "colour_a", [1.0, 0.0, 0.0, 1.0]);
+    tint(&mut gradient, "colour_b", [0.0, 0.0, 1.0, 1.0]);
+    let mut overlay = style("style_colour_overlay", &[]);
+    tint(&mut overlay, "colour", [0.0, 1.0, 0.0, 1.0]);
+
+    let (ramp_only, comp_a) = project(vec![gradient.clone()]);
+    let (both, comp_b) = project(vec![gradient, overlay]);
+    let (a, w, _) = r.render_rgba(&ramp_only, comp_a, 0, 1.0).unwrap();
+    let (b, ..) = r.render_rgba(&both, comp_b, 0, 1.0).unwrap();
+
+    // Two points down the middle of the square, well inside it.
+    let (top, bottom) = ((BOX / 2, 2), (BOX / 2, BOX - 3));
+    assert_ne!(
+        rgb(&a, w, top.0, top.1),
+        rgb(&a, w, bottom.0, bottom.1),
+        "the ramp alone must actually grade the interior, or this proves nothing"
+    );
+    assert_eq!(
+        rgb(&b, w, top.0, top.1),
+        rgb(&b, w, bottom.0, bottom.1),
+        "the colour overlay covers the gradient overlay: the interior is flat"
+    );
+    let [red, green, blue] = rgb(&b, w, top.0, top.1);
+    assert!(
+        green > red && green > blue,
+        "and it is the overlay's green, not either end of the ramp: {:?}",
+        [red, green, blue]
+    );
+}
+
+/// **§2 entries 1 and 2.** The Drop shadow is furthest back and the Outer glow
+/// sits in front of it, so against the layer's own edge — where both are at
+/// their strongest — the glow's colour is the one that reads and the shadow is
+/// the one that has given ground.
+///
+/// This is the assertion the seam's reversed outer run exists for: the ops are
+/// emitted glow-then-shadow precisely so that the *shadow* ends up underneath.
+///
+/// **Read it right against the edge.** The two outer styles run on one raster,
+/// so the second one blurs an alpha the first has already fattened and therefore
+/// reaches further out than it would alone. Far from the shape that extra reach
+/// wins on its own and the two colours cross over; hard against the edge, where
+/// both coverages are near their peak, being in front is the only thing that
+/// decides. Moving this sample outward is how the test stops meaning anything.
+#[test]
+fn the_drop_shadow_sits_under_the_outer_glow() {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    // Both at zero throw and the same softness, so they cover the same ground
+    // outside the layer and the only question left is which is on top.
+    let shadow = red_shadow_at_zero_throw();
+    let mut glow = style("style_outer_glow", &[("opacity", 100.0), ("softness", 6.0)]);
+    tint(&mut glow, "glow_colour", [0.0, 1.0, 0.0, 1.0]);
+
+    let (both, comp_a) = project(vec![shadow.clone(), glow]);
+    let (shadow_only, comp_b) = project(vec![shadow]);
+    let (a, w, _) = r.render_rgba(&both, comp_a, 0, 1.0).unwrap();
+    let (b, ..) = r.render_rgba(&shadow_only, comp_b, 0, 1.0).unwrap();
+
+    // The first pixel past the square's right edge.
+    let (sx, sy) = (BOX, BOX / 2);
+    let [red, green, _] = rgb(&a, w, sx, sy);
+    let alone = rgb(&b, w, sx, sy)[0];
+    assert!(
+        green > 20 && red > 20 && alone > 20,
+        "both styles must reach ({sx}, {sy}), or these are zeroes agreeing"
+    );
+    assert!(
+        green > red,
+        "the glow is in front: green {green} must beat red {red}"
+    );
+    assert!(
+        red < alone,
+        "and the shadow, being behind the glow, has given ground: {red} against \
+         {alone} with no glow above it"
+    );
+}
+
+/// The order test's shadow on its own — thrown nowhere, so it sits squarely
+/// under the glow rather than beside it.
+fn red_shadow_at_zero_throw() -> EffectInstance {
+    let mut s = style(
+        "style_drop_shadow",
+        &[("opacity", 100.0), ("distance", 0.0), ("softness", 6.0)],
+    );
+    tint(&mut s, "shadow_colour", [1.0, 0.0, 0.0, 1.0]);
+    s
+}
+
+/// **§2 entry 9.** The Stroke draws over the interiors, so a stroke laid on a
+/// layer already flooded by a Colour overlay is still visible.
+#[test]
+fn the_stroke_draws_over_the_interior_styles() {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut overlay = style("style_colour_overlay", &[]);
+    tint(&mut overlay, "colour", [0.0, 1.0, 0.0, 1.0]);
+    let mut stroke = style("style_stroke", &[("size", 3.0), ("opacity", 100.0)]);
+    tint(&mut stroke, "stroke_colour", [1.0, 0.0, 0.0, 1.0]);
+    // Inside, so the band lands on ground the overlay has already flooded —
+    // which is the point: an Outside stroke would prove nothing about order.
+    choose(&mut stroke, "position", 1);
+
+    let (doc, comp) = project(vec![overlay, stroke]);
+    let (px, w, _) = r.render_rgba(&doc, comp, 0, 1.0).unwrap();
+    // The square's RIGHT edge. Its left one is the raster's own border, where
+    // the erode's clamp-to-edge sees the shape carry on and leaves no band —
+    // the same edge policy the screen matte's shrink has always run on.
+    let edge = rgb(&px, w, BOX - 2, BOX / 2);
+    let middle = rgb(&px, w, BOX / 2, BOX / 2);
+    assert!(
+        edge[0] > edge[1],
+        "the stroke's red must survive the overlay at the edge: {edge:?}"
+    );
+    assert!(
+        middle[1] > middle[0],
+        "and the middle is still the overlay's green: {middle:?}"
+    );
+}
+
+/// **Padding at a reduced preview resolution** (§9). An outer style declares
+/// `roi = FullFrame` and rides the Drop shadow effect's own padding path, so its
+/// reach beyond the layer's rect has to survive being rendered at half size —
+/// the px@comp resolve is what makes a 10 px throw still 10 comp-pixels when
+/// every raster pixel is two of them.
+#[test]
+fn an_outer_styles_reach_survives_a_reduced_preview_resolution() {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (doc, comp) = project(vec![red_shadow()]);
+    let (half, w, h) = r.render_rgba(&doc, comp, 0, 0.5).unwrap();
+    assert_eq!(
+        (w, h),
+        (COMP / 2, COMP / 2),
+        "half the preview, half the raster"
+    );
+    // The full-size test reads the shadow at (BOX + 4, BOX + 4); the same point
+    // in comp coordinates is half of that here.
+    let (sx, sy) = ((BOX + 4) / 2, (BOX + 4) / 2);
+    assert!(
+        px(&half, w, sx, sy) > 60,
+        "the shadow must still reach past the layer at half resolution — got {:?}",
+        rgb(&half, w, sx, sy)
+    );
+    // And it still stops: a corner of the frame is empty either way.
+    assert_eq!(
+        rgb(&half, w, w - 1, h - 1),
+        [0, 0, 0],
+        "a FullFrame style is not a flood"
+    );
+}
+
+/// **Satin and Bevel and emboss are invisible in v1** (§8), through the real
+/// seam and on the GPU path — no pass, no fault, no black frame.
+#[test]
+fn the_two_unrendered_styles_change_no_pixel_of_a_real_frame() {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (bare, comp_a) = project(Vec::new());
+    let (dressed, comp_b) = project(vec![
+        style("style_satin", &[]),
+        style("style_bevel_emboss", &[]),
+    ]);
+    let (a, ..) = r.render_rgba(&bare, comp_a, 0, 1.0).unwrap();
+    let (b, ..) = r.render_rgba(&dressed, comp_b, 0, 1.0).unwrap();
+    assert_eq!(a, b, "a style with no kernel renders as the identity");
 }

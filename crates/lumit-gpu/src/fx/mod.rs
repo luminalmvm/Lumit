@@ -90,6 +90,11 @@ pub struct FxEngine {
     matte_key_combine: wgpu::ComputePipeline,
     matte_morph: wgpu::ComputePipeline,
     matte_despot: wgpu::ComputePipeline,
+    /// Stroke (**style**, K-706): the separable pass that carries the fattened
+    /// and thinned copies of the layer's alpha together, and the combine that
+    /// cuts the band between them.
+    stroke_morph: wgpu::ComputePipeline,
+    stroke_combine: wgpu::ComputePipeline,
     matte_mask: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,

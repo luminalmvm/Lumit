@@ -122,6 +122,10 @@ impl Gradient {
             scatter: (self.scatter / 100.0).clamp(0.0, 1.0),
             seed: self.seed,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            // A generator floods the frame (§2.2's opaque write); clipping the
+            // ramp to the layer's coverage is the Gradient overlay *style*'s
+            // (K-706), and false here is the picture this effect always drew.
+            clip_to_alpha: false,
         }
     }
 }

@@ -1726,6 +1726,12 @@ pub struct GradientParams {
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// **Paint the ramp only where the layer already is** (K-706): the Gradient
+    /// *effect* is a generator and floods the frame opaque, while the Gradient
+    /// overlay *style* dresses the layer's own coverage. One multiply by the
+    /// alpha, and the alpha itself left alone — which is the whole difference
+    /// between the two, and why there is one kernel rather than two.
+    pub clip_to_alpha: bool,
 }
 
 /// Gradient (docs/08 §3.35): a linear or radial two-colour ramp with optional
@@ -1748,11 +1754,19 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
                 t += (hash01(p.seed, 0, x as i32, y as i32, 0) - 0.5) * p.scatter;
             }
             let t = t.clamp(0.0, 1.0);
+            // Clipped to alpha (K-706): `ramp · a` is the premultiplied form of
+            // "this ramp at this coverage", so the overlay works on
+            // premultiplied values with no round trip, exactly as `fill` does.
+            let cover = if p.clip_to_alpha { rgba[i + 3] } else { 1.0 };
             for c in 0..3 {
-                let g = p.c0[c] + (p.c1[c] - p.c0[c]) * t;
+                let g = (p.c0[c] + (p.c1[c] - p.c0[c]) * t) * cover;
                 rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
             }
-            rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + p.mix;
+            if !p.clip_to_alpha {
+                // The generator writes opaque; the overlay leaves the layer's
+                // own coverage exactly as it found it.
+                rgba[i + 3] = rgba[i + 3] * (1.0 - p.mix) + p.mix;
+            }
         }
     }
 }
@@ -5909,6 +5923,24 @@ pub struct DropShadowParams {
     /// shape either way. On a semi-transparent one it is the difference between
     /// a shadow that shows through and one that does not.
     pub knockout: bool,
+    /// **Read the coverage from the inverted alpha** (K-706): what the shape is
+    /// *not*, softened — which is the whole of Inner shadow's geometry.
+    ///
+    /// Spelled as one subtraction after the sample rather than as a second blur
+    /// of `1 − α`, and that is exact rather than merely convenient: the gaussian
+    /// is a normalised weighted sum and this one is padded with zeros, so
+    /// `1 − blur₀(α)` **is** the 1-padded blur of `1 − α` — including outside
+    /// the frame, where "not the shape" is the honest reading and a zero-padded
+    /// blur of the inverted alpha would have claimed the opposite.
+    pub invert: bool,
+    /// **Composite inside the shape and over it** (K-706) rather than
+    /// underneath — the other half of what makes an inner style inner.
+    ///
+    /// The layer's own colour is carried toward the style's by the coverage and
+    /// its alpha is left exactly as it was. Both sides of that carry the layer's
+    /// alpha, so an interior style cannot put a pixel anywhere the layer was
+    /// not, which is the clip the note asks for and not a second pass.
+    pub inner: bool,
 }
 
 /// The [`DropShadowParams::spread_scale`] a Spread per cent asks for.
@@ -5969,6 +6001,13 @@ pub fn drop_shadow_matted(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams
                 y as f32 + 0.5 - p.offset[1],
                 0,
             )[3];
+            // Inverted alpha (K-706): the softened picture of what the shape is
+            // NOT. Outside the frame the sample is 0, so this reads 1 there —
+            // which is exactly right, because outside the frame is outside the
+            // shape.
+            if p.invert {
+                cover = 1.0 - cover;
+            }
             // Spread (K-706): the gaussian's ramp re-cut about its half-way
             // line, which is where the original edge was — so the shadow grows
             // outward and hardens rather than moving. Skipped whole at slope 1,
@@ -5987,18 +6026,97 @@ pub fn drop_shadow_matted(rgba: &mut [f32], w: u32, h: u32, p: &DropShadowParams
             }
             let k = cover * matte_toward(p.opacity, 0.0, matte_strength(matte, d));
             let shadow = [p.colour[0] * k, p.colour[1] * k, p.colour[2] * k, k];
-            for c in 0..4 {
+            let over: [f32; 4] = if p.inner {
+                // Interior (K-706): the layer's colour carried toward the
+                // style's by the coverage, alpha untouched. `colour · src_a` is
+                // the premultiplied form of "this colour at this layer's
+                // coverage", so both sides of the lerp are already clipped to
+                // the shape and nothing lands outside it.
+                std::array::from_fn(|c| {
+                    if c == 3 {
+                        src_a
+                    } else {
+                        original[d + c] * (1.0 - k) + p.colour[c] * src_a * k
+                    }
+                })
+            } else if p.shadow_only {
+                shadow
+            } else {
                 // Source OVER shadow, premultiplied — the shadow is BELOW,
                 // which is the whole reason this is an effect and not a
                 // duplicated layer.
-                let over = if p.shadow_only {
-                    shadow[c]
-                } else {
-                    original[d + c] + shadow[c] * (1.0 - src_a)
-                };
-                rgba[d + c] = original[d + c] * (1.0 - p.mix) + over * p.mix;
+                std::array::from_fn(|c| original[d + c] + shadow[c] * (1.0 - src_a))
+            };
+            for c in 0..4 {
+                rgba[d + c] = original[d + c] * (1.0 - p.mix) + over[c] * p.mix;
             }
         }
+    }
+}
+
+/// One resolved Stroke **style** (K-706, docs/impl/layer-styles.md §4), reduced
+/// to what both paths read. The Position choice is already spent into the two
+/// half-widths host-side (`StrokeStyle::packed`), so neither path branches on it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeContourParams {
+    /// Scene-linear RGB; the band's coverage supplies the rest.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// How far the alpha is grown outward before the band is cut, raster pixels.
+    pub grow_px: f32,
+    /// How far it is shrunk inward, raster pixels.
+    pub shrink_px: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+/// Stroke (**style**, K-706) — the CPU reference and §1.6 oracle.
+///
+/// **In plain terms.** Take the layer's own shape, make one copy a little
+/// fatter and one a little thinner, and the ring between the two *is* the
+/// stroke. Which side of the edge the thickness is spent on is entirely which
+/// of the two copies moved: Outside fattens, Inside thins, Centre does half of
+/// each. The band is then painted in one colour and laid over the layer.
+///
+/// This is an **alpha-contour** stroke and deliberately not the Stroke *effect*,
+/// which paints a mask's own path — a different input and a different machine.
+///
+/// Because the fat copy is never smaller than the shape and the thin one never
+/// larger, Outside cannot put a pixel inside the shape and Inside cannot put one
+/// outside it; that is arithmetic, not a clip, and the tests pin it.
+///
+/// Both copies come from [`matte_morph`], the screen matte's own shrink/grow:
+/// same separable running min/max, same clamp-to-edge, same fractional easing of
+/// the outermost ring, so dragging Size is smooth and there is no second
+/// morphology in the tree to keep in step.
+// ponytail: two full-frame scratch buffers per call, plus the two `matte_morph`
+// takes for itself — the CPU path is the §1.6 oracle, not the fast path, and the
+// GPU twin allocates nothing beyond its two work textures. Upgrade: a fused
+// two-channel pass writing max and min together, as the WGSL kernel already
+// does. Trigger: a CPU-fallback export where the styles show in the profile.
+pub fn stroke_contour(rgba: &mut [f32], w: u32, h: u32, p: &StrokeContourParams) {
+    // `matte_morph` reads channel 0 and writes the same number to all four, so
+    // the alpha is copied across the lot on the way in — which is also what
+    // makes a zero half-width the bit-exact identity on either copy.
+    let alpha: Vec<f32> = rgba.chunks_exact(4).flat_map(|q| [q[3]; 4]).collect();
+    let mut grown = alpha.clone();
+    matte_morph(&mut grown, w, h, p.grow_px);
+    let mut shrunk = alpha;
+    matte_morph(&mut shrunk, w, h, -p.shrink_px);
+
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let o = [px[0], px[1], px[2], px[3]];
+        let band = (grown[i * 4] - shrunk[i * 4]).clamp(0.0, 1.0);
+        let k = band * p.opacity;
+        for c in 0..3 {
+            // The band OVER the layer, premultiplied: `colour · k` is the
+            // premultiplied stroke and the layer shows through what is left.
+            let over = p.colour[c] * k + o[c] * (1.0 - k);
+            px[c] = o[c] * (1.0 - p.mix) + over * p.mix;
+        }
+        let over_a = k + o[3] * (1.0 - k);
+        px[3] = o[3] * (1.0 - p.mix) + over_a * p.mix;
     }
 }
 

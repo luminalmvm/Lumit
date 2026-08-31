@@ -19,7 +19,7 @@ struct Params {
     mix_amt: f32,           // 0..1, blended against the unprocessed input
     seed: u32,
     radial: u32,            // 0 linear, 1 radial
-    _pad0: u32,
+    clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha (K-706)
     _pad1: u32,
 };
 
@@ -73,8 +73,17 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
         t = t + (hash01(0u, xy.x, xy.y, 0) - 0.5) * p.scatter;
     }
     let tc = clamp(t, 0.0, 1.0);
-    let g = p.c0.rgb + (p.c1.rgb - p.c0.rgb) * tc;
+    // Clipped to alpha (K-706, == cpu::gradient): `ramp · a` is the
+    // premultiplied form of "this ramp at this coverage", and the layer's own
+    // alpha is then left exactly as it was — the whole difference between the
+    // Gradient overlay style and the generator this kernel also serves.
+    var cover = 1.0;
+    var outa = o.a * (1.0 - p.mix_amt) + p.mix_amt;
+    if (p.clip_to_alpha != 0u) {
+        cover = o.a;
+        outa = o.a;
+    }
+    let g = (p.c0.rgb + (p.c1.rgb - p.c0.rgb) * tc) * cover;
     let outv = o.rgb * (1.0 - p.mix_amt) + g * p.mix_amt;
-    let outa = o.a * (1.0 - p.mix_amt) + p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, outa));
 }

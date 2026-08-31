@@ -1,8 +1,9 @@
 # Layer styles
 
-Decision: K-706. Status: §10's first package has landed — the model, all nine
-declarations, the render seam and two rendering styles. Packages 2 and 3 are
-still to build.
+Decision: K-706. Status: §10's first two packages have landed — the model, all
+nine declarations, the render seam, and **all seven v1 styles rendering on both
+paths** with §2's order pinned in pixels. Package 3 (fold, panel, menu, import)
+is still to build.
 
 **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
 behind it, a glow around it, a colour or gradient painted across its face, a
@@ -213,8 +214,30 @@ sharp corners. Upgrade: two-pass chamfer distance transform in the same kernel
 slots. Trigger: side-by-side import comparison flagging corner shape. -->
 
 Four of the seven shipped styles are one gaussian-on-alpha kernel in four
-configurations — the drop-shadow core generalises with three uniforms (invert
-alpha in/out, offset, spread) rather than four shaders.
+configurations — the drop-shadow core generalises rather than growing four
+shaders. **Two** new uniforms carry it, not the one "invert" the design counted:
+`invert` reads the coverage from the inverted alpha, and `inner` keeps the result
+in the shape and composites it over. They are genuinely separate, and Inner glow
+is why — its Centre source is `inner` **without** `invert`, the two coverages
+being exact complements inside the shape. (`offset` and `spread` were already
+there.) The inversion is one subtraction after the sample rather than a second
+blur, and that is exact, not merely cheap: the gaussian is a normalised weighted
+sum padded with zeros, so `1 − blur₀(α)` is the 1-padded blur of `1 − α`,
+including outside the frame, where "not the shape" is the honest reading.
+
+**Gradient overlay's geometry.** The style names an angle and a scale where the
+Gradient effect names two points, so `GradientOverlay::packed` takes the raster's
+size and works the points out: the axis is centred on the raster and half as long
+as the raster's own support along the angle, and Reverse swaps the two colours
+rather than the two points, so a reversed ramp sits exactly where the unreversed
+one sat. Radial reads only the axis's length, and takes the half-diagonal.
+
+**Stroke's morphology is the screen matte's.** The dilate and erode are
+`cpu::matte_morph` — the same separable running max/min, the same clamp-to-edge,
+the same fractional easing of the outermost ring that keeps dragging Size
+continuous. A consequence worth knowing before it is reported as a bug: a shape
+that runs to the edge of its own raster gets no inside stroke along that edge,
+because clamp-to-edge says the shape carries on.
 
 ## 5. The Timeline fold
 
@@ -342,9 +365,16 @@ UI (only the touched test files):
    generalised drop-shadow kernel uniforms (`spread_scale`, `knockout`), and the
    identity/order/cache/parity tests in `fx/styles/tests.rs` and
    `lumit-render/tests/layer_styles.rs`.
-2. **The remaining five kernels + order pinning.** Inner shadow, Outer glow,
-   Inner glow, Gradient overlay, Stroke (the new dilate), the full §2 order
-   pixel tests, CPU/GPU agreement, padding tests.
+2. ~~**The remaining five kernels + order pinning.**~~ **Landed.** Inner shadow,
+   Outer glow, Inner glow, Gradient overlay and Stroke (the new dilate), the §2
+   order pixel tests, CPU/GPU agreement for all seven, and the padding test.
+   **How to read the order tests.** The two outer styles run on one raster, so
+   the second one blurs an alpha the first has already fattened and reaches
+   further out than it would alone; far from the shape that extra reach wins on
+   its own and the two colours cross over. The order test therefore samples hard
+   against the layer's edge, where both coverages are near their peak and being
+   in front is the only thing that decides. Moving that sample outward is how
+   the test stops meaning anything.
 3. **Fold + panel + menu + import.** Bridge styles accessors and the shared
    instance lookup, add/remove/toggle commands, Timeline Styles group, panel
    section, Layer-menu wiring, engine labels + arb keys, the §7 map stage,

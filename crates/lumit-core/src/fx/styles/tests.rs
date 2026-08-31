@@ -255,6 +255,8 @@ fn spread_at_full_hardens_the_shadow() {
         mix: 1.0,
         spread_scale: cpu::spread_scale(spread),
         knockout: false,
+        invert: false,
+        inner: false,
     };
     // Shadow only, so the alpha that comes back IS the shadow's coverage.
     let ramps = |spread: f32| {
@@ -296,6 +298,8 @@ fn the_layer_knocks_the_shadow_out_only_where_it_is_transparent() {
                 mix: 1.0,
                 spread_scale: 1.0,
                 knockout,
+                invert: false,
+                inner: false,
             },
         );
         // The middle of the square.
@@ -408,4 +412,293 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
         back.styles[0].param("mix"),
         Some(EffectValue::Float(_))
     ));
+}
+
+// ---------------------------------------------------------------------------
+// The five kernels of §10's second package (docs/impl/layer-styles.md §9).
+//
+// These read the typed structs straight, rather than through `resolve_stack`,
+// because what is under test is the arithmetic each style packs — the walk that
+// carries it is already pinned above, and going through it twice would only make
+// a kernel failure read as a resolution failure.
+// ---------------------------------------------------------------------------
+
+use crate::fx::styles::defs::{
+    DropShadowStyle, GradientOverlay, InnerGlow, InnerShadow, OuterGlow, StrokeStyle,
+};
+use crate::fx::Params;
+
+/// Run one style's ops through the ordinary resolve walk — the path a real
+/// frame takes, used where *whether the style renders at all* is the question.
+fn through_the_walk(name: &str, px: &mut [f32], w: u32, h: u32) {
+    let inst = style(name);
+    let ops = crate::fx::resolve_stack(
+        std::slice::from_ref(&inst),
+        0.0,
+        1000.0,
+        1.0,
+        &crate::fx::MarkerContext::NONE,
+        std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
+    );
+    assert_eq!(ops.len(), 1, "{name} resolves through the ordinary walk");
+    cpu::apply_stack(px, w, h, &ops);
+}
+
+/// **Outer glow is the drop-shadow core at distance 0** (§4), and the note means
+/// that literally: the two styles pack the *same bundle*, so the assertion is on
+/// the numbers rather than on a tolerance between two pictures.
+///
+/// The knockout is the one thing that must differ, and it is off on the glow on
+/// purpose — a glow is meant to be seen through a semi-transparent layer.
+#[test]
+fn outer_glow_is_the_drop_shadow_core_at_distance_nought() {
+    let colour = [0.2, 0.45, 0.9, 1.0];
+    let mut glow = OuterGlow::read(Params::EMPTY);
+    glow.glow_colour = colour;
+    glow.opacity = 60.0;
+    glow.softness = 6.0;
+    glow.spread = 25.0;
+
+    let mut shadow = DropShadowStyle::read(Params::EMPTY);
+    shadow.shadow_colour = colour;
+    shadow.opacity = 60.0;
+    shadow.softness = 6.0;
+    shadow.spread = 25.0;
+    shadow.distance = 0.0;
+    shadow.knockout = false;
+
+    assert_eq!(
+        glow.packed(),
+        shadow.packed(),
+        "the glow must be the shadow's own bundle at zero offset"
+    );
+
+    // And the same bundle through the same kernel is the same bytes.
+    let (w, h) = (32u32, 32u32);
+    let before = square(w, h, 1.0);
+    let mut a = before.clone();
+    let mut b = before.clone();
+    cpu::drop_shadow(&mut a, w, h, &glow.packed());
+    cpu::drop_shadow(&mut b, w, h, &shadow.packed());
+    assert_eq!(a, b, "one kernel, one picture, to the bit");
+    assert_ne!(a, before, "and it drew something");
+}
+
+/// **An inner style stays inside the shape** (§9). Both halves matter: the
+/// alpha is never touched, and no pixel outside the layer's own coverage is
+/// written — which is what makes Inner shadow an *interior* style rather than a
+/// second shadow with the sign flipped.
+#[test]
+fn an_inner_shadow_leaves_no_pixel_outside_the_shape() {
+    let (w, h) = (32u32, 32u32);
+    let before = square(w, h, 1.0);
+    let mut after = before.clone();
+    let mut inner = InnerShadow::read(Params::EMPTY);
+    inner.opacity = 100.0;
+    inner.distance = 5.0;
+    inner.softness = 4.0;
+    cpu::drop_shadow(&mut after, w, h, &inner.packed());
+
+    for (i, (a, b)) in before
+        .chunks_exact(4)
+        .zip(after.chunks_exact(4))
+        .enumerate()
+    {
+        assert_eq!(a[3], b[3], "pixel {i}: an interior style never moves alpha");
+        if a[3] == 0.0 {
+            assert_eq!(
+                [b[0], b[1], b[2]],
+                [0.0, 0.0, 0.0],
+                "pixel {i} is outside the shape and must stay empty"
+            );
+        }
+    }
+    assert_ne!(before, after, "and it darkened something");
+    // The dark band lands on the side the light comes FROM: the default 135°
+    // throws the shadow down-and-right, so the inside of the TOP-LEFT edge is
+    // where the shape's own darkening shows.
+    let at = |x: u32, y: u32| after[((y * w + x) * 4) as usize];
+    let (near, far) = (at(w / 4 + 1, h / 4 + 1), at(3 * w / 4 - 2, 3 * h / 4 - 2));
+    assert!(
+        near < far,
+        "the inner shadow must darken the light-ward edge more than the far one: \
+         {near} against {far}"
+    );
+}
+
+/// **Inner glow's two Sources are exact complements** (§4): Edge reads what the
+/// shape is not, Centre reads the shape, and inside the coverage those two
+/// coverages sum to one. So the two pictures put the glow in opposite places,
+/// and neither leaves the shape.
+#[test]
+fn inner_glows_centre_source_inverts_the_distance_sense() {
+    let (w, h) = (32u32, 32u32);
+    let run = |source: u32| {
+        let mut g = InnerGlow::read(Params::EMPTY);
+        g.source = source;
+        g.opacity = 100.0;
+        g.softness = 5.0;
+        let p = g.packed();
+        assert_eq!(p.offset, [0.0, 0.0], "a glow does not lean");
+        assert!(p.inner, "an inner glow is an interior style");
+        let mut px = square(w, h, 1.0);
+        cpu::drop_shadow(&mut px, w, h, &p);
+        px
+    };
+    let edge = run(0);
+    let centre = run(1);
+    // One pixel in from the shape's rim, and one at its middle. The glow's
+    // default colour is a warm near-white on a mid-grey square, so brighter is
+    // more glow.
+    let at = |px: &[f32], x: u32, y: u32| px[((y * w + x) * 4) as usize];
+    let rim = (w / 4 + 1, h / 4 + 1);
+    let mid = (w / 2, h / 2);
+    assert!(
+        at(&edge, rim.0, rim.1) > at(&edge, mid.0, mid.1),
+        "Edge puts the glow against the rim"
+    );
+    assert!(
+        at(&centre, mid.0, mid.1) > at(&centre, rim.0, rim.1),
+        "Centre puts it in the middle"
+    );
+    for (a, b) in edge.chunks_exact(4).zip(centre.chunks_exact(4)) {
+        assert_eq!(a[3], b[3], "neither source touches alpha");
+    }
+}
+
+/// **Stroke's Position is the whole of which side the thickness lands on** (§9):
+/// Outside adds nothing inside the shape, Inside adds nothing outside it, and
+/// both actually draw a band. Arithmetic rather than a clip — the fat copy is
+/// never smaller than the shape and the thin one never larger.
+#[test]
+fn stroke_outside_adds_nothing_inside_and_inside_nothing_outside() {
+    let (w, h) = (32u32, 32u32);
+    let before = square(w, h, 1.0);
+    let run = |position: u32| {
+        let mut s = StrokeStyle::read(Params::EMPTY);
+        s.position = position;
+        s.size = 3.0;
+        s.opacity = 100.0;
+        s.stroke_colour = [1.0, 0.0, 0.0, 1.0];
+        let mut px = before.clone();
+        cpu::stroke_contour(&mut px, w, h, &s.packed());
+        px
+    };
+    let changed = |after: &[f32], want_inside: bool| {
+        let mut hits = 0usize;
+        for (i, (a, b)) in before
+            .chunks_exact(4)
+            .zip(after.chunks_exact(4))
+            .enumerate()
+        {
+            if a == b {
+                continue;
+            }
+            hits += 1;
+            assert_eq!(
+                a[3] > 0.0,
+                want_inside,
+                "pixel {i} changed on the wrong side of the edge"
+            );
+        }
+        hits
+    };
+    assert!(changed(&run(0), false) > 0, "Outside must draw a band");
+    assert!(changed(&run(1), true) > 0, "Inside must draw one too");
+
+    // Centre straddles: it has to touch both sides, which is what makes it a
+    // third position rather than a rounding of one of the other two.
+    let centre = run(2);
+    let (mut out_hits, mut in_hits) = (0usize, 0usize);
+    for (a, b) in before.chunks_exact(4).zip(centre.chunks_exact(4)) {
+        if a != b {
+            if a[3] > 0.0 {
+                in_hits += 1;
+            } else {
+                out_hits += 1;
+            }
+        }
+    }
+    assert!(
+        out_hits > 0 && in_hits > 0,
+        "Centre must straddle the edge: {out_hits} outside, {in_hits} inside"
+    );
+}
+
+/// A stroke of **size 0** is the bit-exact identity: both copies of the alpha
+/// are the alpha, so the band between them is empty. The property that keeps
+/// dragging the slider down to nothing from leaving a one-pixel rind behind.
+#[test]
+fn a_stroke_of_no_size_is_the_picture_untouched() {
+    let (w, h) = (16u32, 16u32);
+    let before = square(w, h, 1.0);
+    let mut after = before.clone();
+    let mut s = StrokeStyle::read(Params::EMPTY);
+    s.size = 0.0;
+    cpu::stroke_contour(&mut after, w, h, &s.packed());
+    assert_eq!(before, after);
+}
+
+/// **Gradient overlay is the ramp clipped to the coverage** (§4): it recolours
+/// the shape, leaves the alpha alone, adds nothing outside, and Reverse turns
+/// the ramp round without moving it.
+#[test]
+fn a_gradient_overlay_is_clipped_to_the_alpha_and_reverses_in_place() {
+    let (w, h) = (32u32, 32u32);
+    let before = square(w, h, 1.0);
+    let run = |reverse: bool| {
+        let mut g = GradientOverlay::read(Params::EMPTY);
+        g.reverse = reverse;
+        let p = g.packed(w, h);
+        assert!(p.clip_to_alpha, "an overlay is not a generator");
+        let mut px = before.clone();
+        cpu::gradient(&mut px, w, h, &p);
+        px
+    };
+    let plain = run(false);
+    let reversed = run(true);
+
+    for (i, (a, b)) in before
+        .chunks_exact(4)
+        .zip(plain.chunks_exact(4))
+        .enumerate()
+    {
+        assert_eq!(a[3], b[3], "pixel {i}: the overlay never touches alpha");
+        if a[3] == 0.0 {
+            assert_eq!(
+                [b[0], b[1], b[2]],
+                [0.0, 0.0, 0.0],
+                "pixel {i} is outside the shape and must stay empty"
+            );
+        }
+    }
+    // The default angle runs the ramp top to bottom, from Colour A (white) to
+    // Colour B (black); Reverse swaps the ends and leaves the axis where it was.
+    let at = |px: &[f32], y: u32| px[((y * w + w / 2) * 4) as usize];
+    let (top, bottom) = (h / 4 + 1, 3 * h / 4 - 2);
+    assert!(
+        at(&plain, top) > at(&plain, bottom),
+        "the ramp runs light to dark down the layer"
+    );
+    assert!(
+        at(&reversed, top) < at(&reversed, bottom),
+        "and Reverse turns it round"
+    );
+}
+
+/// **Satin and Bevel and emboss render as the identity** (§8) — on the CPU path
+/// here, and with no GPU pass at all, which `gpufx`'s own table test pins.
+///
+/// They are modelled so that an import keeps their data and no file migrates
+/// when their kernels land; until then an instance of one has to be invisible
+/// rather than a fault or a black frame.
+#[test]
+fn the_two_unrendered_styles_are_the_identity() {
+    let (w, h) = (16u32, 16u32);
+    for name in ["style_satin", "style_bevel_emboss"] {
+        let before = square(w, h, 1.0);
+        let mut after = before.clone();
+        through_the_walk(name, &mut after, w, h);
+        assert_eq!(before, after, "{name} must render as the identity in v1");
+    }
 }

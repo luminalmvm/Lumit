@@ -1176,4 +1176,118 @@ impl FxEngine {
         );
         out
     }
+
+    /// Apply one Stroke **style** (K-706, docs/impl/layer-styles.md §4) to a
+    /// linear working texture, returning a new texture of the same size.
+    ///
+    /// Three passes: the two separable morphological passes that carry the
+    /// fattened and thinned copies of the alpha together, then one combine that
+    /// cuts the band between them, paints it and lays it over the layer.
+    pub fn stroke_contour(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &StrokeOp,
+    ) -> wgpu::Texture {
+        // The rings and the fractional easing are taken once here rather than
+        // per pixel (K-137's host-side arithmetic rule), by exactly the
+        // expressions `cpu::matte_morph` takes them by — same clamp, same floor,
+        // same remainder — so the two paths cannot disagree about how wide the
+        // element is, and a nonsense number cannot turn a pass into a hang.
+        let rings = |px: f32| {
+            let r = px.abs().min(MATTE_MORPH_MAX_PX);
+            let ri = r.floor() as i32;
+            (ri, r - ri as f32)
+        };
+        let (grow_ri, grow_frac) = rings(op.grow_px);
+        let (shrink_ri, shrink_frac) = rings(op.shrink_px);
+        let params = |dx: i32, dy: i32, stage: u32| StrokeParams {
+            colour: [op.colour[0], op.colour[1], op.colour[2], 1.0],
+            dx,
+            dy,
+            grow_ri,
+            grow_frac,
+            shrink_ri,
+            shrink_frac,
+            opacity: op.opacity,
+            mix_amt: op.mix,
+            stage,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
+        };
+        let tmp = work_texture(ctx, w, h, "fx-stroke-morph-h");
+        self.dispatch(
+            ctx,
+            &self.stroke_morph,
+            src,
+            src,
+            &tmp,
+            w,
+            h,
+            bytemuck::bytes_of(&params(1, 0, 0)),
+        );
+        let pair = work_texture(ctx, w, h, "fx-stroke-morph-v");
+        self.dispatch(
+            ctx,
+            &self.stroke_morph,
+            &tmp,
+            &tmp,
+            &pair,
+            w,
+            h,
+            bytemuck::bytes_of(&params(0, 1, 1)),
+        );
+        let out = work_texture(ctx, w, h, "fx-stroke-out");
+        self.dispatch(
+            ctx,
+            &self.stroke_combine,
+            src,
+            &pair,
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&params(0, 0, 1)),
+        );
+        out
+    }
+}
+
+/// One resolved Stroke **style** (K-706). Mirrors
+/// `lumit_core::fx::cpu::StrokeContourParams` field-for-field so the kernel and
+/// the CPU oracle consume the identical numbers (K-031); the Position choice was
+/// already spent into the two half-widths by `StrokeStyle::packed`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeOp {
+    /// Scene-linear RGB; the band's coverage supplies the rest.
+    pub colour: [f32; 3],
+    /// Opacity ÷ 100.
+    pub opacity: f32,
+    /// How far the alpha is grown outward before the band is cut, raster pixels.
+    pub grow_px: f32,
+    /// How far it is shrunk inward, raster pixels.
+    pub shrink_px: f32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct StrokeParams {
+    colour: [f32; 4],
+    dx: i32,
+    dy: i32,
+    grow_ri: i32,
+    grow_frac: f32,
+    shrink_ri: i32,
+    shrink_frac: f32,
+    opacity: f32,
+    mix_amt: f32,
+    /// 0 = the first separable pass (read the layer's alpha), 1 = the second.
+    stage: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
 }

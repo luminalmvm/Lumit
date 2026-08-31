@@ -20,6 +20,10 @@ struct Params {
     matte_on: f32,         // 1 = the matte scales the shadow's Opacity (K-428)
     spread_scale: f32,     // Spread's threshold-remap slope (K-706); 1 = none
     knockout: u32,         // 1 = the layer's shape knocks the shadow out (K-706)
+    invert: u32,           // 1 = read the coverage from the inverted alpha (K-706)
+    inner: u32,            // 1 = composite inside the shape and over it (K-706)
+    _pad0: u32,
+    _pad1: u32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -92,6 +96,12 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     var cover = bilinear_transparent(f32(xy.x) + 0.5 - p.offset.x,
                                      f32(xy.y) + 0.5 - p.offset.y,
                                      size).a;
+    // Inverted alpha (K-706, == cpu::drop_shadow_matted): the softened picture
+    // of what the shape is NOT. Outside the frame the sample is 0, so this reads
+    // 1 there — which is right, because outside the frame is outside the shape.
+    if (p.invert != 0u) {
+        cover = 1.0 - cover;
+    }
     // Spread (K-706, == cpu::drop_shadow_matted): the gaussian's ramp re-cut
     // about its half-way line, which is where the original edge was. Skipped
     // whole at slope 1, so a shadow with no spread is the bytes it always was.
@@ -110,6 +120,12 @@ fn drop_shadow(@builtin(global_invocation_id) gid: vec3<u32>) {
     var over = o + shadow * (1.0 - o.a);
     if (p.shadow_only != 0u) {
         over = shadow;
+    }
+    // Interior (K-706): the layer's colour carried toward the style's by the
+    // coverage, alpha untouched. Both sides already carry the layer's alpha, so
+    // an interior style cannot put a pixel where the layer was not.
+    if (p.inner != 0u) {
+        over = vec4<f32>(o.rgb * (1.0 - k) + p.colour.rgb * o.a * k, o.a);
     }
     textureStore(dst, xy, o * (1.0 - p.mix_amt) + over * p.mix_amt);
 }

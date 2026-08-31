@@ -51,6 +51,10 @@ pub struct GradientOp {
     pub seed: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Paint the ramp only where the layer already is, leaving its alpha alone
+    /// (K-706) — the Gradient overlay *style*, as against this effect's
+    /// frame-flooding generator.
+    pub clip_to_alpha: bool,
 }
 
 #[repr(C)]
@@ -65,7 +69,8 @@ struct GradientParams {
     mix_amt: f32,
     seed: u32,
     radial: u32,
-    _pad0: u32,
+    /// 1 = clip the ramp to the layer's coverage and leave its alpha (K-706).
+    clip_to_alpha: u32,
     _pad1: u32,
 }
 
@@ -208,7 +213,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 seed: op.seed,
                 radial: u32::from(op.radial),
-                _pad0: 0,
+                clip_to_alpha: u32::from(op.clip_to_alpha),
                 _pad1: 0,
             }),
         );

@@ -14273,6 +14273,23 @@ same blur-the-alpha kernel the Drop shadow effect has used all along; the
 colour overlay is the Fill effect's painting arm; most of the family is old
 code wearing new labels.
 
+Four of the seven styles Lumit draws are, in fact, **the same kernel four
+times**. Blur the layer's silhouette, tint it, and put it behind the layer, and
+you have a drop shadow; stop sliding it sideways and the same thing is an outer
+glow. Now blur the silhouette's *opposite* — the picture of everywhere the layer
+is not — and keep the result inside the shape, and you have an inner shadow;
+stop sliding that and it is an inner glow. So the kernel carries two extra
+switches, "read the shape inside out" and "keep the result inside the shape",
+and those two switches are the whole difference between four styles. The one
+that is genuinely new is the **stroke**, and it works the way you would draw one
+by hand: make a copy of the layer's silhouette slightly fatter, make another
+slightly thinner, and the ring between the two is the stroke. Which side of the
+edge the thickness lands on is nothing more than which of the two copies you
+moved — fatten only, and the stroke sits outside; thin only, and it sits inside;
+do half of each and it straddles. (Fattening and thinning a shape like this has
+a proper name, *dilate* and *erode*, and Lumit already had the pair: it is what
+the green-screen keyer's Shrink/grow control does to a matte.)
+
 In the Timeline, a layer that has styles grows a **Styles** group next to
 Effects, folding open like Transform does. Importing an After Effects project
 brings styles across with their keyframes; the two exotic ones — satin, and

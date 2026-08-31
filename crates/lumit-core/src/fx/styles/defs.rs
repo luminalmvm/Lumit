@@ -4,10 +4,17 @@
 //! **In plain terms.** Nine little control panels, written the way every effect
 //! in the catalogue is written, so that keyframes, expressions, drivers, undo
 //! and the panel widgets all arrive with them and none of it had to be built
-//! twice. Two of them render in this package — Drop shadow and Colour overlay,
-//! one outer and one interior, which between them prove both halves of the
-//! render seam. The other seven are declared here so that an imported project
+//! twice. **Seven of the nine render** (§8): Drop shadow, Outer glow, Gradient
+//! overlay, Colour overlay, Inner glow, Inner shadow and Stroke. Satin and Bevel
+//! and emboss are declared but not rendered in v1, so that an imported project
 //! keeps its data and no file ever has to migrate when their kernels land.
+//!
+//! Four of the seven are **one kernel** — the drop-shadow core, generalised.
+//! Outer glow is that kernel at zero offset; Inner shadow is it reading the
+//! inverted alpha and compositing inside the shape; Inner glow is the inner
+//! shadow at zero offset, with the Centre source declining the inversion. That
+//! is why each `packed` below is short: the arithmetic lives in one place and
+//! these are the four uniforms that tell it apart.
 //!
 //! Three conventions run through the lot:
 //!
@@ -154,6 +161,8 @@ impl DropShadowStyle {
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
             spread_scale: cpu::spread_scale(self.spread),
             knockout: self.knockout,
+            invert: false,
+            inner: false,
         }
     }
 }
@@ -239,15 +248,15 @@ impl EffectDef for ColourOverlayDef {
 }
 
 // ---------------------------------------------------------------------------
-// Declared, not yet rendered.
+// The other five that render (docs/impl/layer-styles.md §10's second package),
+// and then the two that do not.
 //
-// The seven below carry their whole parameter set so that an AE import keeps
-// every value losslessly and no `.lum` has to migrate when their kernels land
-// (docs/impl/layer-styles.md §8, §10 packages 2 and 4). Each has the default
-// `EffectDef::apply_cpu` — the identity — and no entry in the GPU table, so an
-// instance of one resolves to an op that passes the picture through: the same
-// calm degrade a missing LUT or an unknown effect already takes, never a fault
-// (docs/14 §4).
+// Four of the five are the drop-shadow core in another configuration — the
+// generalisation the note counted on: Outer glow is that kernel at zero offset,
+// Inner shadow is it reading the *inverted* alpha and compositing inside the
+// shape, and Inner glow is the inner shadow at zero offset with the Centre
+// source declining the inversion. Gradient overlay is the Gradient effect's own
+// ramp clipped to the coverage. Only Stroke brings a kernel of its own.
 // ---------------------------------------------------------------------------
 
 /// Outer glow — §2's entry 2, behind the layer and in front of its shadow.
@@ -310,12 +319,46 @@ pub struct OuterGlow {
     pub mix: f32,
 }
 
+impl OuterGlow {
+    /// The drop-shadow bundle at **zero offset** (docs/impl/layer-styles.md §4).
+    ///
+    /// There is no direction to spend a sine on: a glow that leaned would be a
+    /// shadow. Everything else is the shadow's own arithmetic, which is the
+    /// point — the two styles are one kernel and the pixel test says so.
+    #[must_use]
+    pub fn packed(self) -> cpu::DropShadowParams {
+        cpu::DropShadowParams {
+            colour: [
+                self.glow_colour[0],
+                self.glow_colour[1],
+                self.glow_colour[2],
+            ],
+            opacity: (self.opacity / 100.0).clamp(0.0, 1.0),
+            offset: [0.0, 0.0],
+            softness_px: self.softness.max(0.0),
+            shadow_only: false,
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            spread_scale: cpu::spread_scale(self.spread),
+            // A glow is not knocked out by its own layer: it is meant to be seen
+            // through a semi-transparent one, which is half of what makes it
+            // read as light rather than as a shadow with a colour.
+            knockout: false,
+            invert: false,
+            inner: false,
+        }
+    }
+}
+
 /// Outer glow's behaviour.
 pub struct OuterGlowDef;
 
 impl EffectDef for OuterGlowDef {
     fn schema(&self) -> &'static EffectSchema {
         &<OuterGlow as EffectMetadata>::SCHEMA
+    }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        cpu::drop_shadow(rgba, w, h, &OuterGlow::read(p).packed());
     }
 }
 
@@ -381,6 +424,74 @@ pub struct GradientOverlay {
     pub mix: f32,
 }
 
+impl GradientOverlay {
+    /// The Gradient effect's own bundle, clipped to the coverage
+    /// (docs/impl/layer-styles.md §4).
+    ///
+    /// The style names an **angle and a scale** where the effect names two
+    /// points, so the two points are worked out here — once, host-side, in the
+    /// raster the style is about to run on. The axis is centred on that raster
+    /// and half as long as the raster's own support along the angle, which puts
+    /// Colour A at the first edge the ramp meets and Colour B at the last: scale
+    /// 100 % spans the picture exactly, and more of it spends the interesting
+    /// part of the ramp over a narrower band.
+    ///
+    /// Reverse swaps the two colours rather than the two points, because a
+    /// reversed ramp must sit where the unreversed one sat.
+    // ponytail: the ramp spans the RASTER, where Photoshop spans the layer's own
+    // bounds; ceiling = a small shape on a large layer raster (a precomp, an
+    // adjustment) gets only the middle of its gradient. Upgrade: carry the
+    // layer's alpha bounding box into the resolve, as the ROI padding path will
+    // already have to. Trigger: an import comparison or a report where the
+    // overlay reads flat.
+    #[must_use]
+    pub fn packed(self, w: u32, h: u32) -> cpu::GradientParams {
+        let theta = self.angle.to_radians();
+        let (sin, cos) = theta.sin_cos();
+        // "From straight up, clockwise" on a raster whose y grows downward —
+        // the convention every angle in this file follows.
+        let dir = [sin, -cos];
+        let (wf, hf) = (w as f32, h as f32);
+        let s = (self.scale / 100.0).max(0.01);
+        let centre = [wf * 0.5, hf * 0.5];
+        let (start, axis) = if self.gradient_type == 1 {
+            // Radial reads only the axis's LENGTH, so the direction is spent on
+            // nothing and the radius is the half-diagonal — the distance at
+            // which a ramp centred on the raster has reached every corner.
+            ([centre[0], centre[1]], [wf.hypot(hf) * 0.5 * s, 0.0])
+        } else {
+            // The raster's support along the axis, halved: |dir·(w, h)| ÷ 2.
+            let half = (dir[0].abs() * wf + dir[1].abs() * hf) * 0.5 * s;
+            (
+                [centre[0] - dir[0] * half, centre[1] - dir[1] * half],
+                [dir[0] * half * 2.0, dir[1] * half * 2.0],
+            )
+        };
+        let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
+        let (a, b) = if self.reverse {
+            (self.colour_b, self.colour_a)
+        } else {
+            (self.colour_a, self.colour_b)
+        };
+        cpu::GradientParams {
+            radial: self.gradient_type == 1,
+            start,
+            axis,
+            inv_len2: 1.0 / len2,
+            inv_len: 1.0 / len2.sqrt(),
+            c0: [a[0], a[1], a[2]],
+            c1: [b[0], b[1], b[2]],
+            // The style has no Scatter: dither is the generator's cure for
+            // banding across a whole frame, and an overlay rides whatever the
+            // layer under it already does.
+            scatter: 0.0,
+            seed: 0,
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            clip_to_alpha: true,
+        }
+    }
+}
+
 /// Gradient overlay's behaviour.
 pub struct GradientOverlayDef;
 
@@ -388,12 +499,23 @@ impl EffectDef for GradientOverlayDef {
     fn schema(&self) -> &'static EffectSchema {
         &<GradientOverlay as EffectMetadata>::SCHEMA
     }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        cpu::gradient(rgba, w, h, &GradientOverlay::read(p).packed(w, h));
+    }
 }
 
-/// Satin — §2's entry 6, interior.
+/// Satin — §2's entry 6, interior. **Declared, not rendered** (§8).
 ///
-/// Modelled and imported, not rendered in v1 (§8): its offset-alpha intersection
-/// shading is a fiddly kernel for a style almost nobody uses.
+/// Its offset-alpha intersection shading is a fiddly kernel for a style almost
+/// nobody uses. It carries its whole parameter set so that an AE import keeps
+/// every value losslessly and no `.lum` has to migrate when the kernel lands; it
+/// takes the default [`EffectDef::apply_cpu`] — the identity — and has no entry
+/// in the GPU table, so an instance resolves to an op that passes the picture
+/// through on **either** path: the same calm degrade a missing LUT already
+/// takes, never a fault (docs/14 §4). Bevel and emboss, below, is the other one.
+/// `the_two_unrendered_styles_are_the_identity` in `tests.rs` says so, and fails
+/// the day either grows a kernel without also growing a pass.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_satin",
@@ -521,12 +643,48 @@ pub struct InnerGlow {
     pub mix: f32,
 }
 
+impl InnerGlow {
+    /// The inner shadow's bundle at **zero offset**
+    /// (docs/impl/layer-styles.md §4).
+    ///
+    /// **The Source choice is the inversion, and nothing else.** Edge reads the
+    /// softened picture of what the shape is *not*, which is brightest against
+    /// the rim and dies away inward; Centre declines that inversion and reads
+    /// the shape itself, which is brightest in the middle and falls off toward
+    /// the rim. Those two are exact complements inside the shape, which is what
+    /// "the Centre source inverts the distance sense" means once the arithmetic
+    /// is written down.
+    #[must_use]
+    pub fn packed(self) -> cpu::DropShadowParams {
+        cpu::DropShadowParams {
+            colour: [
+                self.glow_colour[0],
+                self.glow_colour[1],
+                self.glow_colour[2],
+            ],
+            opacity: (self.opacity / 100.0).clamp(0.0, 1.0),
+            offset: [0.0, 0.0],
+            softness_px: self.softness.max(0.0),
+            shadow_only: false,
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            spread_scale: cpu::spread_scale(self.choke),
+            knockout: false,
+            invert: self.source == 0,
+            inner: true,
+        }
+    }
+}
+
 /// Inner glow's behaviour.
 pub struct InnerGlowDef;
 
 impl EffectDef for InnerGlowDef {
     fn schema(&self) -> &'static EffectSchema {
         &<InnerGlow as EffectMetadata>::SCHEMA
+    }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        cpu::drop_shadow(rgba, w, h, &InnerGlow::read(p).packed());
     }
 }
 
@@ -596,12 +754,50 @@ pub struct InnerShadow {
     pub mix: f32,
 }
 
+impl InnerShadow {
+    /// The drop-shadow bundle with both halves of the inner wrapper on
+    /// (docs/impl/layer-styles.md §4).
+    ///
+    /// `invert` reads the coverage from what the shape is *not*, so sliding it
+    /// by the offset walks the outside world **into** the shape; `inner` keeps
+    /// the result there, carrying the layer's own colour toward the shadow's and
+    /// leaving its alpha alone. The offset is the drop shadow's own, which is
+    /// why the dark band lands on the side the light comes from.
+    #[must_use]
+    pub fn packed(self) -> cpu::DropShadowParams {
+        let theta = self.direction.to_radians();
+        let (sin, cos) = theta.sin_cos();
+        cpu::DropShadowParams {
+            colour: [
+                self.shadow_colour[0],
+                self.shadow_colour[1],
+                self.shadow_colour[2],
+            ],
+            opacity: (self.opacity / 100.0).clamp(0.0, 1.0),
+            offset: [self.distance * sin, self.distance * -cos],
+            softness_px: self.softness.max(0.0),
+            shadow_only: false,
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            // Choke is Spread's twin on an interior style: the same remap of the
+            // same ramp, pulling the softened edge back in rather than out.
+            spread_scale: cpu::spread_scale(self.choke),
+            knockout: false,
+            invert: true,
+            inner: true,
+        }
+    }
+}
+
 /// Inner shadow's behaviour.
 pub struct InnerShadowDef;
 
 impl EffectDef for InnerShadowDef {
     fn schema(&self) -> &'static EffectSchema {
         &<InnerShadow as EffectMetadata>::SCHEMA
+    }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        cpu::drop_shadow(rgba, w, h, &InnerShadow::read(p).packed());
     }
 }
 
@@ -657,6 +853,38 @@ pub struct StrokeStyle {
     pub mix: f32,
 }
 
+impl StrokeStyle {
+    /// The contour bundle both paths consume
+    /// (docs/impl/layer-styles.md §4).
+    ///
+    /// **Position is spent here into two half-widths**, so no kernel ever
+    /// branches on the choice: Outside fattens the shape by the whole Size and
+    /// leaves the thin copy where it was, Inside thins it by the whole Size and
+    /// leaves the fat copy, and Centre does half of each. The band is the
+    /// difference of the two copies, so those three lines are the whole of what
+    /// "which side of the edge" means.
+    #[must_use]
+    pub fn packed(self) -> cpu::StrokeContourParams {
+        let size = self.size.max(0.0);
+        let (grow_px, shrink_px) = match self.position {
+            1 => (0.0, size),
+            2 => (size * 0.5, size * 0.5),
+            _ => (size, 0.0),
+        };
+        cpu::StrokeContourParams {
+            colour: [
+                self.stroke_colour[0],
+                self.stroke_colour[1],
+                self.stroke_colour[2],
+            ],
+            opacity: (self.opacity / 100.0).clamp(0.0, 1.0),
+            grow_px,
+            shrink_px,
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
+        }
+    }
+}
+
 /// Stroke (style)'s behaviour.
 pub struct StrokeStyleDef;
 
@@ -664,13 +892,18 @@ impl EffectDef for StrokeStyleDef {
     fn schema(&self) -> &'static EffectSchema {
         &<StrokeStyle as EffectMetadata>::SCHEMA
     }
+
+    fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
+        cpu::stroke_contour(rgba, w, h, &StrokeStyle::read(p).packed());
+    }
 }
 
-/// Bevel and emboss — §2's entry 10, topmost.
+/// Bevel and emboss — §2's entry 10, topmost. **Declared, not rendered** (§8),
+/// on exactly [`Satin`]'s terms.
 ///
-/// Modelled and imported, not rendered in v1 (§8): a lighting model with five
-/// techniques and an altitude is the one genuinely expensive style, and shipping
-/// seven well beats shipping nine where two are wrong.
+/// A lighting model with five techniques and an altitude is the one genuinely
+/// expensive style, and shipping seven well beats shipping nine where two are
+/// wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "style_bevel_emboss",
