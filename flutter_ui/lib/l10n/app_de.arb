@@ -5489,10 +5489,6 @@
   "@menuCreateShapesFromText": {
     "description": "Layer ▸ Create submenu item: makes a copy of the selected text layer whose picture is the outlines of its letters as editable vector shapes."
   },
-  "menuCropCompToWorkArea": "Komposition auf Arbeitsbereich zuschneiden",
-  "@menuCropCompToWorkArea": {
-    "description": "Menu item."
-  },
   "menuCut": "Ausschneiden",
   "@menuCut": {
     "description": "Menu item."

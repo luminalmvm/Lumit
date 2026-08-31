@@ -2819,10 +2819,6 @@
   "@menuCreate": {
     "description": "Menu item."
   },
-  "menuCropCompToWorkArea": "Crop comp to work area",
-  "@menuCropCompToWorkArea": {
-    "description": "Menu item."
-  },
   "menuCut": "Қиып алу",
   "@menuCut": {
     "description": "Menu item."

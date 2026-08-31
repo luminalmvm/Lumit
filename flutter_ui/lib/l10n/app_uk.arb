@@ -3306,10 +3306,6 @@
   "@menuCreate": {
     "description": "Menu item."
   },
-  "menuCropCompToWorkArea": "Crop comp to work area",
-  "@menuCropCompToWorkArea": {
-    "description": "Menu item."
-  },
   "menuCut": "Вирізати",
   "@menuCut": {
     "description": "Menu item."
