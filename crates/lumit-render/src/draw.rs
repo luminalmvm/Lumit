@@ -66,6 +66,16 @@ pub struct MatteDraw {
     pub colour_space: Option<String>,
 }
 
+/// One Roto brush's matte for one frame, as the draw carries it (K-710): the
+/// propagation's gray8 plane at the source raster, shared rather than copied
+/// (the store hands out an `Arc` and this is that same allocation).
+#[derive(Clone)]
+pub struct RotoMatteDraw {
+    pub width: u32,
+    pub height: u32,
+    pub gray: std::sync::Arc<Vec<u8>>,
+}
+
 /// A depth-of-field depth input packaged for the compositor (docs/impl/
 /// layer-input.md §2): the referenced layer's **source** pixels, ready for
 /// [`crate::fxops::render_layer_input`] to resample into the consuming layer's
@@ -333,6 +343,22 @@ pub struct CompLayerDraw {
     /// documented no-op — an unset row, a mask since deleted, a layer with no
     /// masks — and never a fault.
     pub mask_paths: Vec<lumit_core::mask::MaskPolyline>,
+    /// **Every Roto brush's matte for this frame** (K-710, docs/impl/roto.md
+    /// §5): one slot per enabled `roto_brush` op that resolves to an op at all,
+    /// in stack order — the same one-predicate, one-order rule the mask paths
+    /// follow, with its own counter in `run_ops` because its predicate is a
+    /// different one again.
+    ///
+    /// `None` is the honest passthrough and is what a frame **outside the
+    /// propagated span** gets: never a held neighbouring matte, which would be
+    /// a wrong answer wearing a right one's face. Also `None` before any
+    /// propagation has run, and after the cache folder is deleted.
+    ///
+    /// A gray8 plane at the **source's own raster**, not this layer's working
+    /// one: the matte was solved on the file's frames (K-248) and the resample
+    /// into the working raster happens on the card, where every other
+    /// differently-sized input is fitted.
+    pub roto_mattes: Vec<Option<RotoMatteDraw>>,
     /// **Every points producer's birth schedule** (points-stream.md §3.3,
     /// K-474): one per op whose effect declares a `Points` output — Particulate
     /// alone in v1 — 1:1 and in stack order with them, the same one-predicate,

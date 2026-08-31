@@ -1065,7 +1065,17 @@ impl Realiser<'_> {
                     }
                     _ => l.fx.clone(),
                 };
-                crate::fxops::run_ops(
+                // The propagated mattes, uploaded once each at the source's
+                // own raster (K-710). `fit_centred` inside the walk takes them
+                // to the working raster, which is where every differently-sized
+                // input is fitted. Empty on every layer with no Roto brush,
+                // which costs nothing at all.
+                let roto_mattes: Vec<Option<wgpu::Texture>> = l
+                    .roto_mattes
+                    .iter()
+                    .map(|slot| slot.as_ref().map(|m| upload_roto_matte(&self.ctx, m)))
+                    .collect();
+                crate::fxops::run_ops_with_roto(
                     self.fx,
                     &self.ctx,
                     tex,
@@ -1080,6 +1090,7 @@ impl Realiser<'_> {
                     &mattes,
                     &l.mask_paths,
                     &l.points_schedules,
+                    &roto_mattes,
                     fx_ms.as_mut(),
                     // The per-effect cache (K-421), for a source the builder
                     // could name; a nested comp, text or shape runs as before.
@@ -1358,4 +1369,23 @@ fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
     !layers
         .iter()
         .any(|l| matches!(l.source, DrawSource::Adjust) || !l.mb.is_empty())
+}
+
+/// One propagated matte on the card (K-710): a gray8 plane at the source's own
+/// raster, uploaded as the working linear format so it goes through the same
+/// sampler every other auxiliary picture does.
+///
+/// Grey into all four channels. `set_matte` reads the luminance of whichever
+/// channel it is told to, so the alpha carries the same number as the colour and
+/// the plane reads correctly whichever way it is asked. The values are the
+/// matte's own 0..1 and are **not** colour, so no transfer function is applied
+/// to them — a coverage is a weight, not a picture.
+fn upload_roto_matte(ctx: &lumit_gpu::GpuContext, m: &crate::draw::RotoMatteDraw) -> wgpu::Texture {
+    let n = (m.width as usize) * (m.height as usize);
+    let mut rgba = Vec::with_capacity(n * 4);
+    for i in 0..n {
+        let a = f32::from(m.gray.get(i).copied().unwrap_or(0)) / 255.0;
+        rgba.extend_from_slice(&[a, a, a, a]);
+    }
+    lumit_gpu::fx::upload_linear_f32(ctx, &rgba, m.width, m.height)
 }

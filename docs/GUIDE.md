@@ -14457,3 +14457,55 @@ meet it, and it is deliberate — the moment influence is allowed to travel both
 sentence above stops being one sentence, and nothing can be copied with confidence again. If
 you want the frames before your correction re-decided too, you move the base frame there,
 which says what you mean and re-solves what it should.
+
+## 55. Where a propagated matte is kept, in plain terms
+
+The two sections above describe working a matte out and deciding which of them an edit
+spoils. This one is about the machinery in the middle: the job that does the work, and the
+folder it puts the answers in.
+
+**The work happens somewhere else.** Pressing Propagate does not lock the application up.
+Lumit starts a thread of its own — one, never two — that opens the media file, decodes it
+frame by frame, measures the motion, and works out a matte for each frame. You carry on
+editing while it runs. A second Propagate while one is going answers "busy" rather than
+queueing: two of these share one disk and one graphics card and would halve each other.
+While it runs it publishes a number anyone can read — this many frames done, this many of
+them copied rather than solved — and the panel simply looks at that number when it repaints,
+rather than holding a subscription to it.
+
+**Stopping keeps what it had.** This is where the Roto brush deliberately differs from the
+camera tracker. A cancelled camera solve throws its work away, because half a camera path
+half-adjusted toward an answer is not an answer. A cancelled propagation has fifty finished
+mattes, and every one of them is right — so they are written, the span says how far it got,
+and pressing Propagate again carries on from there rather than starting over.
+
+**The answers go in a cache folder, not in the project.** Beside the folders that already
+hold rendered frames and camera solves there is now one called `roto/`. Each propagation
+writes one file there. Its name has two halves: the first says which media file it is about,
+the second says which strokes and settings made it. The two halves matter. When you correct a
+stroke the second half changes — it is a different run now — but the first half does not, so
+the new run can find the old file and lift out every frame the correction did not touch.
+That is the copying the last section described, and the file name is what makes it cheap.
+
+Inside, each frame is stored as its chain hash, a rectangle, and the grey picture inside that
+rectangle, squeezed. A matte is mostly long stretches of pure black and pure white, which
+compresses to almost nothing: a full-size frame that would be two megabytes raw is usually a
+few tens of kilobytes, and a whole shot is tens of megabytes. The folder can be deleted at any
+moment, from a file manager, with Lumit running or not; the cost is re-propagating, and the
+project file is not touched, because it never points at the folder at all.
+
+**When the picture is drawn**, the effect asks the store for this layer's matte at *this file's
+frame number* — the file's own numbering, not the composition's, so the same matte serves a
+retimed copy, a slowed one and one in a different composition. The store keeps the last few
+frames uncompressed so scrubbing back and forth over one moment does not unpack the same
+picture again on every repaint. If there is no matte for that frame — nothing propagated yet,
+the folder deleted, or the playhead past where the run got to — the effect does **nothing at
+all** and the layer comes through whole. That is deliberate: showing the nearest matte instead
+would be a wrong picture wearing a right one's face, and the panel says how far the span
+actually reaches so there is no mystery about it.
+
+**One refusal deserves explaining.** If the machine has no graphics card the propagation can
+use, Lumit refuses the job rather than falling back to the slow path it keeps for testing.
+That path takes seconds per frame pair, so a shot would look like it had hung, and mixing the
+two would mean the same strokes produced different mattes on different runs — which would
+quietly break the promise that deleting the cache costs nothing.

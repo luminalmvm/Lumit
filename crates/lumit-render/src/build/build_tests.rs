@@ -79,6 +79,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         temporal: Vec::new(),
         flow_fields: Vec::new(),
         source_key: 0,
+        source_frame: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
     map.insert(layer.id, &lp);
@@ -358,6 +359,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         temporal: Vec::new(),
         flow_fields: Vec::new(),
         source_key: 0,
+        source_frame: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
     map.insert(layer.id, &lp);
@@ -1453,6 +1455,7 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         temporal: Vec::new(),
         flow_fields: Vec::new(),
         source_key: 0,
+        source_frame: 0,
     };
     let (gp, mp) = (pixels(&gated), pixels(&matte_layer));
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();

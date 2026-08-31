@@ -53,6 +53,13 @@ pub fn flow_divisor(index: u32) -> u32 {
     }
 }
 
+/// The **View** row's resolved id, so the render seam can read which picture to
+/// draw without a string lookup per op.
+pub const VIEW_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("view");
+
+/// The **Matte mode** row's resolved id.
+pub const MODE_ID: crate::fx::params::ParamId = crate::fx::params::ParamId::new("mode");
+
 /// The Roto brush's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(

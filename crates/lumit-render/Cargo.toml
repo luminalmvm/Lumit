@@ -26,6 +26,10 @@ lumit-text = { path = "../lumit-text" }
 # crate that can both decode a clip and hold the solve where the render path
 # reads it (docs/impl/tracking.md §5b).
 lumit-track = { path = "../lumit-track" }
+# The roto brush's arithmetic (K-708). The propagation job lives here for the
+# tracker's reason: this is the one crate that can decode a clip, measure its
+# flow and hold the answer where the render path reads it (impl/roto.md §5).
+lumit-roto = { path = "../lumit-roto" }
 # The compositor speaks wgpu directly. The version is pinned to the one
 # lumit-gpu links, or the handles would not unify.
 wgpu = "24"
@@ -37,6 +41,9 @@ blake3 = "1"
 # The `track/` sidecar's body (K-417), in the same form the media index uses for
 # the same reason: a compact record of a struct, rebuilt whenever it disagrees.
 bincode = "1"
+# The `roto/` tier's mattes, compressed the way the frame cache compresses its
+# pixels and with the same crate (docs/10 §3).
+lz4_flex = "0.11"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

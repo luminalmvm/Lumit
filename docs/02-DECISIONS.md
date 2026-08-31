@@ -22492,3 +22492,86 @@ baseline, which is what every other budget gets.
 **What did not change:** the warp stays CPU at the paint/masks seam (K-704), the mesh stays
 unsaved and content-keyed, and the block still feeds the frame cache key. Only the three
 numbers moved, and they moved because they were measured.
+
+## K-713 — RB2, the second half: the propagation job, the `roto/` tier, and the matte applied where the effect stands
+
+**Status:** DECIDED. The other half of K-710, implementing [impl/roto.md](impl/roto.md) §5–§8
+(K-705) over the crate K-708 built. `crates/lumit-render/src/roto.rs`, the frame-key stamp in
+`lumit-eval`, and the carriage through `build.rs` → `realise.rs` → `fxops.rs`.
+
+**The job takes the camera tracker's thread discipline verbatim** (impl/tracking.md §5b): one
+propagation at a time, on a thread spawned for it and named `lumit-roto`, never a pool worker;
+the cache probe on that thread so no caller waits on a disk; progress as a value in a map that
+whoever repaints samples, never a subscription. **One thing is deliberately opposite.** A
+cancelled *track* discards its half-solve, because half a camera path adjusted toward an answer
+it never reached is not an answer. A cancelled *propagation* **finalises** — the K-540 pattern —
+because its fifty finished mattes are each correct and each correctly named, so they are
+written, the span says how far it got, and a later Propagate resumes from them.
+
+**A run is filed by the effect instance, not by the media.** A camera solve describes a file and
+is shared by every layer cutting it; a matte describes *a subject somebody scribbled on*, and
+two Roto brushes on one clip are two answers. The `roto/` sidecar's name is therefore in two
+halves — `<media>-<run>.lrot`, sixteen bytes each — where the media half is shared across every
+run of one shot and the run half is `roto::key_hash`. That split is load-bearing rather than
+tidy: after a correction the run half changes, and the new run finds the old file **by the
+media prefix** in order to copy frames out of it. Reuse is per frame and by chain hash, so no
+key check is made when reading a *different* run's file — the chain hash already covers the
+settings, the base and every stroke that decides that frame, which is the whole guarantee.
+
+**`FlowUnavailable` is a refusal, not a fallback.** The propagation asks `FlowEngine` for a GPU
+backend and refuses when there is none, rather than using the CPU oracle. Two reasons, both
+stated in impl/roto.md §8: at seconds a frame pair the oracle would misrepresent a minutes-long
+job as hung, and mixing backends would break the byte-identical rebuild the tier asserts. The
+five other refusals — `Offline`, `Busy`, `NoBaseFrame`, `Unreadable`, `NoFrames`, `NoSeeds` —
+are a closed enum with no free text in it, so the bridge hands the interface a reason rather
+than an English sentence (K-303, the camera track's §5c stance).
+
+**The matte reaches the frame key through the document, not through a store.** The camera link
+needed a `SourceStamper` method because a solved pose lives outside `lumit-core` (tracking.md
+§5b deviation 8); a roto chain hash does not — it is a pure function of the effect instance and
+the frame, so `lumit-eval` calls `lumit_core::roto::frame_stamp` and no trait grows a method.
+Hashed in the **Footage** and **Sequence-footage** arms, where the stamped source frame is
+already in hand, and emitting nothing at all for a layer with no stroked Roto brush, so every
+key written before this exists is still the key that layer names.
+
+**The matte is carried as a side list, and `run_ops` did not grow a parameter.**
+`CompLayerDraw::roto_mattes` is one slot per `roto_brush` op, filled by `build.rs` beside the
+mask paths and the birth schedules, under the same one-predicate, one-order rule and with its
+own counter. Getting the **source frame** to the draw builder needed one new field —
+`CompLayerPixels::source_frame` — because the document holds no frame rate for a media item and
+the plan's answer was already in hand. `run_ops` keeps its exact signature and forwards an
+empty slice to a new `run_ops_with_roto`; the roto matte is the one side list whose absence is
+the overwhelmingly normal case, and one forwarding line says so instead of twenty edited call
+sites. *Ponytail: fold the two back together if a second such list ever appears.*
+
+**The pass is Set matte's, not a kernel of its own.** Multiply this layer's alpha by the matte's
+luminance, colour untouched — which `lumit_gpu::fx::set_matte` with `combine` already is, fused
+into one straight-alpha pass. Matte inverted is its `invert`; the **Matte** view runs the same
+pass over the plane itself, so the matte is judged as a picture. **Boundary renders as Result at
+the stack seam** and is the viewer overlay's business (RB3): drawing a line over the picture is
+not something the coverage pass can do, and inventing a second pass for it here would be built
+twice.
+
+**Outside the propagated span there is no matte and the effect runs no pass at all.** Not the
+nearest one held: impl/roto.md §12's trap, and the K-540 lesson re-applied.
+
+**The bridge is a doorway, not a worker** (docs/17's "The Roto brush: strokes down, a span
+and a progress up"). Strokes go down as methods on the existing `BridgeEffectInstance`
+handle, staged where every other row stages and committed by the same
+`LayerReference::set_effects`, so a scribble is one op and one undo step. Propagate and
+Cancel go through `fire_effect_action`, the one Action doorway. The status comes up as one
+flat struct — stage, done/total, **how many frames were copied rather than re-solved**, the
+span in source frames, the clip's length, the base frame, the stroke count — polled only
+while it is moving. `BridgeRotoFailure` is seven variants with no free text, and
+`panels/roto_display_frb.dart`'s exhaustive switch picks the arb key, so a reason added to
+the engine is a Dart compile error rather than an English island.
+
+New arb keys (Crowdin owes translations): `rotoFailedBusy`, `rotoFailedFlowUnavailable`,
+`rotoFailedNoBaseFrame`, `rotoFailedNoFrames`, `rotoFailedNoSeeds`, `rotoFailedOffline`,
+`rotoFailedUnreadable`, `rotoNoMatte`, `rotoNoStrokes`, `rotoQueued`, `rotoReadyToPropagate`,
+`rotoSolving`, `rotoSolvingReusing`, `rotoSpanPartial`, `rotoSpanWhole`.
+
+**Owed to RB3:** arming `tool.roto`, the brush and refine-edge gestures on the viewer, the
+overlay (strokes, the matte and boundary views, the span bar), and the effect panel's rows
+and status line. The **Boundary** view renders as Result at the stack seam until that overlay
+exists, which is where a line drawn over a picture belongs.

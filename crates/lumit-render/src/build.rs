@@ -98,6 +98,16 @@ fn warp_puppet(
     };
     let factorisation = PUPPET.factorisation(&mesh, &pins);
     let solution = lumit_core::puppet::solve(&mesh, &pins, &factorisation);
+    // What the Viewer's wireframe draws is the mesh that drew the pixels, not a
+    // second copy of it (docs/impl/puppet.md §5): left here, read by the bridge.
+    crate::puppet::publish(
+        layer.id,
+        crate::puppet::Ghost {
+            mesh: Arc::clone(&mesh),
+            deformed: solution.vertices.clone(),
+            inert: solution.inert.clone(),
+        },
+    );
     lumit_core::puppet::apply_puppet(
         rgba,
         w,
@@ -106,6 +116,34 @@ fn warp_puppet(
         f64::from(natural.1),
         &mesh,
         &solution,
+    );
+}
+
+/// The unmoved mesh of a layer a puppet tool is armed on but nobody has pinned,
+/// published for the overlay alone (docs/impl/puppet.md §5).
+///
+/// The pixels are the layer's own, at this frame, already made — so this costs
+/// one alpha lift and one *cached* mesh build and never a render. A mesh that
+/// cannot be built (nothing at or above 10 % alpha) takes the layer's wireframe
+/// away rather than leaving the last one lying over a picture it no longer fits;
+/// that absence is what the first click reads as its refusal.
+fn preview_puppet(pixels: &LayerPixels, layer: Uuid, density: f64, expansion: f64) {
+    let (rgba, w, h, natural) = pixels;
+    let nw = natural.0.round().max(1.0) as u32;
+    let nh = natural.1.round().max(1.0) as u32;
+    let alpha = lumit_core::puppet::alpha_at_natural(rgba, *w, *h, nw, nh);
+    let Ok(mesh) = PUPPET.mesh(&alpha, nw, nh, density, expansion) else {
+        crate::puppet::forget(layer);
+        return;
+    };
+    let deformed = mesh.vertices.clone();
+    crate::puppet::publish(
+        layer,
+        crate::puppet::Ghost {
+            mesh,
+            deformed,
+            inert: Vec::new(),
+        },
     );
 }
 
@@ -1046,6 +1084,12 @@ pub fn build_comp_draws_at(
         // block's reference time, which is the alpha the pins were placed on.
         if let Some(block) = &layer.puppet {
             warp_puppet(&mut pixels, layer, block, lt, &solo_at);
+        } else if let Some((density, expansion)) = crate::puppet::previewing(layer.id) {
+            // A puppet tool is armed on a layer nobody has pinned yet: the mesh
+            // the first click has to land inside does not exist until this
+            // builds it (docs/impl/puppet.md §5). No second render — the alpha
+            // is the picture already in hand.
+            preview_puppet(&pixels, layer.id, density, expansion);
         }
         Some(pixels)
     };

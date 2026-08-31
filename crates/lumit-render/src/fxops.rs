@@ -438,6 +438,55 @@ pub fn run_ops(
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
     points_schedules: &[lumit_core::fx::points::PointsSchedule],
+    timings: Option<&mut Vec<f32>>,
+    cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
+) -> Tex {
+    run_ops_with_roto(
+        fx,
+        ctx,
+        tex,
+        w,
+        h,
+        ops,
+        neighbours,
+        flow_fields,
+        luts,
+        layer_inputs,
+        flare_lens,
+        mattes,
+        mask_paths,
+        points_schedules,
+        &[],
+        timings,
+        cache,
+    )
+}
+
+/// [`run_ops`] with the **roto carriage** threaded through (K-710): one slot per
+/// `roto_brush` op, in stack order, holding the matte its propagation filed for
+/// this layer's source frame — or `None`, which is the effect's passthrough.
+///
+/// A separate entry point rather than a seventeenth parameter on the one every
+/// test calls: the roto matte is the only side list whose *absence* is the
+/// overwhelmingly normal case, and `run_ops` forwarding an empty slice says so
+/// in one line instead of at twenty call sites.
+#[allow(clippy::too_many_arguments)]
+pub fn run_ops_with_roto(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    tex: Tex,
+    w: u32,
+    h: u32,
+    ops: &lumit_core::fx::ResolvedStack,
+    neighbours: &[(i32, Tex)],
+    flow_fields: &[(i32, Tex)],
+    luts: &[Option<LoadedLut>],
+    layer_inputs: &[LayerInput],
+    flare_lens: &[Option<(u64, String)>],
+    mattes: &[LayerInput],
+    mask_paths: &[lumit_core::mask::MaskPolyline],
+    points_schedules: &[lumit_core::fx::points::PointsSchedule],
+    roto_mattes: &[Option<Tex>],
     mut timings: Option<&mut Vec<f32>>,
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
@@ -538,6 +587,12 @@ pub fn run_ops(
     // in is a number in the bag, so they ride beside the op the way a polyline
     // does.
     let mut sched_i = 0usize;
+    // The roto carriage's own counter (K-710), on its own predicate — one slot
+    // per `roto_brush` op, which is the enumeration `build.rs`'s
+    // `roto_mattes_for` fills by. Its own rather than shared for the mask
+    // path's reason: almost no op is a Roto brush, and one shared index would
+    // hand a matte to whichever effect happened to sit above.
+    let mut roto_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let paths_n = resolved.def.schema().mask_path_count();
@@ -572,6 +627,13 @@ pub fn run_ops(
         } else {
             None
         };
+        let roto = if resolved.def.schema().match_name == lumit_core::roto::ROTO_BRUSH {
+            let slot = roto_mattes.get(roto_i).and_then(|o| o.as_ref());
+            roto_i += 1;
+            Some(slot)
+        } else {
+            None
+        };
         let gpu = crate::gpufx::gpu_effect(resolved.def.schema().match_name);
         // An op whose output is already held: its counters still advance (the
         // lists are 1:1 with the ops, held or not; the matte, mask-path and
@@ -584,6 +646,8 @@ pub fn run_ops(
                 Some(AuxKind::LensFile) => flare_i += 1,
                 _ => {}
             }
+            // `roto_i` was advanced above with the other per-op slot reads, so
+            // nothing more is owed here.
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
@@ -727,6 +791,64 @@ pub fn run_ops(
             if let (Some((mode, mix, _)), Some(input)) = (blend, blend_input) {
                 tex = fx.blend_mix(ctx, &input, &tex, w, h, mode, mix);
             }
+        }
+
+        // **The Roto brush** (K-710, docs/impl/roto.md §5). It has no entry in
+        // the GPU table — there is no kernel to write — because what it does is
+        // Set matte's arithmetic over a picture nobody picked: multiply this
+        // layer's alpha by the propagation's matte, leaving the colour alone
+        // (§2.2's straight-alpha rule, which `set_matte` already fuses into its
+        // one pass). Matte mode inverts it; the Matte view shows the matte
+        // itself, because that is how a matte is judged; Boundary keeps the
+        // picture for the viewer's overlay to draw an edge over, and at the
+        // stack seam is Result.
+        //
+        // An **empty slot passes through**, running no pass at all: outside the
+        // propagated span there is no matte, and holding a neighbour's would be
+        // a wrong answer wearing a right one's face.
+        if let Some(Some(plane)) = roto {
+            let plane = lumit_gpu::fx::fit_centred(ctx, plane.clone(), w, h);
+            let view = resolved
+                .params
+                .choice(lumit_core::fx::effects::roto_brush::VIEW_ID, 0);
+            let invert = resolved
+                .params
+                .choice(lumit_core::fx::effects::roto_brush::MODE_ID, 0)
+                == 1;
+            tex = if view == 1 {
+                // The matte itself, as an opaque grey picture.
+                fx.set_matte(
+                    ctx,
+                    &plane,
+                    w,
+                    h,
+                    None,
+                    &lumit_gpu::fx::SetMatteOp {
+                        channel: 0,
+                        combine: false,
+                        invert,
+                        mix: 1.0,
+                    },
+                )
+            } else {
+                fx.set_matte(
+                    ctx,
+                    &tex,
+                    w,
+                    h,
+                    Some(&plane),
+                    &lumit_gpu::fx::SetMatteOp {
+                        channel: 0,
+                        // Intersect with the layer's own alpha rather than
+                        // replace it: a matte says which of *this* picture
+                        // to keep, and a layer that was already partly
+                        // transparent stays so.
+                        combine: true,
+                        invert,
+                        mix: 1.0,
+                    },
+                )
+            };
         }
 
         // The generic strength semantic (K-395), one implementation for every

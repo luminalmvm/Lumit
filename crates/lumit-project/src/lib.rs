@@ -3078,6 +3078,7 @@ mod tests {
                 custom_name: None,
                 linked_pairs: Vec::new(),
                 plugin_state: None,
+                roto: None,
                 extra: serde_json::Map::new(),
             };
             if let Some(bytes) = blob {

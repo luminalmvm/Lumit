@@ -128,7 +128,7 @@ the file's is what answers on a machine that has never seen the project.
 ## 3. The sidecar cache folder
 
 All derived data lives outside the project. **v1 status:** the rendered-frame cache, the
-media index and the camera-solve sidecar are built; `proxies/`, `peaks/`, and `flow/` are
+media index, the camera-solve sidecar and the roto-matte sidecar are built; `proxies/`, `peaks/`, and `flow/` are
 planned ([TODO.md](TODO.md)). What exists today:
 
 ```
@@ -139,6 +139,7 @@ planned ([TODO.md](TODO.md)). What exists today:
 │   └── index.log                  #   changes since that snapshot, replayed at open
 ├── media-index/       # frame indexes for exact long-GOP seeking, shared across projects
 ├── track/             # camera solves (K-417), shared across projects — see below
+├── roto/              # propagated roto mattes (K-710), shared across projects — see below
 └── <project-uuid>/journal/ops.jsonl # the crash-recovery journal (§4)
 
 <project>.lum-cache/   # the same frame cache, when the user asks for it beside the project
@@ -192,6 +193,30 @@ Global rather than per-project, for the reason `media-index/` is: a solve descri
 one, and a copy of a project finds its solves already there. The solve is deterministic
 (K-415), so a rebuild is byte-identical to what was deleted — asserted by a test, not
 assumed.
+
+**`roto/` — the roto-matte sidecar (K-710).** One file per propagation run, named
+`<media>-<run>.lrot`, where `<media>` is sixteen bytes of blake3 over the media's fingerprint
+and `<run>` sixteen bytes of blake3 over the tier's format version, the Roto brush's
+propagation settings, its base frame and its whole stroke table. Two halves rather than one
+hash for a reason the tier depends on: after a correction stroke the run hash changes, and the
+new run has to be able to **find the old file** to copy frames out of, which the shared media
+prefix is what makes cheap. The file is a seven-byte magic (`LUMROT `), a little-endian `u16`
+version, then a bincode record of that key, the source raster, the media's frame rate, the
+clip's own frame count, and one record per propagated frame: the frame index, that frame's
+**chain hash**, the matte's bounding box, and gray8 inside that box, LZ4-compressed. A matte is
+mostly long runs of 0 and 255, so a 1080p frame lands in tens of kilobytes where the raw plane
+is two megabytes, and a 600-frame shot in tens of megabytes. The refusal rules are `track/`'s
+exactly: wrong magic, a version **newer than this build**, a body that will not parse, or a
+stored key that is not the one asked for, is ignored and re-propagated.
+
+The **chain hash** is what makes this tier different from `track/`, and it is the whole of the
+invalidation rule. It covers the settings, the base frame, and exactly the strokes drawn
+between the base and that frame on that frame's side — [impl/roto.md](impl/roto.md) §1's purity
+sentence — so a correction on frame 200 of a shot based at frame 0 changes the hash of frames
+200 onward and of nothing else. A re-propagation reads every `.lrot` sharing the media prefix
+and **copies** each frame whose chain hash it already has, so the correction loop costs the
+frames it spoiled rather than the whole shot. Deterministic like every other tier, so a rebuild
+is byte-identical to what was deleted — asserted by a test, not assumed.
 
 Rules, binding:
 - The global cache root defaults under the user's local app-data and is configurable with a

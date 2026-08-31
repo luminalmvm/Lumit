@@ -106,6 +106,12 @@ pub struct CompLayerPixels {
     /// what lets the per-effect cache recognise a layer's source across
     /// renders without hashing its bytes.
     pub source_key: u128,
+    /// The **source frame** these pixels are, which is what a Roto brush's
+    /// matte is indexed by (K-710). The stamper works it out again for the
+    /// frame key; the draw builder cannot, because the document holds no frame
+    /// rate for a media item and this is the one place the plan's answer is
+    /// already in hand.
+    pub source_frame: i64,
 }
 
 pub struct CompFrame {
@@ -825,6 +831,7 @@ fn decode_comp(
             temporal,
             flow_fields,
             source_key: job.source_key(),
+            source_frame: i64::try_from(job.source_frame).unwrap_or(0),
         });
         // One more source frame in hand. Reported after the layer is filed, so
         // "n of m done" is true of what has actually been decoded.
