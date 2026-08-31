@@ -99,8 +99,8 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 ///
 /// **Six cells** — the L6 arrangement (owner's ruling; supersedes K-483/K-484's
 /// share of the ordering). Fx leads the column, collapse comes out of the cell
-/// it shared with flow and stands last on a column of its own after 3D, and
-/// flow sits immediately left of it: fx · motion blur · 3D · adjustment · flow
+/// it shared with flow and stands last on a column of its own, and
+/// flow sits immediately left of it: fx · 3D · motion blur · adjustment · flow
 /// · collapse ([ModeCell]). The span is the same on every row, including the
 /// kinds a given cell is not drawn on: a column that changed width by layer
 /// kind would take the pickers with it.
@@ -120,10 +120,10 @@ const List<SwitchCell> switchHideOrder = [
   SwitchCell.solo,
 ];
 
-/// The Modes cells, in the order they are drawn (L6): fx leads, collapse ends
+/// The Modes cells, in the order they are drawn (L6, amended by the owner
+/// 2026-08-31: 3D and motion blur swapped places): fx leads, collapse ends
 /// the column on a cell of its own, and flow stands immediately left of it.
-/// Motion blur, 3D and adjustment keep the places they had between them.
-enum ModeCell { fx, motionBlur, threeD, adjustment, flow, collapse }
+enum ModeCell { fx, threeD, motionBlur, adjustment, flow, collapse }
 
 /// The order the Modes column gives its cells up in (owner, T4): flow, then
 /// adjustment, then motion blur. Fx, 3D and collapse are what a shrunk Modes

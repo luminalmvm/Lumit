@@ -22831,3 +22831,15 @@ the outline offers, the group broadcast's op-builder shared; a locked sibling si
 drops out exactly as the loop's `try`/`catch` did, the clicked row keeps its own refusal
 rules) and `ungroup_selection(layer_ids)` (every band the selection touches, one batch,
 each restored to its slot by one undo). One click, one `Op::Batch`, one undo step.
+
+## K-721 — 3D stands left of motion blur in the Modes column
+
+**Status:** DECIDED — 2026-08-31
+
+Owner, desktop testing: "switch the motion blur and 3D layer options in the modes in the
+outline area." Amends K-632's cell order and nothing else about it: the column reads
+fx · 3D · motion blur · adjustment · flow · collapse. The hide ladder (K-633) is untouched
+— it names cells, not places — so a narrowed column still keeps fx, 3D and collapse.
+
+Tests: `timeline_panel_frb_test` ("the outline columns sit in their groups", "flow and
+collapse stand in cells of their own") pin the new order.

@@ -501,12 +501,13 @@ class _OutlineRowState extends State<OutlineRow> {
     );
   }
 
-  /// Group 3: fx · motion blur · 3D · adjustment · flow · collapse, spread
+  /// Group 3: fx · 3D · motion blur · adjustment · flow · collapse, spread
   /// across the same span the fold-out's value cells use.
   ///
-  /// **The L6 arrangement** (owner's ruling): fx leads the column, collapse has
+  /// **The L6 arrangement** (owner's ruling; 3D and motion blur swapped on the
+  /// owner's 2026-08-31 desktop testing): fx leads the column, collapse has
   /// come out of the cell it shared with flow (K-168's flow-or-collapse) and
-  /// stands on its own after 3D, and flow sits immediately left of it. A
+  /// stands on its own at the end, and flow sits immediately left of it. A
   /// column each means a Precomp that is also retimed footage shows both, and
   /// neither has to be read off the layer's kind to know which switch it is.
   ///

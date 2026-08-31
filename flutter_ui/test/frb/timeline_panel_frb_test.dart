@@ -5116,7 +5116,7 @@ void main() {
 
     /// The four column groups in their shipped order (docs/07 §4.2):
     /// visibility · audio · solo · lock · shy, then twirl · label · number ·
-    /// name, then fx · motion blur · 3D · adjustment, then matte · blend ·
+    /// name, then fx · 3D · motion blur · adjustment, then matte · blend ·
     /// parent.
     testWidgets('the outline columns sit in their groups', (tester) async {
       final p = withComp();
@@ -5139,8 +5139,9 @@ void main() {
         'tl-label-$id',
         'tl-name-$id',
         'tl-fx-$id',
-        'tl-mb-$id',
+        // 3D left of motion blur (owner, 2026-08-31 — the pair swapped).
         'tl-3d-$id',
+        'tl-mb-$id',
         // A solid draws the adjustment cell (K-484); most kinds do not.
         'tl-adjust-$id',
         'tl-matte-$id',
@@ -5182,9 +5183,9 @@ void main() {
       double dx(String key) =>
           tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
       for (final pair in [
-        ('tl-fx-$precompId', 'tl-mb-$precompId'),
-        ('tl-mb-$precompId', 'tl-3d-$precompId'),
-        ('tl-3d-$precompId', 'tl-adjust-$precompId'),
+        ('tl-fx-$precompId', 'tl-3d-$precompId'),
+        ('tl-3d-$precompId', 'tl-mb-$precompId'),
+        ('tl-mb-$precompId', 'tl-adjust-$precompId'),
         ('tl-adjust-$precompId', 'tl-collapse-$precompId'),
       ]) {
         expect(dx(pair.$2), greaterThan(dx(pair.$1)),

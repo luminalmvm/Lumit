@@ -1370,10 +1370,11 @@ wanders into the panels behind it.
 
 **Shipped arrangement (K-188, superseding K-168's; extended by K-276):** the columns sit in
 FIVE groups, left to right — 1 visibility · audio · solo · lock · shy · guide; 2 twirl ·
-label-colour chip · layer number · name; 3 fx bypass · motion blur · 3D · adjustment · flow
-· collapse (K-632, superseding K-483/K-484's ordering: fx leads the column, collapse has
-its own cell after 3D rather than sharing K-168's flow-or-collapse slot, and flow stands
-immediately left of it);
+label-colour chip · layer number · name; 3 fx bypass · 3D · motion blur · adjustment · flow
+· collapse (K-632, superseding K-483/K-484's ordering, with 3D and motion blur swapped by
+the owner's 2026-08-31 desktop testing: fx leads the column, collapse has its own cell at
+the end rather than sharing K-168's flow-or-collapse slot, and flow stands immediately
+left of it);
 4 matte · blend · parent (dropdowns; the pick-whips are a follow-up); 5 **render time**. **Dragging a group's header moves the
 whole group**, which is how the column order is changed, and **dragging the seam after a
 group resizes it** (K-192) — every other group keeps its width, so the outline grows or
