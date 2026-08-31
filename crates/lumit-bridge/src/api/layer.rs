@@ -26,6 +26,18 @@ use crate::api::{
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod style_tests;
 
+/// Which list an instance id lives on — the three homes
+/// `LayerReference::with_instances` can commit to (K-706's two, and the group
+/// header K-731 added). Internal to the shared lookup: no panel ever sees it,
+/// which is the point.
+#[frb(ignore)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstanceHome {
+    Effects,
+    Styles,
+    Group(Uuid),
+}
+
 /// A layer's on/off switches, read as a group because the Timeline draws them
 /// as one column block and reading them one at a time would be six crossings
 /// per row per frame.
@@ -5482,38 +5494,61 @@ impl LayerReference {
         &self,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        self.with_instances(false, edit)
+        self.with_instances(InstanceHome::Effects, edit)
     }
 
-    /// [`Self::with_effects`] for either of the layer's two instance lists —
-    /// its effect stack, or its **styles** (docs/impl/layer-styles.md §5,
-    /// K-706).
+    /// [`Self::with_effects`] for any of the three instance lists a param
+    /// command can land on — the layer's effect stack, its **styles**
+    /// (docs/impl/layer-styles.md §5, K-706), or a **group header's** stack in
+    /// this comp (docs/impl/group-effects.md §6, K-731).
     ///
-    /// A style is an `EffectInstance` in a second, order-locked list, so the
-    /// only thing that differs between editing one and editing an effect is
-    /// which list is read and which op commits it. Both live here, which is why
-    /// no command below grows a style branch of its own.
+    /// A style and a header effect are both `EffectInstance`s in another list,
+    /// so the only thing that differs between editing one and editing an
+    /// effect is which list is read and which op commits it. All three live
+    /// here, which is why no command below grows a branch of its own.
     #[frb(ignore)]
     fn with_instances(
         &self,
-        styles: bool,
+        home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        let layer = self.item()?;
-        let mut list = if styles { layer.styles } else { layer.effects };
-        edit(&mut list)?;
-
-        let op = if styles {
-            lumit_core::Op::SetLayerStyles {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                styles: list,
+        let op = match home {
+            InstanceHome::Effects | InstanceHome::Styles => {
+                let layer = self.item()?;
+                let mut list = if home == InstanceHome::Styles {
+                    layer.styles
+                } else {
+                    layer.effects
+                };
+                edit(&mut list)?;
+                if home == InstanceHome::Styles {
+                    lumit_core::Op::SetLayerStyles {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        styles: list,
+                    }
+                } else {
+                    lumit_core::Op::SetLayerEffects {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        effects: list,
+                    }
+                }
             }
-        } else {
-            lumit_core::Op::SetLayerEffects {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                effects: list,
+            InstanceHome::Group(group) => {
+                let comp = self.composition()?;
+                let mut list = comp
+                    .groups
+                    .iter()
+                    .find(|g| g.id == group)
+                    .map(|g| g.effects.clone())
+                    .ok_or(BridgeError::InvalidEffect)?;
+                edit(&mut list)?;
+                lumit_core::Op::SetGroupEffects {
+                    comp: self.comp_id,
+                    group,
+                    effects: list,
+                }
             }
         };
         let proj = self.project()?;
@@ -5522,23 +5557,35 @@ impl LayerReference {
         Ok(())
     }
 
-    /// **The one find-instance-on-layer lookup** (docs/impl/layer-styles.md
-    /// §5): whether `id` names a style rather than an effect.
+    /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
+    /// docs/impl/group-effects.md §6): which list `id` lives on.
     ///
-    /// The effect stack is searched first, then the style list — ids are unique
-    /// across both, so the order is only a statement about which is the common
-    /// case. `false` for an id on neither list, which leaves the caller's own
-    /// "no such instance" error to be the one the user sees rather than
-    /// inventing a second one here.
+    /// The effect stack is searched first, then the style list, then the
+    /// comp's group headers — ids are unique across all three, so the order is
+    /// only a statement about which is the common case. `Effects` for an id on
+    /// none of them, which leaves the caller's own "no such instance" error to
+    /// be the one the user sees rather than inventing a second one here.
     ///
     /// Every param command — set a value, move a key, bypass, remove — routes
-    /// through this rather than asking whether its caller was a styles panel.
-    /// That is the whole of what makes a style row's stopwatch, drag, driver
-    /// wire and expression the *same* code as an effect row's.
+    /// through this rather than asking whether its caller was a styles panel
+    /// or a group header's. That is the whole of what makes a style row's and
+    /// a header row's stopwatch, drag and expression the *same* code as an
+    /// effect row's (the K-706 pattern, grown its third arm).
     #[frb(ignore)]
-    fn is_style(&self, id: Uuid) -> Result<bool, BridgeError> {
+    fn instance_home(&self, id: Uuid) -> Result<InstanceHome, BridgeError> {
         let layer = self.item()?;
-        Ok(!layer.effects.iter().any(|e| e.id == id) && layer.styles.iter().any(|s| s.id == id))
+        if layer.effects.iter().any(|e| e.id == id) {
+            return Ok(InstanceHome::Effects);
+        }
+        if layer.styles.iter().any(|s| s.id == id) {
+            return Ok(InstanceHome::Styles);
+        }
+        let comp = self.composition()?;
+        Ok(comp
+            .groups
+            .iter()
+            .find(|g| g.effects.iter().any(|e| e.id == id))
+            .map_or(InstanceHome::Effects, |g| InstanceHome::Group(g.id)))
     }
 
     /// Append the built-in effect named `name` to this layer's stack — or, when
@@ -5602,7 +5649,7 @@ impl LayerReference {
     #[frb(sync)]
     pub fn remove_effect(&self, effect: &BridgeEffectInstance) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_instances(self.is_style(id)?, move |effects| {
+        self.with_instances(self.instance_home(id)?, move |effects| {
             let before = effects.len();
             effects.retain(|e| e.id != id);
             if effects.len() == before {
@@ -5625,7 +5672,13 @@ impl LayerReference {
         new_index: i64,
     ) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_effects(move |effects| {
+        // A style keeps its order lock: routing a style id to the effect list
+        // finds nothing and refuses, exactly as before the group arm existed.
+        let home = match self.instance_home(id)? {
+            InstanceHome::Styles => InstanceHome::Effects,
+            home => home,
+        };
+        self.with_instances(home, move |effects| {
             let from = effects
                 .iter()
                 .position(|e| e.id == id)
@@ -5649,7 +5702,7 @@ impl LayerReference {
         enabled: bool,
     ) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_instances(self.is_style(id)?, move |effects| {
+        self.with_instances(self.instance_home(id)?, move |effects| {
             let instance = effects
                 .iter_mut()
                 .find(|e| e.id == id)
@@ -5687,11 +5740,11 @@ impl LayerReference {
         // An empty staged list is an empty *effect* stack: there is nothing to
         // ask the lookup about, and clearing the style list is `remove_effect`'s
         // job rather than a silent consequence of a stale panel.
-        let styles = match staged.first() {
-            Some(first) => self.is_style(first.id)?,
-            None => false,
+        let home = match staged.first() {
+            Some(first) => self.instance_home(first.id)?,
+            None => InstanceHome::Effects,
         };
-        self.with_instances(styles, move |current| {
+        self.with_instances(home, move |current| {
             let same_stack = current.len() == staged.len()
                 && current.iter().zip(&staged).all(|(a, b)| a.id == b.id);
             if !same_stack {
@@ -5739,7 +5792,7 @@ impl LayerReference {
             return Err(BridgeError::UnknownEffectName);
         }
         let instance = lumit_core::fx::instantiate(&name).ok_or(BridgeError::UnknownEffectName)?;
-        self.with_instances(true, move |styles| {
+        self.with_instances(InstanceHome::Styles, move |styles| {
             if styles
                 .iter()
                 .any(|s| s.effect.match_name == instance.effect.match_name)

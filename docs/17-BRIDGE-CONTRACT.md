@@ -330,8 +330,11 @@ parameters a wire is deciding) is then made only for the layers that can possibl
 
 `BridgeCompModel.groups: Vec<BridgeLayerGroup>` carries, per group, its id, name and label
 colour, **the member ids in stack order**, the combined `in_frame`/`out_frame` its bar
-spans, and four switch faces (`visible`, `audible`, `solo`, `locked`) that are on only when
-every member is.
+spans, four switch faces (`visible`, `audible`, `solo`, `locked`) that are on only when
+every member is, and — K-731 — `effects`, the header's own stack as the same
+`BridgeEffectInstanceInfo` listing a layer's `info.effects` carries, resolved at comp time
+(a group has no layer clock). Empty for the K-702 group, which is what the Timeline's fx
+tick and the header's fold key their visibility on.
 
 Every one of those is a question the engine can answer for nothing while it already holds
 the document, and none of them is a question Dart should be answering at all. Which layers
@@ -341,12 +344,20 @@ view is exactly the drift the read model exists to prevent. It is also the shape
 section above names: working it out on the Dart side would be a walk of the whole stack per
 group per rebuild, on a panel that rebuilds constantly.
 
-Down the wire go five commands on `CompositionReference` — `group_layers` (which answers
+Down the wire go the commands on `CompositionReference` — `group_layers` (which answers
 the new id, and refuses a scattered selection rather than moving anything),
 `ungroup`, `set_group_name`, `set_group_label`, `set_group_switch` (one `Op::Batch` over
-the members) and `shift_group` (likewise, for the combined bar's drag). Nothing new is
-needed for *Pre-compose group*: it hands the group's members to the `precompose` call that
-already existed.
+the members) and `shift_group` (likewise, for the combined bar's drag). K-731 adds two for
+the header's stack: `get_group_effects` (staged `BridgeEffectInstance` handles, offset
+zero) and `add_group_effect` (the Add-effect road's group arm; a driver is refused — a
+group carries no graph). **Everything else the header's stack needs is the layer commands
+it already had**: `remove_effect`, `set_effect_enabled`, `set_effects` and the whole
+staged-parameter road route by the shared instance lookup (effects, then styles, then the
+comp's group headers — the K-706 pattern grown its third arm), so a group instance handed
+to any member's `LayerReference` commits as one `Op::SetGroupEffects` with no second code
+path. *Pre-compose group* passes its group id to `precompose(…, group)`: the header's
+stack moves onto the new Precomp layer and the emptied band is ungrouped in the same
+batch, so one undo restores band, wardrobe and layers together.
 
 Two of those grew **selection twins** (K-720), on the same reference and down the same
 roads: `ungroup_selection(layer_ids)` resolves every band the given layers touch and takes
@@ -1082,7 +1093,10 @@ path, documented beside the types in
     `WorkerResponse::RenderProgress` (`BridgeRenderProgress`: frame, stage code,
     0..1 fraction, and a `done` flag) says how far the frame the user is waiting
     on has got, and `WorkerResponse::FrameProfile` (`BridgeFrameProfile`: the
-    frame, its total, and per-layer/per-effect milliseconds with ids as strings)
+    frame, its total, **five stage milliseconds** — `plan_ms`, `decode_ms`,
+    `build_ms`, `composite_ms`, `present_ms`, which sum to roughly the total and
+    let the readout explain time no layer row owns — and per-layer/per-effect
+    milliseconds with ids as strings)
     says what a measured frame cost. Two rules bound them. **Progress is sent
     only for a frame someone is waiting on** — the worker turns it on around the
     interactive render paths and off again, so playback, the idle cache fill and

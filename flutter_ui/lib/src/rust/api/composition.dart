@@ -301,6 +301,12 @@ class BridgeLayerGroup {
   final bool solo;
   final bool locked;
 
+  /// The header's own effect stack (docs/impl/group-effects.md §6, K-731) —
+  /// the same listing a layer's `BridgeLayerInfo::effects` carries, resolved
+  /// at comp time (a group has no layer clock). Empty for the K-702 group,
+  /// which is what the fx tick and the header's fold key their visibility on.
+  final List<BridgeEffectInstanceInfo> effects;
+
   const BridgeLayerGroup({
     required this.id,
     required this.name,
@@ -312,6 +318,7 @@ class BridgeLayerGroup {
     required this.audible,
     required this.solo,
     required this.locked,
+    required this.effects,
   });
 
   @override
@@ -325,7 +332,8 @@ class BridgeLayerGroup {
       visible.hashCode ^
       audible.hashCode ^
       solo.hashCode ^
-      locked.hashCode;
+      locked.hashCode ^
+      effects.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -341,7 +349,8 @@ class BridgeLayerGroup {
           visible == other.visible &&
           audible == other.audible &&
           solo == other.solo &&
-          locked == other.locked;
+          locked == other.locked &&
+          effects == other.effects;
 }
 
 /// One timeline marker (docs/03 §11): a cue on the comp's timebase, and — when
@@ -495,6 +504,20 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddFootageLayer(
               that: this, footage: footage, asSequence: asSequence);
+
+  /// Append the built-in effect named `name` to a group header's stack
+  /// (K-731) — the group arm of `LayerReference::add_effect`, and the same
+  /// road every Add-effect surface drives.
+  ///
+  /// A **driver** is refused: a group carries no graph for the node to land
+  /// on (K-731's named v1 boundary), and silently dropping it on some
+  /// member would be an edit nobody asked for. Self-pointing layer
+  /// references are pointed at the group itself, which the render reads as
+  /// "the unit's own picture" — the Lens flare's natural matte.
+  void addGroupEffect({required UuidValue group, required String name}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddGroupEffect(
+              that: this, group: group, name: name);
 
   /// Add a Light layer at the comp centre (K-360).
   ///
@@ -759,6 +782,20 @@ class CompositionReference {
         that: this,
       );
 
+  /// A group header's effect stack as staged copies (docs/impl/
+  /// group-effects.md §6, K-731), exactly as `LayerReference::get_effects`
+  /// hands out a layer's: ordinary
+  /// [`BridgeEffectInstance`](crate::api::effect::BridgeEffectInstance)
+  /// handles, so `get_value` / `set_value` and the
+  /// staged commit through `LayerReference::set_effects` — which routes a
+  /// group instance to [`lumit_core::Op::SetGroupEffects`] by the shared
+  /// instance lookup — work on a header row unchanged. Offset zero: a group
+  /// resolves at comp time.
+  List<BridgeEffectInstance> getGroupEffects({required UuidValue group}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetGroupEffects(
+              that: this, group: group);
+
   List<LayerReference> getLayers() =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGetLayers(
         that: this,
@@ -934,17 +971,25 @@ class CompositionReference {
   /// pointed at, and the engine reads a link it cannot resolve as no link —
   /// the parent chain stops there (`layer_parent_chain`). Nothing dangles
   /// into a crash, and clearing them here would only spell the same result.
+  /// `group` names the layer group being pre-composed, when the command came
+  /// from a group header's *Pre-compose group* (K-702, K-731): the header's
+  /// effect stack moves onto the new Precomp layer — where it means exactly
+  /// what it meant, because a live group renders as that precompose already —
+  /// and the emptied band is ungrouped in the same batch, so one undo puts
+  /// the band, its wardrobe and the layers all back.
   LayerReference precompose(
           {required List<UuidValue> layerIds,
           required String name,
           required bool leaveAttributes,
-          required bool adjustDuration}) =>
+          required bool adjustDuration,
+          UuidValue? group}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferencePrecompose(
           that: this,
           layerIds: layerIds,
           name: name,
           leaveAttributes: leaveAttributes,
-          adjustDuration: adjustDuration);
+          adjustDuration: adjustDuration,
+          group: group);
 
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.

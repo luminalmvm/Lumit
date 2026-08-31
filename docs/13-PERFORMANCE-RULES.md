@@ -435,8 +435,13 @@ A built-in profiler, surfaced in the UI — After Effects' composition profiler 
   its effect stack), and each effect's cost on its heading row in the fold-out and on its
   title row in the Effect controls panel. Only the top-level layers of the composition being
   rendered are timed, and the final composite — one pass over the whole stack, not a
-  per-layer act — lands in the frame total rather than on a row. Sorting by the column, and
-  the profiler panel proper, are not built.
+  per-layer act — lands in the frame total rather than on a row. **The total explains
+  itself by stage**: the profile carries wall-clock per render stage (plan, decode, build,
+  composite, present — `BridgeFrameProfile`'s five stage fields), so time no layer owns —
+  a heavy draw-list build, a slow decode — is named in the header's readout instead of
+  hanging unattributed over the rows. No budget row changed meaning: the total and the
+  per-layer numbers are what they were, the stages only partition the total. Sorting by
+  the column, and the profiler panel proper, are not built.
 - Recording mode: capture over a playback or export run, then report per-node totals,
   percentiles, cache hit rates, and time spent per degradation-ladder step — answering "why is
   this comp slow" with names and numbers, not vibes.

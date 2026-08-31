@@ -299,6 +299,17 @@ pub struct BridgeFrameProfile {
     pub frame: u64,
     /// The whole frame, wall-clock, including the stages no layer owns.
     pub total_ms: f64,
+    /// Where the total went, stage by stage — plan the decodes, decode them,
+    /// build the draw list, composite it, display-encode and hand it over.
+    /// The five sum to roughly `total_ms`, and they are what lets the readout
+    /// explain a total no layer row owns: a heavy frame whose rows are all
+    /// cheap is usually the build or the decode, and now the header can say
+    /// so.
+    pub plan_ms: f64,
+    pub decode_ms: f64,
+    pub build_ms: f64,
+    pub composite_ms: f64,
+    pub present_ms: f64,
     /// The composition's top-level layers, bottom-most first.
     pub layers: Vec<BridgeLayerTiming>,
 }

@@ -2584,7 +2584,7 @@ fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
     let precomp = comp
-        .precompose(vec![packed.layer_id], "Packed".into(), false, false)
+        .precompose(vec![packed.layer_id], "Packed".into(), false, false, None)
         .expect("precomposed");
     assert!(
         precomp.get_switches().expect("switches").solo,
@@ -2598,7 +2598,7 @@ fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
         .set_switch(BridgeLayerSwitch::Solo, true)
         .expect("soloed");
     let precomp = other
-        .precompose(vec![going.layer_id], "Packed".into(), false, false)
+        .precompose(vec![going.layer_id], "Packed".into(), false, false, None)
         .expect("precomposed");
     assert!(
         !precomp.get_switches().expect("switches").solo,
@@ -3986,6 +3986,7 @@ fn precompose_packs_the_chosen_layers_and_leaves_one_precomp_behind() {
             String::new(),
             false,
             false,
+            None,
         )
         .expect("precomposed");
 
@@ -4035,11 +4036,11 @@ fn precompose_refuses_nothing_and_survives_a_stray_reference() {
     let theirs = other.add_solid_layer().expect("solid");
 
     assert!(matches!(
-        comp.precompose(Vec::new(), String::new(), false, false),
+        comp.precompose(Vec::new(), String::new(), false, false, None),
         Err(BridgeError::InvalidLayer)
     ));
     assert!(matches!(
-        comp.precompose(vec![theirs.layer_id], String::new(), false, false),
+        comp.precompose(vec![theirs.layer_id], String::new(), false, false, None),
         Err(BridgeError::InvalidLayer)
     ));
 
@@ -4049,6 +4050,7 @@ fn precompose_refuses_nothing_and_survives_a_stray_reference() {
         "Packed".into(),
         false,
         false,
+        None,
     )
     .expect("precomposed");
     assert_eq!(comp.get_layers().expect("layers").len(), 1);
@@ -4072,14 +4074,15 @@ fn precompose_leaving_attributes_keeps_them_on_the_precomp_layer_only() {
             vec![solid.layer_id, second.layer_id],
             "Both".into(),
             true,
-            false
+            false,
+            None
         ),
         Err(BridgeError::InvalidLayer)
     ));
     second.delete().expect("delete");
 
     let packed = comp
-        .precompose(vec![solid.layer_id], "Blurred".into(), true, false)
+        .precompose(vec![solid.layer_id], "Blurred".into(), true, false, None)
         .expect("precomposed");
 
     assert_eq!(packed.get_effects().expect("effects").len(), 1);
@@ -4112,7 +4115,7 @@ fn precompose_adjusting_the_duration_trims_the_new_comp_to_the_selection() {
     solid.set_span(span).expect("span");
 
     let packed = comp
-        .precompose(vec![solid.layer_id], "Trimmed".into(), false, true)
+        .precompose(vec![solid.layer_id], "Trimmed".into(), false, true, None)
         .expect("precomposed");
 
     let Some(ItemReference::Composition(inner)) = packed.get_source_item().expect("source") else {
@@ -7305,7 +7308,7 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     .expect("marked");
 
     let precomp = comp
-        .precompose(vec![layer.layer_id], "Packed".into(), false, false)
+        .precompose(vec![layer.layer_id], "Packed".into(), false, false, None)
         .expect("packed");
     assert!(
         precomp.get_markers().expect("layer markers").is_empty(),

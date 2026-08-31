@@ -3337,9 +3337,15 @@ fn drain_to_newest<T>(
 /// matches them against the ids its read model already holds.
 #[frb(ignore)]
 fn profile_of(p: &lumit_render::FrameProfile) -> crate::api::state::BridgeFrameProfile {
+    let stage = |s: lumit_render::RenderStage| f64::from(p.stage_ms[s.code() as usize]);
     crate::api::state::BridgeFrameProfile {
         frame: p.frame,
         total_ms: f64::from(p.total_ms),
+        plan_ms: stage(lumit_render::RenderStage::Planning),
+        decode_ms: stage(lumit_render::RenderStage::Decoding),
+        build_ms: stage(lumit_render::RenderStage::Building),
+        composite_ms: stage(lumit_render::RenderStage::Compositing),
+        present_ms: stage(lumit_render::RenderStage::Presenting),
         layers: p
             .layers
             .iter()

@@ -113,17 +113,42 @@ class BridgeFrameProfile {
   /// The whole frame, wall-clock, including the stages no layer owns.
   final double totalMs;
 
+  /// Where the total went, stage by stage — plan the decodes, decode them,
+  /// build the draw list, composite it, display-encode and hand it over.
+  /// The five sum to roughly `total_ms`, and they are what lets the readout
+  /// explain a total no layer row owns: a heavy frame whose rows are all
+  /// cheap is usually the build or the decode, and now the header can say
+  /// so.
+  final double planMs;
+  final double decodeMs;
+  final double buildMs;
+  final double compositeMs;
+  final double presentMs;
+
   /// The composition's top-level layers, bottom-most first.
   final List<BridgeLayerTiming> layers;
 
   const BridgeFrameProfile({
     required this.frame,
     required this.totalMs,
+    required this.planMs,
+    required this.decodeMs,
+    required this.buildMs,
+    required this.compositeMs,
+    required this.presentMs,
     required this.layers,
   });
 
   @override
-  int get hashCode => frame.hashCode ^ totalMs.hashCode ^ layers.hashCode;
+  int get hashCode =>
+      frame.hashCode ^
+      totalMs.hashCode ^
+      planMs.hashCode ^
+      decodeMs.hashCode ^
+      buildMs.hashCode ^
+      compositeMs.hashCode ^
+      presentMs.hashCode ^
+      layers.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -132,6 +157,11 @@ class BridgeFrameProfile {
           runtimeType == other.runtimeType &&
           frame == other.frame &&
           totalMs == other.totalMs &&
+          planMs == other.planMs &&
+          decodeMs == other.decodeMs &&
+          buildMs == other.buildMs &&
+          compositeMs == other.compositeMs &&
+          presentMs == other.presentMs &&
           layers == other.layers;
 }
 

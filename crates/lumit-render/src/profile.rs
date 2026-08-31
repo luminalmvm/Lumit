@@ -137,6 +137,12 @@ pub struct FrameProfile {
     /// The whole frame, wall-clock, including the stages no layer owns
     /// (planning, decoding, the final composite, the display encode).
     pub total_ms: f32,
+    /// Where that total went, stage by stage: wall-clock milliseconds indexed
+    /// by [`RenderStage::code`] (plan, decode, build, composite, present).
+    /// The five sum to roughly `total_ms`, and they are what lets the readout
+    /// explain a total no layer row owns — a slow frame whose layers are all
+    /// cheap is usually the build or the decode, and now it says so.
+    pub stage_ms: [f32; 5],
     /// The composition's top-level layers, in draw order (bottom-most first),
     /// each measured as described in the module note.
     pub layers: Vec<LayerTiming>,
@@ -174,6 +180,14 @@ pub struct FrameProfiler {
     layers_done: Cell<u32>,
     layers_total: Cell<u32>,
     timings: RefCell<Vec<LayerTiming>>,
+    /// Wall-clock per stage, indexed by [`RenderStage::code`]. Filled by
+    /// [`Self::advance_to`] as the stage calls arrive: whatever stage is open
+    /// is closed and its elapsed time banked, so a stage the render skips
+    /// simply stays at zero and nothing is double-counted.
+    stage_ms: RefCell<[f32; 5]>,
+    /// When the currently open stage began, and which one it is.
+    stage_mark: Cell<std::time::Instant>,
+    open_stage: Cell<RenderStage>,
 }
 
 impl FrameProfiler {
@@ -183,17 +197,36 @@ impl FrameProfiler {
     /// in that case.
     #[must_use]
     pub fn new(comp: Uuid, frame: u64, progress: Option<ProgressSink>, timing: bool) -> Self {
+        let now = std::time::Instant::now();
         Self {
             comp,
             frame,
             progress,
             timing,
-            started: std::time::Instant::now(),
+            started: now,
             depth: Cell::new(0),
             layers_done: Cell::new(0),
             layers_total: Cell::new(0),
             timings: RefCell::new(Vec::new()),
+            stage_ms: RefCell::new([0.0; 5]),
+            stage_mark: Cell::new(now),
+            open_stage: Cell::new(RenderStage::Planning),
         }
+    }
+
+    /// Close the stage that is open — banking its wall-clock — and open
+    /// `next`. Reading the clock twice per frame per stage is nothing beside
+    /// what the stages themselves cost, so this runs whether or not timings
+    /// were asked for.
+    fn advance_to(&self, next: RenderStage) {
+        let now = std::time::Instant::now();
+        let open = self.open_stage.get();
+        if let Ok(mut ms) = self.stage_ms.try_borrow_mut() {
+            ms[open.code() as usize] +=
+                now.duration_since(self.stage_mark.get()).as_secs_f32() * 1000.0;
+        }
+        self.stage_mark.set(now);
+        self.open_stage.set(next);
     }
 
     /// True when nodes are to be measured — the callers that would otherwise
@@ -216,6 +249,7 @@ impl FrameProfiler {
 
     /// The decode plan is written; `jobs` sources are about to be read.
     pub fn planned(&self) {
+        self.advance_to(RenderStage::Decoding);
         self.report(RenderStage::Planning, PLAN_AT);
     }
 
@@ -229,11 +263,13 @@ impl FrameProfiler {
 
     /// The draw list is being built (the pixels are all in hand).
     pub fn building(&self) {
+        self.advance_to(RenderStage::Building);
         self.report(RenderStage::Building, BUILD_AT);
     }
 
     /// The draw list is in hand: `layers` top-level layers to composite.
     pub fn compositing(&self, layers: u32) {
+        self.advance_to(RenderStage::Compositing);
         self.layers_total.set(layers);
         self.layers_done.set(0);
         self.report(RenderStage::Compositing, COMPOSITE_FROM);
@@ -241,6 +277,7 @@ impl FrameProfiler {
 
     /// The frame is composited and is being display-encoded and handed over.
     pub fn presenting(&self) {
+        self.advance_to(RenderStage::Presenting);
         self.report(RenderStage::Presenting, PRESENT_AT);
     }
 
@@ -307,10 +344,14 @@ impl FrameProfiler {
         if !self.timing {
             return None;
         }
+        // Bank whatever stage is still open — Presenting on a full walk, or
+        // an earlier one on a frame that stopped short.
+        self.advance_to(self.open_stage.get());
         Some(FrameProfile {
             comp: self.comp,
             frame: self.frame,
             total_ms: self.started.elapsed().as_secs_f32() * 1000.0,
+            stage_ms: *self.stage_ms.borrow(),
             layers: self.timings.into_inner(),
         })
     }
@@ -387,6 +428,47 @@ mod tests {
         p.layer_done(Uuid::nil(), 5.0, Vec::new());
         assert!(!p.timing());
         assert!(p.finish().is_none());
+    }
+
+    #[test]
+    fn the_stages_split_the_total_between_them() {
+        let p = FrameProfiler::new(Uuid::nil(), 0, None, true);
+        p.planned();
+        p.building();
+        // A build long enough to measure, so the banked number is a real one.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        p.compositing(1);
+        p.presenting();
+        let profile = p.finish().expect("timings were asked for");
+        let build = profile.stage_ms[RenderStage::Building.code() as usize];
+        assert!(
+            build >= 10.0,
+            "the build stage owns the time spent building: {build}"
+        );
+        let sum: f32 = profile.stage_ms.iter().sum();
+        assert!(
+            sum <= profile.total_ms + 1.0,
+            "the stages cannot claim more than the frame took: {sum} of {}",
+            profile.total_ms
+        );
+        assert!(
+            sum >= profile.total_ms * 0.9,
+            "and between them they explain the total: {sum} of {}",
+            profile.total_ms
+        );
+    }
+
+    #[test]
+    fn a_frame_that_stops_short_banks_what_it_reached() {
+        let p = FrameProfiler::new(Uuid::nil(), 0, None, true);
+        p.planned();
+        let profile = p.finish().expect("timings were asked for");
+        // Planning and decoding got marks; the stages never entered are zero.
+        assert_eq!(profile.stage_ms[RenderStage::Building.code() as usize], 0.0);
+        assert_eq!(
+            profile.stage_ms[RenderStage::Presenting.code() as usize],
+            0.0
+        );
     }
 
     #[test]

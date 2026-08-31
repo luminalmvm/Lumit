@@ -187,6 +187,13 @@ coverage. Its transform moves the coverage map, not the picture. The adjustment 
 ROI is the effect stack's expanded ROI intersected with the coverage DoD — an adjustment layer
 masked to a small region costs a small region.
 
+A **layer group whose header carries effects** (K-731, docs/impl/group-effects.md) is *not*
+a third staging point beside this one and the Precomp node: its drawn run renders as one
+comp-sized nested unit on the Precomp path (§1.3's node, built implicitly per frame), the
+header's stack runs on that unit's texture, and the slab composites at 100/Normal. Inside a
+live unit this section's "everything below it" ends at the unit's floor — the precomp
+semantic, chosen deliberately.
+
 ### 1.6 Mattes
 
 Any layer may name any other layer in the comp as its **matte** (dropdown/pick-whip, matching

@@ -217,6 +217,11 @@ pub struct BridgeLayerGroup {
     pub audible: bool,
     pub solo: bool,
     pub locked: bool,
+    /// The header's own effect stack (docs/impl/group-effects.md §6, K-731) —
+    /// the same listing a layer's `BridgeLayerInfo::effects` carries, resolved
+    /// at comp time (a group has no layer clock). Empty for the K-702 group,
+    /// which is what the fx tick and the header's fold key their visibility on.
+    pub effects: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
 }
 
 /// Which of the four broadcast switches a group header press moves
@@ -760,6 +765,12 @@ impl CompositionReference {
     /// pointed at, and the engine reads a link it cannot resolve as no link —
     /// the parent chain stops there (`layer_parent_chain`). Nothing dangles
     /// into a crash, and clearing them here would only spell the same result.
+    /// `group` names the layer group being pre-composed, when the command came
+    /// from a group header's *Pre-compose group* (K-702, K-731): the header's
+    /// effect stack moves onto the new Precomp layer — where it means exactly
+    /// what it meant, because a live group renders as that precompose already —
+    /// and the emptied band is ungrouped in the same batch, so one undo puts
+    /// the band, its wardrobe and the layers all back.
     #[frb(sync)]
     pub fn precompose(
         &self,
@@ -767,6 +778,7 @@ impl CompositionReference {
         name: String,
         leave_attributes: bool,
         adjust_duration: bool,
+        group: Option<Uuid>,
     ) -> Result<LayerReference, BridgeError> {
         use lumit_core::model::{Composition, MotionBlur, ProjectItem};
         use lumit_core::ops::AutoFolderKind;
@@ -775,6 +787,19 @@ impl CompositionReference {
 
         let comp = self.composition()?;
         let doc = self.document()?;
+
+        // The group whose header stack rides across (K-731 §5). Resolved up
+        // front so a dangling id refuses before anything is committed.
+        let carried = match group {
+            Some(id) => Some(
+                comp.groups
+                    .iter()
+                    .find(|g| g.id == id)
+                    .cloned()
+                    .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?,
+            ),
+            None => None,
+        };
 
         // Read in stack order, not selection order, so the packed comp holds
         // the layers the way the timeline showed them. What is actually packed
@@ -933,6 +958,15 @@ impl CompositionReference {
         });
         ops.push(crate::edits::file_into_folder_op(&doc, folder, inner_id));
 
+        // The band goes before its members do (K-731 §5): a batch inverts in
+        // reverse, so ungrouping first is what lets the undo put the layers
+        // back before `GroupLayers` checks that they are a contiguous run.
+        if let Some(g) = &carried {
+            ops.push(Op::UngroupLayers {
+                comp: self.id,
+                group: g.id,
+            });
+        }
         for layer in &packed {
             ops.push(Op::RemoveLayer {
                 comp: self.id,
@@ -968,6 +1002,15 @@ impl CompositionReference {
             layer.retime = src.retime.clone();
             layer.blend = src.blend;
             layer.switches = src.switches.clone();
+        }
+        if let Some(g) = &carried {
+            // The header's stack lands after any attributes the layer kept —
+            // the order the live group already ran them in: each member's own
+            // effects first, the header's on the composite (K-731 §5). The
+            // picture does not change across the conversion, which is §2's
+            // whole argument and test 8's assertion. The band itself was
+            // ungrouped above, before the removals.
+            layer.effects.extend(g.effects.iter().cloned());
         }
         // Asked of the layers that are staying: the soloed ones being packed
         // away are about to leave, and a Precomp layer soloed on their account
@@ -2545,6 +2588,81 @@ impl CompositionReference {
         Ok(())
     }
 
+    /// A group header's effect stack as staged copies (docs/impl/
+    /// group-effects.md §6, K-731), exactly as `LayerReference::get_effects`
+    /// hands out a layer's: ordinary
+    /// [`BridgeEffectInstance`](crate::api::effect::BridgeEffectInstance)
+    /// handles, so `get_value` / `set_value` and the
+    /// staged commit through `LayerReference::set_effects` — which routes a
+    /// group instance to [`lumit_core::Op::SetGroupEffects`] by the shared
+    /// instance lookup — work on a header row unchanged. Offset zero: a group
+    /// resolves at comp time.
+    #[frb(sync)]
+    pub fn get_group_effects(
+        &self,
+        group: Uuid,
+    ) -> Result<Vec<crate::api::effect::BridgeEffectInstance>, BridgeError> {
+        let comp = self.composition()?;
+        let g = comp
+            .groups
+            .iter()
+            .find(|g| g.id == group)
+            .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?;
+        Ok(g.effects
+            .iter()
+            .map(|e| {
+                crate::api::effect::BridgeEffectInstance::new(
+                    e.clone(),
+                    lumit_core::time::Rational::ZERO,
+                )
+            })
+            .collect())
+    }
+
+    /// Append the built-in effect named `name` to a group header's stack
+    /// (K-731) — the group arm of `LayerReference::add_effect`, and the same
+    /// road every Add-effect surface drives.
+    ///
+    /// A **driver** is refused: a group carries no graph for the node to land
+    /// on (K-731's named v1 boundary), and silently dropping it on some
+    /// member would be an edit nobody asked for. Self-pointing layer
+    /// references are pointed at the group itself, which the render reads as
+    /// "the unit's own picture" — the Lens flare's natural matte.
+    #[frb(sync)]
+    pub fn add_group_effect(&self, group: Uuid, name: String) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let g = comp
+            .groups
+            .iter()
+            .find(|g| g.id == group)
+            .ok_or(BridgeError::OpError(lumit_core::OpError::UnknownGroup))?;
+        if lumit_core::fx::BUILTIN_DEFS
+            .get(&name)
+            .is_some_and(|def| def.schema().category == lumit_core::fx::FxCategory::Drivers)
+        {
+            return Err(BridgeError::UnknownEffectName);
+        }
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            &name,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        lumit_core::fx::point_self_layer_params_at(&mut instance, group);
+        let mut effects = g.effects.clone();
+        effects.push(instance);
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetGroupEffects {
+                comp: self.id,
+                group,
+                effects,
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// Set one switch on **every member** of a group, as one undo step (K-702).
     ///
     /// The broadcast the group header's switch cells perform: the face reads on
@@ -2955,6 +3073,15 @@ fn read_groups(comp: &lumit_core::model::Composition) -> Vec<BridgeLayerGroup> {
                 solo: held.iter().all(|l| l.switches.solo),
                 locked: held.iter().all(|l| l.switches.locked),
                 members,
+                // Resolve time is comp time (K-731 §1): a group has no start
+                // offset, so the listing's offset is zero.
+                effects: g
+                    .effects
+                    .iter()
+                    .map(|e| {
+                        crate::api::effect::read_instance_info(e, lumit_core::time::Rational::ZERO)
+                    })
+                    .collect(),
             }
         })
         .collect()
@@ -3082,6 +3209,115 @@ mod group_tests {
             .layers
             .iter()
             .all(|e| e.info.switches.visible));
+    }
+
+    /// The K-731 crossing (docs/impl/group-effects.md §6): the header's stack
+    /// is listed on the read model, added to through the group road, and every
+    /// existing param command reaches it through the shared instance lookup —
+    /// the K-706 pattern grown its third arm, so a member's own stack and the
+    /// header's cannot be confused.
+    #[test]
+    fn a_headers_effects_cross_and_edit_through_the_shared_lookup() {
+        let (_project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[1..3].to_vec(), "Titles".into())
+            .expect("a group");
+
+        assert!(
+            comp.get_model().expect("model").groups[0]
+                .effects
+                .is_empty(),
+            "an undressed header lists nothing"
+        );
+        comp.add_group_effect(group, "blur".into())
+            .expect("the group road adds");
+        // A driver has no graph to land on, so the group road refuses it.
+        assert!(comp.add_group_effect(group, "wiggle".into()).is_err());
+
+        let model = comp.get_model().expect("model");
+        assert_eq!(model.groups[0].effects.len(), 1);
+        assert_eq!(model.groups[0].effects[0].name, "blur");
+        assert!(
+            model.layers.iter().all(|e| e.info.effects.is_empty()),
+            "no member's own stack grew"
+        );
+
+        // The staged handles, and the shared lookup routing an ordinary
+        // layer command to the header's list: bypass through a member's own
+        // LayerReference lands on the group, not the member.
+        let handles = comp.get_group_effects(group).expect("handles");
+        assert_eq!(handles.len(), 1);
+        layers[1]
+            .set_effect_enabled(&handles[0], false)
+            .expect("the shared lookup routes to the group");
+        let model = comp.get_model().expect("model");
+        assert!(!model.groups[0].effects[0].enabled);
+        assert!(model.layers.iter().all(|e| e.info.effects.is_empty()));
+
+        // And remove, the same way; an unknown group refuses calmly.
+        layers[1]
+            .remove_effect(&handles[0])
+            .expect("removed from the header");
+        assert!(comp.get_model().expect("model").groups[0]
+            .effects
+            .is_empty());
+        assert!(comp.get_group_effects(Uuid::now_v7()).is_err());
+    }
+
+    /// K-731 §5: *Pre-compose group* carries the header's stack onto the new
+    /// Precomp layer — where it means exactly what it meant — and ungroups the
+    /// emptied band in the same batch, so one undo restores band, wardrobe and
+    /// layers together.
+    #[test]
+    fn precomposing_a_group_moves_the_headers_stack_onto_the_precomp_layer() {
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        let group = comp
+            .group_layers(all[1..3].to_vec(), "Titles".into())
+            .expect("a group");
+        comp.add_group_effect(group, "blur".into())
+            .expect("dressed");
+
+        let pre = comp
+            .precompose(
+                all[1..3].to_vec(),
+                "Packed".into(),
+                false,
+                false,
+                Some(group),
+            )
+            .expect("precomposed");
+        let model = comp.get_model().expect("model");
+        assert!(model.groups.is_empty(), "the emptied band went with them");
+        let packed = model
+            .layers
+            .iter()
+            .find(|e| e.layer.layer_id == pre.layer_id)
+            .expect("the Precomp layer");
+        assert_eq!(packed.info.effects.len(), 1);
+        assert_eq!(
+            packed.info.effects[0].name, "blur",
+            "the header's stack rode across"
+        );
+
+        // One undo puts the band back, wardrobe included, and the layers too.
+        project.undo().expect("undo");
+        let back = comp.get_model().expect("model");
+        assert_eq!(back.groups.len(), 1);
+        assert_eq!(back.groups[0].effects.len(), 1);
+        assert_eq!(back.groups[0].members, all[1..3].to_vec());
+
+        // A dangling group id refuses before anything commits.
+        assert!(comp
+            .precompose(
+                all[1..3].to_vec(),
+                "Packed".into(),
+                false,
+                false,
+                Some(Uuid::now_v7()),
+            )
+            .is_err());
     }
 
     #[test]
