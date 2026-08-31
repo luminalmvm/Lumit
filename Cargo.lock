@@ -1281,6 +1281,17 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
@@ -1655,6 +1666,7 @@ name = "lumit-core"
 version = "0.2.0"
 dependencies = [
  "arc-swap",
+ "blake3",
  "hex",
  "i_overlay",
  "lumit-fx-macros",
@@ -1664,6 +1676,7 @@ dependencies = [
  "rhai",
  "serde",
  "serde_json",
+ "spade",
  "tempfile",
  "thiserror 2.0.18",
  "uuid",
@@ -1836,6 +1849,15 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "wgpu",
+]
+
+[[package]]
+name = "lumit-roto"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -2525,6 +2547,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "robust"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e27ee8bb91ca0adcf0ecb116293afa12d393f9c2b9b9cd54d33e8078fe19839"
+
+[[package]]
 name = "rsmpeg"
 version = "0.18.0+ffmpeg.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2730,6 +2758,18 @@ dependencies = [
  "serde",
  "static_assertions",
  "version_check",
+]
+
+[[package]]
+name = "spade"
+version = "2.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9699399fd9349b00b184f5635b074f9ec93afffef30c853f8c875b32c0f8c7fa"
+dependencies = [
+ "hashbrown 0.16.1",
+ "num-traits",
+ "robust",
+ "smallvec",
 ]
 
 [[package]]

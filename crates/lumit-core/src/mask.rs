@@ -826,7 +826,7 @@ fn spread_seeds(seed: &[f32], w: usize, h: usize) -> Vec<f32> {
 /// the centre it is), which puts the seeds at sub-pixel positions and keeps
 /// feathered edges as smooth as the raster they came from. Everything else
 /// starts unknown and gets its distance from the exact Euclidean transform.
-fn signed_distance(cov: &[u8], w: usize, h: usize) -> Vec<f32> {
+pub(crate) fn signed_distance(cov: &[u8], w: usize, h: usize) -> Vec<f32> {
     // Not `f32::INFINITY`: the parabola intersections below would go NaN
     // subtracting one infinity from another. Far beyond any real image.
     const FAR: f32 = 1e20;

@@ -1,12 +1,13 @@
 # The Puppet tools (K-704)
 
-**Status: design only until built.** [07-UI-SPEC.md](../07-UI-SPEC.md) §1.7 names the four
-tools — Puppet position pin, Puppet starch pin, Puppet overlap pin, Puppet bend pin — and
-K-228 keeps them on the strip, disabled, until there is an engine behind them. This note is
-the binding *how* for that engine: the mesh, the deformer, the storage, the render seam, the
-overlay, the refusals, the tests, and the ordered work packages PU1–PU3. Nothing here is
-built; when a package lands, update this header the way [audio-plugins.md](audio-plugins.md)
-did.
+**Status: PU1 built (`lumit_core::puppet`); PU2 and PU3 outstanding.**
+[07-UI-SPEC.md](../07-UI-SPEC.md) §1.7 names the four tools — Puppet position pin, Puppet
+starch pin, Puppet overlap pin, Puppet bend pin — and K-228 keeps them on the strip,
+disabled, until there is an engine behind them. This note is the binding *how* for that
+engine: the mesh, the deformer, the storage, the render seam, the overlay, the refusals, the
+tests, and the ordered work packages PU1–PU3. The mesh, the two-step solve and the warp
+function exist and carry §7's tests 1–12; nothing is stored, wired to the render seam, or
+reachable from the UI yet.
 
 ## In plain terms
 
@@ -88,11 +89,21 @@ constrained Delaunay with quality refinement in-tree is exactly the wheel not to
    maximum triangle area of `density² · √3 / 4`, so interior edges come out near the
    density.
 3. **Discard outside triangles** by sampling: a triangle is kept iff the expanded coverage,
-   bilinearly sampled at its centroid, is ≥ 127.5. No hole/outer classification, no
-   even-odd bookkeeping — holes and the region outside the silhouette fail the sample and
-   fall away, and disjoint blobs come out as disjoint mesh components (which is load-bearing:
-   two limbs separated by a gap must never be welded — this is the reason for a conforming
-   mesh rather than a clipped grid).
+   bilinearly sampled at its centroid, is ≥ 127.5. Holes and the region outside the
+   silhouette fail the sample and fall away, and disjoint blobs come out as disjoint mesh
+   components (which is load-bearing: two limbs separated by a gap must never be welded —
+   this is the reason for a conforming mesh rather than a clipped grid).
+
+   The centroid sample is *first* filtered by the faces spade's own flood fill already
+   called outer (`exclude_outer_faces`, whose result the refinement hands back). The note
+   originally said the centroid alone, with no outer classification, and §7's weld test is
+   what corrected it: two blobs whose silhouettes share a straight edge — two legs on the
+   same ground line — leave the hull triangulator a long thin sliver bridging the gap,
+   unrefined because it is outside, and that sliver's centroid sits a fraction of a pixel
+   *inside* the shared edge. It survives the sample and welds the two components. Using
+   spade's classification costs one flood fill it was going to run anyway (excluding those
+   faces from refinement is what keeps the vertex budget on the silhouette), and the
+   decision is still made by the same closed contours.
 4. Re-index kept vertices densely, in first-use order over kept triangles sorted by their
    spade creation order. The mesh is `vertices: Vec<[f64; 2]>` (layer px) +
    `triangles: Vec<[u32; 3]>`.
@@ -174,9 +185,18 @@ animated position at the frame. Soft constraints keep the systems SPD and unchan
 - **No pins, or all inert**: identity — the warp is skipped entirely and the layer draws
   untouched.
 - **One pin**: the similarity step is underdetermined (global rotation about the pin is
-  free). Do not solve: translate the whole mesh by the pin's delta from rest. This is also
-  what the user meant.
+  free). Do not solve: translate by the pin's delta from rest. This is also what the user
+  meant.
 - **Two or more pins**: the full two-step solve.
+
+These counts are **per mesh component**, not per mesh, and the count is of *constrained
+points* rather than of pins (a bend pin contributes its own point plus one per vertex in
+its extent, so a lone bend pin is not a translation). A component nothing constrains stays
+exactly at rest, which is what makes the weld test exact rather than merely close: an
+unconstrained component in one global system would be a singular block, and a singular
+block is a Cholesky failure and a mean-translation fallback that moves the far limb. So
+only the vertices of components carrying two or more constrained points enter the systems;
+the rest are filled in directly.
 - **Every pin exactly at its rest position**: identity, checked before solving, so an
   untouched puppet block is byte-for-byte a no-op (§7 test 12).
 
@@ -339,7 +359,8 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
 (PU1 unless marked):
 
 1. **Rectangle contour**: a filled axis-aligned rectangle → one contour; after
-   simplification, 4 corners within tolerance.
+   simplification, 4 corners within tolerance (marching squares chamfers a right angle
+   across the corner cell, so "within tolerance" is one cell's diagonal, not zero).
 2. **Ring**: rectangle with a hole → two contours; no kept triangle's centroid inside the
    hole.
 3. **Two blobs, the weld test**: disjoint blobs → disjoint components; dragging a pin in
@@ -355,7 +376,10 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
 8. **Overlap**: a bar folded over itself; the pixel at the overlap's centre matches the
    region with the higher overlap amount; swapping the two amounts swaps the pixel.
 9. **Bend**: θ on a bend pin turns vertices inside its extent by θ about it, within
-   tolerance; a vertex outside the extent moves less than one inside.
+   tolerance; a vertex outside the extent moves less than one inside. The far end needs an
+   ordinary position pin holding it, or "outside the extent" means nothing: with only the
+   bend pin, as-rigid-as-possible correctly swings the whole shape round it and the far end
+   travels furthest of all.
 10. **One pin** short-circuits to translation.
 11. **Refusals**: transparent layer refuses a mesh; a click outside the mesh refuses a
     pin; > 1500 vertices coarsens then refuses.
@@ -369,13 +393,15 @@ Synthetic alpha shapes with hand-checkable deformations, in `lumit-core`'s puppe
 
 ## 8. Ordered work packages
 
-- **PU1 — engine: mesh + solve** (`lumit-core::puppet`, `spade` added to the lockfile):
-  coverage → marching squares → simplification → CDT + refinement → outside-discard →
-  cap/coarsen; the two-step solve with pins, starch, bend; the in-tree Cholesky pair; the
-  mesh and factorisation caches; tests 1–12. Pure engine, no bridge, no UI.
-- **PU2 — model, warp, seam, bridge**: `PuppetBlock`/`PuppetPin` on `Layer` (serde
-  round-trip), the solo-render-at-reference-time helper, `apply_puppet` at the
-  paint/masks seam, overlap draw order, frame-cache key, bench scenario + budget gates,
+- **PU1 — engine: mesh + solve** (`lumit-core::puppet`, `spade` added to the lockfile) —
+  **built**: coverage → marching squares → simplification → CDT + refinement →
+  outside-discard → cap/coarsen; the two-step solve with pins, starch, bend; the in-tree
+  Cholesky pair; the mesh and factorisation caches; tests 1–12. Pure engine, no bridge, no
+  UI. `apply_puppet` itself lands here rather than in PU2, because tests 8 and 12 are pixel
+  tests and a test that cannot run is not a test; what PU2 adds is the *call* at the seam.
+- **PU2 — model, seam, bridge**: `PuppetBlock`/`PuppetPin` on `Layer` (serde
+  round-trip), the solo-render-at-reference-time helper, the `apply_puppet` call at the
+  paint/masks seam, frame-cache key, bench scenario + budget gates,
   bridge API for the block and pins (codegen once), tests 13–14.
 - **PU3 — tools, overlay, panel**: arm the four tools (K-228 flip), tool options (Density,
   Expansion), the mesh ghost and pin overlay, gestures and document commands, the Timeline

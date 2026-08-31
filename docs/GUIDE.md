@@ -14135,8 +14135,9 @@ have to decide which member's edge you meant, and there is no honest answer to t
 ## 51. Puppet pins, in plain terms
 
 You have a cutout of a character on a layer, and you want the arm to wave without cutting
-the layer into pieces. The Puppet tools (designed in `docs/impl/puppet.md`, not built yet)
-do it the way a real puppet does: with a skeleton of sorts, and strings.
+the layer into pieces. The Puppet tools (designed in `docs/impl/puppet.md`; the engine half
+is built, the tools on the strip are not yet wired to it) do it the way a real puppet does:
+with a skeleton of sorts, and strings.
 
 The skeleton is a **mesh** — a net of small triangles laid over the opaque part of the
 picture, bent to fit the silhouette, like chicken wire pressed onto the shape. Lumit finds
@@ -14177,6 +14178,18 @@ the original pixels it owns, and it carries that patch to wherever it ended up �
 "stretch a picture over triangles" that every 3D game does thousands of times a frame, done
 here on the CPU because the layer's pixels are already in hand at that point in the render
 (right where paint strokes and masks are applied, for the same reason).
+
+Two things about that "solve a big system" step are worth knowing, because they are what
+you would notice if they were not there. The first is a **ceiling**: the sums grow roughly
+with the cube of the number of net corners, so a net finer than about fifteen hundred
+corners would take seconds rather than milliseconds. Rather than let that happen, Lumit
+quietly makes the triangles coarser — up to a point — and then declines the build and says
+so. Puppet is a tool for a cutout, not for a full-frame photograph, and the refusal names
+the density so you know which dial to turn. The second is that the sums can, in rare
+arrangements, come out with no answer at all; when that happens the engine slides the whole
+net by the average of what the pins asked for rather than throwing up its hands. A puppet
+that moves slightly wrong is a bad frame; a puppet that crashes the render is a bad
+evening.
 
 ## 52. Layer styles, or the wardrobe a layer wears, in plain terms
 

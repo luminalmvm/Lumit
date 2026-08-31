@@ -24,6 +24,9 @@ pub mod ops;
 pub mod paint;
 pub mod pixels;
 pub mod preset;
+/// Puppet: the mesh over a layer's own silhouette and the as-rigid-as-possible
+/// deformer over it (K-704).
+pub mod puppet;
 pub mod retime;
 pub mod sequence;
 pub mod shape;
