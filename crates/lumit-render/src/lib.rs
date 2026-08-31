@@ -69,6 +69,7 @@ pub mod proxy;
 pub mod puppet;
 pub mod realise;
 pub mod roto;
+mod sidecar;
 pub mod source;
 pub mod track;
 

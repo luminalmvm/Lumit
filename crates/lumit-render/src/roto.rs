@@ -57,6 +57,8 @@ use lumit_core::roto::{chain_hash, RotoBlock, RotoSettings, RotoStrokeKind};
 use lumit_roto::{base_seeds, FlowField, FrameRgb, RotoSolver, RotoStroke, Seeds, StrokeKind};
 use uuid::Uuid;
 
+use crate::sidecar;
+
 // ---------------------------------------------------------------------------
 // What a propagation is asked for
 // ---------------------------------------------------------------------------
@@ -389,11 +391,7 @@ fn key_bytes(key: RotoKey) -> [u8; 32] {
     out
 }
 
-/// Serialise a run: magic, version, then the body.
-///
-/// The version sits **outside** the body deliberately: a reader has to be able
-/// to say "this was written by a newer Lumit" without first parsing a shape it
-/// does not know — the refuse-newer rule `manifest.json` follows (docs/10 §1).
+/// Serialise a run, in the crate's shared framing ([`crate::sidecar`]).
 fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key_bytes(key),
@@ -404,11 +402,7 @@ fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
         frames: run.records.clone(),
     })
     .ok()?;
-    let mut out = Vec::with_capacity(body.len() + 9);
-    out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
-    out.extend_from_slice(&body);
-    Some(out)
+    Some(sidecar::frame(MAGIC, FORMAT_VERSION, &body))
 }
 
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
@@ -416,14 +410,7 @@ fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
 /// stored key that is not the one asked for. Every refusal costs a
 /// re-propagation and nothing else.
 fn decode(bytes: &[u8], key: Option<RotoKey>) -> Option<Record> {
-    let (head, body) = bytes.split_at_checked(9)?;
-    if head.get(..7)? != MAGIC {
-        return None;
-    }
-    let version = u16::from_le_bytes([*head.get(7)?, *head.get(8)?]);
-    if version > FORMAT_VERSION {
-        return None;
-    }
+    let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
     let record: Record = bincode::deserialize(body).ok()?;
     match key {
         Some(k) if record.key != key_bytes(k) => None,
@@ -451,16 +438,10 @@ fn read_sidecar(dir: &Path, key: RotoKey) -> Option<RotoRun> {
     record_to_run(decode(&bytes, Some(key))?)
 }
 
-/// Write one, best-effort. A cache that cannot be written costs the next session
-/// a re-propagation; it is never worth failing an answer already in hand.
 fn write_sidecar(dir: &Path, key: RotoKey, run: &RotoRun) {
-    let Some(bytes) = encode(key, run) else {
-        return;
-    };
-    if std::fs::create_dir_all(dir).is_err() {
-        return;
+    if let Some(bytes) = encode(key, run) {
+        sidecar::write(dir, &key.file_name(), &bytes);
     }
-    let _ = std::fs::write(dir.join(key.file_name()), bytes);
 }
 
 /// Every frame any **other** run of the same media can lend this one, by chain

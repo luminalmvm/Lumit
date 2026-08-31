@@ -73,6 +73,8 @@ use lumit_track::{
 };
 use uuid::Uuid;
 
+use crate::sidecar;
+
 // ---------------------------------------------------------------------------
 // What an analysis is asked for
 // ---------------------------------------------------------------------------
@@ -606,12 +608,7 @@ struct Record {
     answer: Answer,
 }
 
-/// Serialise a record: magic, version, then the body.
-///
-/// The version sits **outside** the body deliberately: a reader has to be able
-/// to say "this was written by a newer Lumit" without first parsing a shape it
-/// does not know, which is the same refuse-newer rule `manifest.json` follows
-/// (docs/10 §1).
+/// Serialise a record, in the crate's shared framing ([`crate::sidecar`]).
 fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key.0,
@@ -620,25 +617,14 @@ fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) -> Op
         answer: answer.clone(),
     })
     .ok()?;
-    let mut out = Vec::with_capacity(body.len() + 9);
-    out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
-    out.extend_from_slice(&body);
-    Some(out)
+    Some(sidecar::frame(MAGIC, FORMAT_VERSION, &body))
 }
 
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
 /// from the future, a body that will not parse, or a key that is not the one
 /// asked for. Every refusal costs a re-analysis and nothing else.
 fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, Answer)> {
-    let (head, body) = bytes.split_at_checked(9)?;
-    if head.get(..7)? != MAGIC {
-        return None;
-    }
-    let version = u16::from_le_bytes([*head.get(7)?, *head.get(8)?]);
-    if version > FORMAT_VERSION {
-        return None;
-    }
+    let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
     let record: Record = bincode::deserialize(body).ok()?;
     let clip_frames = usize::try_from(record.clip_frames).unwrap_or(usize::MAX);
     (record.key == key.0).then_some((record.fps, clip_frames, record.answer))
@@ -651,16 +637,10 @@ fn read_sidecar(dir: &Path, key: AnalysisKey) -> Option<(f64, usize, Answer)> {
     decode(&bytes, key)
 }
 
-/// Write one, best-effort. A cache that cannot be written costs the next session
-/// a re-analysis; it is never worth failing an answer that is already in hand.
 fn write_sidecar(dir: &Path, key: AnalysisKey, fps: f64, clip_frames: usize, answer: &Answer) {
-    let Some(bytes) = encode(key, fps, clip_frames, answer) else {
-        return;
-    };
-    if std::fs::create_dir_all(dir).is_err() {
-        return;
+    if let Some(bytes) = encode(key, fps, clip_frames, answer) {
+        sidecar::write(dir, &key.file_name(), &bytes);
     }
-    let _ = std::fs::write(dir.join(key.file_name()), bytes);
 }
 
 /// Where the sidecar lives. Overridable in tests, which must never write into
