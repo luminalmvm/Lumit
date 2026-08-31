@@ -237,9 +237,12 @@ These are v1-scope surfaces it does not yet match.
     keyframed camera cannot be dragged (no single value to add to); a drag
     spanning several layers is one undo step per layer, because no op carries
     edits to more than one.
-- **Roto** and **Puppet** - disabled on the strip until there is an engine behind
-    them ([16-ROADMAP.md](16-ROADMAP.md)). Roto wants a segmentation model and
-    per-frame stroke propagation; Puppet wants a mesh, pins and a deformer.
+- **Roto propagation speed** - the tools shipped (K-708..K-717: geodesic solve,
+    flow propagation, guided Refine edge, the `roto/` sidecar tier, both tools
+    armed), but a propagated 1080p frame measures 895 ms against §7's 60 ms
+    target (K-714) - the WGSL ports [impl/roto.md](impl/roto.md) names are owed.
+    Puppet shipped whole (K-704, K-712, K-716); its recorded upgrades (GPU warp,
+    sparse factorisation) have fired triggers and wait on the same quiet day.
 **Smooth zooming everywhere else.** The shared helper is built
 (`widgets/smooth_zoom.dart`, K-293) and the Timeline reads it. Still cutting
 rather than flying: the **graph editor's** zoom and auto-fit — a matter of
@@ -1427,8 +1430,10 @@ list, not a re-statement of the roadmap.
     the OFX host and the LFX C ABI + validator remain. Placeholder
     round-tripping already preserves unknown effects/expressions.
 - **Phase 5 - AE parity march.** 2.5D cameras/lights/DOF, tracker/stabiliser,
-    keying, rotoscoping, particles, tier-2 effects, text animators, shape
-    operators, the Composer audio workspace ([09-AUDIO.md](09-AUDIO.md)).
+    keying, particles, tier-2 effects, shape operators. Rotoscoping and Puppet
+    landed (K-708..K-717, K-704); text animators landed; the Composer audio
+    workspace landed with CLAP/VST3 hosting ([09-AUDIO.md](09-AUDIO.md),
+    K-697..K-709).
 - **Phase 6 - Beyond parity.** Node view over the evaluation graph, Blender scene
     import, Lottie export, OpenTimelineIO interchange, render-farm/CLI export
     (K-023, K-036).
