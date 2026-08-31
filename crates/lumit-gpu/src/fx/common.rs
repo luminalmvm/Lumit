@@ -10,8 +10,15 @@ use super::work_texture;
 /// Upload a linear f32 RGBA image as a working (fp16) texture — test and
 /// tooling support for effect kernels.
 pub fn upload_linear_f32(ctx: &GpuContext, rgba: &[f32], w: u32, h: u32) -> wgpu::Texture {
-    let tex = work_texture(ctx, w, h, "fx-upload");
     let halfs: Vec<u16> = rgba.iter().map(|v| f16_bits(*v)).collect();
+    upload_linear_f16(ctx, &halfs, w, h)
+}
+
+/// The same upload, for a caller that already holds the fp16 bits — one that
+/// can produce them without an f32 plane in between. `halfs` is RGBA, four
+/// per pixel.
+pub fn upload_linear_f16(ctx: &GpuContext, halfs: &[u16], w: u32, h: u32) -> wgpu::Texture {
+    let tex = work_texture(ctx, w, h, "fx-upload");
     ctx.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &tex,
@@ -19,7 +26,7 @@ pub fn upload_linear_f32(ctx: &GpuContext, rgba: &[f32], w: u32, h: u32) -> wgpu
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         },
-        bytemuck::cast_slice(&halfs),
+        bytemuck::cast_slice(halfs),
         wgpu::TexelCopyBufferLayout {
             offset: 0,
             bytes_per_row: Some(w * 8),

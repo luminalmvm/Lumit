@@ -1380,12 +1380,28 @@ fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
 /// the plane reads correctly whichever way it is asked. The values are the
 /// matte's own 0..1 and are **not** colour, so no transfer function is applied
 /// to them — a coverage is a weight, not a picture.
+/// A gray8 byte goes straight to the fp16 bits the texture holds, through a
+/// 256-entry table — the same numbers the f32 route produced, without the
+/// full-plane f32 temporary in between.
+///
+// ponytail: uploaded fresh every rendered frame. An unchanged matte — the
+// common case, since a propagated run does not move while it is being watched
+// — re-uploads the whole plane per frame per Roto layer. Memoising the texture
+// per (effect instance, source frame) is the upgrade, and it belongs beside
+// `LutCache`/`FxCache` on the `Realiser`'s owner rather than in the roto store,
+// which is process-wide and knows nothing of a device. Observable trigger: a
+// Roto layer's upload showing up in the docs/13 budget traces, or scrubbing a
+// 4K propagated shot dropping frames the matte solve is not paying for.
 fn upload_roto_matte(ctx: &lumit_gpu::GpuContext, m: &crate::draw::RotoMatteDraw) -> wgpu::Texture {
-    let n = (m.width as usize) * (m.height as usize);
-    let mut rgba = Vec::with_capacity(n * 4);
-    for i in 0..n {
-        let a = f32::from(m.gray.get(i).copied().unwrap_or(0)) / 255.0;
-        rgba.extend_from_slice(&[a, a, a, a]);
+    let mut table = [0u16; 256];
+    for (v, bits) in table.iter_mut().enumerate() {
+        *bits = lumit_gpu::fx::f16_bits(v as f32 / 255.0);
     }
-    lumit_gpu::fx::upload_linear_f32(ctx, &rgba, m.width, m.height)
+    let n = (m.width as usize) * (m.height as usize);
+    let mut halfs = Vec::with_capacity(n * 4);
+    for i in 0..n {
+        let a = table[usize::from(m.gray.get(i).copied().unwrap_or(0))];
+        halfs.extend_from_slice(&[a, a, a, a]);
+    }
+    lumit_gpu::fx::upload_linear_f16(ctx, &halfs, m.width, m.height)
 }
