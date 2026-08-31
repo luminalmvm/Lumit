@@ -128,6 +128,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// open is no more part of the composition than whether a layer is.
   final Set<String> _foldedGroups = {};
 
+  /// Which group headers have their **effect lanes** twirled open (K-731), by
+  /// group id — the fx tick's own fold, session state like the two above.
+  /// The per-effect twirls under it live in [_open] under the header's
+  /// group-prefixed paths, so the ordinary toggle road serves them unchanged.
+  final Set<String> _openGroupFx = {};
+
   /// Whether [id]'s twirl is down.
   ///
   /// One set, since K-529: the flat-sheet twirl set went with Keys mode and
@@ -636,6 +642,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // After the write, not before: setting the selection notifies the
           // listener that clears this, so the order is what leaves it set.
           _selectedGroup = g.id;
+          // The header is now the Effect controls panel's subject (K-731) —
+          // after setSelection for the same clears-then-sets reason above.
+          ui.selectedGroupHeader.value = g.id;
           // Published, not `setState` — [_selectLayer]'s own rule (WP-2): the
           // rows and bars listen for their slice of [TimelineSelection], so
           // what redraws is the band lit and the layers let go. The header
@@ -692,6 +701,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           comp.shiftGroup(group: g.id, delta: delta);
           ui.model.refresh();
         },
+        // The fx tick's twirl (K-731): the header's effect lanes, session
+        // state like the member fold above it.
+        onToggleFxFold: (id) => setState(() {
+          if (!_openGroupFx.remove(id)) _openGroupFx.add(id);
+        }),
       );
 
   void _selectLayer(LumitUiState ui, LayerReference? layer,
@@ -3042,7 +3056,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // both from one walk, so the two halves cannot disagree about how many
     // rows there are.
     final folds =
-        groupFolds(groups: ui.model.groups, folded: _foldedGroups);
+        groupFolds(
+            groups: ui.model.groups,
+            folded: _foldedGroups,
+            fxOpen: _openGroupFx);
     final layers = [
       for (final e in ui.model.layers)
         if ((needle.isEmpty || e.info.name.toLowerCase().contains(needle)) &&

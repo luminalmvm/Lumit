@@ -814,7 +814,18 @@ class LumitUiState extends ChangeNotifier {
     // the old layer's effects picked (K-300) — Copy would then act on something
     // no longer on screen.
     clearEffectSelection();
+    // And choosing layers is choosing a layer subject: the group header the
+    // panel was showing stands down (K-731). The Timeline's group click sets
+    // it back after routing through here, which is what keeps the order
+    // honest — see its onSelect.
+    selectedGroupHeader.value = null;
   }
+
+  /// The **layer group** whose header the Effect controls panel is showing
+  /// (K-731, docs/impl/group-effects.md §6), or null while the subject is a
+  /// layer. Set by the Timeline's header click after it selects the members;
+  /// cleared by any layer selection.
+  final ValueNotifier<UuidValue?> selectedGroupHeader = ValueNotifier(null);
 
   /// The effects picked out of one layer's stack (K-300), as instance ids in
   /// **stack order** — what Copy and Cut act on when it is not empty.

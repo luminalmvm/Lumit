@@ -28,6 +28,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import 'package:uuid/uuid.dart';
 
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
@@ -90,8 +91,17 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// parameter's does — the only two things that differ are which path it sits
   /// under ([foldRowPath]) and which of the layer's two lists a write reads.
   final bool style;
+
+  /// The **layer group** whose header stack this row belongs to (K-731,
+  /// docs/impl/group-effects.md §6), or null for a layer's own row — the
+  /// styles bit's pattern, grown its third arm. A group row draws, keys and
+  /// drags as any effect parameter does; what differs is the path prefix
+  /// ([groupFoldPrefix]) and that a write reads the header's list
+  /// (`CompositionReference.getGroupEffects`) — the commit itself routes by
+  /// the engine's shared instance lookup either way.
+  final UuidValue? group;
   const FoldEffectParamRow(this.info, this.param, this.value,
-      {required int depth, this.driven, this.style = false})
+      {required int depth, this.driven, this.style = false, this.group})
       : super(depth);
 }
 
@@ -1176,6 +1186,10 @@ bool moveLaneKeys({
   required BridgeLayerEntry entry,
   required LayerFoldRow row,
   required Map<int, BridgeRational> times,
+  // Only a **group header's** row reads it (K-731): its list lives on the
+  // comp, not the layer. Optional so the layer arms stay callable from tests
+  // that hold no composition.
+  CompositionReference? comp,
 }) {
   if (times.isEmpty) return false;
 
@@ -1222,11 +1236,18 @@ bool moveLaneKeys({
       entry.layer.setTransforms(props: props, values: values);
       return true;
 
-    case FoldEffectParamRow(:final info, :final param, :final style):
-      // Whichever of the layer's two lists holds it — a style's keys move
-      // exactly as an effect's do (K-706). The row already says which, so the
-      // list is taken rather than searched for.
-      final stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
+    case FoldEffectParamRow(:final info, :final param, :final style, :final group):
+      // Whichever list holds it — a style's keys move exactly as an effect's
+      // do (K-706), and a group header's the same way (K-731). The row
+      // already says which, so the list is taken rather than searched for;
+      // the commit routes by the engine's shared instance lookup either way.
+      final List<BridgeEffectInstance> stack;
+      if (group != null) {
+        if (comp == null) return false;
+        stack = comp.getGroupEffects(group: group);
+      } else {
+        stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
+      }
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
@@ -1371,6 +1392,11 @@ bool moveLaneKeys({
 String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldGroupRow(:final path) => path,
       FoldTransformRow(:final group) => transformGroupPath(layerId, group),
+      // A group header's row roots under the group's own prefix, whichever
+      // layer's block it is drawn inside (K-731) — a group id can never be
+      // mistaken for a layer's, so `layerIdOfPath` answers no layer for it.
+      FoldEffectParamRow(:final info, :final param, group: final g?) =>
+        '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -1432,6 +1458,41 @@ String effectsPath(String layerId) => '$layerId/effects';
 /// The path of one effect within the Effects group.
 String effectPath(String layerId, String effectId) =>
     '$layerId/effects/$effectId';
+
+/// The root a **group header's** fold paths sit under (K-731): a prefixed
+/// form of the group's id, so nothing that expects a layer id can mistake one
+/// for it — `layerIdOfPath` on a group path answers a string no layer has.
+String groupFoldPrefix(UuidValue group) => 'g:$group';
+
+/// The rows a group header's twirl shows (K-731, docs/impl/group-effects.md
+/// §6): one heading per header effect, and the ordinary [FoldEffectParamRow]s
+/// under whichever are open — the layer Effects arm's own shape, rooted under
+/// [groupFoldPrefix] and drawn inside the carrier layer's block. No Transform,
+/// Masks or Audio: a band has none of those, only the wardrobe.
+List<LayerFoldRow> groupHeaderFoldRows({
+  required BridgeLayerGroup group,
+  required Set<String> open,
+}) {
+  final gid = groupFoldPrefix(group.id);
+  final rows = <LayerFoldRow>[];
+  for (final fx in group.effects) {
+    final path = effectPath(gid, fx.id.toString());
+    final fxOpen = open.contains(path);
+    rows.add(FoldGroupRow(
+        path: path,
+        label: fx.customName ?? effectLabelOf(fx.name),
+        open: fxOpen,
+        depth: 1));
+    if (fxOpen) {
+      final values = {for (final v in fx.values) v.id: v.value};
+      for (final param in cachedListParameters(fx.name)) {
+        rows.add(FoldEffectParamRow(fx, param, values[param.id],
+            depth: 2, group: group.id));
+      }
+    }
+  }
+  return rows;
+}
 
 /// The path of a layer's **Styles** group (K-706).
 String stylesPath(String layerId) => '$layerId/styles';

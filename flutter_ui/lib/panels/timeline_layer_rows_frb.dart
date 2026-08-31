@@ -610,6 +610,13 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
   Widget build(BuildContext context) {
     final row = widget.row;
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    // A group header's row (K-731): the editor's third place to read a stack
+    // from — the commit still goes through the carrier layer, where the
+    // engine's shared instance lookup routes it to the group's own op.
+    _editor.groupStack = switch (row.group) {
+      final g? => () => widget.comp.getGroupEffects(group: g),
+      null => null,
+    };
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
       effectId: row.info.id,

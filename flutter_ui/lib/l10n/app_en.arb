@@ -11555,6 +11555,10 @@
   "@tipUnfoldGroup": {
     "description": "Tooltip on the triangle at the left of a layer group's header row in the Timeline, when the group is folded shut: pressing it shows the layers inside the group again. Two words."
   },
+  "tipGroupEffects": "Group effects",
+  "@tipGroupEffects": {
+    "description": "Tooltip on the small fx mark at the right of a layer group's header row in the Timeline, shown only while the group's header carries effects; pressing it twirls the header's effect lanes open or shut. Two words."
+  },
   "tipGroupColour": "Group colour",
   "@tipGroupColour": {
     "description": "Tooltip on the small coloured tick on a layer group's header row in the Timeline; pressing it opens an eight-colour picker. Two words."

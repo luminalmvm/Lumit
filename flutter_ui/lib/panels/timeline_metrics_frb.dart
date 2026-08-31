@@ -328,6 +328,18 @@ class LayerRow {
   /// carrier's own block.
   final GroupHeader? groupHeader;
 
+  /// The header's own fold-out (K-731): its effect headings and their
+  /// parameter rows, riding the carrier's block exactly as the header itself
+  /// does — so the drag arithmetic and both halves' windows still see one
+  /// entry per visible layer. Empty for every layer that carries no header,
+  /// and for a header with an empty wardrobe.
+  final List<LayerFoldRow> groupFoldRows;
+
+  /// The header rows the table draws: its fold-out when the fx tick is
+  /// twirled open, nothing when it is not — [drawnRows]'s twin.
+  List<LayerFoldRow> get drawnGroupRows =>
+      (groupHeader?.fxOpen ?? false) ? groupFoldRows : const [];
+
   const LayerRow({
     required this.entry,
     required this.id,
@@ -339,6 +351,7 @@ class LayerRow {
     this.hasAudio = false,
     this.hasPicture = true,
     this.groupHeader,
+    this.groupFoldRows = const [],
   });
 
   /// Whether the layer's **own** row draws at all. A shut group's carrier
@@ -346,10 +359,13 @@ class LayerRow {
   /// fold-out are what the fold hid, along with the members below it.
   bool get bodyDrawn => !(groupHeader?.folded ?? false);
 
-  /// This block's height: the group header it carries, then — unless the fold
-  /// is shut — its own row, the rows it draws, and its open view.
+  /// This block's height: the group header it carries with whatever lanes its
+  /// fx twirl shows, then — unless the fold is shut — its own row, the rows
+  /// it draws, and its open view.
   double get height =>
-      (groupHeader == null ? 0 : rowHeight) +
+      (groupHeader == null
+          ? 0
+          : rowHeight * (1 + drawnGroupRows.length)) +
       (bodyDrawn
           ? rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0)
           : 0);
@@ -370,13 +386,15 @@ class LayerRow {
 ({Map<String, GroupHeader> headers, Set<String> hidden}) groupFolds({
   required List<BridgeLayerGroup> groups,
   required Set<String> folded,
+  Set<String> fxOpen = const {},
 }) {
   final headers = <String, GroupHeader>{};
   final hidden = <String>{};
   for (final g in groups) {
     if (g.members.isEmpty) continue;
     final shut = folded.contains(g.id.toString());
-    headers[g.members.first.toString()] = GroupHeader(g, shut);
+    headers[g.members.first.toString()] =
+        GroupHeader(g, shut, fxOpen: fxOpen.contains(g.id.toString()));
     if (shut) {
       // Every member but the first: the first stays in the list as the row
       // the header is drawn on, with its own body standing down.
@@ -469,6 +487,14 @@ List<LayerRow> layerRows({
       // so appearing and then going is far less startling than the reverse.
       hasPicture: hasPicture[id] ?? true,
       groupHeader: groupHeaders[id],
+      // The header's own fold-out (K-731), built from the read model's
+      // listing with the same open set the layer folds use — a header
+      // effect's twirl is remembered under its group-prefixed path.
+      groupFoldRows: switch (groupHeaders[id]) {
+        final gh? when gh.group.effects.isNotEmpty =>
+          groupHeaderFoldRows(group: gh.group, open: open),
+        _ => const [],
+      },
     ));
   }
   return out;

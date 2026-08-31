@@ -941,6 +941,34 @@ class Outline extends StatelessWidget {
                   actions: groupActions,
                   renameRequest: renameRequest,
                 ),
+              // The header's own effect lanes (K-731), under the header and
+              // above the carrier's body — the same FoldRow the layer fold
+              // draws, with the carrier's layer as the write road (the engine
+              // routes a group instance by its shared lookup).
+              for (final row in rows[i].drawnGroupRows)
+                Listener(
+                  onPointerDown: (_) => onHighlight(rows[i].id),
+                  child: FoldRow(
+                    key: ValueKey<String>(
+                        'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
+                    comp: comp,
+                    layer: rows[i].entry.layer,
+                    row: row,
+                    valueColumn: valueColumn,
+                    timingsColumn: timingsColumn,
+                    baseIndent: baseIndent,
+                    path: foldRowPath(rows[i].id, row),
+                    selectedProperties: mine.properties,
+                    graphColours: mine.colours,
+                    onSelectProperty: onSelectProperty,
+                    onEditProperty: onEditProperty,
+                    playheadFrame: playheadFrame,
+                    onSeek: onSeek,
+                    onToggle: onToggle,
+                    onChanged: onChanged,
+                    locked: false,
+                  ),
+                ),
               // A shut fold draws the header and nothing else: the carrier's
               // own row is one of the rows the fold hid.
               if (rows[i].bodyDrawn)

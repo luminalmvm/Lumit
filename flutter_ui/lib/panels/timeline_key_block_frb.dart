@@ -11,6 +11,7 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'key_block.dart';
 import 'timeline_extras_frb.dart';
@@ -66,6 +67,9 @@ class KeyBlockOverlay extends StatefulWidget {
   final int fpsNum;
   final int fpsDen;
   final ProjectReference? project;
+
+  /// For a group header's rows (K-731), whose stack lives on the comp.
+  final CompositionReference? comp;
   final ValueChanged<Offset> onEase;
   final VoidCallback onChanged;
 
@@ -85,6 +89,7 @@ class KeyBlockOverlay extends StatefulWidget {
     required this.fpsNum,
     required this.fpsDen,
     required this.project,
+    this.comp,
     required this.onEase,
     required this.onChanged,
     required this.onSelectKey,
@@ -160,6 +165,7 @@ class _KeyBlockOverlayState extends State<KeyBlockOverlay> {
       fpsNum: widget.fpsNum,
       fpsDen: widget.fpsDen,
       project: widget.project,
+      comp: widget.comp,
     )) {
       widget.onChanged();
     }

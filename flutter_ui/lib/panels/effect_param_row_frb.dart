@@ -2012,6 +2012,13 @@ String _basename(String path) {
 /// value), and every call that consumes a stack gets a freshly read one with
 /// that edit written into it.
 class EffectStackEditor {
+  /// Where a **group header's** stack is read from (K-731,
+  /// docs/impl/group-effects.md §6), set by whichever panel is showing a
+  /// header's rows — the third place [stackWith] can look, after the layer's
+  /// effects and its styles, exactly as the engine's own shared instance
+  /// lookup does. Null for every ordinary editor.
+  List<BridgeEffectInstance> Function()? groupStack;
+
   /// The parameters this gesture has staged, by effect and parameter id.
   ///
   /// **A map rather than one edit, because a gesture can move two parameters
@@ -2043,9 +2050,17 @@ class EffectStackEditor {
   List<BridgeEffectInstance> stackWith(LayerReference layer) {
     final effects = layer.getEffects();
     final ids = {for (final instance in effects) instance.id()};
-    final stack = _staged.keys.every((key) => ids.contains(key.$1))
-        ? effects
-        : layer.getStyles();
+    var stack = effects;
+    if (!_staged.keys.every((key) => ids.contains(key.$1))) {
+      // Styles next, then — for an editor showing a group header's rows —
+      // the header's own list (K-731): the same order the engine's shared
+      // lookup searches, so the commit lands on the list the id lives in.
+      final styles = layer.getStyles();
+      final styleIds = {for (final s in styles) s.id()};
+      stack = _staged.keys.every((key) => styleIds.contains(key.$1))
+          ? styles
+          : (groupStack?.call() ?? styles);
+    }
     for (final instance in stack) {
       final id = instance.id();
       for (final entry in _staged.entries) {
@@ -2069,6 +2084,14 @@ class EffectStackEditor {
     required double scale,
   }) {
     _staged[(effect, param)] = value;
+    // A group header's drag stages without a live preview render (K-731): the
+    // preview overlay stands a stack in for the LAYER's own, and a header's
+    // stack is not that — the picture would blur the carrier alone. The row
+    // still shows the staged value, and the real picture follows on commit.
+    // ponytail: no live group preview; ceiling = a header drag repaints on
+    // release only. Upgrade: a group overlay on render_frame_with_preview.
+    // Trigger: the owner asking why the drag does not show.
+    if (groupStack != null) return;
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(

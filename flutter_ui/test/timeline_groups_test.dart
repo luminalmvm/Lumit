@@ -87,6 +87,30 @@ void main() {
       expect(folds.hidden, {_layers[3].toString()});
     });
 
+    test('the fx twirl rides the header, independent of the member fold', () {
+      // K-731: the wardrobe's lanes belong to the band, so they can be open
+      // while the members are folded away, and shut while they show.
+      final folds = groupFolds(
+        groups: [
+          _group(_gid, [_layers[1], _layers[2]])
+        ],
+        folded: {_gid},
+        fxOpen: {_gid},
+      );
+      final header = folds.headers[_layers[1].toString()]!;
+      expect(header.folded, isTrue);
+      expect(header.fxOpen, isTrue);
+
+      final shut = groupFolds(
+        groups: [
+          _group(_gid, [_layers[1], _layers[2]])
+        ],
+        folded: const {},
+      );
+      expect(shut.headers[_layers[1].toString()]!.fxOpen, isFalse,
+          reason: 'shut by default, like every other twirl');
+    });
+
     test('a group whose layers are all gone draws no row at all', () {
       // The engine answers an empty member list for a group nothing resolves
       // to; there is no row to hang a header on, and nothing to hide.

@@ -78,16 +78,26 @@ bool ungroupSelection({
 class GroupHeader {
   final BridgeLayerGroup group;
   final bool folded;
-  const GroupHeader(this.group, this.folded);
+
+  /// Whether the header's **effect lanes** are twirled open (K-731): the
+  /// header twirls like a layer, showing its stack's rows and keyframes
+  /// beneath it. Session state beside [folded], and independent of it — the
+  /// wardrobe's lanes belong to the band, not to the members it may have
+  /// folded away.
+  final bool fxOpen;
+  const GroupHeader(this.group, this.folded, {this.fxOpen = false});
 
   String get id => group.id.toString();
 
   @override
   bool operator ==(Object other) =>
-      other is GroupHeader && other.group == group && other.folded == folded;
+      other is GroupHeader &&
+      other.group == group &&
+      other.folded == folded &&
+      other.fxOpen == fxOpen;
 
   @override
-  int get hashCode => Object.hash(group, folded);
+  int get hashCode => Object.hash(group, folded, fxOpen);
 }
 
 /// What the group header row can be asked to do. One object rather than eight
@@ -116,6 +126,10 @@ class GroupActions {
   /// The combined bar was dragged by this many frames — every member moves.
   final void Function(BridgeLayerGroup group, int deltaFrames) onShift;
 
+  /// Twirl the header's effect lanes open or shut (K-731) — the fx tick's own
+  /// press, session state like [onToggleFold]'s.
+  final ValueChanged<String> onToggleFxFold;
+
   const GroupActions({
     required this.onToggleFold,
     required this.onSelect,
@@ -125,6 +139,7 @@ class GroupActions {
     required this.onUngroup,
     required this.onPrecompose,
     required this.onShift,
+    required this.onToggleFxFold,
   });
 }
 
@@ -298,6 +313,32 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
           child: Text('${_group.members.length}',
               style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
         ),
+        // **The fx tick** (K-731): an effected group is visible in the
+        // outline, and the tick doubles as the header's own twirl — pressing
+        // it opens the wardrobe's lanes beneath the header, the way a layer's
+        // caret opens its property lanes. Absent entirely while the header
+        // carries nothing, which is most groups.
+        if (_group.effects.isNotEmpty)
+          LumitTooltip(
+            message: l10n.tipGroupEffects,
+            child: GestureDetector(
+              key: ValueKey<String>('tl-group-fx-${widget.header.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => widget.actions.onToggleFxFold(widget.header.id),
+              child: SizedBox(
+                width: 16,
+                height: t.density.laneRow,
+                child: Center(
+                  child: lumitIcon(
+                    LumitIcon.fx,
+                    size: iconSize,
+                    color:
+                        widget.header.fxOpen ? t.accent : t.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

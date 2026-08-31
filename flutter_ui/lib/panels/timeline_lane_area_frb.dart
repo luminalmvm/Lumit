@@ -77,6 +77,9 @@ bool commitKeyGesture({
   required int fpsNum,
   required int fpsDen,
   required ProjectReference? project,
+  // Only a group header's rows read it (K-731) — their list lives on the
+  // comp, not on any layer.
+  CompositionReference? comp,
 }) {
   final byRow = <String, (SelectedKey, Map<int, BridgeRational>)>{};
   for (final place in places) {
@@ -89,7 +92,8 @@ bool commitKeyGesture({
   var changed = false;
   asOneUndoStep(project, () {
     for (final (place, times) in byRow.values) {
-      if (moveLaneKeys(entry: place.entry, row: place.row, times: times)) {
+      if (moveLaneKeys(
+          entry: place.entry, row: place.row, times: times, comp: comp)) {
         changed = true;
       }
     }
@@ -116,6 +120,14 @@ List<SnapTarget> timelineSnapTargets({
       layers: [for (final row in rows) row.entry],
       compMarkers: markersOf(comp),
       keyRows: [
+        // A group header's own rows (K-731) are places to land like any
+        // other lane's — the run is short (a header's stack, open or not).
+        for (final layer in rows)
+          for (final row in layer.groupFoldRows)
+            (
+              rowId: foldRowPath(layer.id, row),
+              frames: laneKeysOf(row).map((k) => laneKeyFrame(k, fps)),
+            ),
         for (final layer in rows)
           for (final row in layer.foldRows)
             (
@@ -461,6 +473,7 @@ class LayerArea extends StatelessWidget {
       fpsNum: fpsNum,
       fpsDen: fpsDen,
       project: project,
+      comp: comp,
     )) {
       onChanged();
     }
@@ -479,27 +492,44 @@ class LayerArea extends StatelessWidget {
     final held = selectedKeys.value;
     final out = <SelectedKey>[];
     var y = 0.0;
+    void placesOf(LayerRow layer, LayerFoldRow row, double step, double top) {
+      final rowId = foldRowPath(layer.id, row);
+      final keys = laneKeysOf(row);
+      for (var i = 0; i < keys.length; i++) {
+        if (!held.contains('$rowId#$i')) continue;
+        out.add(SelectedKey(
+          entry: layer.entry,
+          row: row,
+          rowId: rowId,
+          index: i,
+          frame: laneKeyFrame(keys[i], fps),
+          top: top,
+          height: step,
+        ));
+      }
+    }
+
     for (final layer in rows) {
       final step = layer.rowHeight;
+      // The same walk [LayerRow.height] describes, or the block's box drifts
+      // off the diamonds below any group header: the header row and its own
+      // lanes (K-731) first, then — only while the fold shows a body — the
+      // bar, the view's room, and the fold-out.
+      if (layer.groupHeader != null) {
+        y += step; // the header row
+        for (final row in layer.drawnGroupRows) {
+          final rowTop = y;
+          y += step;
+          placesOf(layer, row, step, rowTop);
+        }
+      }
+      if (!layer.bodyDrawn) continue;
       y += step; // the layer's own bar row
       y += layer.sequenceExtra ?? 0; // and an open Sequence view's room (§4.4)
       for (final row in layer.drawnRows) {
         final rowTop = y;
         y += step;
-        final rowId = foldRowPath(layer.id, row);
-        final keys = laneKeysOf(row);
-        for (var i = 0; i < keys.length; i++) {
-          if (!held.contains('$rowId#$i')) continue;
-          out.add(SelectedKey(
-            entry: layer.entry,
-            row: row,
-            rowId: rowId,
-            index: i,
-            frame: laneKeyFrame(keys[i], fps),
-            top: rowTop,
-            height: step,
-          ));
-        }
+        placesOf(layer, row, step, rowTop);
       }
     }
     return out;
@@ -753,6 +783,35 @@ class LayerArea extends StatelessWidget {
                                           framesOfDx: (dx) =>
                                               axis.framesOfPx(dx).round(),
                                         ),
+                                      // The header's own effect lanes (K-731),
+                                      // level with the outline's rows for
+                                      // them: the same _lane the layer fold
+                                      // uses, keyed under the group's own
+                                      // prefix so its key selection filters
+                                      // to these lanes and no layer's.
+                                      if (rows[i]
+                                          .drawnGroupRows
+                                          .isNotEmpty)
+                                        _LayerKeys(
+                                          keys: selectedKeys,
+                                          layerId: groupFoldPrefix(rows[i]
+                                              .groupHeader!
+                                              .group
+                                              .id),
+                                          builder: (context) => Column(
+                                            key: ValueKey<String>(
+                                                'tl-group-lanes-${rows[i].groupHeader!.id}'),
+                                            children: [
+                                              for (final row
+                                                  in rows[i].drawnGroupRows)
+                                                SizedBox(
+                                                  height: t.density.laneRow,
+                                                  child: _lane(t, rows[i].entry,
+                                                      row, snap),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       if (rows[i].bodyDrawn &&
                                           rows[i].sequenceExtra == null)
                                         LayerBlock(
@@ -951,6 +1010,7 @@ class LayerArea extends StatelessWidget {
                                           fpsNum: fpsNum,
                                           fpsDen: fpsDen,
                                           project: project,
+                                          comp: comp,
                                           onEase: onEase,
                                           onChanged: onChanged,
                                           onSelectKey: _selectKey,

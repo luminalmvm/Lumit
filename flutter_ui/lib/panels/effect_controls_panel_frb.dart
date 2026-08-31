@@ -478,19 +478,191 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       );
     }
 
-    return ValueListenableBuilder<LayerReference?>(
-      valueListenable: ui.selectedLayer,
-      builder: (context, layer, _) {
-        if (layer != null) _lastLayer = layer;
-        final shown = layer ?? _lastLayer;
-        if (shown == null) {
-          return PlaceholderPanel(
-            icon: LumitIcon.fx,
-            title: l10n.effectControls,
-            hint: l10n.effectControlsNoLayer,
-          );
+    return ValueListenableBuilder<UuidValue?>(
+      valueListenable: ui.selectedGroupHeader,
+      builder: (context, groupId, _) => ValueListenableBuilder<LayerReference?>(
+        valueListenable: ui.selectedLayer,
+        builder: (context, layer, _) {
+          // A picked group header is the subject the way a picked layer is
+          // (K-731): its stack, its Add-effect, its parameter rows. The model
+          // no longer holding the group — ungrouped, another comp fronted —
+          // falls back to the layer subject rather than a dead card.
+          if (groupId != null) {
+            final body = _groupBody(context, comp, groupId);
+            if (body != null) return body;
+          }
+          if (layer != null) _lastLayer = layer;
+          final shown = layer ?? _lastLayer;
+          if (shown == null) {
+            return PlaceholderPanel(
+              icon: LumitIcon.fx,
+              title: l10n.effectControls,
+              hint: l10n.effectControlsNoLayer,
+            );
+          }
+          return _body(context, comp, shown);
+        },
+      ),
+    );
+  }
+
+  /// The panel with a **group header** as its subject (K-731,
+  /// docs/impl/group-effects.md §6): the header's own stack drawn with the
+  /// same cards a layer's is, and the Add-effect road targeting the group.
+  /// Null when the model no longer holds the group, or it has no member left
+  /// to route writes through.
+  Widget? _groupBody(
+    BuildContext context,
+    CompositionReference comp,
+    UuidValue groupId,
+  ) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ListenableBuilder(
+      listenable: ui.model,
+      builder: (context, _) {
+        final t = ThemeScope.of(context).theme;
+        BridgeLayerGroup? group;
+        for (final g in ui.model.groups) {
+          if (g.id == groupId) group = g;
         }
-        return _body(context, comp, shown);
+        // The carrier member is the write road: the engine's shared instance
+        // lookup routes a group instance from any of the comp's layers.
+        final carrier = group == null || group.members.isEmpty
+            ? null
+            : ui.model.byId(group.members.first);
+        if (group == null || carrier == null) {
+          // Fall back to the layer subject on the next frame — clearing here
+          // inside build would notify mid-build.
+          return _lastLayer == null
+              ? PlaceholderPanel(
+                  icon: LumitIcon.fx,
+                  title: l10n.effectControls,
+                  hint: l10n.effectControlsNoLayer,
+                )
+              : _body(context, comp, _lastLayer!);
+        }
+        final layer = carrier.layer;
+        final g = group;
+        // The shared editor's third place to read a stack from, while the
+        // header is the subject.
+        final gid = g.id;
+        _effects.groupStack = () => comp.getGroupEffects(group: gid);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              layerName: g.name,
+              onAdd: (name) {
+                try {
+                  comp.addGroupEffect(group: gid, name: name);
+                } catch (_) {
+                  // A driver, or a name this build does not know: the engine
+                  // refused calmly and the menu simply did nothing.
+                }
+                ui.model.refresh();
+              },
+            ),
+            Expanded(
+              child: DragTarget<EffectDragData>(
+                onAcceptWithDetails: (details) {
+                  try {
+                    comp.addGroupEffect(group: gid, name: details.data.name);
+                  } catch (_) {}
+                  ui.model.refresh();
+                },
+                builder: (context, candidate, _) => Container(
+                  decoration: candidate.isEmpty
+                      ? null
+                      : BoxDecoration(
+                          border: Border.all(color: t.accent),
+                          color: t.accent.withValues(alpha: 0.06),
+                        ),
+                  child: GestureDetector(
+                    key: const ValueKey('fx-group-ground'),
+                    behavior: HitTestBehavior.translucent,
+                    onTap: ui.clearEffectSelection,
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      children: [
+                        if (g.effects.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            child: Text(
+                              l10n.noEffectsYet,
+                              style: t.small,
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else
+                          for (var i = 0; i < g.effects.length; i++)
+                            _groupEffectCard(context, ui, comp, layer, g, i),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One header effect's card (K-731): the layer card with the group as the
+  /// list its commands read — like a style's, it takes no part in the effect
+  /// selection, and its heading only twirls.
+  Widget _groupEffectCard(
+    BuildContext context,
+    LumitUiState ui,
+    CompositionReference comp,
+    LayerReference layer,
+    BridgeLayerGroup group,
+    int index,
+  ) {
+    final fx = group.effects[index];
+    return _EffectSection(
+      key: ValueKey<String>('fx-card-group-$index'),
+      info: fx,
+      group: group.id,
+      open: _isOpen('fx-${fx.id}'),
+      onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+      selected: false,
+      driven: const {},
+      stagedValue: _effects.stagedValue,
+      index: index,
+      count: group.effects.length,
+      onStackChanged: ui.model.refresh,
+      onWrite: (id, param, value) {
+        _effects.write(layer, id, param, value);
+        ui.model.refresh();
+      },
+      onWritePair: (id, values) {
+        _effects.writeAll(layer, id, values);
+        ui.model.refresh();
+      },
+      onLive: (id, param, value) => setState(() {
+        _effects.live(comp, layer, id, param, value,
+            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+      }),
+      onSelect: () {},
+      layer: layer,
+      allLayers: ui.model.layers,
+      comp: comp,
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      isGroupOpen: _isGroupOpen,
+      onToggleGroup: _toggleGroup,
+      pressed: _actionPressed,
+      themedGraphs: ui.workspace.themedEffectGraphs,
+      curvePlotSize: ui.workspace.curvePlotSize,
+      onCurvePlotSize: ui.workspace.setCurvePlotSize,
+      onAction: (effect, param) {
+        try {
+          fireEffectAction(layer: layer, effect: effect, param: param);
+        } catch (_) {
+          // Refused; the effect's own status line says why.
+        }
+        setState(() => _actionPressed += 1);
       },
     );
   }
@@ -500,6 +672,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     CompositionReference comp,
     LayerReference layer,
   ) {
+    // A layer subject reads no group's stack: the editor's third place to
+    // look is only armed while a header is the subject (K-731).
+    _effects.groupStack = null;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // **The panel does not listen to the playhead.** Every row that reads it —
     // a value under the playhead, a diamond that fills on a key — carries its
@@ -1277,6 +1452,14 @@ class _EffectSection extends StatelessWidget {
   /// ([_instances]) and which three commands are absent — reorder, copy and
   /// paste, none of which nine fixed slots in a pinned order can perform.
   final bool style;
+
+  /// This card sits on a **group header's** stack (K-731,
+  /// docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
+  /// third arm. Every command still goes through [layer] (the group's first
+  /// member): the engine's shared instance lookup routes a group instance to
+  /// `SetGroupEffects`, so the card's remove, bypass, reorder, reset and
+  /// every parameter row are the same widgets doing the same thing.
+  final UuidValue? group;
   final LayerReference layer;
 
   /// Every layer in the comp, from the read model — what a layer-valued
@@ -1354,6 +1537,7 @@ class _EffectSection extends StatelessWidget {
     required this.index,
     required this.count,
     this.style = false,
+    this.group,
     required this.layer,
     required this.allLayers,
     required this.comp,
@@ -1389,10 +1573,11 @@ class _EffectSection extends StatelessWidget {
   List<BridgeEffectInstance> _handles(BuildContext context) {
     // A style is never part of a picked *run*: the effect selection is the
     // stack's, and a style has no place in it. So this card's own instance is
-    // the whole answer (K-706).
-    if (style) {
+    // the whole answer (K-706) — and a group header's card takes the same
+    // road for the same reason (K-731).
+    if (style || group != null) {
       return [
-        for (final candidate in layer.getStyles())
+        for (final candidate in _instances())
           if (candidate.id() == info.id) candidate,
       ];
     }
@@ -1405,11 +1590,14 @@ class _EffectSection extends StatelessWidget {
     ];
   }
 
-  /// The layer's list this card's instance is on — its style list, or its
-  /// effect stack (K-706). Written back through `setEffects` either way: the
-  /// engine routes a staged list to the list its ids name.
-  List<BridgeEffectInstance> _instances() =>
-      style ? layer.getStyles() : layer.getEffects();
+  /// The list this card's instance is on — a group header's stack (K-731),
+  /// the layer's style list, or its effect stack (K-706). Written back
+  /// through `setEffects` either way: the engine routes a staged list to the
+  /// list its ids name.
+  List<BridgeEffectInstance> _instances() => switch (group) {
+        final g? => comp.getGroupEffects(group: g),
+        null => style ? layer.getStyles() : layer.getEffects(),
+      };
 
   /// Run [op] on each of them, in stack order.
   void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,

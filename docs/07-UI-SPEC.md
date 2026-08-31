@@ -1489,7 +1489,18 @@ the one sanctioned way a group reaches the picture.
   be trimmable.
 - The header's right-click menu offers **Rename group**, **Ungroup**, and **Pre-compose
   group** — the last handing the group's members to the dialogue in §13.4, which is the
-  render-level collapse a group deliberately is not.
+  render-level collapse a group deliberately is not. Since K-731 the pre-compose also
+  carries the header's effect stack onto the new Precomp layer and retires the emptied
+  band, as one undo step.
+- **Effects on the header** (K-731): while the header's stack is non-empty the identity
+  column ends with an **fx tick** beside the member count, so an effected group is
+  visible in the outline. The tick doubles as the header's own twirl: pressing it opens
+  **real lanes** for the header's effects under the header row — one heading per effect,
+  ordinary parameter rows with stopwatches, values and keyframe diamonds beneath
+  whichever are open — riding the carrier layer's block exactly as the header itself
+  does. Clicking the header also makes the group the **Effect controls panel's subject**:
+  the panel shows the header's stack with the cards a layer's stack uses, and its
+  Add-effect targets the group (drivers are refused — a group carries no graph).
 
 ### 4.3 Layer lanes and property twirl-down
 
