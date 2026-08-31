@@ -44,6 +44,7 @@ import '../state/puppet_ghost.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
+import 'layer_fold_frb.dart' show puppetPinCopy;
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_tool_cursor.dart';
@@ -267,13 +268,8 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
 
   /// The layer being pinned: the primary selection, as every other drawing tool
   /// uses.
-  LayerBox? get _target {
-    final ids = widget.uiState.selectedLayerIds;
-    for (final box in widget.boxes) {
-      if (ids.contains(box.id)) return box;
-    }
-    return null;
-  }
+  LayerBox? get _target =>
+      primarySelectedBox(widget.boxes, widget.uiState.selectedLayerIds);
 
   /// Escape abandons the drag in flight — the ladder's gesture rung, so it is
   /// taken back before a menu closes.
@@ -516,16 +512,12 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     // the new number (docs/07 §4.3).
     BridgeScalar at(BridgeScalar s, double v) =>
         scalarWithValueAt(s, v, widget.comp, frame);
-    final next = BridgePuppetPin(
-      id: was.id,
-      name: was.name,
-      kind: was.kind,
-      x: to == null ? was.x : at(was.x, to.dx),
-      y: to == null ? was.y : at(was.y, to.dy),
-      rotation: rotation == null ? was.rotation : at(was.rotation, rotation),
-      scale: scale == null ? was.scale : at(was.scale, scale),
-      amount: was.amount,
-      extent: was.extent,
+    final next = puppetPinCopy(
+      was,
+      x: to == null ? null : at(was.x, to.dx),
+      y: to == null ? null : at(was.y, to.dy),
+      rotation: rotation == null ? null : at(was.rotation, rotation),
+      scale: scale == null ? null : at(was.scale, scale),
     );
     if (next == was) return;
     try {

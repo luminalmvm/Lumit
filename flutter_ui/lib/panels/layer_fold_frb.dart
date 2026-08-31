@@ -19,7 +19,6 @@
 import 'dart:collection';
 
 import 'package:flutter/services.dart';
-import 'package:uuid/uuid.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -89,8 +88,7 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// One bit, and it buys the whole group: a style is an `EffectInstance` like
   /// any other, so the row draws, keys, drags and reads exactly as an effect
   /// parameter's does — the only two things that differ are which path it sits
-  /// under ([foldRowPath]) and which of the layer's two lists a write reads
-  /// first ([instancesHolding]).
+  /// under ([foldRowPath]) and which of the layer's two lists a write reads.
   final bool style;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth, this.driven, this.style = false})
@@ -369,20 +367,41 @@ BridgeScalar puppetScalarOf(BridgePuppetPin pin, PuppetValue value) =>
       PuppetValue.amount => pin.amount,
     };
 
+/// [pin] with some of its fields replaced. Everything not named is carried, so
+/// an edit can never silently drop a field: the engine takes the whole pin, and
+/// every write here is "the pin, with this changed".
+BridgePuppetPin puppetPinCopy(
+  BridgePuppetPin pin, {
+  String? name,
+  double? extent,
+  BridgeScalar? x,
+  BridgeScalar? y,
+  BridgeScalar? rotation,
+  BridgeScalar? scale,
+  BridgeScalar? amount,
+}) =>
+    BridgePuppetPin(
+      id: pin.id,
+      name: name ?? pin.name,
+      kind: pin.kind,
+      x: x ?? pin.x,
+      y: y ?? pin.y,
+      rotation: rotation ?? pin.rotation,
+      scale: scale ?? pin.scale,
+      amount: amount ?? pin.amount,
+      extent: extent ?? pin.extent,
+    );
+
 /// [pin] with the one number [value] names replaced.
 BridgePuppetPin puppetPinWithScalar(
         BridgePuppetPin pin, PuppetValue value, BridgeScalar to) =>
-    BridgePuppetPin(
-      id: pin.id,
-      name: pin.name,
-      kind: pin.kind,
-      x: value == PuppetValue.positionX ? to : pin.x,
-      y: value == PuppetValue.positionY ? to : pin.y,
-      rotation: value == PuppetValue.rotation ? to : pin.rotation,
-      scale: value == PuppetValue.scale ? to : pin.scale,
-      amount: value == PuppetValue.amount ? to : pin.amount,
-      extent: pin.extent,
-    );
+    switch (value) {
+      PuppetValue.positionX => puppetPinCopy(pin, x: to),
+      PuppetValue.positionY => puppetPinCopy(pin, y: to),
+      PuppetValue.rotation => puppetPinCopy(pin, rotation: to),
+      PuppetValue.scale => puppetPinCopy(pin, scale: to),
+      PuppetValue.amount => puppetPinCopy(pin, amount: to),
+    };
 
 /// Which of a stroke's animatable values a [FoldStrokeValueRow] carries
 /// (K-549). Both are a per cent of the stroke's own length.
@@ -1192,10 +1211,11 @@ bool moveLaneKeys({
       entry.layer.setTransforms(props: props, values: values);
       return true;
 
-    case FoldEffectParamRow(:final info, :final param):
+    case FoldEffectParamRow(:final info, :final param, :final style):
       // Whichever of the layer's two lists holds it — a style's keys move
-      // exactly as an effect's do (K-706).
-      final stack = instancesHolding(entry.layer, info.id);
+      // exactly as an effect's do (K-706). The row already says which, so the
+      // list is taken rather than searched for.
+      final stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
@@ -1411,19 +1431,6 @@ String stylesPath(String layerId) => '$layerId/styles';
 /// else.
 String stylePath(String layerId, String styleId) =>
     '${stylesPath(layerId)}/$styleId';
-
-/// The layer's list that holds the instance `id` names — **the frontend's half
-/// of the engine's shared lookup** (docs/impl/layer-styles.md §5).
-///
-/// The effect stack is read first because it is the common case and usually the
-/// only one; the styles are asked for only when the id is not in it. What comes
-/// back is committed through `setEffects` either way — the engine routes it to
-/// the list the ids name, so there is no second write path here to keep in step.
-List<BridgeEffectInstance> instancesHolding(
-    LayerReference layer, UuidValue id) {
-  final stack = layer.getEffects();
-  return stack.any((i) => i.id() == id) ? stack : layer.getStyles();
-}
 
 /// The effect instance a fold path names, or null when the path is not one
 /// effect's heading (it is the Effects group itself, one parameter under an

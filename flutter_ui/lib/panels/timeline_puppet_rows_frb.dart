@@ -38,25 +38,6 @@ LumitIcon puppetPinIcon(BridgePuppetPinKind kind) => switch (kind) {
       BridgePuppetPinKind.bend => LumitIcon.puppetBend,
     };
 
-/// [pin] with one field changed. The engine takes the whole pin, so every edit
-/// here is "the pin, with this changed".
-BridgePuppetPin puppetPinWith(
-  BridgePuppetPin pin, {
-  String? name,
-  double? extent,
-}) =>
-    BridgePuppetPin(
-      id: pin.id,
-      name: name ?? pin.name,
-      kind: pin.kind,
-      x: pin.x,
-      y: pin.y,
-      rotation: pin.rotation,
-      scale: pin.scale,
-      amount: pin.amount,
-      extent: extent ?? pin.extent,
-    );
-
 /// One pin's own row: its name, and how far it reaches.
 class PuppetPinRow extends StatelessWidget {
   final LayerReference layer;
@@ -92,7 +73,7 @@ class PuppetPinRow extends StatelessWidget {
         // nothing.
         opacity: null,
         valueColumn: valueColumn,
-        onRename: (name) => _write(puppetPinWith(pin, name: name)),
+        onRename: (name) => _write(puppetPinCopy(pin, name: name)),
         onDelete: () {
           try {
             layer.deletePuppetPin(id: pin.id);
@@ -129,7 +110,7 @@ class _ExtentFieldState extends State<_ExtentField> {
 
   void _commit(num v) {
     setState(() => _staged = null);
-    widget.onCommit(puppetPinWith(widget.pin, extent: v.toDouble()));
+    widget.onCommit(puppetPinCopy(widget.pin, extent: v.toDouble()));
   }
 
   @override

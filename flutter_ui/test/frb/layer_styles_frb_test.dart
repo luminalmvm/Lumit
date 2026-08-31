@@ -98,17 +98,17 @@ void main() {
       );
     });
 
-    testWidgets('a style parameter edit round-trips through the shared lookup',
+    testWidgets('a style parameter edit round-trips through setEffects',
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       layer.addEffect(name: 'blur');
       layer.addStyle(name: 'style_drop_shadow');
 
-      // Exactly what a row's write does: the list that holds the instance,
+      // Exactly what a row's write does: the list the row says it is on,
       // freshly read, the value staged on it, and `setEffects` as the commit.
       final id = layer.getStyles().single.id();
-      final staged = instancesHolding(layer, id);
+      final staged = layer.getStyles();
       expect(staged.single.id(), id, reason: 'the styles, not the stack');
       staged.single.setValue(
         id: 'distance',
@@ -125,13 +125,11 @@ void main() {
         const BridgeEffectValue.float(BridgeScalar.static_(41)),
       );
 
-      // And the effect stack still routes to itself.
+      // And the effect stack is still its own list, untouched by the write
+      // above: the two lists never merge, whichever one a row names.
       final effect = layer.getEffects().single.id();
-      expect(
-        instancesHolding(layer, effect).single.id(),
-        effect,
-        reason: 'the common case is answered without asking for the styles',
-      );
+      expect(layer.getEffects().single.id(), effect);
+      expect(effect, isNot(id));
     });
   });
 }
