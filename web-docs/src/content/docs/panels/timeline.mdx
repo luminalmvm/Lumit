@@ -27,9 +27,8 @@ Shut, a layer's keys are summarised as small diamonds on its own bar.
 
 <Shot file="graph-mode.png" caption="Graph mode: the curve of the selected property, running edge to edge." />
 
-**Graph** draws the curves. A property's curves are on the pane while its row is **selected**
-in the outline — there is no tick and no separate list. The curves share one value scale, so
-a rotation in degrees and an opacity in per cent are one flat line under another.
+**Graph** draws the curves. A property's curves are on the pane while its row is
+**selected** in the outline. The curves share one value scale.
 
 ## The Animated filter
 
@@ -75,32 +74,29 @@ rendered. See [Layers](/use/layers/#switches).
 
 <Shot file="timeline-lanes.png" caption="A layer twirled open, showing its properties and keyframes." />
 
-Each layer has a bar showing when it draws. Drag the bar to move it, and either end to trim
-it. A trimmed layer keeps a faint outline of its full source extent, so you can see what you
-cut off.
+Each layer has a bar showing when it draws. Drag the bar to move it, and either end to
+trim it. A trimmed layer keeps a faint outline of its full source extent.
 
 Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
 contents appear beneath it, each on a lane of its own.
 
-A [Sequence layer](/use/sequence-layers/) draws its clips on one row and behaves differently
-from everything else here.
+A [Sequence layer](/use/sequence-layers/) draws its clips on one row.
 
 ## Editing keyframes in bulk
 
 <Shot file="layers-selected.png" caption="A block of keyframes selected: the box, its stretch handles, and the count of what is inside." />
 
 Sweep a box over the lanes and every keyframe inside it is selected, across as many
-properties and layers as the box crosses. The selection is drawn as a **block** with a badge
-reading how many keys it holds and how many frames it spans.
+properties and layers as the box crosses. The selection is drawn as a **block** with a
+badge reading how many keys it holds and how many frames it spans.
 
 - Drag the block's **body** to move every key together.
-- Drag an **end handle** to stretch the whole block — the keys inside keep their proportions.
-- The **magnet** on the bottom bar decides whether a dragged key lands on a whole frame or
-  may sit between two.
+- Drag an **end handle** to stretch the whole block — the keys inside keep their
+  proportions.
+- The **magnet** on the bottom bar decides whether a dragged key lands on a whole frame.
 
-The strip along the bottom bar acts on whatever keys are selected, in whichever mode you are
-in: **Interpolation** — Linear, Hold, Ease, Bezier — then **Reverse**, **Copy** and **Paste
-at playhead**.
+The strip along the bottom bar acts on whatever keys are selected: **Interpolation** —
+Linear, Hold, Ease, Bezier — then **Reverse**, **Copy** and **Paste at playhead**.
 
 ## Render times
 
