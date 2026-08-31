@@ -530,6 +530,34 @@ class KeyCommandStrip extends StatelessWidget {
         ),
       );
 
+  /// A strip command drawn as a glyph of the set (K-723): the interpolation
+  /// entries, whose shapes — a line, a step, a curve, a handled curve — say
+  /// more at 16px than four capitalised words did. The word is the tooltip,
+  /// which is the control's name (K-482), and the semantic label for a reader.
+  Widget _glyphButton(
+    LumitTheme t, {
+    required String keyName,
+    required String mark,
+    required String word,
+    required VoidCallback onPressed,
+  }) =>
+      LumitTooltip(
+        message: word,
+        child: HouseButton(
+          key: ValueKey<String>(keyName),
+          small: true,
+          frameless: true,
+          // The comp-toggle buttons' own padding: a 16px glyph plus the
+          // button's 1px edge is the whole of an 18px bottom bar (K-451).
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          onPressed: onPressed,
+          // A command, not a toggle: it rests at the column's muted strength,
+          // the way the magnet and the shy filter rest when off.
+          child: glyph.LumitIcon(mark,
+              size: iconSize, colour: t.textMuted, semanticLabel: word),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -551,40 +579,38 @@ class KeyCommandStrip extends StatelessWidget {
             // segmented run, 12 between one run and the next, so the runs read
             // as groups rather than as one long strip of buttons.
             if (strip) ...[
-              _button(t,
+              // Glyphs, not words (K-723, the owner's ask): the set's own
+              // marks for the four interpolations, each named by its tooltip.
+              _glyphButton(t,
                   keyName: 'keys-interp-linear',
-                  label: l10n.easeLinear,
-                  tip: l10n.tipLinearKeyframes,
-                  on: false,
+                  mark: LumitIcons.linear,
+                  word: l10n.easeLinear,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
               const SizedBox(width: 2),
-              _button(t,
+              _glyphButton(t,
                   keyName: 'keys-interp-hold',
-                  label: l10n.easeHold,
-                  tip: l10n.tipHoldKeyframes,
-                  on: false,
+                  mark: LumitIcons.hold,
+                  word: l10n.easeHold,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.hold())),
               const SizedBox(width: 2),
               // The shaped ease, one step along from the flat three: the same
               // selection, a curve chosen by name instead of a constant. Its
-              // own Builder so the popover can be anchored to the word that
+              // own Builder so the popover can be anchored to the glyph that
               // opened it.
               Builder(
-                builder: (buttonContext) => _button(t,
+                builder: (buttonContext) => _glyphButton(t,
                     keyName: 'keys-interp-ease',
-                    label: l10n.keysEase,
-                    tip: l10n.tipEaseTheBlock,
-                    on: false,
+                    mark: LumitIcons.easeInOut,
+                    word: l10n.keysEase,
                     onPressed: () => onEaseBlock?.call(buttonContext)),
               ),
               const SizedBox(width: 2),
-              _button(t,
+              _glyphButton(t,
                   keyName: 'keys-interp-bezier',
-                  label: l10n.easeBezier,
-                  tip: l10n.tipEasyEase,
-                  on: false,
+                  mark: LumitIcons.bezier,
+                  word: l10n.easeBezier,
                   onPressed: () => onInterp?.call(easyEase)),
               const SizedBox(width: 12),
               // No second run: Reverse, Copy and Paste at playhead left the

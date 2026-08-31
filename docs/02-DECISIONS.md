@@ -22863,3 +22863,88 @@ effect's engine label.
 
 Tests: `timeline_panel_frb_test` ("the outline's foot carries the keyframe strip" now pins
 the three buttons as absent).
+
+## K-723 — A first scribble just works: the brush rides in with the stroke, and release solves the frame it touched
+
+**Status:** DECIDED (2026-08-31, owner ruling). Supersedes K-717's "a layer with no Roto
+brush is told, not helped" and amends [docs/07-UI-SPEC.md](07-UI-SPEC.md) §2.3.7 and
+[docs/impl/roto.md](impl/roto.md) §6. Builds on K-710/K-713 (the job, the sidecar, the
+store) and K-717 (the tools).
+
+**The finding, in the owner's words:** "The roto brush doesn't seem to work? like it colors
+in as ur scrubbing correctly, but then when u let go nothing happens." Two absences made
+one broken-looking tool: a scribble on a layer without the effect was refused with a calm
+notice, and even with the effect a committed stroke changed no pixel until Propagate.
+
+**The refusal's rationale dissolves, so the refusal goes.** K-717 declined to auto-add
+because `add_effect` plus a stroke would be two ops and so two undo steps. It never needed
+to be two: the stroke lives *inside* the effect instance, so
+`LayerReference::roto_first_stroke` builds the instance with its stroke (and base frame)
+already aboard and pushes it through the ordinary whole-stack commit — one
+`SetLayerEffects`, one undo step, exactly what a scribble on a brushed layer costs. After
+Effects' contract, met on After Effects' terms. **Refine edge keeps the K-717 sentence**:
+a refine stroke widens the band around an answer, and a bare layer has no answer to widen —
+bringing a brush along would claim a subject nobody named.
+
+**Release solves the scribbled frame, through the propagation's own seam.** `RotoJob` gains
+`stop_after`: the same job Propagate runs, walking from the base toward the asked frame and
+stopping the moment it is filed; on the far side of the base it only *copies* what the
+sidecar can lend, since nothing there was invalidated. The solo run is filed in the
+ordinary sidecar and store, so the matte shows the moment it lands and a later Propagate
+**resumes** from it — which fixed a second gap in passing: a propagation over a partial
+sidecar hit (a cancelled run, a solo) used to read it back as `Done` and never carry on,
+and `lendable` skipped the run's own file, which is exactly the file a resume borrows
+from. A stop-at-the-base solo never opens the flow engine, so first-touch feedback works
+on machines the full propagation honestly refuses (`FlowUnavailable`). The ask itself
+(`roto_solve_frame`) is best-effort and quiet on refusal — the gesture it trails already
+succeeded, and Propagate remains the press that reports refusals. The overlay polls the
+same progress the card does and nudges the Viewer when the solve lands (the K-430 lesson:
+a job landing moves no revision), so the result appears with no panel open.
+
+Tests: `roto_tools_frb_test` (a first scribble on a bare layer lands brush and stroke as
+one undo step — fails as a refusal without this; release asks for the scribbled frame's
+solve; refine on a bare layer still says so), `lumit-render`'s
+`a_stop_after_run_files_the_asked_frame_and_no_further` and
+`a_propagate_resumes_from_its_own_partial_run`. No new strings; `rotoAddTheEffect` now
+belongs to Refine edge alone.
+
+## K-724 — The hardware crosshair leads; drawn pointers are decoration or nothing
+
+**Status:** DECIDED (2026-08-31, owner ruling). Amends K-226 and
+[docs/07-UI-SPEC.md](07-UI-SPEC.md) §2.3.3 for the aiming tools; K-230's drawn pointers
+(Hand, Zoom, vertical Type) stand.
+
+**The finding:** "the cursor's framerate is tied to the application framerate... moving the
+mouse where you want it is genuinely difficult." K-226 hid the system pointer over the
+Viewer and drew a crosshair or brush ring in its place — which repaints at the
+application's rate, so at 10 fps the pointer itself lagged the hand.
+
+**The rule now: any tool that aims at a pixel wears the OS `precise` crosshair**, which the
+platform moves at input rate however slowly the application is repainting. Shape, Pen, the
+painting brushes, the Roto pair, the Puppet pins and the camera moves all ask for it
+(their `DrawnPointerRegion`s and `viewerCursorFor` agree). What the app still draws beside
+it is **decoration the user does not aim with**: the tool badge, and the brush-size ring —
+the drawn crosshair arms and the ring's centre dot went, because a second pointer a frame
+behind the real one is exactly what K-226 hid the arrow to avoid. The Hand, the Zoom and
+the vertical Type keep their drawn pointers with the system one hidden: no platform ships
+those (K-230), and they drag and click rather than aim.
+
+Tests: `viewer_tool_cursor_test` pins `precise` for the aiming tools;
+`roto_tools_frb_test` and `viewer_panel_frb_test` assert the armed overlays wear it.
+
+## K-723 — The keyframe strip's interpolation entries are glyphs
+
+**Status:** DECIDED — 2026-08-31
+
+Owner, desktop testing: the linear / hold / ease / bezier entries in the Timeline's bottom
+bar become icons, with the words as their tooltips. The set (K-440) already drew Linear,
+Hold and Ease in out; **Bezier joins it** — a hand-shaped curve with its tangent handle
+through the waist, two filled dots for the handle's ends, drawn to the set's grammar and
+generated from `tool/icons/glyphs.json` like the rest. Each button keeps its widget key,
+its command and its word: the word is now the tooltip (a control's name, K-482) and the
+glyph's semantic label. Graph view's own strip keeps its words — its run mixes the eases
+with tangent modes and lenses that have no drawings, and a half-iconed run reads worse
+than either whole.
+
+Tests: `timeline_panel_frb_test` ("the strip's interpolation entries draw the set's
+glyphs"); `lumit_icons_test` gates the generated set against its source as always.

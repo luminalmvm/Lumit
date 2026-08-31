@@ -197,6 +197,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C8 13 8 3 14 3"/></svg>';
   static const String hold =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h6V4h6"/></svg>';
+  /// A hand-shaped curve with its tangent handle through the waist: the two dots are the handle's ends, which is what dragging a Bezier key edits. The ease family beside it draws bare curves; the handle is the whole of the difference.
+  static const String bezier =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C5 13 6 9 8 8C10 7 11 3 14 3"/><path d="M5 9.5L11 6.5"/><circle cx="5" cy="9.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>';
   static const String fit =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3"/></svg>';
   static const String normalise =
@@ -430,6 +433,7 @@ abstract final class LumitIcons {
     'Ease out': easeOut,
     'Ease in out': easeInOut,
     'Hold': hold,
+    'Bezier': bezier,
     'Fit': fit,
     'Normalise': normalise,
     'Zoom in': zoomIn,

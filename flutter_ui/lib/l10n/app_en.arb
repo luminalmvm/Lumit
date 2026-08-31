@@ -1468,7 +1468,7 @@
   },
   "rotoAddTheEffect": "Add a Roto brush to this layer to stroke on it",
   "@rotoAddTheEffect": {
-    "description": "Status-area line when the Roto brush tool is used on a layer that carries no Roto brush effect."
+    "description": "Status-area line when the Refine edge tool is used on a layer that carries no Roto brush effect. (The Roto brush tool itself adds the effect with the first stroke.)"
   },
   "rotoAssignBase": "Set to current frame",
   "@rotoAssignBase": {
@@ -8922,7 +8922,7 @@
   },
   "keysEase": "Ease",
   "@keysEase": {
-    "description": "Timeline, Keys mode bottom bar: the word that opens the Ease popover on the selected keyframes. Drawn in capitals, beside Linear, Hold and Bezier."
+    "description": "Timeline bottom bar: tooltip on the curve glyph that opens the Ease popover on the selected keyframes, between the Hold and Bezier glyphs."
   },
   "welcomeNewProject": "New project",
   "@welcomeNewProject": {

@@ -7113,6 +7113,40 @@ void main() {
     // the chord, round-tripped below; Reverse's arithmetic keeps its pins in
     // key_block_test.dart.
 
+    /// **The interpolation entries are glyphs, named by their tooltips**
+    /// (K-723, the owner's ask): the set's own line, step, curve and handled
+    /// curve where four capitalised words stood, each tooltip the control's
+    /// word (K-482) and each glyph carrying it as its semantic label.
+    testWidgets('the strip\'s interpolation entries draw the set\'s glyphs',
+        (tester) async {
+      final p = withComp();
+      blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+
+      for (final (key, mark, word) in [
+        ('keys-interp-linear', LumitIcons.linear, 'Linear'),
+        ('keys-interp-hold', LumitIcons.hold, 'Hold'),
+        ('keys-interp-ease', LumitIcons.easeInOut, 'Ease'),
+        ('keys-interp-bezier', LumitIcons.bezier, 'Bezier'),
+      ]) {
+        final button = find.byKey(ValueKey<String>(key));
+        final icon = tester.widget<glyph.LumitIcon>(
+            find.descendant(of: button, matching: find.byType(glyph.LumitIcon)));
+        expect(icon.glyph, mark, reason: '$key draws the set\'s own mark');
+        expect(icon.semanticLabel, word,
+            reason: 'and a reader still hears the word');
+        expect(find.descendant(of: button, matching: find.byType(Text)),
+            findsNothing, reason: 'the capitalised word is gone from $key');
+        final tip = tester.widget<LumitTooltip>(find
+            .ancestor(of: button, matching: find.byType(LumitTooltip))
+            .first);
+        expect(tip.message, word, reason: 'the tooltip is the control\'s name');
+      }
+
+      // The Bezier glyph is a drawing of the set, generated with the rest.
+      expect(LumitIcons.byName['Bezier'], LumitIcons.bezier);
+    });
+
     // ---------------------------------------------------------------------
     // The owner's desktop-testing batch (K-529, K-530).
     // ---------------------------------------------------------------------
