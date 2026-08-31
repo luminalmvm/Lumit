@@ -9,8 +9,9 @@
 //     in MediaQuery only misleads asset-resolution and changes nothing visible.
 //   * The genuine pipeline scale (`RenderView.configuration.devicePixelRatio`)
 //     is only reachable through the experimental multi-window `View` API, which
-//     the pinned stable SDK (3.44.7) gates behind an `@internal`, feature-
-//     flagged surface we cannot touch without failing `flutter analyze`.
+//     the stable SDK gated behind an `@internal`, feature-flagged surface we
+//     cannot touch without failing `flutter analyze` when this was chosen
+//     (3.44.7; the pin is 3.47.1 now and this has not been re-tried).
 //   * `Transform.scale` DOES carry through hit-testing (RenderTransform applies
 //     the inverse matrix to pointer events), so scaling paint + pointers is
 //     coherent. Its one trap is layout: a bare `Transform.scale` lays the child
