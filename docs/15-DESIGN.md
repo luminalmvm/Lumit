@@ -1201,12 +1201,14 @@ carries. The rules worth writing down:
   count truncate**: the `n missing ·` half was fixed-width, which overflowed a
   narrow bar rather than shortening.
 - **The search well is an inset well** (§2.1), the row's full width, at the standard 20.
-- **The colour swatch filter lives inside that well, at its left** (K-634) — six 6px dots
-  3px apart, in the leading-mark slot a search glyph would take, with the well's own 6px
-  inset standing the first dot off the edge. One control that narrows the list rather than
-  two side by side, and it is the one leading mark in the app that answers the pointer,
-  because it is a control rather than a sign saying what the field is for. The held chip
-  is marked by a ring, never by growing, so the row keeps its resting width (§12A.5).
+- **The colour swatch filter lives inside that well, at its left** (K-634) — one 10px
+  square (K-726) in the leading-mark slot a search glyph would take, with the well's own
+  6px inset standing it off the edge. Clicking it opens the same eight-colour picker a
+  layer's dot does; the square wears the held colour while one is held and a four-hue
+  quartering while none is, so the control states its value without a strip of choices
+  standing in the well. It is the one leading mark in the app that answers the pointer,
+  because it is a control rather than a sign saying what the field is for — and it never
+  changes size, so the row keeps its resting width (§12A.5).
 - **The bottom bar carries the new-item controls at the left** — icon plus a 0.08em kicker
   word — **and a factual count at the right** (`1 missing · 10 items`) in mono at 0.06em,
   sentence case, never capitals: it is a statement, not a container label. The item total

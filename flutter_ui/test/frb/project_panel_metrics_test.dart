@@ -656,39 +656,43 @@ void main() {
       expect(label.style!.color, theme.success);
     });
 
-    /// 8d. **The colour chips are the mockup's six 6px dots.** Five palette
-    /// colours and a neutral one, in a row inside the search well at its left
-    /// (K-634) — the swatch filter is part of the search bar rather than a
-    /// second control beside it.
-    testWidgets('the filter chips are six 6px dots inside the search well',
+    /// 8d. **The swatch filter is one 10px square inside the search well**
+    /// (K-726, replacing K-634's row of dots): the owner's ask — a single
+    /// square that opens the eight-colour picker, rather than a strip of
+    /// choices standing in the well.
+    testWidgets('the filter is one 10px square inside the search well',
         (tester) async {
       final p = withItems();
       await mount(tester, p, width: 360);
       await settleFrb(tester, minRounds: 6);
 
-      final strip = find.byKey(const ValueKey<String>('project-label-chips'));
-      expect(strip, findsOneWidget);
-      for (final label in [...projectFilterLabels, 'none']) {
-        final chip = find.byKey(ValueKey<String>('project-label-chip-$label'));
-        expect(chip, findsOneWidget);
-        expect(tester.getRect(chip).size, const Size(6, 6),
-            reason: 'the mockup draws each chip 6 by 6');
-      }
+      final square = find.byKey(const ValueKey<String>('project-label-filter'));
+      expect(square, findsOneWidget);
+      expect(tester.getRect(square).size,
+          const Size(projectFilterSquare, projectFilterSquare));
       // Inside the well, at its left, and clear of both its edges.
       final well = tester.getRect(find.byKey(const ValueKey('project-search')));
-      expect(tester.getRect(strip).left, greaterThan(well.left));
-      expect(tester.getRect(strip).right, lessThan(well.right));
+      expect(tester.getRect(square).left, greaterThan(well.left));
+      expect(tester.getRect(square).right, lessThan(well.right));
+
+      // Tapping it opens the shared eight-colour picker, one chip per palette
+      // entry — the same popup a layer's dot raises.
+      await tester.tap(square);
+      await tester.pumpAndSettle();
+      for (var i = 0; i < LumitTheme.labelCount; i++) {
+        expect(find.byKey(ValueKey<String>('project-filter-chip-$i')),
+            findsOneWidget);
+      }
     });
 
     /// 8e. **The search row measured at the mockup's own width** (owner,
     /// 2026-08-24), as the swatch filter's move inside the well leaves it
     /// (K-634). The artboard is 360 across and the row is padded 8 either
-    /// side, so the well is now the whole 344 of what is left rather than the
-    /// 279 it kept while a 59-wide chip strip stood beside it.
+    /// side, so the well is the whole 344 of what is left rather than the
+    /// 279 it kept while a chip strip stood beside it.
     ///
-    /// The strip itself is unchanged apart from its standoff: six 6px dots 3
-    /// apart is 51, and it sits one border and one 6px inset in from the
-    /// well's left edge, with the well's usual 5 between it and the text.
+    /// The filter square sits one border and one 6px inset in from the well's
+    /// left edge, with the well's usual 5 between it and the text.
     testWidgets('the search row is the mockup\'s row, at the mockup\'s width',
         (tester) async {
       final p = withItems();
@@ -696,7 +700,7 @@ void main() {
 
       final row = band(tester, 'project-search-row');
       final well = band(tester, 'project-search');
-      final chips = band(tester, 'project-label-chips');
+      final square = band(tester, 'project-label-filter');
 
       expect(row.width, 360);
       expect(well.left - row.left, 8,
@@ -706,8 +710,8 @@ void main() {
       expect(well.size, const Size(344, 20),
           reason: 'the well is the row\'s full width now that nothing '
               'stands beside it');
-      expect(chips.width, 51, reason: 'six 6px dots, 3 apart');
-      expect(chips.left - well.left, 7,
+      expect(square.width, projectFilterSquare);
+      expect(square.left - well.left, 7,
           reason: 'the well\'s own border and its 6px inset');
     });
 

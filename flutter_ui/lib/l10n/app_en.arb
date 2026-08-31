@@ -6232,9 +6232,9 @@
   "@tipMeasureRenderTimes": {
     "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. One or two words."
   },
-  "tipFilterByLabel": "This colour",
-  "@tipFilterByLabel": {
-    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
+  "tipFilterColour": "Filter colour",
+  "@tipFilterColour": {
+    "description": "Tooltip on the small colour square inside the Project panel's search field. Clicking it opens the colour picker, and the picked colour narrows the list to items wearing it.",
     "type": "text"
   },
   "tipLinkPair": "Link",

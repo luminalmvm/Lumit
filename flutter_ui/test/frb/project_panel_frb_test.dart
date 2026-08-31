@@ -56,6 +56,18 @@ void main() {
       await tester.pump();
     }
 
+    /// Hold [colour] in the swatch filter, the way the pointer does it
+    /// (K-726): the well's one square opens the eight-colour picker, and the
+    /// picked chip is the filter. `null` picks the neutral chip, which shows
+    /// everything again.
+    Future<void> pickFilterColour(WidgetTester tester, int? colour) async {
+      await tester.tap(find.byKey(const ValueKey('project-label-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+          find.byKey(ValueKey<String>('project-filter-chip-${colour ?? 0}')));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('an empty project shows the quiet hint', (tester) async {
       final p = freshProject();
       await tester.pumpWidget(
@@ -1463,15 +1475,14 @@ void main() {
           i is ItemReference_Footage && i.field0.internalid == shot.internalid);
       expect(item.label(), 4, reason: 'the engine holds the tag');
 
-      // The chip filter narrows to that colour, and the neutral chip clears it.
-      await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
-      await tester.pump();
+      // The swatch filter narrows to that colour, and the picker's neutral
+      // chip clears it.
+      await pickFilterColour(tester, 4);
       expect(rowText('shot.mov'), findsOneWidget);
       expect(rowText('other.mov'), findsNothing,
           reason: 'an untagged item is not this colour');
 
-      await tester.tap(find.byKey(const ValueKey('project-label-chip-none')));
-      await tester.pump();
+      await pickFilterColour(tester, null);
       expect(rowText('other.mov'), findsOneWidget,
           reason: 'the neutral chip is the way back out');
     });
@@ -1498,8 +1509,7 @@ void main() {
       ));
       await settleFrb(tester, minRounds: 6);
 
-      await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
-      await tester.pump();
+      await pickFilterColour(tester, 4);
       expect(rowText('Reds'), findsOneWidget,
           reason: 'the folder wears the colour itself');
       expect(rowText('inside.mov'), findsOneWidget,
@@ -1524,8 +1534,7 @@ void main() {
           reason: 'both the colour and the term are satisfied');
 
       // The neutral chip clears the colour and leaves the term running.
-      await tester.tap(find.byKey(const ValueKey('project-label-chip-none')));
-      await tester.pump();
+      await pickFilterColour(tester, null);
       expect(rowText('outside.mov'), findsNothing,
           reason: 'clearing the swatch does not clear the search');
       await tester.enterText(find.byKey(const ValueKey('project-search')), '');
@@ -1560,8 +1569,7 @@ void main() {
       expect(rowText('tucked.mov'), findsNothing,
           reason: 'a shut folder keeps what it holds to itself');
 
-      await tester.tap(find.byKey(const ValueKey('project-label-chip-2')));
-      await tester.pump();
+      await pickFilterColour(tester, 2);
       expect(rowText('tucked.mov'), findsOneWidget,
           reason: 'the filter looks inside a shut folder');
     });

@@ -26,6 +26,7 @@ import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'project_columns_frb.dart';
+import 'timeline_extras_frb.dart' show showLabelPicker;
 
 /// The preview card: 10px of padding round a 96×54 poster frame, with the
 /// hairline under it counted in — 10 + 54 + 10 + 1.
@@ -67,19 +68,18 @@ const double _footerCountTracking = 0.54;
 /// The bottom bar's glyphs (K-456), drawn at the size its own mockup computed.
 const double projectFooterIconSize = 13;
 
-/// The colour-chip filter, now *inside* the search well at its left (K-634):
-/// the mockup's six 6px dots, 3px apart. The strip's own standoff padding has
-/// gone with the move — the well's own 6px inset stands the leading dot off
-/// the edge, and `HouseTextField` puts the usual 5 between a leading mark and
-/// the text after it.
-const double _chipSize = 6;
-const double _chipGap = 3;
+/// The colour filter's one square, *inside* the search well at its left
+/// (K-726, superseding K-634's row of dots): 10 square, standing in the
+/// leading-mark slot with the well's own 6px inset standing it off the edge,
+/// and `HouseTextField` puts the usual 5 between a leading mark and the text
+/// after it.
+const double projectFilterSquare = 10;
 
-/// The label chips the filter row offers, as palette indices, in the mockup's
-/// own order — azure, mint, amber, violet, coral. The sixth chip is not a
-/// colour: it is the neutral one that clears the filter, so the row can always
-/// be got out of.
-const List<int> projectFilterLabels = [1, 4, 2, 3, 8];
+/// The four hues the [projectHueSquare] quarters itself into — azure, mint,
+/// amber, violet, the first four chips the old filter strip offered, in its
+/// order. Enough of the palette to say "colours live here" without the square
+/// claiming any one of them.
+const List<int> _hueSquareLabels = [1, 4, 2, 3];
 
 /// Where the preview card gives way (§12A.6's ladder, step 3). The two mockups
 /// are the two ends of this ladder — the 360-wide artboard shows the card, the
@@ -233,56 +233,77 @@ Widget projectSearchRow(
             // the row's full width again. It is the one leading in the app
             // that answers the pointer, because it is a control rather than
             // a sign saying what the field is for.
-            leading: _labelChips(t, labelFilter, onFilter),
+            leading: _labelFilterSquare(t, labelFilter, onFilter),
             leadingInteractive: true,
           ),
         ),
       ),
     );
 
-/// The colour-swatch filter, inside the search well at its left (§12A.3a,
-/// K-634). Five palette dots and a neutral one: tapping a colour narrows the
-/// tree to the items wearing it — a folder's own tag included, so a colour
-/// finds everything filed under a folder of that colour (K-567) — and tapping
-/// the neutral chip, or the held colour again, shows everything.
-///
-/// The held chip is marked by a ring rather than by growing, so the row does
-/// not change width as the filter is used (§12A.5: nothing changes the
-/// resting state).
-Widget _labelChips(
-        LumitTheme t, int? labelFilter, ValueChanged<int?> onFilter) =>
-    Row(
-      key: const ValueKey('project-label-chips'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (i, label) in [...projectFilterLabels, null].indexed)
-          Padding(
-            // Between the chips, not before the first one: the well's own
-            // 6 of inset is what stands the leading dot off the edge.
-            padding: EdgeInsets.only(left: i == 0 ? 0 : _chipGap),
-            child: LumitTooltip(
-              message: label == null
-                  ? l10n.tipShowEverything
-                  : l10n.tipFilterByLabel,
-              child: GestureDetector(
-                key: ValueKey<String>('project-label-chip-${label ?? 'none'}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onFilter(label == labelFilter ? null : label),
-                child: Container(
-                  width: _chipSize,
-                  height: _chipSize,
-                  decoration: BoxDecoration(
-                    color: label == null ? t.surface4 : t.labelColour(label),
-                    shape: BoxShape.circle,
-                    border: labelFilter == label && label != null
-                        ? Border.all(color: t.textPrimary)
-                        : null,
-                  ),
+/// A small square quartered into four of the label palette's hues — the mark
+/// that says "a colour lives here" without the control claiming any one
+/// colour. The search well's filter square wears it while no colour is held,
+/// and a row's own label square wears it always; both open the shared
+/// eight-colour picker.
+Widget projectHueSquare(LumitTheme t, {required double size}) => ClipRRect(
+      borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Column(
+          children: [
+            for (var row = 0; row < 2; row++)
+              Expanded(
+                child: Row(
+                  children: [
+                    for (var col = 0; col < 2; col++)
+                      Expanded(
+                          child: ColoredBox(
+                              color: t.labelColour(
+                                  _hueSquareLabels[row * 2 + col]))),
+                  ],
                 ),
               ),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
+    );
+
+/// The colour-swatch filter, inside the search well at its left (§12A.3a,
+/// K-634): **one square that opens the eight-colour picker** (K-726, the
+/// owner's ask, replacing the row of five dots). It wears the held colour
+/// while one is held and the hue square while none is, so the control states
+/// its value the way every other control does — and it never changes size, so
+/// the row keeps its resting width (§12A.5).
+///
+/// The picker's first chip is the neutral one, and picking it shows
+/// everything — the same way back out the row menu's chip strip offers.
+Widget _labelFilterSquare(
+        LumitTheme t, int? labelFilter, ValueChanged<int?> onFilter) =>
+    Builder(
+      builder: (context) => LumitTooltip(
+        message: l10n.tipFilterColour,
+        child: GestureDetector(
+          key: const ValueKey('project-label-filter'),
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) async {
+            final picked = await showLabelPicker(context, d.globalPosition,
+                keyPrefix: 'project-filter');
+            if (picked == null) return;
+            onFilter(picked == 0 ? null : picked);
+          },
+          child: labelFilter == null
+              ? projectHueSquare(t, size: projectFilterSquare)
+              : Container(
+                  width: projectFilterSquare,
+                  height: projectFilterSquare,
+                  decoration: BoxDecoration(
+                    color: t.labelColour(labelFilter),
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                ),
+        ),
+      ),
     );
 
 /// The horizontal scrollbar under the tree: a 4px track inset 8 either side,

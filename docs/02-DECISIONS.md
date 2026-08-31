@@ -22951,3 +22951,24 @@ than either whole.
 
 Tests: `timeline_panel_frb_test` ("the strip's interpolation entries draw the set's
 glyphs"); `lumit_icons_test` gates the generated set against its source as always.
+
+## K-726 — The swatch filter is one square that opens the picker
+
+**Status:** DECIDED — 2026-08-31 (owner finding). Supersedes K-634's *form* — the row of
+five dots and a neutral one — and keeps its substance: the filter still lives inside the
+search well's leading-mark slot and still narrows on the colour a row is wearing.
+
+Owner: "the circles for selecting a color to search by should be a single square, and
+clicking that opens the swatch with the colors." The strip of dots offered five of nine
+colours and asked to be read as a control at 6px a dot; the replacement is **one 10px
+square** that opens the shared eight-colour label picker (`showLabelPicker`, the popup a
+layer's dot and a group's tick already raise), so the filter offers the whole palette
+through the same surface everything else picks a label from. The square wears the held
+colour while one is held and a four-hue quartering while none is; the picker's neutral
+chip shows everything again. `projectFilterLabels` (the five-dot subset) goes with the
+strip.
+
+Strings: `tipFilterColour` ("Filter colour") replaces `tipFilterByLabel`.
+
+Tests: `project_panel_frb_test` (filter and clear through the picker),
+`project_panel_metrics_test` 8d/8e (one 10px square inside the well; the picker's chips).
