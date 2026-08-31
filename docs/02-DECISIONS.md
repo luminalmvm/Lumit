@@ -22123,7 +22123,7 @@ Terminology: **layer group**, distinct from the **property group** already in th
 (Transform, Masks) and from the Timeline's **column groups**. The glossary carries the
 entry.
 
-## K-703 — Roto brush ships classical: geodesic segmentation carried by the in-tree flow; the network is a seam, not a v1
+## K-705 — Roto brush ships classical: geodesic segmentation carried by the in-tree flow; the network is a seam, not a v1
 
 **Status: DECIDED (2026-08-31).** Scoping commissioned by the owner for the largest unbuilt
 feature on the tool strip (the Roto pair, disabled since K-228; docs/07 §1's table;
@@ -22172,7 +22172,53 @@ sidecar, document, bridge), RB3 (tools, overlay, panel — arming `tool.roto` at
 Each package carries its slice of the note's §10 test plan, on synthetic moving shapes
 with known mattes.
 
-## K-703 — Layer styles are a second, order-locked effect list on the layer, run at the end of its own raster pass
+## K-704 — Puppet ships as a conforming mesh plus the closed-form as-rigid-as-possible solve; the mesh is never saved
+
+**Status: DECIDED (2026-08-31).** Commissions and is bound by `docs/impl/puppet.md`, the
+design for 07-UI-SPEC §1.7's four Puppet tools (position, starch, overlap, bend pins) —
+greenfield per the inventory, disabled on the strip under K-228 until built. Design only;
+the note's PU1–PU3 packages build it.
+
+**The mesh conforms to the alpha, and is a cache, not a document.** Coverage is the
+layer's own rendered alpha at natural size at the reference time (paint and masks
+applied), iso 10%, expanded 3 px by the mask rasteriser's distance-field machinery;
+marching squares extracts the contours, Douglas–Peucker (1.25 px) simplifies them, and a
+**constrained Delaunay triangulation with quality refinement does the meshing — via the
+`spade` crate**, the one new dependency (MIT/Apache, pure Rust, its deps already in the
+lockfile): Cargo.lock had no triangulator, and robust CDT + refinement is the wheel not
+reinvented in-tree. Conforming, not a clipped grid, because disjoint blobs must come out
+as disjoint components — two limbs across a gap are never welded. The mesh is **never
+serialised**: the block stores reference time, density (24 px), expansion and pins; the
+mesh is rebuilt on demand and cached by blake3 of (coverage, density, expansion), so a
+better triangulator later changes no saved project. Vertex cap 1500 by deterministic
+auto-coarsening, then refusal.
+
+**The deformer is Igarashi 2005, two steps, no iteration budget.** The registration-free
+as-rigid-as-possible formulation: a similarity solve then a scale-adjustment solve, both
+sparse SPD systems whose matrices depend only on the rest mesh and the pin *set* — factored
+once (in-tree dense Cholesky, `lumit-track`'s pattern; sparse when the cap hurts), with
+per-frame work only right-hand sides and back-substitution. Pins are soft constraints
+(w=1000) on barycentric points; **starch** is a per-triangle error weight (max-combined
+across pins), **bend** is a soft rigid-rotation target over its extent (w=100·falloff, so
+position pins outrank it), **overlap** never touches the solve — it is the painter's-order
+depth of the warp. One pin short-circuits to translation; zero pins and all-at-rest are
+byte-exact identity; a failed factorisation degrades to translation, never a panic.
+
+**The warp is CPU, at the paint/masks seam.** `apply_puppet` sits in `lumit-render`'s
+build closure directly after `apply_strokes` and `apply_masks`, where the layer's pixels
+are already a CPU buffer at render size: scanline-fill the deformed triangles in overlap
+order, barycentric back to rest, bilinear sample. Budgets gated in lumit-bench: ≤ 8 ms
+warp at 1080p, ≤ 100 ms mesh build, ≤ 1 ms per-frame solve at the cap. GPU warp is the
+recorded upgrade path, not v1. The puppet block feeds the frame cache key (pixels, unlike
+Volume/Pan).
+
+**Storage is ordinary properties.** One optional `PuppetBlock` per layer (several meshes
+per layer is a future additive change), pins with `Property` x/y in layer px plus
+kind-specific rotation/scale/amount — the existing stopwatch, lanes and graph, no new
+animation machinery. Pins re-bind to a rebuilt mesh by position; one that lands outside
+goes inert (kept, hollow, ignored), never deleted.
+
+## K-705 — Layer styles are a second, order-locked effect list on the layer, run at the end of its own raster pass
 
 **DECIDED** (design, docs/impl/layer-styles.md). AE's nine layer styles (Drop shadow,
 Inner shadow, Outer glow, Inner glow, Bevel and emboss, Satin, Colour overlay, Gradient
