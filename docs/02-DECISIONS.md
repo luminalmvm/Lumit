@@ -22720,3 +22720,36 @@ emitting edge pixels rather than a traced contour, so a hairline edge draws as d
 as a line. The upgrade is a contour traced once and filed with the run; the trigger is the
 boundary reading as dotted at ordinary magnification, or a scrub with the overlay up dropping
 frames.
+
+## K-718 — A beat source picked by name is always heard; the comp mix still is not
+
+**Status:** DECIDED (2026-08-31, owner ruling). Amends [docs/09-AUDIO.md](09-AUDIO.md) §5 and
+the beat-detection bullet of [docs/17-BRIDGE-CONTRACT.md](17-BRIDGE-CONTRACT.md). Builds on
+K-435 (the mute switch and what the mixer counts as sounding) and K-690 (the strip).
+
+**The ruling, in the owner's words:** if you select a layer it should always work; on the
+general comp or timeline, only what is actually audible. The bug behind it: a precomp was
+soloed, detection was run on another source by name, and the panel said the composition had no
+sound. Detection built its jobs from the comp's audible mix and *then* filtered them to the
+named layer, so a row a solo had already removed could never be filtered back in.
+
+**Two questions, two answers.** The comp mix is "what does this composition sound like", and a
+solo, a mute and the audible switch all have their say in it — unchanged. Naming a layer is
+"listen to *this*", where those switches are beside the point: the same mixer walk now takes an
+optional row that is heard whatever the switches say
+(`AudioJobsBuilder::layer_audio_jobs`), and the job list is then that row and nothing else. The
+bypass is for the named row alone — inside a Precomp the ordinary rules stand, so a Precomp
+picked by name carries exactly what it carries when it plays.
+
+**The dropdown already offered the right list** and now means it: it is built from
+`layer_has_audio`, which is deliberately blind to the audible and solo switches (K-435), so a
+layer silenced by somebody else's solo has always been on offer — and picking it now works.
+
+**The refusal names the source.** A named layer with nothing in it keeps its own sentence
+(`beatsLayerNoSound`), because "a mute or a solo can silence the mix" — true of the comp mix —
+would send the reader to a switch that no longer changes this answer.
+
+**One thing fell out of it.** Detection asked for its jobs through the export-input builder,
+which builds a GPU renderer to get at a walk that needs no graphics card; it now calls the walk
+directly. A machine with no adapter finds beats instead of answering `NoAudioPipeline`, and the
+bridge's own beats tests run without a GPU.

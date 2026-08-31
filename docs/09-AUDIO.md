@@ -238,6 +238,12 @@ same decoded ring, so it is warm wherever the cache bar is warm.
     worse grid), enforce a minimum spacing (the more confident of a crowded pair stands),
     and nudge the whole generated set by a phase offset. One options block over the bridge
     (`BridgeBeatOptions`), whose defaults are the one-click detection every menu entry runs.
+  - **A source picked by name is always heard** (K-718, owner). Naming a layer in *Source*
+    is asking to listen to that layer, so it sounds for detection through its own mute and
+    through a solo on any other row; the dropdown therefore offers every layer of the comp
+    that can make a sound, silenced or not. The **comp mix** is the other question and keeps
+    its answer: only what is actually audible, solo and mute and all. A Precomp picked by
+    name carries what it carries when it plays, its own inner switches included.
 - Beat markers are ordinary markers with a `beat` label: deletable, draggable, and stored
   in the project file. Re-running detection offers replace or merge.
 - **The confirmed grid is kept, and the ruler wears it** (K-698). A detection that used a

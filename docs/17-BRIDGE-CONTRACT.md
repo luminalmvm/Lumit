@@ -1110,8 +1110,8 @@ a preset name are the *user's* words, and are passed through untouched.
     identical whatever the features are — the generated Dart is one shape
     everywhere — so a function never *disappears* with a feature: it stays
     compiled and its body degrades. Beat detection is the shape to copy: always
-    present, and `NoAudioPipeline` on a build with no audio pipeline. What a
-    media-less build actually loses is decoding — no probe, no thumbnails, no
+    present, and `NoAudio` where nothing can be probed or decoded to listen to.
+    What a media-less build actually loses is decoding — no probe, no thumbnails, no
     waveform peaks, and the decode-ahead thread drains its queue without
     producing anything — never a call that is not there.
 - **`render`** (default on) enables the composited-comp Viewer path and export
@@ -1178,7 +1178,13 @@ that read-back is gone.
     BPM override and the phase nudge, with `standard()` being the one-click
     detection every menu entry runs — waits for its own answer, and returns
     the count beside the tempo the grid used (`BridgeBeatsResult`), for the
-    panel's BPM well. It matters because the pool
+    panel's BPM well. **A named source is heard whatever the switches say**
+    (K-718): `source_layer` naming a layer builds that row's jobs through
+    `AudioJobsBuilder::layer_audio_jobs`, which steps over the row's own audible
+    switch and any solo elsewhere, while an empty `source_layer` mixes the comp
+    as it actually sounds. Either way the walk needs no graphics card, so a
+    machine with no adapter still finds beats; `NoAudio` is the answer when
+    there is nothing to hear. It matters because the pool
     flutter_rust_bridge runs asynchronous calls on is *shared* — thumbnails,
     `has_audio`, `media_info` — and a couple of detections could hold the lot.
     The analysis answers times and confidences; the marker ids are minted by

@@ -2403,7 +2403,12 @@ impl HeadlessRenderer {
 /// does. The has-audio probe result is cached per item, so each file is probed
 /// at most once per session.
 #[derive(Default)]
-pub struct AudioJobsBuilder;
+pub struct AudioJobsBuilder {
+    /// The one layer that is heard whatever the switches say — see
+    /// [`AudioJobsBuilder::layer_audio_jobs`]. `None` for every ordinary mix,
+    /// which is the comp as it actually sounds.
+    heard: Option<Uuid>,
+}
 
 /// Whether each footage **item** carries an audio stream, probed once per
 /// process rather than once per [`AudioJobsBuilder`] — see
@@ -2484,13 +2489,45 @@ fn audio_chain_of(
 impl AudioJobsBuilder {
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     /// The comp's audio jobs (empty for a silent comp) — the same list export,
     /// beat detection and playback all mix from, so they cannot disagree about
     /// what the comp sounds like.
     pub fn audio_jobs(&mut self, doc: &Arc<Document>, comp: &Composition) -> Vec<AudioJob> {
+        self.heard = None;
+        self.jobs(doc, comp)
+    }
+
+    /// **One layer's audio jobs, whatever the switches say.** The layer named
+    /// here is mixed even when its own audible switch is off and even when a
+    /// solo somewhere else in the comp silences it (K-718).
+    ///
+    /// This is the Beats panel's *Source* picker (docs/09 §5): choosing a layer
+    /// by name is asking to hear that layer, and a source picked by name that
+    /// answered "no audio" because a picture row elsewhere was soloed is the
+    /// bug this exists for. The comp's own mix ([`Self::audio_jobs`]) still
+    /// respects every switch — it is what the comp sounds like.
+    ///
+    /// The bypass is for the named row alone: inside a Precomp the ordinary
+    /// rules stand, so a Precomp picked by name carries exactly what it carries
+    /// when it plays.
+    pub fn layer_audio_jobs(
+        &mut self,
+        doc: &Arc<Document>,
+        comp: &Composition,
+        layer: Uuid,
+    ) -> Vec<AudioJob> {
+        self.heard = Some(layer);
+        let mut jobs = self.jobs(doc, comp);
+        // The walk still builds whatever else is audible; the strip is the row
+        // the sound is filed under, so this is "that row and nothing else".
+        jobs.retain(|job| job.layer == layer);
+        jobs
+    }
+
+    fn jobs(&mut self, doc: &Arc<Document>, comp: &Composition) -> Vec<AudioJob> {
         let mut jobs = Vec::new();
         let mut visited = vec![comp.id];
         self.walk(
@@ -2523,7 +2560,11 @@ impl AudioJobsBuilder {
     ) {
         let any_solo = lumit_core::model::any_solo(comp);
         for layer in &comp.layers {
-            if !layer.switches.audible || (any_solo && !layer.switches.solo) {
+            // A layer asked for by name is heard whatever its own switches or a
+            // solo elsewhere say (K-718, `layer_audio_jobs`). Ids are unique to
+            // a document, so this can only ever match the row that was named.
+            let named = self.heard == Some(layer.id);
+            if !named && (!layer.switches.audible || (any_solo && !layer.switches.solo)) {
                 continue;
             }
             let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
@@ -4249,6 +4290,70 @@ mod tests {
         );
         let strips: std::collections::BTreeSet<Uuid> = jobs.iter().map(|j| j.layer).collect();
         assert_eq!(strips.len(), 2, "two rows, two strips");
+    }
+
+    /// **A row asked for by name is heard whatever the switches say** (K-718,
+    /// owner). The Beats panel's Source picker names a layer; the mix it is
+    /// picked out of is beside the point, so a solo on the picture row and the
+    /// named layer's own audible switch are both stepped over. The comp's own
+    /// mix is unchanged: it is what the comp sounds like, solo and all.
+    #[test]
+    fn a_layer_asked_for_by_name_is_heard_through_a_solo_and_its_own_mute() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let voice = push_footage_item(&mut doc, "vo.wav");
+        let comp = push_comp(&mut doc, "edit", 32, 32);
+        push_layer(&mut doc, comp, LayerKind::Footage { item: song });
+        push_layer(&mut doc, comp, LayerKind::Footage { item: voice });
+        push_layer(&mut doc, comp, LayerKind::Null);
+        // The song is soloed, so the voice is out of the mix.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
+            c.layers[0].switches.solo = true;
+        }
+        seed_has_audio(song);
+        seed_has_audio(voice);
+
+        let c = doc.comp(comp).expect("comp").clone();
+        let (soloed, muted, silent) = (c.layers[0].id, c.layers[1].id, c.layers[2].id);
+        let doc = Arc::new(doc);
+        let mut builder = AudioJobsBuilder::new();
+
+        let mix = builder.audio_jobs(&doc, &c);
+        assert_eq!(
+            mix.iter().map(|j| j.layer).collect::<Vec<_>>(),
+            vec![soloed],
+            "the comp mix is what the comp sounds like: the solo stands"
+        );
+
+        let named = builder.layer_audio_jobs(&doc, &c, muted);
+        assert_eq!(
+            named.iter().map(|j| j.layer).collect::<Vec<_>>(),
+            vec![muted],
+            "the named row is heard through the solo, and nothing else with it"
+        );
+        assert_eq!(named[0].item, voice);
+
+        // Its own audible switch off, and the solo still standing: still heard.
+        let mut off = (*doc).clone();
+        if let Some(ProjectItem::Composition(c)) = off.item_mut(comp) {
+            c.layers[1].switches.audible = false;
+        }
+        let c_off = off.comp(comp).expect("comp").clone();
+        assert_eq!(
+            builder
+                .layer_audio_jobs(&Arc::new(off), &c_off, muted)
+                .len(),
+            1,
+            "a layer picked by name is heard even with its own mute on"
+        );
+
+        // A row with no sound in it has none to find, named or not.
+        assert!(builder.layer_audio_jobs(&doc, &c, silent).is_empty());
+        assert!(builder
+            .layer_audio_jobs(&doc, &c, Uuid::now_v7())
+            .is_empty());
+        // And the bypass does not linger: the next ordinary mix is ordinary.
+        assert_eq!(builder.audio_jobs(&doc, &c).len(), 1);
     }
 
     /// **A Sequence layer sounds through its clips, and a join is a

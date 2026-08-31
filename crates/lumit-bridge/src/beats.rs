@@ -140,31 +140,34 @@ fn run(rx: &Receiver<Job>) {
     }
 }
 
-/// Mix the composition's audible sources down and run the onset analysis over
-/// them. The whole cost of a detection, and a pure function of its inputs.
+/// Mix the composition's sources down and run the onset analysis over them.
+/// The whole cost of a detection, and a pure function of its inputs.
 ///
-/// Built through the same headless input path the exporter uses, so what is
-/// analysed is what will be exported.
+/// Built through the same mixer walk the exporter and playback use
+/// (`AudioJobsBuilder`), so what is analysed is what will be exported. That
+/// walk needs no graphics card — asking for it through the export-input builder
+/// meant a machine with no adapter could not find a beat.
 fn analyse(
     document: &Arc<lumit_core::Document>,
     comp: Uuid,
     duration_seconds: f64,
     options: &BridgeBeatOptions,
 ) -> Result<Detected, BridgeError> {
-    let inputs =
-        crate::render::with_export_inputs(document, comp).ok_or(BridgeError::NoAudioPipeline)?;
+    let composition = document.comp(comp).ok_or(BridgeError::NoAudio)?;
+    let mut builder = lumit_render::headless::AudioJobsBuilder::new();
 
-    // The Source dropdown (docs/09 §5): the comp's mix, or one strip of it —
-    // the same "one layer's row" identity the mixer meters by, so a Precomp's
-    // beats are found in everything it carries.
-    let jobs: Vec<_> = match uuid::Uuid::parse_str(&options.source_layer) {
-        Ok(layer) => inputs
-            .audio
-            .iter()
-            .filter(|j| j.layer == layer)
-            .cloned()
-            .collect(),
-        Err(_) => inputs.audio,
+    // The Source dropdown (docs/09 §5): the comp's mix, or one row of it — the
+    // same "one layer's row" identity the mixer meters by, so a Precomp's beats
+    // are found in everything it carries.
+    //
+    // **A row asked for by name is always heard** (K-718, owner): the comp mix
+    // is what is audible, but picking a layer is asking to listen to *that*
+    // layer, so its own audible switch and a solo elsewhere are both stepped
+    // over. Soloing a precomp and then detecting beats on the music used to
+    // find silence.
+    let jobs = match uuid::Uuid::parse_str(&options.source_layer) {
+        Ok(layer) => builder.layer_audio_jobs(document, composition, layer),
+        Err(_) => builder.audio_jobs(document, composition),
     };
     if jobs.is_empty() {
         return Err(BridgeError::NoAudio);

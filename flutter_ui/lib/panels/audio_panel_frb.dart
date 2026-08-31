@@ -366,11 +366,15 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     // **A refusal says why.** This used to be `onError: (_) {}`, so a comp
     // whose mix is silenced — a soloed picture row (K-435) is the everyday way
     // — placed no markers, cleared the grid and explained nothing. It is one
-    // sentence rather than one per reason because a `BridgeError` reaches Dart
-    // as an opaque handle with nothing readable on it: `NoAudio` is what the
-    // engine answers here in every case a person can cause (docs/09 §5), the
-    // rest being a project that closed or a machine with no renderer.
-    // ponytail: one sentence for the whole refusal; split it the day
+    // sentence per *source* rather than one per reason because a `BridgeError`
+    // reaches Dart as an opaque handle with nothing readable on it: `NoAudio`
+    // is what the engine answers here in every case a person can cause
+    // (docs/09 §5), the rest being a project that closed.
+    //
+    // Which sentence is the source's, not the error's, and the panel is the
+    // one that knows it: a mute or a solo cannot silence a layer picked by
+    // name (K-718), so blaming them would send the reader to the wrong switch.
+    // ponytail: two sentences for the whole refusal; split further the day
     // BridgeError carries a reason id across the bridge.
     final app = context.read<LumitState>();
     showBusyWhile(
@@ -382,7 +386,9 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         // A run that placed nothing is a legitimate answer (docs/09 §5) and
         // used to be an indistinguishable one: no markers, no grid, no word.
         if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
-      }, onError: (_) => app.postNotice(l10n.beatsNoSound)),
+      },
+          onError: (_) => app.postNotice(
+              _source.isEmpty ? l10n.beatsNoSound : l10n.beatsLayerNoSound)),
     );
   }
 

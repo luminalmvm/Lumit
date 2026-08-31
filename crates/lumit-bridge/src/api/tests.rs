@@ -2528,9 +2528,26 @@ fn audible_jobs(
 /// Sixteen-bit mono PCM, a tenth of a second of silence: enough of a file for
 /// a probe to find an audio stream in.
 fn silent_wav() -> Vec<u8> {
-    const RATE: u32 = 44_100;
-    const SAMPLES: u32 = RATE / 10;
-    let data = SAMPLES * 2;
+    wav(44_100, &vec![0i16; 4_410])
+}
+
+/// Three seconds of click train at 8 kHz: a 30 ms burst every half second, so
+/// 120 BPM of beats a detector cannot miss.
+fn click_wav() -> Vec<u8> {
+    const RATE: u32 = 8_000;
+    let mut samples = vec![0i16; RATE as usize * 3];
+    for click in 0..6 {
+        let start = click * RATE as usize / 2;
+        for i in 0..240 {
+            samples[start + i] = if i % 2 == 0 { 20_000 } else { -20_000 };
+        }
+    }
+    wav(RATE, &samples)
+}
+
+/// Sixteen-bit mono PCM around the samples handed in.
+fn wav(rate: u32, samples: &[i16]) -> Vec<u8> {
+    let data = samples.len() as u32 * 2;
     let mut wav = Vec::with_capacity(44 + data as usize);
     wav.extend_from_slice(b"RIFF");
     wav.extend_from_slice(&(36 + data).to_le_bytes());
@@ -2538,13 +2555,15 @@ fn silent_wav() -> Vec<u8> {
     wav.extend_from_slice(&16u32.to_le_bytes());
     wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
     wav.extend_from_slice(&1u16.to_le_bytes()); // mono
-    wav.extend_from_slice(&RATE.to_le_bytes());
-    wav.extend_from_slice(&(RATE * 2).to_le_bytes()); // bytes per second
+    wav.extend_from_slice(&rate.to_le_bytes());
+    wav.extend_from_slice(&(rate * 2).to_le_bytes()); // bytes per second
     wav.extend_from_slice(&2u16.to_le_bytes()); // block align
     wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
     wav.extend_from_slice(b"data");
     wav.extend_from_slice(&data.to_le_bytes());
-    wav.resize(44 + data as usize, 0);
+    for sample in samples {
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
     wav
 }
 
@@ -6803,6 +6822,90 @@ fn detecting_beats_in_a_silent_composition_says_so() {
     assert!(matches!(
         comp.detect_beats(crate::api::beats::BridgeBeatOptions::standard()),
         Err(BridgeError::NoAudio) | Err(BridgeError::NoAudioPipeline)
+    ));
+}
+
+/// **A layer picked as the beat Source is always heard** (K-718, owner ruling).
+///
+/// The comp mix is what is audible — a solo takes everything else out of it,
+/// which is the whole point of a solo. Picking a layer by name is a different
+/// question: it says *listen to this*, so the named row sounds through a solo
+/// on another row and through its own mute. The owner soloed a precomp, ran
+/// detection on the music, and was told the composition was silent.
+///
+/// A soloed picture row over a click train is the smallest scene that tells the
+/// two apart: the mix has nothing left in it and says so, while the track asked
+/// for by name finds its clicks.
+#[test]
+fn a_layer_named_as_the_beat_source_is_heard_through_a_solo() {
+    use crate::api::beats::BridgeBeatOptions;
+    use crate::api::layer::BridgeLayerSwitch;
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let clicks = dir.path().join("clicks.wav");
+    std::fs::write(&clicks, click_wav()).expect("wrote the fixture");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let comp = add_comp(&project, "Cut");
+    let footage = project
+        .import_footage(clicks.to_string_lossy().into_owned())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let music_row = comp.get_layers().expect("layers").remove(0);
+    if !music_row.has_audio().expect("asked") {
+        // No decoder in this build, or none that reads the fixture: there is
+        // nothing to hear either way, so there is no claim to test.
+        return;
+    }
+
+    // The everyday way to reach the bug: a picture row is soloed, which takes
+    // the music out of the mix.
+    let solid = comp.add_solid_layer().expect("layer");
+    solid
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    let listening_to = |layer: Option<&crate::api::layer::LayerReference>| BridgeBeatOptions {
+        source_layer: layer.map(|l| l.layer_id.to_string()).unwrap_or_default(),
+        sensitivity_percent: 80,
+        work_area_only: false,
+        min_spacing_ms: 200,
+        // The clicks are half a second apart, so the grid is named rather than
+        // estimated off three seconds of file.
+        bpm_override: 120.0,
+        phase_ms: 0.0,
+    };
+
+    assert!(
+        matches!(
+            comp.detect_beats(listening_to(None)),
+            Err(BridgeError::NoAudio)
+        ),
+        "the comp mix hears only what is audible, and the solo silenced it"
+    );
+    assert!(
+        comp.detect_beats(listening_to(Some(&music_row)))
+            .expect("the named row is heard")
+            .placed
+            > 0,
+        "a layer picked by name is heard through somebody else's solo"
+    );
+
+    // And through its own mute, which is the same ruling from the other side.
+    music_row
+        .set_switch(BridgeLayerSwitch::Audible, false)
+        .expect("muted");
+    assert!(
+        comp.detect_beats(listening_to(Some(&music_row)))
+            .expect("still heard")
+            .placed
+            > 0,
+        "a layer picked by name is heard with its own mute on"
+    );
+
+    // A row that makes no sound at all still says so, named or not.
+    assert!(matches!(
+        comp.detect_beats(listening_to(Some(&solid))),
+        Err(BridgeError::NoAudio)
     ));
 }
 

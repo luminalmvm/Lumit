@@ -11551,6 +11551,10 @@
   "@beatsNoSound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection was asked for (the Audio panel's Generate button, the Timeline's more menu, or Composition > Detect beats) and the engine found no audible source to listen to. Calm, not an error: soloing a picture layer, or muting the only layer with sound, silences the whole mix. 'Mute' and 'solo' are the two layer switches of those names."
   },
+  "beatsLayerNoSound": "No beats: the layer chosen as the source has no sound in it.",
+  "@beatsLayerNoSound": {
+    "description": "One line in the status bar at the bottom of the window, after beat detection was asked for with a layer picked in the Audio panel's Source dropdown, and that layer turned out to carry no sound at all. Distinct from beatsNoSound because a mute or a solo cannot silence a layer picked by name - saying so would send the reader to the wrong switch. Calm, not an error."
+  },
   "beatsNoneFound": "No beats stood out in this composition's audio.",
   "@beatsNoneFound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection ran over audio that was there but placed no markers - the sound has no clear rhythm, the sensitivity is too low, or the work area holds none. Calm, not an error."
