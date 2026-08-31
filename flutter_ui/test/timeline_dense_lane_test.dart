@@ -19,8 +19,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/key_block.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
+import 'package:lumit_flutter/panels/timeline_metrics_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_key_block_frb.dart';
 import 'package:lumit_flutter/panels/timeline_key_lane_frb.dart';
@@ -33,7 +35,10 @@ import 'package:uuid/uuid.dart';
 
 /// A layer entry with only the fields the lane reads filled in — the same
 /// stub the razor test builds, because [KeyLane] never looks inside it.
-BridgeLayerEntry _entry() {
+///
+/// [transform] is for the tests that *do* look inside: a shut layer's summary
+/// row is gathered from whatever the layer has keyed.
+BridgeLayerEntry _entry({BridgeTransform? transform}) {
   final id = UuidValue.fromString(const Uuid().v4());
   return BridgeLayerEntry(
     layer: LayerReference(
@@ -70,19 +75,7 @@ BridgeLayerEntry _entry() {
       outFrame: 200,
       clipFrames: Int64List(0),
       clips: const [],
-      transform: BridgeTransform(
-        anchorX: const BridgeScalar.static_(0),
-        anchorY: const BridgeScalar.static_(0),
-        positionX: const BridgeScalar.static_(0),
-        positionY: const BridgeScalar.static_(0),
-        positionZ: const BridgeScalar.static_(0),
-        scaleX: const BridgeScalar.static_(100),
-        scaleY: const BridgeScalar.static_(100),
-        rotation: const BridgeScalar.static_(0),
-        rotationX: const BridgeScalar.static_(0),
-        rotationY: const BridgeScalar.static_(0),
-        opacity: const BridgeScalar.static_(100),
-      ),
+      transform: transform ?? _still,
       axisModes: const BridgeAxisModes(
         anchor: BridgeAxisMode.combined,
         position: BridgeAxisMode.combined,
@@ -101,6 +94,42 @@ BridgeLayerEntry _entry() {
     ),
   );
 }
+
+/// A transform with nothing animated on it.
+const _still = BridgeTransform(
+  anchorX: BridgeScalar.static_(0),
+  anchorY: BridgeScalar.static_(0),
+  positionX: BridgeScalar.static_(0),
+  positionY: BridgeScalar.static_(0),
+  positionZ: BridgeScalar.static_(0),
+  scaleX: BridgeScalar.static_(100),
+  scaleY: BridgeScalar.static_(100),
+  rotation: BridgeScalar.static_(0),
+  rotationX: BridgeScalar.static_(0),
+  rotationY: BridgeScalar.static_(0),
+  opacity: BridgeScalar.static_(100),
+);
+
+/// The same, with [position] (its first axis), [rotation] and [opacity] keyed
+/// — three fold rows of the layer's own, whatever times each is given.
+BridgeTransform _keyed({
+  List<BridgeKeyframe> position = const [],
+  List<BridgeKeyframe> rotation = const [],
+  List<BridgeKeyframe> opacity = const [],
+}) =>
+    BridgeTransform(
+      anchorX: const BridgeScalar.static_(0),
+      anchorY: const BridgeScalar.static_(0),
+      positionX: BridgeScalar.keyframed(position),
+      positionY: const BridgeScalar.static_(0),
+      positionZ: const BridgeScalar.static_(0),
+      scaleX: const BridgeScalar.static_(100),
+      scaleY: const BridgeScalar.static_(100),
+      rotation: BridgeScalar.keyframed(rotation),
+      rotationX: const BridgeScalar.static_(0),
+      rotationY: const BridgeScalar.static_(0),
+      opacity: BridgeScalar.keyframed(opacity),
+    );
 
 /// `count` linear keys, one per frame at 25 fps — the shape a baked AE
 /// import has.
@@ -263,6 +292,50 @@ void main() {
     expect(canvas.paths, greaterThan(0));
     expect(canvas.paths, lessThan(300),
         reason: '${canvas.paths} paths drawn for an 800 px window');
+  });
+
+  /// **A shut layer's row draws places, not keys.** The summary row converted
+  /// every key on the layer to a frame on every rebuild of the bar, so the
+  /// baked camera paid for seventeen thousand conversions to draw two
+  /// thousand diamonds, each one under six others.
+  group("A shut layer's summary row", () {
+    List<BridgeKeyframe> summaryOf(BridgeTransform transform) => layerRows(
+          layers: [_entry(transform: transform)],
+          open: const {},
+          rowHeight: 16,
+          hasAudio: const {},
+        ).single.summaryKeys;
+
+    test('draws one diamond a frame, not one a key', () {
+      final baked = _bakedKeys(300);
+      final summary =
+          summaryOf(_keyed(position: baked, rotation: baked, opacity: baked));
+      expect(summary.length, 300, reason: '900 keys stand on 300 frames');
+      expect(
+        summary.map((k) => rationalSeconds(k.time)).toSet().length,
+        300,
+        reason: 'and no time is named twice',
+      );
+    });
+
+    test('keeps every frame of a hand-keyed layer', () {
+      final summary = summaryOf(_keyed(
+        position: _bakedKeys(2),
+        opacity: [
+          const BridgeKeyframe(
+            time: BridgeRational(num: 5, den: 25),
+            value: 50,
+            interpIn: BridgeSideInterp.linear(),
+            interpOut: BridgeSideInterp.linear(),
+          ),
+        ],
+      ));
+      expect(
+        summary.map((k) => rationalSeconds(k.time)).toSet(),
+        {0.0, 1 / 25, 5 / 25},
+        reason: 'two properties, three distinct times, three diamonds',
+      );
+    });
   });
 }
 

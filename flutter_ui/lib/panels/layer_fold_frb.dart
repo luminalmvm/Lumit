@@ -907,24 +907,35 @@ class _EveryPath extends SetBase<String> {
 ///
 /// A twirled-open layer draws its keys per property lane; a shut one has to
 /// say the same thing on one row, so this walks the fold-out as though every
-/// twirl were down and gathers what each lane would have drawn. Duplicates
-/// stay: two properties keyed on the same frame draw one diamond on top of
-/// another, which is the truth of it.
+/// twirl were down and gathers what each lane would have drawn.
+///
+/// **One key per time.** Two properties keyed on the same frame drew one
+/// diamond exactly on top of another, so the second was never seen; a baked
+/// import, where all seven of a camera's curves are keyed on every frame, paid
+/// for seventeen thousand of them to show two thousand. The first key on a
+/// time is kept and the rest dropped, which leaves the row looking as it
+/// always did.
 List<BridgeKeyframe> layerKeys({
   required BridgeLayerEntry entry,
   BridgeFlowParams? flowParams,
   BridgeScalar? volumeDb,
-}) =>
-    [
-      for (final row in layerFoldRows(
-        entry: entry,
-        open: everyFoldPath,
-        hasAudio: volumeDb != null,
-        flowParams: flowParams,
-        volumeDb: volumeDb,
-      ))
-        ...laneKeysOf(row),
-    ];
+}) {
+  final seen = <double>{};
+  return [
+    for (final row in layerFoldRows(
+      entry: entry,
+      open: everyFoldPath,
+      hasAudio: volumeDb != null,
+      flowParams: flowParams,
+      volumeDb: volumeDb,
+    ))
+      for (final key in laneKeysOf(row))
+        // By seconds rather than by the rational itself: one instant can arrive
+        // as 1/25 from one property and 2/50 from another, and both land on the
+        // same diamond when the row is drawn.
+        if (seen.add(rationalSeconds(key.time))) key,
+  ];
+}
 
 /// What a stroke's value row is called — shared by the row and the graph
 /// channel, exactly as [maskValueLabel] is.
