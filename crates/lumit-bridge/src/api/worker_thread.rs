@@ -5028,12 +5028,25 @@ mod tests {
             "the card's window is still the card's budget, got {on_card}"
         );
 
-        // **A full card climbs nothing from disk either.** Move one memory-held
-        // frame down to disk and out of memory, then run the fill again: the
-        // frame must stay on disk. Before the guard covered disk as well as
-        // memory, the fill uploaded it, the card pushed another frame down,
+        // **A full card climbs nothing from disk either.** Move the frames the
+        // card pushed out down to disk and out of memory, then run the fill
+        // again: they must stay on disk. Before the guard covered disk as well
+        // as memory, the fill uploaded one, the card pushed another frame down,
         // memory pushed a third onto disk, and the next turn found that one
         // and started again - an idle loop with no fixed point.
+        //
+        // **Every** frame below the card goes down, not one of them, and that is
+        // what keeps this half honest under load. [`DiskIo`]'s mirrors answer
+        // "no" rather than block when they are contended, deliberately (the
+        // render path must never wait on the IO thread's bookkeeping) - and the
+        // IO thread holds `known` while it rebuilds it after every single write.
+        // Leave the other frames held nowhere and this pass has twenty-nine of
+        // them to composite, each eviction another write, each write another
+        // rebuild: a "no" then lands on the parked frame's own turn, the fill
+        // reads it as "not on disk" and composites the frame it was supposed to
+        // leave alone. With everything below already on disk the pass has
+        // nothing to make, the IO thread sits still, and the mirror answers what
+        // it knows.
         let keys: Vec<_> = (0..50u64)
             .map(|f| {
                 state
@@ -5042,13 +5055,10 @@ mod tests {
                     .expect("nameable")
             })
             .collect();
-        let parked = keys
+        let below: Vec<_> = keys
             .into_iter()
-            .find(|k| {
-                !state.renderer.has_frame_texture(*k, bgra) && crate::framecache::contains(*k)
-            })
-            .expect("a frame held in memory only");
-        let (w, h, bytes) = crate::framecache::get(parked).expect("its bytes");
+            .filter(|k| !state.renderer.has_frame_texture(*k, bgra))
+            .collect();
         // The disk tier parks nothing until it has a folder.
         let dir = tempfile::tempdir().expect("a folder for the disk tier");
         state
@@ -5058,31 +5068,66 @@ mod tests {
                 dir.path().to_path_buf(),
             )))
             .expect("the disk thread");
-        assert!(state
-            .disk
-            .park(parked, w, h, bgra, std::sync::Arc::new(bytes), 1, 1000));
-        for _ in 0..500 {
-            if state.disk.contains(parked) {
+        for &key in &below {
+            let (w, h, bytes) = crate::framecache::get(key).expect("its bytes");
+            let bytes = std::sync::Arc::new(bytes);
+            // A refused park is "the queue is busy, offer it again", not a
+            // failure: `park` declines while its own lock is contended and while
+            // the write-behind queue is full (K-277).
+            let mut taken = false;
+            for _ in 0..500 {
+                if state.disk.park(key, w, h, bgra, bytes.clone(), 1, 1000) {
+                    taken = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            assert!(taken, "the disk tier took the frame");
+        }
+        // Wait for the writes to land AND the queue to empty, so the IO thread is
+        // idle for the pass below rather than still rebuilding its mirror.
+        for _ in 0..1_000 {
+            if state.disk.pending_parks() == 0 && below.iter().all(|k| state.disk.contains(*k)) {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        assert!(state.disk.contains(parked), "the park landed");
+        let parked = *below.first().expect("frames below the card");
+        assert!(state.disk.contains(parked), "the parks landed");
         crate::framecache::clear();
         let card_before = state.renderer.frame_texture_stats().0;
         state.fill_exhausted = false;
-        for _ in 0..200 {
+        // Asking the disk for a frame costs the fill nothing and finishes the
+        // walk, so "exhausted" is not the end of the pass: the copy arrives on a
+        // later turn and `collect_disk_loads` puts it on the card and sets the
+        // fill going again. The pass is over when the fill has stayed exhausted
+        // with nothing coming up for a spell - anything less and a climb that
+        // was asked for is simply never observed.
+        let mut quiet = 0;
+        for _ in 0..1_000 {
             if state.fill_exhausted {
-                break;
+                if quiet > 20 {
+                    break;
+                }
+                quiet += 1;
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            } else {
+                quiet = 0;
+                super::idle_fill(&mut state, &mut stream);
             }
-            super::idle_fill(&mut state, &mut stream);
             super::collect_disk_loads(&mut state);
             super::drain_demotions(&mut state);
         }
         assert!(state.fill_exhausted, "the second pass terminates");
+        let climbed: Vec<_> = below
+            .iter()
+            .filter(|k| state.renderer.has_frame_texture(**k, bgra))
+            .collect();
         assert!(
-            !state.renderer.has_frame_texture(parked, bgra),
-            "a disk-held frame is not climbed onto a full card"
+            climbed.is_empty(),
+            "a disk-held frame is not climbed onto a full card: {} of {} came up",
+            climbed.len(),
+            below.len()
         );
         assert_eq!(
             state.renderer.frame_texture_stats().0,
