@@ -13,16 +13,9 @@ Clone to points is a **Generate** effect.
 
 ## What it does
 
-Wire a producer's teal **Points** socket into this effect, pick a layer, and that layer's
-picture is stamped once per point — at the point's place, turned by its rotation, sized by
-its size and tinted by its colour. The points can come from an effect in this layer's own
-stack, or from another layer through a [Layer points](/effects/drivers/layer-points/) tap.
-
-Stamps are laid down oldest first, so a newer point covers an older one, and that order is
-the same on every machine and from either scrub direction.
-
-With nothing wired in, or with no Clone layer set, the picture passes straight through. The
-box in the graph carries the no-stream mark, so you can see which of the two it is.
+Wire a producer's **Points** socket into this effect, pick a layer, and that layer's
+picture is stamped once per point at the point's position, turned by its rotation, sized by
+its size and tinted by its colour.
 
 ## Parameters
 
@@ -49,14 +42,11 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Clone layer**: the layer whose picture is stamped. Nothing is drawn until you set it.
-- **Scale**: multiplies each point's own size. At 100 a stamp is as wide as the point would
-  have been as a disc, so most rigs want this well above 100.
-- **Rotation**: added to each point's own rotation, so a producer's spin still reads.
-- **Tint**: how much of the point's colour the stamp takes on. A point's colour carries
-  its fading as well as its hue, so at nought a stamp never fades.
-- **Max clones**: the most points that may be stamped. A stream longer than this is trimmed
-  to its newest. A capacity declaration, so it does not animate.
+- **Clone layer**: the layer whose picture is stamped.
+- **Scale**: multiplies each point's own size.
+- **Rotation**: added to each point's own rotation.
+- **Tint**: how much of the point's colour the stamp takes on.
+- **Max clones**: the most points that may be stamped.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
   see [Effects](/use/effects/).
@@ -66,6 +56,6 @@ In the Effect Controls panel:
 - [Particulate](/effects/generate/particulate/)
 - [Grid](/effects/generate/grid/)
 - [Layer points](/effects/drivers/layer-points/)
-- [The node graph](/use/nodes/) - where the Points socket is wired.
+- [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

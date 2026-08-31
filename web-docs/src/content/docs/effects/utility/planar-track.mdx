@@ -13,27 +13,10 @@ Planar track is a **Utility** effect.
 
 ## What it does
 
-Something flat in the shot — a phone screen, a poster, a sign, a laptop lid — is to have
-your own picture put on it. Drop this on the footage, drag the four corner points round the
-flat thing, and press **Analyse**. The tracker follows the specks inside that quad and works
-out, frame by frame, how the camera is stretching the surface. Then set **Pin layer** and
-press **Create corner pin**: a [Corner pin](/effects/distortion/corner-pin/) appears on the
-layer you named, with its four corners keyframed to sit on the surface at every frame.
-
-The corners you set are the surface as it is on the frame you set them on, and every other
-frame is measured against that one rather than against the frame before it, which is what
-stops the quad drifting over a long shot.
-
-The track belongs to this effect and not to the footage, so two Planar tracks on one shot
-are two separate answers. That is the difference from
-[Camera track](/effects/utility/camera-track/), which solves one camera for a whole source
-footage item.
+Used to track a rectangle on an object
 
 Where the surface stops being followable, the analysis stops there and keeps the part that
-worked. A quad drawn over a blank wall has nothing to follow, and is refused rather than
-guessed at. Mask out whatever crossed the surface and analyse again.
-
-You can keep working while an analysis runs.
+worked.
 
 ## Parameters
 
@@ -62,22 +45,17 @@ You can keep working while an analysis runs.
 
 - **Analyse**: start tracking.
 - **Cancel**: stop a track that is running.
-- **Create corner pin**: put a keyframed Corner pin on the layer named below. It does
-  nothing until there is a track to read.
+- **Create corner pin**: put a keyframed Corner pin on the layer named below.
 - **Upper left**, **Upper right**, **Lower left** and **Lower right**: the four corners of
-  the surface, as it sits on the frame you set them on. Set them as values here — dragging
-  them on the picture is not built yet.
-- **Pin layer**: which layer the Corner pin is put on. This is the layer that ends up on the
-  surface, so it is not the footage you are tracking.
+  the surface.
+- **Pin layer**: which layer the Corner pin is put on.
 - **Feature density**: how many specks the tracker chases inside the quad. More is slower
   but copes better with a plain or badly lit surface.
-- **Use masks**: masks on the layer are left out of the track. The quad already says where
-  to look; a mask says what to ignore inside it — the hand across the phone, the reflection
-  crossing the sign.
+- **Use masks**: masks on the layer are left out of the track.
 
 ## Related
 
-- [Camera track](/effects/utility/camera-track/) - solves the camera rather than a surface.
+- [Camera track](/effects/utility/camera-track/)
 - [Corner pin](/effects/distortion/corner-pin/)
 - [Masks](/use/masks/)
 - [Utility](/effects/#utility)

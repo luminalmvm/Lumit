@@ -13,20 +13,11 @@ Connect points is a **Generate** effect.
 
 ## What it does
 
-Wire a producer's teal **Points** socket into this effect and every pair of points closer
-together than **Max distance** is joined by a line — a plexus. A
-[Grid](/effects/generate/grid/) becomes a mesh; a [Scatter](/effects/generate/scatter/)
-inside a silhouette becomes a constellation of it.
+Wire a producer's **Points** socket into this effect and every pair of points closer than **Max distance** creates a line joining them.
 
-Nearness is measured on the frame rather than in space, so on a 3D layer two points join
-when they look close through the composition's camera.
+Nearness is measured on the frame rather than in 3D space.
 
-Each line takes the average of the colours of its two points, so particles that change
-colour as they age still read along the web. **Colour** multiplies that, which is why it
-is white by default.
-
-With nothing wired in, the picture passes straight through and the box carries the
-no-stream mark.
+Each line takes the average of the colours of its two points. **Colour** multiplies this.
 
 ## Parameters
 
@@ -58,21 +49,14 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Max distance**: how far apart two points may be and still be joined. Nought joins
-  nothing.
-- **Max connections**: the most lines that may meet at any one point, which stops a dense
-  crowd turning into a solid sheet. A pair is joined only when both ends still have room.
-- **Taper**: how much a line thins as it lengthens. At 100 a line at exactly Max distance
-  has no width left.
-- **Fade**: how much a line fades as it lengthens. At 100, the default, a line at exactly
-  Max distance is invisible, so the web comes and goes rather than popping.
+- **Max distance**: how far apart two points may be and still be joined.
+- **Max connections**: the most lines that may meet at any one point.
+- **Taper**: how much a line thins as it lengthens.
+- **Fade**: how much a line fades as it lengthens.
 - **Width**: the thickness of a line.
 - **Feather**: how soft a line's edge is.
-- **Colour**: multiplies the colour each line inherits from its two ends. White leaves it
-  alone.
-- **Max points**: the most points that may be considered. A stream longer than this is
-  trimmed to its newest, which bounds the pairing as well as the drawing. A capacity
-  declaration, so it does not animate.
+- **Colour**: multiplies the colour each line inherits from its two ends.
+- **Max points**: the most points that this effect operates on, newest points first.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
   see [Effects](/use/effects/).
@@ -82,6 +66,6 @@ In the Effect Controls panel:
 - [Particulate](/effects/generate/particulate/)
 - [Grid](/effects/generate/grid/)
 - [Trail](/effects/generate/trail/)
-- [The node graph](/use/nodes/) - where the Points socket is wired.
+- [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

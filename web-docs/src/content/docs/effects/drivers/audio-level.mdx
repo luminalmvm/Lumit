@@ -13,18 +13,10 @@ Audio level is a **Drivers** effect.
 
 ## What it does
 
-Gives the loudness of a named layer's sound at the frame being drawn. It has two sockets:
-**Amplitude**, the level of the whole sound, and **Low**, the level of the bottom end
-alone — the one that follows a kick drum rather than a hi-hat. Wire either into a scale, a
-glow or a brightness, usually through a [Remap](/effects/drivers/remap/).
+Returns the loudness of the audio from a given layer at the current frame. It has two sockets:
+**Amplitude**, the level of the whole sound, and **Low**, the level of the bottom end.
 
-The level is measured over a short stretch of time centred on the frame, not off one
-sample. It is one of the two drivers that read times other than their own, and Lumit folds
-the stretch into what it caches so a held frame cannot outlive the sound it was measured
-from.
-
-With no layer chosen, a layer that has no sound, or a layer somebody deleted, the level
-reads nought.
+The level is measured over a short stretch of time centred on the frame.
 
 ## Parameters
 
@@ -39,16 +31,14 @@ reads nought.
 
 ## What each control does
 
-- **Audio**: the layer whose sound is measured. Wires never cross between layers, so this
-  is a layer picker rather than a socket.
-- **Window**: how long a stretch the level is measured over, centred on the frame. Short
-  follows every transient and twitches; long rides the tune and reacts late.
+- **Audio**: the layer whose sound is measured.
+- **Window**: how long a stretch of time the level is measured over.
 
 ## Related
 
-- [Smooth](/effects/drivers/smooth/) - calm a level that is too twitchy to drive anything.
-- [Remap](/effects/drivers/remap/) - turn a level into the range a parameter wants.
+- [Smooth](/effects/drivers/smooth/)
+- [Remap](/effects/drivers/remap/)
 - [Audio](/use/audio/)
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

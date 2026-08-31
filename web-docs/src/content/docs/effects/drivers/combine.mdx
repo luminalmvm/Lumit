@@ -13,12 +13,7 @@ Combine is a **Drivers** effect.
 
 ## What it does
 
-Wire a number into each channel — an audio level, a wiggle, a remapped distance — and
-its **Colour** socket carries the colour they make. Alpha sits at one unless something
-is wired into it, so three wires make an opaque colour.
-
-The numbers are scene-linear channels, not per cent, and nothing is clamped: a channel
-driven past one stays past one.
+Wire a number into each channel and the **Colour** socket outputs the colour they make. Alpha remains 1 unless wired.
 
 ## Parameters
 
@@ -35,13 +30,12 @@ driven past one stays past one.
 
 ## What each control does
 
-Each row is a socket for one channel; the slider is its value when nothing is wired
-in. A wire may carry any number — the 0 to 1 range is the slider's, not the socket's.
+Each row is a socket for one channel.
 
 ## Related
 
-- [Split](/effects/drivers/split/) - a colour apart into these four numbers.
-- [Remap](/effects/drivers/remap/) - put a driver's output into the range a channel wants.
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [Split](/effects/drivers/split/)
+- [Remap](/effects/drivers/remap/)
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

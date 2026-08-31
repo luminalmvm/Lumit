@@ -13,18 +13,10 @@ Camera track is a **Utility** effect.
 
 ## What it does
 
-Tracks the footage and allows you to recreate the camera path within Lumit. Apply it 
-to a layer and press **Analyse**. You can keep editing while it runs. 
-The whole source footage is analysed, so every layer using it shares the one
-solve. Trimming, moving or retiming a layer doesn't track it again.
+Tracks the footage and allows you to recreate the camera path within Lumit.
 
-A track can also cover only part of a shot. Where the shot stops being followable —
-a whiteout, a fast lens rack, a cut in the middle of the file — there is nothing
-after that point that can be tied to anything before it, so the analysis stops there
-and solves the part that worked. The bar above the status line shows how much of the
-shot carries a camera, and the line says how far it got. A camera linked to a partial
-track follows it inside that span and holds its last position past the end. Mask out
-whatever broke the shot and analyse again, or treat the two halves as two shots.
+A track can also cover only part of a shot. Where the shot stops being followable,
+the analysis stops there and solves the part that worked.
 
 ## Parameters
 
@@ -46,10 +38,8 @@ whatever broke the shot and analyse again, or treat the two halves as two shots.
 - **Cancel**: stop a track that's running.
 - **Feature density**: how many points are tracked. More is slower but copes better
   with hard footage.
-- **Use masks**: masks on the layer are left out of the track. Use this for anything
-  moving on its own, like a person.
-- **Show points**: draws the solved points over the picture. Select some to create a
-  null or solid at their position.
+- **Use masks**: masks on the layer are left out of the track.
+- **Show points**: draws the solved points over the picture.
 
 ## Related
 

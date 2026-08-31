@@ -13,24 +13,9 @@ Points sample is a **Drivers** effect.
 
 ## What it does
 
-Wire a producer's teal **Points** socket into this driver and it turns the particles into
-two numbers: **Count**, how many are alive at this frame, and **Nearest distance**, how far
-the closest one is from a place you choose. Wire those into a parameter, usually through a
-[Remap](/effects/drivers/remap/).
-
-The particles it counts are the particles the picture draws. Distances are in pixels at
-composition size, and on a 3D layer they are measured where the composition's camera puts
-the points, not where they sit in space.
-
-With nothing wired in, Count is nought and Nearest distance is an enormous number — nought
-would read as a particle sitting right on the position.
-
-[Scatter](/effects/generate/scatter/) and
-[Emit from image](/effects/generate/emit-from-image/) cannot be sampled this way. Their
-points depend on a picture, and at the moment this driver runs there is no picture yet, so
-a wire from either reads as an empty stream. [Particulate](/effects/generate/particulate/),
-[Grid](/effects/generate/grid/) and
-[Layer points](/effects/drivers/layer-points/) all answer normally.
+Wire a producer's **Points** socket into this driver and returns two numbers:
+**Count**, how many points in this frame, and **Nearest distance**, how far
+the closest one is from a place you choose.
 
 ## Parameters
 
@@ -45,14 +30,13 @@ a wire from either reads as an empty stream. [Particulate](/effects/generate/par
 
 ## What each control does
 
-- **Position x** and **Position y**: the place Nearest distance is measured from. Count
-  ignores it.
+- **Position x** and **Position y**: the place Nearest distance is measured from.
 
 ## Related
 
 - [Particulate](/effects/generate/particulate/)
 - [Layer points](/effects/drivers/layer-points/)
 - [Remap](/effects/drivers/remap/)
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

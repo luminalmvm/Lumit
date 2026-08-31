@@ -13,12 +13,7 @@ Colour cycle is a **Drivers** effect.
 
 ## What it does
 
-Puts out a colour whose hue turns through the wheel at a rate you set. Wire its **Colour**
-socket into a [Fill](/effects/generate/fill/), a [Glow](/effects/stylise/glow/), a
-[Gradient](/effects/generate/gradient/) stop or a particle colour.
-
-It is the one driver that carries a colour rather than a number, so it only fits sockets
-that take one.
+Puts out a colour whose hue turns through the wheel at a rate you set.
 
 ## Parameters
 
@@ -35,20 +30,17 @@ that take one.
 
 ## What each control does
 
-- **Phase**: where on the wheel it starts, in whole turns. 0 is red, a third is green, two
-  thirds is blue, and 1 is red again. Turns rather than degrees, so a
-  [Wiggle](/effects/drivers/wiggle/) of amount 1 wired in here sweeps exactly one
+- **Phase**: where on the wheel it starts. Turns rather than degrees, so a
+  [Wiggle](/effects/drivers/wiggle/) with a value of 1 wired in here sweeps exactly one
   revolution.
-- **Rate**: turns per second; negative runs the wheel backwards. Nought holds the colour
-  still at Phase, for when something else is driving Phase.
-- **Saturation**: how coloured it is. Nought is grey.
-- **Brightness**: per cent of white. It runs past 100, matching a colour parameter's
-  headroom.
+- **Rate**: turns per second.
+- **Saturation**: how coloured it is.
+- **Brightness**: per cent of white. It can be increased past 100.
 
 ## Related
 
-- [Wiggle](/effects/drivers/wiggle/) - drive Phase for a colour that wanders rather than turns.
+- [Wiggle](/effects/drivers/wiggle/)
 - [Fill](/effects/generate/fill/)
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

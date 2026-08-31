@@ -13,13 +13,7 @@ Smooth is a **Drivers** effect.
 
 ## What it does
 
-Averages its input over a short stretch of time centred on the frame. Put it between a
-twitchy driver and whatever it is driving.
-
-The stretch is centred rather than trailing, so a value that ramps comes out as the same
-ramp instead of running late — the motion calms down, but it does not slide. Like
-[Audio level](/effects/drivers/audio-level/), it reads times other than its own, and Lumit
-folds the stretch into what it caches.
+Averages its input over a short stretch of time centred on the frame.
 
 The input is read nine times across the window, however long the window is. Past about an
 eighth of a second those readings sit further apart than a frame, so a long Time on a
@@ -38,15 +32,13 @@ fast-moving input can start stepping rather than smoothing.
 
 ## What each control does
 
-- **Value**: the number coming in. Only does anything with a wire on it — a typed value
-  has nothing to smooth.
-- **Time**: how long a stretch to average over. Longer is calmer and lazier to react;
-  nought passes the input through untouched.
+- **Value**: the values coming in.
+- **Time**: how long a time to average over.
 
 ## Related
 
-- [Audio level](/effects/drivers/audio-level/) - the driver this is most often put in front of.
+- [Audio level](/effects/drivers/audio-level/)
 - [Wiggle](/effects/drivers/wiggle/)
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

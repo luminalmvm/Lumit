@@ -15,25 +15,7 @@ Scatter is a **Generate** effect.
 
 ## What it does
 
-Throws points at random and keeps the ones that land inside the layer's own alpha, so a
-silhouette, a piece of text or a keyed subject becomes a cloud of points in the shape of
-itself.
-
-A point's odds follow the alpha under it: where the layer is solid every point stands,
-where it is half transparent half of them do. A soft edge comes out as a thinning crowd
-rather than a cut line.
-
-Like [Grid](/effects/generate/grid/), it hands the same points out on a teal **Points**
-socket for [Clone to points](/effects/generate/clone-to-points/),
-[Connect points](/effects/generate/connect-points/) and
-[Trail](/effects/generate/trail/) to build on, and Mix at nought emits the stream while
-drawing nothing.
-
-Two limits worth knowing. Where a point lands is fixed by the seed — but whether a point on
-a *soft edge* is kept is decided from the picture at the resolution being drawn, so a
-half-resolution preview can keep a slightly different fringe from the export. And a
-[Points sample](/effects/drivers/points-sample/) driver cannot read this stream: it depends
-on a picture, and a driver is worked out before there is one.
+Throws points at random and keeps the ones that land inside the layer.
 
 ## Parameters
 
@@ -62,29 +44,22 @@ In the Effect Controls panel:
 
 ## What each control does
 
-- **Density**: how many points are thrown per hundred-pixel square of the composition, so
-  the same number means the same spacing whatever size the composition is.
-- **Seed**: which points. Reseeding moves the crowd and changes which of it survives.
+- **Density**: how many points are thrown per hundred-pixel square of the composition.
+- **Seed**: randomises where points are thrown.
 - **Size**: the diameter of the disc a point is drawn as.
-- **Feather**: how soft that disc's edge is. At nought it is a hard circle.
-- **Colour**: what the points are drawn in. Values above 1 are legal, and useful under a
-  [Glow](/effects/stylise/glow/).
-- **Max points**: the most points that may be thrown. A ceiling on the work rather than on
-  the look, since only some of them stand. It does not animate.
-- **Mix**: how much of the drawing lands on the picture. At nought the points are still
-  emitted on the socket.
-- **Matte**: unusually, this is not a strength. It chooses whose alpha the points land
-  inside — set it and the points take that layer's shape instead of this one's. **Invert**
+- **Feather**: how soft that disc's edge is.
+- **Colour**: what the points are drawn in.
+- **Max points**: the most points.
+- **Mix**: how much of the drawing lands on the picture.
+- **Matte**: this is not a strength. It chooses the alpha the points land
+  inside. Points take that layer's shape instead of this one's. **Invert**
   reads that matte the other way round, which fills everything the shape does not cover.
-  There is no Channel row here: Scatter reads alpha and only alpha, so turn a brightness
-  into an alpha with [Set matte](/effects/utility/set-matte/) or
-  [Matte key](/effects/utility/matte-key/) first.
 
 ## Related
 
-- [Emit from image](/effects/generate/emit-from-image/) - the same throw, kept where a layer is bright.
+- [Emit from image](/effects/generate/emit-from-image/)
 - [Grid](/effects/generate/grid/)
 - [Particulate](/effects/generate/particulate/)
-- [The node graph](/use/nodes/) - where the Points socket is wired.
+- [The node graph](/use/nodes/)
 - [Generate](/effects/#generate)
 - [Effects](/use/effects/)

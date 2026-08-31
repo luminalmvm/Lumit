@@ -13,13 +13,9 @@ Split is a **Drivers** effect.
 
 ## What it does
 
-Wire a colour in and four numbers come out: **Red**, **Green**, **Blue** and
-**Alpha** sockets, each carrying that channel as the colour holds it — scene-linear,
-unclamped, so a value above one survives. Unwired, the swatch on its row makes the
-node a constant four numbers.
+Wire a colour in and it outputs the four colour channels as values.
 
-[Combine](/effects/drivers/combine/) is the other half; a Split into a Combine gives
-the colour back exactly.
+[Combine](/effects/drivers/combine/) is the inverse of this effect.
 
 ## Parameters
 
@@ -33,13 +29,11 @@ the colour back exactly.
 
 ## What each control does
 
-- **Colour**: the colour to take apart. Usually fed by a wire — a
-  [Colour cycle](/effects/drivers/colour-cycle/), a Colour control — rather than set
-  by hand.
+- **Colour**: the colour to separate.
 
 ## Related
 
-- [Combine](/effects/drivers/combine/) - the four numbers back into a colour.
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [Combine](/effects/drivers/combine/)
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)

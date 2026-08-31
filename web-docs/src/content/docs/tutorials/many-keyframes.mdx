@@ -7,8 +7,8 @@ sidebar:
 
 import Shot from "../../../components/Shot.astro";
 
-Lumit treats a selection of keyframes as one thing — a **block** — so sliding a run,
-stretching its timing or easing the lot is one drag or one press.
+Lumit treats a selection of keyframes as a **block**,
+so stretching its timing or easing the selection is a single drag or click.
 
 Work in the Timeline's **Layers** mode. Everything below is the same in Graph mode.
 
@@ -16,46 +16,36 @@ Work in the Timeline's **Layers** mode. Everything below is the same in Graph mo
 
 - Select the layer and press `U`. It opens showing only the rows that carry keyframes.
   Press it again to shut the layer.
-- **ANIMATED** on the Timeline's toolbar is the same as a standing filter: while it is lit,
-  the outline draws animated rows and nothing else, for every layer at once.
 
 <Shot file="layers-selected.png" caption="Two layers, one twirled open, with keyframes on Position and Opacity." eager/>
 
-## 2. Catch them
+## 2. Select them
 
-Drag on empty lane space — anywhere the bars and the keyframes are not — and a box sweeps
-out. Every keyframe it covers is selected on release, across as many rows as the box
-reaches.
+Drag on empty space in the lane and a selection will extend from where you began dragging. Every keyframe it covers is selected on release.
 
-- **Hold `Shift` or `Ctrl` as the drag begins** and the box adds to what you already had,
-  which is how you build a selection out of rows that are not next to each other.
-- **Click empty lane space** to select nothing.
+- **Hold `Shift` or `Ctrl` as the drag begins** and the selection adds to what you already have.
+- **Click empty lane space** to select nothing/deselect.
 
 Two or more keys become a block: a box with a small handle at each end, and a badge saying
-how many keys it holds and how many frames it spans — `12 keys · 48 f`. One key is a key,
-not a block; it has its own drag already.
+how many keys it holds and how many frames it spans — `12 keys · 48 f`.
 
 ## 3. Slide the whole run
 
-Drag any keyframe in the selection and the whole block goes with it, the same distance.
-The shape of the run is kept — every key keeps its place relative to the others rather
-than each finding its own frame.
+Drag any keyframe in the selection and the whole block moves with it.
 
 The **magnet** on the bar under the lanes decides whether the run lands on whole frames.
-With it on, the key in your hand snaps and the rest follow it.
+With it on, the key in your hand snaps and the rest follow.
 
 ## 4. Stretch the timing
 
 Take hold of a handle at either end of the box and drag.
 
 - The end you did **not** touch stays exactly where it is.
-- The end you dragged goes where you put it.
-- Every key in between keeps its share of the span, so a move that eased in the middle goes
-  on easing in the middle.
+- The end you dragged moves to where you put it.
+- Every key inbetween retains its relative position between the start and end points.
 
-The dragged end snaps to the same things a single key does — a whole frame, a marker,
-the playhead, a key on another row — so a run can be pulled onto a beat and stick to it. A
-block cannot be squeezed below one frame; two keys cannot share a time.
+The dragged end snaps to the same things a single key does, such as: a whole frame, a marker,
+the playhead, a key on another row.
 
 ## 5. Shape the movement
 
@@ -66,7 +56,7 @@ opens on the selection.
 | --- | --- |
 | **Curve** | A named shape — easy ease, slow start, slow finish, anticipate, overshoot, snap, heavy ease, or one you saved. |
 | **Influence** | How far each side of the curve reaches, in per cent, in and out separately. |
-| **Stagger** | Frames between one row's keys and the next, top down or bottom up. Nought leaves every row where it is. |
+| **Stagger** | Frames between one row's keys and the next, top down or bottom up. Zero leaves every row where it is. |
 
 **Apply** lands the shape and the box stays up, so easing is "try it, look at it, try
 another" rather than a decision you commit to blind. **Open graph** hands the same selection

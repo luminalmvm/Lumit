@@ -13,12 +13,9 @@ Math is a **Drivers** effect.
 
 ## What it does
 
-Takes two numbers and does one piece of arithmetic with them, putting the answer out of its
-**Value** socket. Either input can be left as a typed number, so scaling one driver by a
-constant is a single node.
+Takes two numbers and performs arithmetic with them. Either input can be left as a typed number.
 
-Dividing by nought, and taking the remainder by nought, both answer nought rather than
-running away.
+Dividing by zero, and taking the remainder by zero, both return zero to avoid errors.
 
 ## Parameters
 
@@ -34,16 +31,15 @@ running away.
 
 ## What each control does
 
-- **A**: the left-hand number.
-- **B**: the right-hand number.
-- **Operation**: what to do with them. **Minimum** and **Maximum** put a floor or a
-  ceiling under a driver, **Remainder** makes a value repeat, and **Power** raises A to B,
-  bending a straight response into a curve.
+- **A**: the left-hand value.
+- **B**: the right-hand value.
+- **Operation**: **Minimum** and **Maximum** put a floor or a
+  ceiling under a driver, **Remainder** makes a value repeat, and **Power** raises A to B.
 
 ## Related
 
-- [Remap](/effects/drivers/remap/) - the other way to reshape a number.
+- [Remap](/effects/drivers/remap/)
 - [Wiggle](/effects/drivers/wiggle/)
-- [The node graph](/use/nodes/) - where a driver is added and wired.
+- [The node graph](/use/nodes/)
 - [Drivers](/effects/#drivers)
 - [Effects](/use/effects/)
