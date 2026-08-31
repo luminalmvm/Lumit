@@ -370,11 +370,13 @@ jobs:
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
       # Flutter stable pinned to the SAME version the desktop dev box runs
-      # (3.44.7), so CI and the owner's machine agree. `cache: true` caches the
+      # (3.47.1), so CI and the owner's machine agree. It has to be: the runner
+      # calls `DartProject::set_impeller_switch` (K-732), which 3.44.7's Windows
+      # embedder does not have, so a stale pin fails to compile main.cpp. `cache: true` caches the
       # SDK; the pub cache is cached separately below.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: Cache pub packages
@@ -477,7 +479,7 @@ jobs:
       # The same pinned Flutter the Linux job takes, so the two agree.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: Cache pub packages
@@ -551,7 +553,7 @@ jobs:
       # the same version the other Flutter job takes.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       # Generating compiles lumit-bridge, so this job needs the same native

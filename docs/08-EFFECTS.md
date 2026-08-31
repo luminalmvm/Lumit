@@ -1558,7 +1558,10 @@ per pixel in the kernel from the same coefficients, so a half-grey matte on 90°
 above), Mix.
 
 **Algorithm sketch.** Expand or compress every RGB channel about a fixed mid-grey pivot:
-`out = (in − pivot) × k + pivot`, with `k = Contrast ÷ 100` and `pivot = 0.5`. Alpha is
+`out = (in − pivot) × k + pivot`, with `k = 1 + t|t|` for `t = Contrast ÷ 100 − 1`, and
+`pivot = 0.5`. The factor is **quadratic** in the distance from neutral (K-737): the ends
+are unchanged — 0 flattens to grey and 200 doubles — and the per cent either side of 100 is
+a hundredth of the move a linear mapping gave it. Alpha is
 untouched. The maths runs in the compositor's scene-linear working space, consistent with the
 other grades, and the pivot subtraction happens in that same space. Because of the `− pivot`
 offset this is an **affine** grade, not a pure scale, so — unlike Exposure and Hue shift — it

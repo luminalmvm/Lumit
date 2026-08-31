@@ -23381,3 +23381,39 @@ Three things this entry exists to record:
 
   This retires when Homebrew ships `ffmpeg@8` (drop the action, name the keg),
   or when rsmpeg learns FFmpeg 9 and Lumit follows.
+
+## K-737 — Contrast answers quadratically to its own slider
+
+**Date:** 2026-08-31 · **Status:** DECIDED · **Scope:** docs/08 §3.18, lumit-core
+
+A tester reported the effect as unusable near neutral: 101 % was a visible jump, and the
+first few per cent of the slider were the only part anybody could aim with. The maths was
+not wrong — `k = Contrast ÷ 100` is the familiar photo-editor mapping — but the pivot is a
+mid-grey of 0.5 in **scene-linear** light, which sits far above where a picture's tones
+actually are, so a one per cent change of slope about a distant pivot is a large change to
+a dark pixel. The slider was linear in a place where the eye is not.
+
+**The factor is now quadratic in the distance from neutral**: `k = 1 + t|t|`, where
+`t = Contrast ÷ 100 − 1`. What that buys, exactly:
+
+- 101 % lands on `k` 1.0001 where it used to land on 1.01 — a hundredth of the move.
+- 110 % lands on 1.01, which is what 101 % used to do. The owner's own statement of the
+  ask ("101 should be more like 110") is the definition of the curve.
+- **Both ends are untouched.** 0 % is `k` 0 and still flattens to grey; 200 % is `k` 2 and
+  still doubles. The documented shape of the control did not change, only its feel between
+  the ends.
+- Neutral is still `t == 0` exactly, so 100 % stays the bit-exact identity both render
+  paths short-circuit on, and the §1.6 oracle is unaffected.
+
+Above 200 % the curve is steeper than the linear one was (300 % is `k` 5 rather than 3).
+That is the price of matching the ask at the bottom while keeping 200 % where it was, and
+it is past the slider's own range, where a typed number is a deliberate act.
+
+Not chosen: moving the pivot to scene-linear 0.18, or grading through a display curve.
+Either would change what every existing project's Contrast does to its picture; this
+changes only how far the number travels, and K-110's promise that 0, 100 and 200 mean flat,
+neutral and doubled survives it. Rescaling the slider's range instead (0..2000) was refused
+for the same reason: the numbers on it are in the manual and in projects.
+
+One method changes — `Contrast::packed` — and both render paths read it, so the CPU
+reference and the WGSL kernel cannot disagree about the new curve.

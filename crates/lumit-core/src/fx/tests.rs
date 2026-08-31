@@ -2961,6 +2961,58 @@ fn contrast_is_neutral_at_100_and_pivots_about_mid_grey() {
 }
 
 #[test]
+fn contrast_answers_quadratically_to_its_slider() {
+    use effects::contrast::Contrast;
+
+    let k = |pct: f32| {
+        Contrast {
+            contrast: pct,
+            mix: 100.0,
+        }
+        .packed()
+        .0
+    };
+
+    // The ends are exactly where K-110 put them.
+    assert_eq!(k(0.0), 0.0, "0 % flattens to grey");
+    assert_eq!(
+        k(100.0),
+        1.0,
+        "100 % is the bit-exact neutral both paths skip"
+    );
+    assert_eq!(k(200.0), 2.0, "200 % doubles");
+
+    // K-737: quadratic in the distance from neutral. One per cent moves a
+    // hundredth of what it used to, and the number that used to be 101 is 110 -
+    // which is the whole of what the change was asked for.
+    assert!(
+        (k(101.0) - 1.0001).abs() < 1e-6,
+        "101 % barely moves: {}",
+        k(101.0)
+    );
+    assert!(
+        (k(110.0) - 1.01).abs() < 1e-6,
+        "110 % is the old 101 %: {}",
+        k(110.0)
+    );
+    assert!(
+        (k(90.0) - 0.99).abs() < 1e-6,
+        "and symmetrically below: {}",
+        k(90.0)
+    );
+
+    // Monotone across the slider and past its end, with no negative factor -
+    // an inverted picture is not a contrast setting.
+    let mut last = f32::NEG_INFINITY;
+    for step in 0..=40 {
+        let v = k(step as f32 * 10.0);
+        assert!(v >= 0.0, "no inversion at {step}0 %");
+        assert!(v > last || step == 0, "monotone at {step}0 %");
+        last = v;
+    }
+}
+
+#[test]
 fn gamma_is_neutral_at_one_and_curves_per_channel() {
     let e = instantiate("gamma").unwrap();
     assert_eq!(e.float_at("gamma", 0.0), Some(1.0));

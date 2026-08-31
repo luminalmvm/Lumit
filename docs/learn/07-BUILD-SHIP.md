@@ -47,7 +47,7 @@ internals in a debugger is unpleasant; the tests are how this project is worked 
 | `flutter_ui/lib/l10n/app_en.arb` | `flutter pub get` (or any build) | `lib/l10n/gen/` — the `Strings` class |
 | Anything in the bridge crate | `cargo build -p lumit_bridge` | `target/debug/lumit_bridge.{dll,so,dylib}`, which `flutter_ui/test/frb/` loads (content-hash checked, stale = loud failure) |
 
-Codegen versions are pinned: `flutter_rust_bridge` 2.12.0 exactly, Flutter 3.44.7 in
+Codegen versions are pinned: `flutter_rust_bridge` 2.12.0 exactly, Flutter 3.47.1 in
 CI, Rust via `rust-toolchain.toml` (1.97.1). All three OSes link FFmpeg n8.1 (K-736; macOS has no Homebrew route to it yet).
 
 ## CI: the merge gate

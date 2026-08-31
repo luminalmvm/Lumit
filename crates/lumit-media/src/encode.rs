@@ -67,7 +67,18 @@ pub enum ColourTags {
 impl ColourTags {
     /// `(colour_primaries, transfer_characteristics, matrix_coefficients)` as
     /// the ISO/IEC 23091-2 code points FFmpeg's `AVCOL_*` enumerations mirror.
-    fn av(self) -> (i32, i32, i32) {
+    ///
+    /// Typed by the bindings' own aliases rather than by `i32`: rsmpeg generates
+    /// these enumerations as signed on some platforms and unsigned on others,
+    /// and the context fields they are written to follow the constants. Naming
+    /// the alias is what makes the same source compile against either.
+    fn av(
+        self,
+    ) -> (
+        ffi::AVColorPrimaries,
+        ffi::AVColorTransferCharacteristic,
+        ffi::AVColorSpace,
+    ) {
         match self {
             ColourTags::Srgb => (
                 ffi::AVCOL_PRI_BT709,

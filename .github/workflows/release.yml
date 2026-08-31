@@ -10,7 +10,7 @@
 # continue-on-error, so a partial release is never published quietly.
 #
 # Toolchain steps mirror ci.yml's `windows` and `flutter-linux` jobs exactly
-# (same FFmpeg 8.1 shared build, same LLVM 18 pin, same Flutter 3.44.7); when
+# (same FFmpeg 8.1 shared build, same LLVM 18 pin, same Flutter 3.47.1); when
 # one changes, change the other.
 #
 # The macOS artefacts are Developer ID signed, notarised and stapled (K-310)
@@ -73,7 +73,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: Install Inno Setup
@@ -138,7 +138,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       - name: flutter build linux
@@ -233,7 +233,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.7
+          flutter-version: 3.47.1
           channel: stable
           cache: true
       # The app icon is an Icon Composer document (K-309): actool needs Xcode 26
