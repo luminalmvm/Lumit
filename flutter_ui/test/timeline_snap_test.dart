@@ -201,4 +201,59 @@ void main() {
       expect(razorFrame(124, const [SnapTarget(13, SnapKind.editPoint)]), 13);
     });
   });
+
+  /// **A place is offered once.** A baked After Effects camera keys all seven
+  /// of its curves on every frame, so the panel gathered seventeen thousand
+  /// keyframe targets for the two thousand frames they sit on — a list rebuilt
+  /// with the panel and walked again on every pointer move of a drag.
+  group('The keyframe places the gatherer offers', () {
+    List<double> keyFrames(List<SnapKeyRow> rows, {String? exceptRow}) =>
+        snapTargetsOf(
+          layers: const [],
+          compMarkers: const [],
+          keyRows: rows,
+          playheadFrame: 0,
+          work: (start: 0, end: 100, whole: true),
+          fps: 25,
+          exceptRow: exceptRow,
+        )
+            .where((t) => t.kind == SnapKind.keyframe)
+            .map((t) => t.frame)
+            .toList();
+
+    test('lanes keyed on the same frames offer each frame once', () {
+      final camera = [
+        for (var p = 0; p < 7; p++)
+          (
+            rowId: 'camera/p$p',
+            frames: [for (var f = 0; f < 50; f++) f.toDouble()],
+          ),
+      ];
+      expect(keyFrames(camera), [for (var f = 0; f < 50; f++) f.toDouble()],
+          reason: '350 keys stand on fifty places');
+    });
+
+    test('a hand-keyed layer keeps every frame it has', () {
+      expect(
+        keyFrames(const [
+          (rowId: 'a', frames: [3.0, 11.5]),
+          (rowId: 'b', frames: [7.0]),
+        ]),
+        [3.0, 11.5, 7.0],
+        reason: 'nothing shared, so nothing dropped, and in gathering order',
+      );
+    });
+
+    test('a frame the dragged lane shares with another is still offered', () {
+      // Leaving the dragged row out may not take away a place another lane
+      // also has: frame four stands because `b` is keyed there too.
+      expect(
+        keyFrames(const [
+          (rowId: 'a', frames: [4.0, 9.0]),
+          (rowId: 'b', frames: [4.0]),
+        ], exceptRow: 'a'),
+        [4.0],
+      );
+    });
+  });
 }

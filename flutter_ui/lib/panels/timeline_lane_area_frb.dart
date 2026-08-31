@@ -120,9 +120,11 @@ List<SnapTarget> timelineSnapTargets({
           for (final row in layer.foldRows)
             (
               rowId: foldRowPath(layer.id, row),
-              frames: [
-                for (final k in laneKeysOf(row)) laneKeyFrame(k, fps),
-              ],
+              // Read as the gatherer walks them: a twirled-open baked camera
+              // has thousands of keys on each of seven lanes, and a list of
+              // them per lane is a rebuild's worth of allocation handed to a
+              // set that keeps one target a frame anyway.
+              frames: laneKeysOf(row).map((k) => laneKeyFrame(k, fps)),
             ),
       ],
       playheadFrame: playheadFrame,

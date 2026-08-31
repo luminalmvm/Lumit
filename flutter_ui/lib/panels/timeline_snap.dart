@@ -130,7 +130,11 @@ bool snapSuspended({required bool controlPressed}) => controlPressed;
 /// One lane's keys, as the gatherer wants them: the row's id (so the lane
 /// being dragged can leave its own keys out) and the frames its diamonds sit
 /// on.
-typedef SnapKeyRow = ({String rowId, List<double> frames});
+///
+/// An `Iterable`, so a lane's frames can be read straight off its keys as the
+/// gatherer walks them: a baked camera would otherwise cost a list of
+/// thousands per property to build a list of thousands.
+typedef SnapKeyRow = ({String rowId, Iterable<double> frames});
 
 /// Everything on the Timeline a drag could land on, gathered from the read
 /// model (K-184) — so building the list costs no bridge calls.
@@ -182,10 +186,18 @@ List<SnapTarget> snapTargetsOf({
       out.add(SnapTarget(info.inFrame + start, SnapKind.editPoint));
     }
   }
+  // One target per frame, however many lanes are keyed on it. A baked import
+  // keys all seven of a camera's curves on every frame, so what a drag can land
+  // on is the two thousand frames rather than the seventeen thousand keys — and
+  // the drag walks this list on every pointer move, so seven copies of a place
+  // cost seven times what the place is worth. Nothing about where a drag lands
+  // changes: [snapFrame] keeps the *first* of two equally close targets, so a
+  // second target on a frame already in the list could never have won.
+  final seen = <double>{};
   for (final row in keyRows) {
     if (row.rowId == exceptRow) continue;
     for (final frame in row.frames) {
-      out.add(SnapTarget(frame, SnapKind.keyframe));
+      if (seen.add(frame)) out.add(SnapTarget(frame, SnapKind.keyframe));
     }
   }
   return out;
