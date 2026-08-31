@@ -184,12 +184,7 @@ pub fn evaluate(keys: &[Keyframe], t: f64) -> Option<f64> {
     if t >= last.time.to_f64() {
         return Some(last.value);
     }
-    // Find the span containing t.
-    let idx = keys
-        .windows(2)
-        .position(|w| t < w[1].time.to_f64())
-        .unwrap_or(keys.len() - 2);
-    Some(evaluate_span(keys, idx, t))
+    Some(evaluate_span(keys, span_index(keys, t), t))
 }
 
 /// The speed an automatic side takes at `keys[i]` (docs/impl/keyframe-eval.md
@@ -265,11 +260,25 @@ pub fn evaluate_speed(keys: &[Keyframe], t: f64) -> Option<f64> {
     if t <= first.time.to_f64() || t >= last.time.to_f64() {
         return Some(0.0);
     }
-    let idx = keys
-        .windows(2)
-        .position(|w| t < w[1].time.to_f64())
-        .unwrap_or(keys.len() - 2);
-    Some(evaluate_speed_span(keys, idx, t))
+    Some(evaluate_speed_span(keys, span_index(keys, t), t))
+}
+
+/// The index of the span containing `t` — the first `i` with
+/// `t < keys[i + 1].time` — by binary search, for callers that have already
+/// handled `t` at or beyond the ends.
+///
+/// In plain terms: a curve with thousands of keys (an imported camera arrives
+/// with one per frame) is sampled at least once per rendered frame per
+/// property, and walking the list from the front made every sample cost the
+/// whole list. Bisecting costs a dozen looks whatever the count, which is what
+/// keeps the impl note's bench gate (10⁶ evaluations < 20 ms) true of dense
+/// curves and not only of sparse ones.
+fn span_index(keys: &[Keyframe], t: f64) -> usize {
+    // The first key strictly past `t`; the guards in the callers put `t`
+    // strictly inside the keyed range, so `p` is in `1..keys.len()` and the
+    // span leaving `keys[p - 1]` is the one `t` sits on.
+    let p = keys.partition_point(|k| k.time.to_f64() <= t);
+    p.saturating_sub(1).min(keys.len().saturating_sub(2))
 }
 
 /// One span's slope, matching [`evaluate_span`]'s side handling: a Hold-out span
@@ -1173,6 +1182,65 @@ mod tests {
         assert!(acc.is_finite());
         // Debug-build headroom: impl note budgets 20 ms release; allow 40× debug.
         assert!(elapsed.as_millis() < 800, "1M evals took {elapsed:?}");
+    }
+
+    /// The same budget on a *dense* curve — an imported AE camera arrives with
+    /// a key per frame, thousands per property. The linear span scan this
+    /// replaced made each sample cost the whole list (~2,400 keys × 7 camera
+    /// properties per rendered frame on the real project that found it), so a
+    /// sparse-only bench held while dense curves missed the gate by orders of
+    /// magnitude. Fails in minutes rather than milliseconds without bisection.
+    #[test]
+    fn million_evaluations_stay_cheap_on_a_dense_curve() {
+        let keys: Vec<Keyframe> = (0..2_400)
+            .map(|i| key(rat(i, 25), (i % 7) as f64, SideInterp::Linear))
+            .collect();
+        let start = std::time::Instant::now();
+        let mut acc = 0.0;
+        for i in 0..1_000_000u32 {
+            acc += evaluate(&keys, f64::from(i % 2_399) / 25.0 + 0.017).unwrap_or(0.0);
+        }
+        let elapsed = start.elapsed();
+        assert!(acc.is_finite());
+        // The same 40× debug headroom as the sparse bench above.
+        assert!(elapsed.as_millis() < 800, "1M dense evals took {elapsed:?}");
+    }
+
+    /// Bisection answers exactly what the linear walk answered, spans and
+    /// speeds both — sampled between keys, exactly on interior keys, and at
+    /// both ends — on a curve dense enough that an off-by-one lands on a
+    /// different span with a different value.
+    #[test]
+    fn span_bisection_matches_the_linear_walk() {
+        let sides = [
+            SideInterp::Linear,
+            SideInterp::Hold,
+            EASY_EASE,
+            SideInterp::Bezier {
+                speed: 3.0,
+                influence: 0.25,
+            },
+        ];
+        let keys: Vec<Keyframe> = (0..500)
+            .map(|i| key(rat(i, 10), ((i * 37) % 11) as f64, sides[(i % 4) as usize]))
+            .collect();
+        let linear_idx = |t: f64| {
+            keys.windows(2)
+                .position(|w| t < w[1].time.to_f64())
+                .unwrap_or(keys.len() - 2)
+        };
+        for i in 0..4_990 {
+            for t in [f64::from(i) / 100.0, f64::from(i) / 100.0 + 0.003] {
+                if t <= keys[0].time.to_f64() || t >= keys[keys.len() - 1].time.to_f64() {
+                    continue;
+                }
+                assert_eq!(
+                    span_index(&keys, t),
+                    linear_idx(t),
+                    "span for t = {t} diverged"
+                );
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
