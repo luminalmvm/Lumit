@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `boundary_of`, `media_rate`, `press`, `read`, `read`, `roto_block_mut`, `roto_block`
+// These functions are ignored because they are not marked as `pub`: `boundary_of`, `job_of`, `media_rate`, `press`, `read`, `read`, `roto_block_mut`, `roto_block`, `stroke_of`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The Roto brush `effect` on `layer`, as its status row draws it.
@@ -67,6 +67,28 @@ Float32List rotoBoundary(
         {required UuidValue effect, required PlatformInt64 frame}) =>
     BridgeLib.instance.api
         .crateApiRotoRotoBoundary(effect: effect, frame: frame);
+
+/// Solve the scribbled frame's own matte, now — the release-time feedback a
+/// committed stroke asks for (K-723, docs/impl/roto.md §6 step 1).
+///
+/// The same job a Propagate press builds, stopped after `frame`: the walk runs
+/// from the base toward it, lends back every cached frame whose strokes did not
+/// change, and files what it solves in the ordinary sidecar — so a later
+/// Propagate resumes from it rather than repeating it. Progress lands in the
+/// same map the status row polls, which is where "Solving…" comes from while
+/// the second or so passes.
+///
+/// `true` when the job started. `false` is a **quiet** refusal — another job
+/// holding the one slot, offline media — because this is best-effort feedback
+/// on the way out of a gesture that already succeeded: the stroke is filed and
+/// visible either way, and Propagate remains the press that reports its
+/// refusals.
+bool rotoSolveFrame(
+        {required LayerReference layer,
+        required UuidValue effect,
+        required PlatformInt64 frame}) =>
+    BridgeLib.instance.api
+        .crateApiRotoRotoSolveFrame(layer: layer, effect: effect, frame: frame);
 
 /// Why a propagation produced no mattes.
 ///

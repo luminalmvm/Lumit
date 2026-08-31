@@ -14585,9 +14585,18 @@ why one number has to come back from the engine before a scribble can be stored 
 
 **Two tools, one key.** `Alt+W` arms the **Roto brush**; pressing it again steps to **Refine
 edge** and again comes back. That is the same walk every grouped tool on the strip does. With
-one of them in hand the pointer becomes a ring the size of the scribble it will leave, and the
-strip grows one setting beside it: **Size**. There is no colour to choose, because a roto
-scribble does not put colour on the picture — it makes a *claim* about the pixels it covers.
+one of them in hand the pointer is the system's own crosshair — the one the operating system
+moves at full speed however busy the application is, so aiming never lags the hand — inside a
+ring the size of the scribble it will leave, and the strip grows one setting beside it:
+**Size**. There is no colour to choose, because a roto scribble does not put colour on the
+picture — it makes a *claim* about the pixels it covers.
+
+**The first scribble is enough.** There is no set-up step: scribbling on a selected footage
+layer that has no Roto brush yet quietly brings the effect with it, and the two arrive as a
+single undo step — press undo once and both are gone, because it was one gesture. And letting
+go of that first scribble does something visible at once: the engine cuts out *that frame*
+right away — a second or so, with the card saying so — rather than waiting for Propagate,
+which remains the button that carries the cut through the rest of the shot.
 
 **Three claims.** Dragging with the Roto brush says *this is the subject*. Holding `Alt` while
 you drag says *this is not* — the background. Dragging with Refine edge says *let the edge be

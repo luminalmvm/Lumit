@@ -138,6 +138,13 @@ pub struct RotoJob {
     /// `false` asks only for a cache hit: the warm pass a project open makes,
     /// which must never start propagating a shot nobody asked about.
     pub propagate: bool,
+    /// Solve no further than this **source** frame — the release-time "show me
+    /// this frame now" a committed scribble asks for (K-723). The walk runs
+    /// toward it from the base and stops the moment it is filed; the other
+    /// direction only *copies* frames an earlier run can lend, so one frame's
+    /// feedback never turns into a propagation nobody pressed for. `None` — a
+    /// press of Propagate — walks to both ends as ever.
+    pub stop_after: Option<i64>,
 }
 
 /// How far a propagation has got. Read, never subscribed to — the interface
@@ -451,21 +458,22 @@ fn write_sidecar(dir: &Path, key: RotoKey, run: &RotoRun) {
 fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], FrameRecord> {
     let mut out = HashMap::new();
     let prefix = key.prefix();
-    let mine = key.file_name();
     let Ok(entries) = std::fs::read_dir(dir) else {
         return out;
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !name.starts_with(&prefix) || !name.ends_with(".lrot") || name == mine {
+        if !name.starts_with(&prefix) || !name.ends_with(".lrot") {
             continue;
         }
         let Ok(bytes) = std::fs::read(entry.path()) else {
             continue;
         };
-        // No key check: the point is to read a *different* run's file. What
-        // makes a frame safe to borrow is its chain hash, which already
-        // covers the settings, the base and every stroke that decides it.
+        // No key check, and the run's **own** file lends too: what makes a
+        // frame safe to borrow is its chain hash, which already covers the
+        // settings, the base and every stroke that decides it. Reading the
+        // same key's earlier file back is exactly what resuming a partial run
+        // is (K-723).
         let Some(record) = decode(&bytes, None) else {
             continue;
         };
@@ -719,13 +727,24 @@ fn run(job: RotoJob, cancel: &AtomicBool) {
     let key = job.key;
     let dir = cache_dir();
 
-    if let Some(run) = key
+    if let Some(hit) = key
         .zip(dir.as_deref())
         .and_then(|(key, d)| read_sidecar(d, key))
     {
-        publish(instance, run);
-        finish(instance, Some(Progress::Done));
-        return;
+        // A whole run answers anybody, and a partial one answers a warm pass
+        // and a stop-after ask it already reaches. A **Propagate** over a
+        // partial run falls through instead: the resume §6 promises, with the
+        // file's own frames lent back by chain hash (K-723) — a cancelled or
+        // stopped-early run used to answer `Done` here and never carry on.
+        let satisfied = match job.stop_after {
+            Some(s) => hit.chain(s).is_some(),
+            None => !hit.is_partial(),
+        };
+        if !job.propagate || satisfied {
+            publish(instance, hit);
+            finish(instance, Some(Progress::Done));
+            return;
+        }
     }
     if !job.propagate {
         // A warm pass found nothing. That is not a failure and must not look
@@ -827,13 +846,20 @@ fn propagate(
     }
     let last_index = i64::try_from(count.saturating_sub(1)).unwrap_or(i64::MAX);
     let base = base.clamp(0, last_index);
+    let stop = job.stop_after.map(|f| f.clamp(0, last_index));
 
     // The flow engine, and the one refusal only it can answer. `new_auto` opens
     // a headless device of its own; a build with no GPU flow degrades to the CPU
-    // oracle, which is exactly what this job may not use (§8).
-    let mut flow = lumit_flow::FlowEngine::new_auto();
-    if !flow.backend().starts_with("dis-gpu") {
-        return Err(RotoFailure::FlowUnavailable);
+    // oracle, which is exactly what this job may not use (§8). Not opened at all
+    // when no step could need a warp — a stop-after run ending at the base, or a
+    // one-frame clip — which is why the release-time solve of the scribbled base
+    // frame works on a machine with no GPU flow (K-723).
+    let needs_flow = count > 1 && stop != Some(base);
+    let mut flow = needs_flow.then(lumit_flow::FlowEngine::new_auto);
+    if let Some(engine) = &flow {
+        if !engine.backend().starts_with("dis-gpu") {
+            return Err(RotoFailure::FlowUnavailable);
+        }
     }
     let flow_set = flow_settings(job.settings);
 
@@ -895,6 +921,11 @@ fn propagate(
     let mut prev_f: Vec<f32> = Vec::with_capacity(n);
     let validity = vec![1u8; n];
     for direction in [1i64, -1] {
+        // A stop-after run *solves* only toward its frame. The other side is
+        // copied as far as an earlier run can lend it — those frames' chain
+        // hashes still hold, and dropping them because a scribble landed on
+        // the far side would retire mattes nothing invalidated (K-723).
+        let copy_only = stop.is_some_and(|s| (s - base).signum() != direction);
         let mut prev_plane = base_plane.clone();
         let mut prev_rgba: Option<Vec<u8>> = None;
         let mut cursor = base;
@@ -918,6 +949,9 @@ fn propagate(
                 records.push(record.clone());
                 reused += 1;
                 prev_rgba = None;
+            } else if copy_only {
+                // Nothing to lend and nothing asked for on this side.
+                break;
             } else {
                 let previous = match prev_rgba.take() {
                     Some(bytes) => bytes,
@@ -937,7 +971,13 @@ fn propagate(
                 // `a → b` is previous → next; the field a backward warp of the
                 // *next* frame needs is `b → a`, and its confidence is measured
                 // with the forward field as the reference.
-                let (fwd, bwd) = flow.flow_pair_with(&a, &b, &flow_set);
+                // Unreachable without an engine — `needs_flow` covers every
+                // path that solves — but a break is honest where a panic is
+                // not (docs/14).
+                let Some(engine) = flow.as_mut() else {
+                    break;
+                };
+                let (fwd, bwd) = engine.flow_pair_with(&a, &b, &flow_set);
                 let conf = lumit_flow::confidence(&bwd, &fwd);
                 let (u, v, conf) =
                     lumit_flow::field_to_size(&bwd, &conf, width as usize, height as usize);
@@ -991,6 +1031,11 @@ fn propagate(
                 total: count,
                 reused,
             });
+            if stop == Some(cursor) {
+                // The frame the release asked for is filed; Propagate is the
+                // road to the rest of the shot (K-723).
+                break;
+            }
         }
         if cancelled {
             break;
@@ -1096,6 +1141,7 @@ pub fn job_for(
         block,
         open: Box::new(move || MediaRgba::open(&path).map(|f| Box::new(f) as Box<dyn RotoFrames>)),
         propagate,
+        stop_after: None,
     })
 }
 

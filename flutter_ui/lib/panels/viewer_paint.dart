@@ -261,12 +261,15 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
     final tools = widget.uiState.tools;
     final box = _target;
     return Positioned.fill(
-      // Hidden, because the ring below replaces it: a system arrow inside the
-      // brush ring would read as two pointers (K-226). Through the shared
-      // region rather than a `MouseRegion` of its own, so the clone stamp's
-      // `Alt`-click cannot bring the arrow back beside the ring (K-235) — the
+      // The hardware crosshair leads (K-724): the OS moves it at input rate
+      // whatever the application's frame rate is doing, so it is the thing to
+      // aim with; the ring below is decoration — the size of the mark, drawn
+      // by the app and honestly a frame behind. Through the shared region
+      // rather than a `MouseRegion` of its own, so the clone stamp's
+      // `Alt`-click cannot swap the pointer under the ring (K-235) — the
       // fault the Zoom tool had, and this had for the same reason.
       child: DrawnPointerRegion(
+        cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() => _pointer = at),
         child: Listener(
           onPointerDown: (event) {

@@ -1,6 +1,7 @@
 # Roto brush and Refine edge: flow-propagated segmentation (K-705)
 
-**Built: RB1 (K-708, `crates/lumit-roto`), RB2 (K-710, K-713, K-714) and RB3 (K-717).**
+**Built: RB1 (K-708, `crates/lumit-roto`), RB2 (K-710, K-713, K-714) and RB3 (K-717;
+first-touch behaviour reworked by K-723).**
 [07-UI-SPEC.md](../07-UI-SPEC.md) §1 puts the Roto pair on the
 tool strip (Alt+W, armed since K-717) and §2.3.7 the tools themselves; [16-ROADMAP.md](../16-ROADMAP.md) Phase 5 lists
 rotoscoping; this note is the binding *how*: the algorithms (pinned, with their ceilings
@@ -224,14 +225,23 @@ which would be a wrong answer wearing a right one's face.
 ## 6. The correction loop, as the user meets it
 
 1. Pick the Roto brush (Alt+W), on a layer with footage. Stroke the subject on a clear
-   frame; that frame becomes the base, the matte appears on it immediately (one §2 solve
-   is interactive — tens of milliseconds).
+   frame; that frame becomes the base — **and if the layer carries no Roto brush yet, the
+   stroke brings one with it**, the two landing as one op and one undo step (K-723,
+   superseding K-717's refusal). The matte appears on that frame on release: the commit
+   fires the propagation job stopped at the scribbled frame (`RotoJob::stop_after`), the
+   card shows the solving status while the second or so passes, and the solo run is filed
+   in the ordinary sidecar so nothing is ever solved twice. A base-only solo never opens
+   the flow engine, so this first feedback works even where a full propagation would
+   refuse `FlowUnavailable`.
 2. Press **Propagate** (a `ParamKind::Action`, the machinery K-417 built). A background
    job — one at a time, `Busy` refusal, progress as a polled value, the whole §5b thread
    discipline — walks outward from the base, filing mattes. The timeline's span reading
    updates as it goes; the user can keep working.
-3. Scrub the result. Where the matte leaks or drops a limb, stroke that frame — the job
-   re-runs from the correction outward, prefix reused, and the fix carries forward.
+3. Scrub the result. Where the matte leaks or drops a limb, stroke that frame — release
+   re-solves **that frame** at once (the same stop-after job, everything between the base
+   and it copied from the cache), so the correction is judged on the spot; pressing
+   Propagate carries it onward, prefix reused. The frames the correction invalidated
+   leave the span honestly until then — passthrough, never a stale matte (K-723).
 4. **Refine edge** (the tool the strip already pairs with the brush) paints the band
    wider where the edge needs more room; the Radius and band parameters cover the
    ordinary case without any refine stroke at all.

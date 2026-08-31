@@ -33,9 +33,19 @@ void main() {
       expect(viewerCursorFor(ToolMode.razor), SystemMouseCursors.basic);
     });
 
+    /// The hardware crosshair leads for every tool that aims (K-724): the OS
+    /// moves it at input rate whatever the application's frame rate is doing,
+    /// where an app-drawn pointer at 10 fps made aiming genuinely difficult.
+    /// The overlays' own `DrawnPointerRegion`s ask for the same pointer, so
+    /// what shows over the picture is this and not a hidden one.
     test('the tools that aim at a pixel keep the crosshair', () {
       expect(viewerCursorFor(ToolMode.shapeEllipse), SystemMouseCursors.precise);
       expect(viewerCursorFor(ToolMode.pen), SystemMouseCursors.precise);
+      expect(viewerCursorFor(ToolMode.brush), SystemMouseCursors.precise);
+      expect(viewerCursorFor(ToolMode.rotoBrush), SystemMouseCursors.precise);
+      expect(viewerCursorFor(ToolMode.puppetPosition),
+          SystemMouseCursors.precise);
+      expect(viewerCursorFor(ToolMode.cameraOrbit), SystemMouseCursors.precise);
     });
   });
 

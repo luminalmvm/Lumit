@@ -221,10 +221,12 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     final target = _target;
     final space = _space;
     return Positioned.fill(
-      // The system pointer is hidden, because the drawn pointer below replaces
-      // it (K-226): the eyedropper's crosshair, badged with this tool's own
-      // icon.
+      // The hardware crosshair leads (K-724): the OS precise pointer moves at
+      // input rate whatever the application's frame rate is doing, so it is
+      // the thing to aim with. The badge beside it, drawn by the app, only
+      // says which shape.
       child: DrawnPointerRegion(
+        cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() {
           _pointer = at;
           // The Pen also draws the edge it would place next, from the last

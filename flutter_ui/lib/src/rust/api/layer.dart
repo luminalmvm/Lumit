@@ -15,6 +15,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'retime.dart';
+import 'roto.dart';
 import 'solid.dart';
 import 'state.dart';
 
@@ -2610,6 +2611,28 @@ class LayerReference {
   BridgeRevealGroups revealGroups({required BridgeRevealKind kind}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceRevealGroups(that: this, kind: kind);
+
+  /// The first scribble on a layer that carries no Roto brush: add the brush
+  /// **and** file the stroke, in one commit (K-723, superseding K-717's
+  /// refusal).
+  ///
+  /// The stroke rides *inside* the new instance, so the whole gesture is one
+  /// `SetLayerEffects` — one op, one journal entry, one undo step, exactly
+  /// what a scribble on a layer that already had the brush costs. K-717
+  /// refused this on the grounds that `add_effect` plus a stroke would be two
+  /// ops; landing the stroke in the instance before it is pushed is what
+  /// dissolves that. The stroke sets the base frame, as a first stroke always
+  /// does.
+  ///
+  /// Answers the new instance's id — what the release-time solve
+  /// ([`roto_solve_frame`]) and the overlay's next read are addressed to.
+  UuidValue rotoFirstStroke(
+          {required List<double> points,
+          required double radius,
+          required BridgeRotoStrokeKind kind,
+          required PlatformInt64 frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceRotoFirstStroke(
+          that: this, points: points, radius: radius, kind: kind, frame: frame);
 
   /// The JSON text of a **node group** gathered from `nodes` (K-651) — the
   /// mirror of `save_preset` for the graph canvas.

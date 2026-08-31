@@ -807,11 +807,16 @@ mask paths cannot be keyframed.
   the strip and says so.
 - Per-character and per-word text animators are a later feature ([TODO.md](TODO.md)).
 
-### 2.3.3 The tools' pointers (K-226)
+### 2.3.3 The tools' pointers (K-226, K-724)
 
-Every tool MUST say what it is through the pointer, and the ones no platform ships a cursor
-for are **drawn**: the system pointer is hidden over the Viewer and the tool paints its own,
-as the Rotation, Anchor point and Razor tools already do.
+Every tool MUST say what it is through the pointer. **A tool that aims at a pixel keeps the
+hardware crosshair** — the OS `precise` pointer, which the platform moves at input rate
+however slowly the application repaints (K-724: an app-drawn pointer repaints at the
+application's rate, and at 10 fps aiming with one is genuinely difficult). What the
+application draws beside it is decoration the user does not aim with: the tool's badge, the
+brush-size ring. Only the pointers no platform ships — and only for tools that drag or click
+rather than aim — are **drawn**, with the system pointer hidden, as the Rotation, Anchor
+point and Hand tools do.
 
 **Windows ships neither a grab nor a magnifier** (K-230). Flutter accepts `grab`, `grabbing`,
 `zoomIn` and `zoomOut`; the Windows embedder's table holds none of them and quietly answers
@@ -830,11 +835,11 @@ only: no tool gains a gesture on a button it did not already handle.
 
 | Tool | Pointer |
 |---|---|
-| Shape, Pen | The **crosshair** the eyedropper uses, badged with the tool's own icon down and to the right |
-| Brush, Clone stamp, Eraser | A **ring** the size of the stroke it would leave, a dot at its centre, badged with the tool's icon |
+| Shape, Pen | The system **crosshair** (`precise`), badged with the tool's own icon down and to the right |
+| Brush, Clone stamp, Eraser, Roto brush, Refine edge | The system crosshair inside a decorative **ring** the size of the stroke it would leave, badged with the tool's icon |
 | Horizontal type | The system **I-beam** |
 | Vertical type | A drawn I-beam, **turned a quarter turn** |
-| Orbit, Track, Dolly camera | The crosshair badged with the tool's icon (§2.3.5) |
+| Orbit, Track, Dolly camera; Puppet pins | The system crosshair badged with the tool's icon (§2.3.5) |
 | Rotation | A curved arrow leaning round the anchor (§2.3) |
 | Anchor point | The anchor's ring-and-cross (§2.3) |
 | Razor (Timeline) | The scissors icon, with the cut line doing the aiming (§4.4, K-235) |
@@ -966,9 +971,14 @@ subject out of a shot, one scribble at a time
   any other frame is a **correction** and leaves the base where it is.
 - One drag is **one stroke and one undo step**, committed on release through the ordinary
   whole-stack effect commit. `Escape` abandons a scribble in flight.
-- With no layer selected, with a selected layer that carries no Roto brush, or with media that
-  will not read, the tool MUST **say so** rather than swallowing the press. It MUST NOT add the
-  effect behind the user's back: that would make one gesture two undo steps.
+- **A first scribble on a layer with no Roto brush just works** (K-723, superseding K-717's
+  refusal): the brush is added with the stroke riding inside it, so the whole gesture is still
+  one op and one undo step. **Release solves the scribbled frame's own matte immediately** —
+  the same job Propagate runs, stopped at that frame, with the solving status on the effect's
+  card while the second or so passes — and Propagate stays the road to the rest of the shot.
+- With no layer selected, or with media that will not read, the tool MUST **say so** rather
+  than swallowing the press. **Refine edge** on a layer with no Roto brush says so too: a
+  refine stroke widens the band around an answer, and a bare layer has no answer to widen.
 - **The overlay** draws this frame's strokes in theme colours — the subject in the success role,
   the background in the error one, refine in the accent — at the width they were made, faded, so
   they read as what the answer was made *from* rather than as the answer.

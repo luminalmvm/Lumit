@@ -111,6 +111,7 @@ fn job(block: RotoBlock, frames: usize) -> RotoJob {
         block,
         open: Box::new(move || Some(Box::new(Disc::new(frames)) as Box<dyn RotoFrames>)),
         propagate: true,
+        stop_after: None,
     }
 }
 
@@ -326,6 +327,103 @@ fn a_cancel_keeps_the_prefix_it_finished() {
     assert!(run.matte(2).is_some(), "the finished frame was kept");
     assert!(run.matte(3).is_none(), "nothing was invented past it");
     assert!(run.is_partial());
+}
+
+/// K-723: the release-time solve of a scribbled frame. A `stop_after` at the
+/// base files exactly that frame — with no walk there is no flow pair to ask
+/// for, which is what lets the feedback work on a machine with no GPU flow —
+/// and a `stop_after` further along walks toward it and no further.
+#[test]
+fn a_stop_after_run_files_the_asked_frame_and_no_further() {
+    let _guard = serially();
+    set_test_cache_dir(None);
+
+    let mut solo = job(block_at(4), 9);
+    solo.stop_after = Some(4);
+    let (run, cancelled) = propagate(solo, &never(), &|_| {}).expect("a run");
+    assert!(!cancelled);
+    assert_eq!((run.first_frame, run.last_frame), (4, 4));
+    assert!(
+        iou(&run, 4) >= 0.95,
+        "the asked frame's matte is a real answer"
+    );
+
+    let mut toward = job(block_at(4), 9);
+    toward.stop_after = Some(6);
+    let (run, _) = propagate(toward, &never(), &|_| {}).expect("a run");
+    assert_eq!(
+        (run.first_frame, run.last_frame),
+        (4, 6),
+        "toward the asked frame and not past it, and nothing solved behind \
+         the base that no cache could lend"
+    );
+}
+
+/// K-723: a Propagate over a partial run **carries on from it** rather than
+/// reading it back as the whole answer — the resume §6 promises. The partial
+/// run here is a release-time solo; a cancelled run resumes the same way, the
+/// two being the same shape of sidecar.
+#[test]
+fn a_propagate_resumes_from_its_own_partial_run() {
+    let _guard = serially();
+    let dir = tempfile::tempdir().expect("a temp dir");
+    set_test_cache_dir(Some(dir.path().to_path_buf()));
+
+    let fingerprint = lumit_core::model::Fingerprint {
+        size: 2048,
+        head_tail_hash: "roto-resume".into(),
+        mtime_secs: 0,
+    };
+    let frames = 6;
+    let block = block_at(0);
+    let key = RotoKey::new(&fingerprint, &block, RotoSettings::default());
+    let instance = uuid::Uuid::now_v7();
+
+    // The release-time solo, through the whole job path: solved, filed in the
+    // sidecar, published as the one-frame span it honestly is.
+    let mut solo = job(block.clone(), frames);
+    solo.instance = instance;
+    solo.key = Some(key);
+    solo.stop_after = Some(0);
+    run(solo, &never());
+    let partial = propagated(instance).expect("the solo run is in the store");
+    assert_eq!((partial.first_frame, partial.last_frame), (0, 0));
+
+    // The same key lends its own file back (the `lendable` half of the
+    // resume): the base is **copied** out of it rather than solved again —
+    // counted, never timed (§5).
+    let mut counted = job(block.clone(), frames);
+    counted.key = Some(key);
+    let last = std::sync::Mutex::new(Progress::Queued);
+    let (_, _) = propagate(counted, &never(), &|p| {
+        if let Ok(mut held) = last.lock() {
+            *held = p;
+        }
+    })
+    .expect("a run");
+    let Progress::Solving { reused, .. } = last.into_inner().expect("the reporter never panicked")
+    else {
+        panic!("the run never reported progress");
+    };
+    assert_eq!(reused, 1, "the solo base was lent, not re-solved");
+
+    // The press of Propagate, through the whole job path: the same key finds
+    // the partial file and falls through instead of answering Done at it.
+    let mut full = job(block, frames);
+    full.instance = instance;
+    full.key = Some(key);
+    run(full, &never());
+    let whole = propagated(instance).expect("the resumed run replaced it");
+    assert_eq!(
+        (whole.first_frame, whole.last_frame),
+        (0, frames as i64 - 1),
+        "the partial run resumed to the whole clip instead of answering Done"
+    );
+    assert_eq!(
+        whole.matte(0).expect("the base")[..],
+        partial.matte(0).expect("the solo base")[..],
+        "the lent base is byte-identical to the one the solo filed"
+    );
 }
 
 /// §10 item 8's refusals, each produced and each named.

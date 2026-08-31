@@ -327,7 +327,10 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
     final t = ThemeScope.of(context).theme;
     final box = _target;
     return Positioned.fill(
+      // The hardware crosshair leads (K-724): a pin is driven into a pixel,
+      // and the OS pointer is the one that moves at input rate.
       child: DrawnPointerRegion(
+        cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() => _pointer = at),
         child: Listener(
           onPointerDown: (event) => _downAt = event.localPosition,

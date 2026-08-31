@@ -5478,7 +5478,7 @@ impl LayerReference {
     /// a stale staged value laid over later frames — the bug v0 had to clear the
     /// overlay at the top of `with_effects` to avoid.
     #[frb(ignore)]
-    fn with_effects(
+    pub(crate) fn with_effects(
         &self,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {

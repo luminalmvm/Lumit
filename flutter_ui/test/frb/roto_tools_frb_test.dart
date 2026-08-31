@@ -20,6 +20,7 @@ import 'package:lumit_flutter/panels/roto_display_frb.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/panels/viewer_roto.dart';
+import 'package:lumit_flutter/panels/viewer_tool_cursor.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -30,20 +31,24 @@ import 'frb_test_support.dart';
 void main() {
   setUpAll(initEngineForTests);
 
-  /// A project with one footage layer carrying an enabled Roto brush, selected.
+  /// A project with one footage layer, selected — carrying an enabled Roto
+  /// brush unless [brush] says it starts bare (the K-723 first-touch case).
   ({
     LumitState state,
     LumitUiState uiState,
     LayerReference layer,
-    UuidValue effect,
-  }) withBrush() {
+    UuidValue? effect,
+  }) withBrush({bool brush = true}) {
     final p = freshProject();
     final comp = p.state.project!.newComposition(name: 'Scene');
     final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
     comp.addFootageLayer(footage: footage, asSequence: false);
     final layer = comp.getLayers().single;
-    layer.addEffect(name: 'roto_brush');
-    final effect = layer.getEffects().single.id();
+    UuidValue? effect;
+    if (brush) {
+      layer.addEffect(name: 'roto_brush');
+      effect = layer.getEffects().single.id();
+    }
     p.uiState
       ..setSelectedComp(comp)
       ..selectedLayer.value = layer;
@@ -93,7 +98,7 @@ void main() {
       LumitState state,
       LumitUiState uiState,
       LayerReference layer,
-      UuidValue effect,
+      UuidValue? effect,
     }) w, {
     required ValueNotifier<int> frame,
     required ValueNotifier<int> nudge,
@@ -101,8 +106,10 @@ void main() {
     ToolMode tool = ToolMode.rotoBrush,
     int Function(LayerReference, int)? sourceFrameOf,
     Float32List Function(UuidValue, int)? boundaryOf,
+    bool Function(LayerReference, UuidValue, int)? solveFrameOf,
   }) async {
     w.uiState.tools.select(tool);
+    final effect = w.effect;
     await tester.pumpWidget(hostPanel(
       state: w.state,
       uiState: w.uiState,
@@ -117,13 +124,17 @@ void main() {
               state: w.state,
               uiState: w.uiState,
               boxes: [boxFor(w.layer)],
-              target: (effect: w.effect, view: view),
+              target: effect == null ? null : (effect: effect, view: view),
               viewScale: 0.5,
               playheadFrame: frame.value,
               revision: w.uiState.model.heldRevision,
               onChanged: w.uiState.model.refresh,
               sourceFrameOf: sourceFrameOf ?? (_, f) => f * 2,
               boundaryOf: boundaryOf,
+              // A stub, not the engine: there is no real file behind the
+              // layer, and what this side owes is only that the ask is made —
+              // asserted where a test cares by handing its own in.
+              solveFrameOf: solveFrameOf ?? (_, __, ___) => false,
             ),
           ],
         ),
@@ -220,10 +231,10 @@ void main() {
       addTearDown(nudge.dispose);
       await mountOverlay(tester, w, frame: frame, nudge: nudge);
 
-      expect(rotoStatus(layer: w.layer, effect: w.effect).baseFrame, isNull);
+      expect(rotoStatus(layer: w.layer, effect: w.effect!).baseFrame, isNull);
       await scribble(tester, const Offset(70, 70));
 
-      final status = rotoStatus(layer: w.layer, effect: w.effect);
+      final status = rotoStatus(layer: w.layer, effect: w.effect!);
       expect(status.baseFrame, 18, reason: 'the file\'s frame, not the comp\'s');
       expect(strokesOf(w.layer).single.frame, 18);
 
@@ -233,7 +244,7 @@ void main() {
       nudge.value++;
       await tester.pumpAndSettle();
       await scribble(tester, const Offset(90, 120));
-      expect(rotoStatus(layer: w.layer, effect: w.effect).baseFrame, 18);
+      expect(rotoStatus(layer: w.layer, effect: w.effect!).baseFrame, 18);
       expect(strokesOf(w.layer).last.frame, 80);
     });
 
@@ -312,6 +323,109 @@ void main() {
       expect(w.state.notice.value, isNotNull);
       expect(w.state.notice.value!.message.trim(), isNotEmpty);
     });
+
+    /// K-723, superseding K-717's refusal: a first scribble on a layer with no
+    /// Roto brush adds the brush **and** files the stroke — one op, one undo
+    /// step — because the stroke rides inside the new instance. This failed
+    /// before the fix: the gesture was refused with a notice, which the owner
+    /// judged to read as the tool being broken.
+    testWidgets('a first scribble on a bare layer is brush and stroke, '
+        'one undo step', (tester) async {
+      final w = withBrush(brush: false);
+      final frame = ValueNotifier(0);
+      final nudge = ValueNotifier(0);
+      addTearDown(frame.dispose);
+      addTearDown(nudge.dispose);
+      final solved = <(UuidValue, int)>[];
+      await mountOverlay(tester, w,
+          frame: frame,
+          nudge: nudge,
+          solveFrameOf: (_, effect, at) {
+            solved.add((effect, at));
+            return false;
+          });
+
+      expect(w.layer.getEffects(), isEmpty);
+      await scribble(tester, const Offset(100, 80));
+
+      final effects = w.layer.getEffects();
+      expect(effects, hasLength(1), reason: 'the scribble brought the brush');
+      final strokes = effects.single.rotoStrokes();
+      expect(strokes, hasLength(1), reason: 'and the stroke rode inside it');
+      expect(strokes.single.kind, BridgeRotoStrokeKind.foreground);
+      final effect = effects.single.id();
+      expect(rotoStatus(layer: w.layer, effect: effect).baseFrame, 0,
+          reason: 'the first stroke set the base');
+      expect(w.state.notice.value, isNull, reason: 'nothing was refused');
+      expect(solved, [(effect, 0)],
+          reason: 'and release asked for that frame\'s own solve');
+
+      w.state.project!.undo();
+      expect(w.layer.getEffects(), isEmpty,
+          reason: 'one undo takes brush and stroke together: one gesture, '
+              'one step');
+    });
+
+    /// The refine tool keeps K-717's sentence: a refine stroke widens the band
+    /// around an answer, and a bare layer has no answer to widen — bringing a
+    /// brush with it would claim a subject nobody has named.
+    testWidgets('a refine stroke on a bare layer still says so',
+        (tester) async {
+      final w = withBrush(brush: false);
+      final frame = ValueNotifier(0);
+      final nudge = ValueNotifier(0);
+      addTearDown(frame.dispose);
+      addTearDown(nudge.dispose);
+      await mountOverlay(tester, w,
+          frame: frame, nudge: nudge, tool: ToolMode.refineEdge);
+
+      await scribble(tester, const Offset(80, 80));
+      expect(w.layer.getEffects(), isEmpty);
+      expect(w.state.notice.value, isNotNull);
+    });
+
+    /// K-723's second half: committing a stroke asks the engine to solve that
+    /// one frame's matte now, through the same job Propagate runs — asserted
+    /// through the seam, with the **source** frame the stroke was filed
+    /// against (the handed-in mapping doubles the composition frame).
+    testWidgets('release asks for the scribbled frame\'s own solve',
+        (tester) async {
+      final w = withBrush();
+      final frame = ValueNotifier(9);
+      final nudge = ValueNotifier(0);
+      addTearDown(frame.dispose);
+      addTearDown(nudge.dispose);
+      final solved = <(UuidValue, int)>[];
+      await mountOverlay(tester, w,
+          frame: frame,
+          nudge: nudge,
+          solveFrameOf: (_, effect, at) {
+            solved.add((effect, at));
+            return false;
+          });
+
+      await scribble(tester, const Offset(70, 70));
+      expect(solved, [(w.effect!, 18)],
+          reason: 'the ask names the brush and the file\'s frame, not the '
+              'composition\'s');
+    });
+
+    /// K-724: the hardware crosshair leads. The overlay asks the platform for
+    /// the precise pointer instead of hiding it, so aiming happens at input
+    /// rate however slowly the application is repainting.
+    testWidgets('the overlay wears the system precise pointer',
+        (tester) async {
+      final w = withBrush();
+      final frame = ValueNotifier(0);
+      final nudge = ValueNotifier(0);
+      addTearDown(frame.dispose);
+      addTearDown(nudge.dispose);
+      await mountOverlay(tester, w, frame: frame, nudge: nudge);
+
+      final region = tester.widget<DrawnPointerRegion>(
+          find.byType(DrawnPointerRegion));
+      expect(region.cursor, SystemMouseCursors.precise);
+    });
   });
 
   group('The Roto brush status row (frb)', () {
@@ -341,7 +455,7 @@ void main() {
         LumitState state,
         LumitUiState uiState,
         LayerReference layer,
-        UuidValue effect,
+        UuidValue? effect,
       }) w,
       BridgeRotoStatus reading,
     ) async {
@@ -351,7 +465,7 @@ void main() {
         size: const Size(340, 200),
         child: RotoDisplayFrb(
           layer: w.layer,
-          effectId: w.effect,
+          effectId: w.effect!,
           playheadFrame: 0,
           onChanged: () {},
           pressed: 0,

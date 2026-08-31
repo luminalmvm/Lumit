@@ -820,14 +820,16 @@ MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
       // (K-226) because no platform ships a sideways beam.
       ToolMode.typeHorizontal => SystemMouseCursors.text,
       ToolMode.typeVertical => SystemMouseCursors.none,
-      // The tools that draw and the tools that paint wear a *drawn* pointer —
-      // the eyedropper's crosshair, or a brush ring, badged with the tool's own
-      // icon (K-226). Their own overlay hides the system pointer and paints it;
-      // this is the fallback underneath, and the nearest system pointer to it.
+      // The tools that aim at a pixel keep the hardware crosshair (K-724): the
+      // OS moves it at input rate whatever the application's frame rate is
+      // doing, and their overlays ask for the same pointer, adding only
+      // decoration beside it — the badge, the brush ring.
       _ => tool.group == ToolGroup.shape ||
               tool.group == ToolGroup.pen ||
               tool.group == ToolGroup.paint ||
-              tool.group == ToolGroup.roto
+              tool.group == ToolGroup.roto ||
+              tool.group == ToolGroup.puppet ||
+              tool.group == ToolGroup.camera
           ? SystemMouseCursors.precise
           : SystemMouseCursors.basic,
     };

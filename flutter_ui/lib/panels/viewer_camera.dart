@@ -419,9 +419,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     return Positioned.fill(
-      // The system pointer is hidden, because the drawn pointer below replaces
-      // it (K-226).
+      // The hardware crosshair leads (K-724); the badge beside it, drawn by
+      // the app, only says which camera move.
       child: DrawnPointerRegion(
+        cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() => _pointer = at),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,

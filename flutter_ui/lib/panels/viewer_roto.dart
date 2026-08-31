@@ -29,7 +29,17 @@
 // **One drag is one stroke is one undo step.** The scribble is drawn on the
 // overlay while the pointer is down and committed once on release, through the
 // ordinary whole-stack effect commit. `Escape` abandons a scribble in flight.
+// A first scribble on a layer with no Roto brush **brings the brush with it**
+// (K-723, superseding K-717's refusal): the stroke rides inside the new
+// instance, so effect and stroke land as one op and one undo step.
+//
+// **Release shows the frame it touched.** Committing a stroke asks the engine
+// to solve that one frame's matte now — the same job Propagate runs, stopped
+// at the scribbled frame — and a small poll waits for it to land so the
+// picture refreshes the moment it does. Propagate stays the road to the rest
+// of the shot.
 
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' show PointMode;
 
@@ -47,6 +57,7 @@ import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
+import 'status_poller.dart' show statusPoll;
 import 'viewer_paint.dart' show strokePaint, strokePath, thinStroke;
 import 'viewer_tool_cursor.dart';
 
@@ -131,6 +142,13 @@ class ViewerRotoLayer extends StatefulWidget {
   final int Function(LayerReference layer, int frame)? sourceFrameOf;
   final Float32List Function(UuidValue effect, int frame)? boundaryOf;
 
+  /// Where the release-time solve of the scribbled frame is asked for
+  /// (K-723). Null is the engine; a test hands one in — solving a real frame
+  /// needs a real file and a minute of machinery, and what this side owes is
+  /// only that the ask is made, with the right frame, on release.
+  final bool Function(LayerReference layer, UuidValue effect, int frame)?
+      solveFrameOf;
+
   const ViewerRotoLayer({
     super.key,
     required this.active,
@@ -146,6 +164,7 @@ class ViewerRotoLayer extends StatefulWidget {
     required this.onChanged,
     this.sourceFrameOf,
     this.boundaryOf,
+    this.solveFrameOf,
   });
 
   @override
@@ -180,6 +199,9 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   VoidCallback? _escapeRelease;
 
+  /// The poll waiting for a release-time solve to land, or null.
+  Timer? _solveTimer;
+
   @override
   void initState() {
     super.initState();
@@ -195,6 +217,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
 
   @override
   void dispose() {
+    _solveTimer?.cancel();
     _escapeRelease?.call();
     _escapeRelease = null;
     super.dispose();
@@ -229,7 +252,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     );
     if (_asked == next) return;
     _asked = next;
-    if (box == null || brush == null) {
+    if (box == null) {
       if (_strokes.isNotEmpty || _boundary.isNotEmpty || _sourceFrame != null) {
         setState(() {
           _strokes = const [];
@@ -243,19 +266,25 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     var strokes = const <BridgeRotoStroke>[];
     var boundary = Float32List(0);
     try {
+      // Asked whether or not the layer carries a brush yet: the first scribble
+      // on a bare layer is the one that *adds* it (K-723), and it needs the
+      // file's frame as much as any correction does.
       frame = (widget.sourceFrameOf ?? _sourceFrameFromEngine)(
           box.layer, widget.playheadFrame);
-      strokes = box.layer
-              .getEffects()
-              .where((e) => e.id() == brush.effect)
-              .firstOrNull
-              ?.rotoStrokes() ??
-          const [];
-      // Only in the Boundary view: the edge is a scan of the whole matte, and
-      // running it for a picture nobody is showing would be work for nothing.
-      if (brush.view == rotoViewBoundary) {
-        boundary = (widget.boundaryOf ?? _boundaryFromEngine)(
-            brush.effect, frame);
+      if (brush != null) {
+        strokes = box.layer
+                .getEffects()
+                .where((e) => e.id() == brush.effect)
+                .firstOrNull
+                ?.rotoStrokes() ??
+            const [];
+        // Only in the Boundary view: the edge is a scan of the whole matte,
+        // and running it for a picture nobody is showing would be work for
+        // nothing.
+        if (brush.view == rotoViewBoundary) {
+          boundary = (widget.boundaryOf ?? _boundaryFromEngine)(
+              brush.effect, frame);
+        }
       }
     } catch (_) {
       // The layer went away under the overlay, or its media will not probe.
@@ -276,9 +305,12 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     final box = _target;
     final alt = HardwareKeyboard.instance.isAltPressed;
     return Positioned.fill(
-      // Hidden, because the ring below replaces it: a system arrow inside the
-      // scribble ring would read as two pointers (K-226).
+      // The hardware crosshair leads (K-724): the OS moves it at input rate
+      // whatever the application's frame rate is doing, so it is the thing to
+      // aim with. The ring below is decoration — the size of the claim, drawn
+      // by the app and honestly a frame behind.
       child: DrawnPointerRegion(
+        cursor: SystemMouseCursors.precise,
         onPointer: (at) => setState(() => _pointer = at),
         child: Listener(
           onPointerDown: (event) => _downAt = event.localPosition,
@@ -370,20 +402,20 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
       widget.state.postNotice(l10n.rotoSelectALayer);
       return;
     }
-    final brush = widget.target;
-    if (brush == null) {
-      // No Roto brush on the layer, so there is nothing a scribble could be an
-      // edit *to*. Said plainly rather than adding the effect behind the user's
-      // back, which would make one gesture two undo steps.
-      widget.state.postNotice(l10n.rotoAddTheEffect);
-      return;
-    }
     final frame = _sourceFrame;
     if (frame == null) {
       // The engine could not say which frame of the file is on screen: the
       // layer is not footage, or its media will not probe. A stroke filed
       // against a guess would seed a frame nobody looked at.
       widget.state.postNotice(l10n.rotoNoSourceFrame);
+      return;
+    }
+    final brush = widget.target;
+    if (brush == null && widget.tool == ToolMode.refineEdge) {
+      // A refine stroke widens the band around an answer, and a layer with no
+      // Roto brush has no answer to widen — said plainly. The brush itself is
+      // different: its first scribble below brings the effect with it (K-723).
+      widget.state.postNotice(l10n.rotoAddTheEffect);
       return;
     }
     // **The conversion.** Screen → the layer's own pixels through the whole
@@ -400,27 +432,89 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
     if (points.isEmpty) return;
     final kind = rotoKindFor(widget.tool,
         alt: HardwareKeyboard.instance.isAltPressed);
+    // In source pixels, as the points are: the width of the claim has to be
+    // in the same ruler as where the claim was made.
+    final radius = widget.uiState.tools.rotoSize / 2;
     try {
-      final staged = box.layer.getEffects();
-      final instance =
-          staged.where((e) => e.id() == brush.effect).firstOrNull;
-      if (instance == null) return;
-      instance.rotoAddStroke(
-        points: Float32List.fromList(points),
-        // In source pixels, as the points are: the width of the claim has to be
-        // in the same ruler as where the claim was made.
-        radius: widget.uiState.tools.rotoSize / 2,
-        kind: kind,
-        frame: frame,
-      );
-      box.layer.setEffects(effects: staged);
+      final UuidValue effect;
+      if (brush == null) {
+        // First scribble on a bare layer: the Roto brush and the stroke land
+        // in one commit — one op, one undo step — instead of K-717's refusal,
+        // which read as the tool doing nothing (K-723).
+        effect = box.layer.rotoFirstStroke(
+          points: Float32List.fromList(points),
+          radius: radius,
+          kind: kind,
+          frame: frame,
+        );
+      } else {
+        final staged = box.layer.getEffects();
+        final instance =
+            staged.where((e) => e.id() == brush.effect).firstOrNull;
+        if (instance == null) return;
+        instance.rotoAddStroke(
+          points: Float32List.fromList(points),
+          radius: radius,
+          kind: kind,
+          frame: frame,
+        );
+        box.layer.setEffects(effects: staged);
+        effect = brush.effect;
+      }
       // The strokes moved, so the held copy is stale; the document's revision
       // has moved too, which is what re-reads it.
       widget.onChanged();
+      _solveNow(box.layer, effect, frame);
     } catch (_) {
       // The layer or the effect went away mid-scribble, or the stroke had
       // nothing in it after thinning. Neither is worth a dialogue.
     }
+  }
+
+  /// Ask for the scribbled frame's own matte, now (K-723, docs/impl/roto.md
+  /// §6 step 1) — the same job Propagate runs, stopped at this frame.
+  ///
+  /// Best-effort on the way out of a gesture that already succeeded: a quiet
+  /// `false` (another job holding the slot, offline media) leaves the stroke
+  /// filed and visible, with Propagate as the press that reports refusals.
+  void _solveNow(LayerReference layer, UuidValue effect, int frame) {
+    final bool started;
+    try {
+      started = (widget.solveFrameOf ?? _solveFrameFromEngine)(
+          layer, effect, frame);
+    } catch (_) {
+      return;
+    }
+    if (started) _watchSolve(layer, effect);
+  }
+
+  /// Wait for the release-time solve to land, then tell the Viewer.
+  ///
+  /// The same twice-a-second sampling the status cards do ([statusPoll]), for
+  /// the same reason (K-430): a job landing moves neither the playhead nor the
+  /// document's revision, so the picture would stay the one banked before it
+  /// unless somebody who knows says so. The effect card says so too when it is
+  /// open — but a scribble must not need a panel open to show its result.
+  void _watchSolve(LayerReference layer, UuidValue effect) {
+    _solveTimer?.cancel();
+    _solveTimer = Timer.periodic(statusPoll, (timer) {
+      final BridgeRotoStatus s;
+      try {
+        s = rotoStatus(layer: layer, effect: effect);
+      } catch (_) {
+        // The layer or the effect went away under the poll.
+        timer.cancel();
+        return;
+      }
+      final moving = s.stage == BridgeRotoStage.queued ||
+          s.stage == BridgeRotoStage.solving;
+      if (moving) return;
+      timer.cancel();
+      if (!mounted) return;
+      widget.uiState.solveLanded.value++;
+      widget.uiState.requestFrame();
+      widget.onChanged();
+    });
   }
 }
 
@@ -430,6 +524,9 @@ int _sourceFrameFromEngine(LayerReference layer, int frame) =>
 
 Float32List _boundaryFromEngine(UuidValue effect, int frame) =>
     rotoBoundary(effect: effect, frame: frame);
+
+bool _solveFrameFromEngine(LayerReference layer, UuidValue effect, int frame) =>
+    rotoSolveFrame(layer: layer, effect: effect, frame: frame);
 
 /// The scribble under the pointer, on its own layer so a drag does not redraw
 /// the edge underneath it.

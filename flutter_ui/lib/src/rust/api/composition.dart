@@ -19,7 +19,7 @@ import 'project_item.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit_slide`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `layer_switch_op`, `place_footage`, `project`, `read_groups`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -1303,6 +1303,30 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSettings(
           that: this, settings: settings);
 
+  /// Set one switch on **every given layer**, as one undo step (K-720) —
+  /// what a switch cell clicked on a multi-selection commits (K-523). Every
+  /// layer takes the same `on`, the clicked row's new state, so a column of
+  /// mixed eyes comes out even; a layer already there contributes no op, and
+  /// a batch with nothing to do commits nothing at all.
+  ///
+  /// `clicked` names the row the click landed on, and it alone keeps its
+  /// refusal rules: a locked *sibling* (or, for the adjustment switch, a
+  /// sibling with no picture to set aside) silently drops out of the batch —
+  /// exactly what the old one-call-per-layer loop's `try`/`catch` did — but
+  /// the clicked row's own refusal is the whole call's, and nothing commits.
+  void setSwitchOnLayers(
+          {required UuidValue clicked,
+          required List<UuidValue> layers,
+          required BridgeLayerSwitch switch_,
+          required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetSwitchOnLayers(
+              that: this,
+              clicked: clicked,
+              layers: layers,
+              switch_: switch_,
+              on_: on_);
+
   /// Set what the Viewer looks *through*, whole: `stops` of exposure and
   /// whether the tone map is engaged (K-314, docs/07 §2.2 items 12-13), and
   /// whether the comp's background colour is left out of the composite so
@@ -1365,6 +1389,23 @@ class CompositionReference {
   void shiftGroup({required UuidValue group, required PlatformInt64 delta}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceShiftGroup(
           that: this, group: group, delta: delta);
+
+  /// Slide the given layers along the timeline by `delta` frames, as one
+  /// `Op::Batch` (K-720) — what releasing a move drag on a multi-selection's
+  /// bar commits. The same arithmetic and the same wall as a group's
+  /// combined bar ([`Self::shift_group`], whose road this is): each layer's
+  /// in point, out point and start offset travel together, and a drag that
+  /// would carry the earliest in point before comp zero is clamped so the
+  /// set stops at the wall with its shape intact.
+  ///
+  /// The batch is all-or-nothing, so a locked layer in the list refuses the
+  /// whole slide; the Timeline hands over the unlocked share of the
+  /// selection, which is how a locked sibling sits still while the rest
+  /// move.
+  void slideLayers(
+          {required List<UuidValue> layerIds, required PlatformInt64 delta}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceSlideLayers(
+          that: this, layerIds: layerIds, delta: delta);
 
   /// Start writing this composition to `path`.
   ///
@@ -1459,6 +1500,15 @@ class CompositionReference {
   /// what it was; only the band goes.
   void ungroup({required UuidValue group}) => BridgeLib.instance.api
       .crateApiCompositionCompositionReferenceUngroup(that: this, group: group);
+
+  /// Take away **every group the given layers touch**, as one undo step
+  /// (K-720) — what Ctrl+Shift+G on a multi-selection commits. Answers
+  /// whether anything went; one undo restores every band in its old slot,
+  /// because [`lumit_core::Op::UngroupLayers`]'s inverse carries it.
+  bool ungroupSelection({required List<UuidValue> layerIds}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceUngroupSelection(
+              that: this, layerIds: layerIds);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

@@ -1,22 +1,25 @@
 // The drawn pointers the drawing and painting tools wear over the picture
-// (K-226, docs/07 §2.3.3).
+// (K-226, K-724, docs/07 §2.3.3).
 //
 // **In plain terms.** A tool should say what it is without you looking away
 // from the picture, and no operating system ships a "rectangle tool" pointer.
-// So the tools that draw wear the same crosshair the eyedropper does — the
-// pointer that means *this exact pixel* — with the tool's own icon tucked just
-// down and to the right of it, the way After Effects badges its pointers. The
-// crosshair is where the shape starts; the badge only says which shape.
+// So the tools that aim at a pixel keep the **hardware crosshair** — the OS
+// `precise` pointer, which moves at input rate however slowly the application
+// is repainting (K-724) — with the tool's own icon tucked just down and to the
+// right of it, the way After Effects badges its pointers. The crosshair is
+// where the shape starts; the badge only says which shape.
 //
-// **The painting tools are different, and rightly.** A brush is not a point,
-// it is a *width*, so its pointer is a circle the size of the stroke it would
-// leave — the one thing a painter needs to see before pressing. The badge under
-// it says brush, clone stamp or eraser.
+// **The painting tools add a ring.** A brush is not only a point, it is a
+// *width*, so a circle the size of the stroke it would leave rides along with
+// the crosshair. The ring is decoration: drawn by the app, it is honestly a
+// frame behind the pointer, and the crosshair in its middle is what the
+// painter aims with.
 //
-// **Why they are drawn and not chosen.** A system cursor is a small fixed
-// picture from a list the platform ships, and none of these are on it. Drawing
-// them means hiding the system pointer over the picture and painting our own —
-// the same thing the Rotation, Anchor point and Razor tools already do.
+// **What is still drawn outright.** A system cursor is a small fixed picture
+// from a list the platform ships, and the hand, the magnifier and the sideways
+// I-beam are not on it (K-230). Those tools hide the system pointer and paint
+// their own — they drag and click rather than aim at a pixel, so a pointer a
+// frame behind costs them nothing.
 //
 // Everything here is a widget, not a canvas: the icons are the application's
 // own [lumitIcon] set, and drawing one on a canvas would mean a second copy of
@@ -206,9 +209,6 @@ void paintAnchorMark(Canvas canvas, Offset at, Color colour,
 const Offset toolBadgeOffset = Offset(7, 7);
 const double toolBadgeSize = 13;
 
-/// How long each arm of the drawn crosshair is, in screen pixels.
-const double toolCrosshairReach = 8;
-
 /// The smallest and largest a brush ring is drawn at, whatever the width says.
 ///
 /// A one-pixel brush would otherwise have an invisible pointer, and a very wide
@@ -216,8 +216,11 @@ const double toolCrosshairReach = 8;
 const double minBrushRingRadius = 3;
 const double maxBrushRingRadius = 200;
 
-/// The drawn pointer for a tool that draws: a crosshair, or a brush ring, with
-/// the tool's icon badged beside it.
+/// The decoration a tool that aims wears beside the hardware crosshair
+/// (K-724): the tool's icon badged down and to the right, and — for the
+/// painting tools — the brush ring. The OS `precise` pointer does the aiming;
+/// nothing here is a point to aim with, which is why it may honestly lag a
+/// frame behind.
 ///
 /// [at] is in the same coordinates as the layer this is placed in — panel-local
 /// for every caller here. A null [at] draws nothing, which is what a pointer
@@ -304,22 +307,14 @@ class _ToolPointerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Only the ring; the point itself is the hardware crosshair's (K-724). A
+    // drawn crosshair or a centre dot here would sit a frame behind the real
+    // pointer and read as two pointers — the very thing K-226 hid the arrow
+    // to avoid.
     final radius = ringRadius;
-    if (radius != null) {
-      paintTwoPassStroke(
-          outline, mark, (paint) => canvas.drawCircle(at, radius, paint));
-      // A dot at the centre: a wide ring alone leaves the actual point of the
-      // brush unmarked, and a stroke starts at a point.
-      canvas.drawCircle(at, 1, Paint()..color = mark);
-      return;
-    }
-
-    paintTwoPassStroke(outline, mark, (paint) {
-      canvas.drawLine(at - const Offset(toolCrosshairReach, 0),
-          at + const Offset(toolCrosshairReach, 0), paint);
-      canvas.drawLine(at - const Offset(0, toolCrosshairReach),
-          at + const Offset(0, toolCrosshairReach), paint);
-    });
+    if (radius == null) return;
+    paintTwoPassStroke(
+        outline, mark, (paint) => canvas.drawCircle(at, radius, paint));
   }
 
   @override

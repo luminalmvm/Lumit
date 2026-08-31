@@ -64,6 +64,82 @@ impl BridgeRotoStrokeKind {
     }
 }
 
+/// One validated stroke from the wire's flat form. An odd-length `points`, a
+/// stroke with none, a non-finite coordinate or a non-positive radius is
+/// refused rather than stored: a stroke nobody can stamp is a stroke that
+/// would silently do nothing.
+fn stroke_of(
+    points: &[f32],
+    radius: f32,
+    kind: BridgeRotoStrokeKind,
+    frame: i64,
+) -> Result<RotoStroke, BridgeError> {
+    if points.is_empty()
+        || !points.len().is_multiple_of(2)
+        || !points.iter().all(|v| v.is_finite())
+    {
+        return Err(BridgeError::InvalidParam);
+    }
+    if !radius.is_finite() || radius <= 0.0 {
+        return Err(BridgeError::InvalidParam);
+    }
+    Ok(RotoStroke {
+        id: Uuid::now_v7(),
+        points: points.chunks_exact(2).map(|p| (p[0], p[1])).collect(),
+        radius,
+        kind: kind.read(),
+        frame,
+    })
+}
+
+impl LayerReference {
+    /// The first scribble on a layer that carries no Roto brush: add the brush
+    /// **and** file the stroke, in one commit (K-723, superseding K-717's
+    /// refusal).
+    ///
+    /// The stroke rides *inside* the new instance, so the whole gesture is one
+    /// `SetLayerEffects` — one op, one journal entry, one undo step, exactly
+    /// what a scribble on a layer that already had the brush costs. K-717
+    /// refused this on the grounds that `add_effect` plus a stroke would be two
+    /// ops; landing the stroke in the instance before it is pushed is what
+    /// dissolves that. The stroke sets the base frame, as a first stroke always
+    /// does.
+    ///
+    /// Answers the new instance's id — what the release-time solve
+    /// ([`roto_solve_frame`]) and the overlay's next read are addressed to.
+    #[frb(sync)]
+    pub fn roto_first_stroke(
+        &self,
+        points: Vec<f32>,
+        radius: f32,
+        kind: BridgeRotoStrokeKind,
+        frame: i64,
+    ) -> Result<Uuid, BridgeError> {
+        let stroke = stroke_of(&points, radius, kind, frame)?;
+        let comp = self.composition()?;
+        // Exactly what `add_effect` builds, minus its driver fork — the Roto
+        // brush is an image op — so the instance a scribble adds and the one
+        // the menu adds cannot drift apart.
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            ROTO_BRUSH,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        instance.roto = Some(RotoBlock {
+            base_frame: Some(frame),
+            strokes: vec![stroke],
+        });
+        let id = instance.id;
+        self.with_effects(move |effects| {
+            effects.push(instance);
+            Ok(())
+        })?;
+        Ok(id)
+    }
+}
+
 impl BridgeEffectInstance {
     /// Add one stroke to this Roto brush, on the **staged** copy (K-713).
     ///
@@ -92,21 +168,10 @@ impl BridgeEffectInstance {
         if self.effect.effect.match_name != ROTO_BRUSH {
             return Err(BridgeError::InvalidEffect);
         }
-        if points.is_empty() || points.len() % 2 != 0 || !points.iter().all(|v| v.is_finite()) {
-            return Err(BridgeError::InvalidParam);
-        }
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err(BridgeError::InvalidParam);
-        }
+        let stroke = stroke_of(&points, radius, kind, frame)?;
         let block = self.roto_block_mut();
         block.base_frame.get_or_insert(frame);
-        block.strokes.push(RotoStroke {
-            id: Uuid::now_v7(),
-            points: points.chunks_exact(2).map(|p| (p[0], p[1])).collect(),
-            radius,
-            kind: kind.read(),
-            frame,
-        });
+        block.strokes.push(stroke);
         Ok(())
     }
 
@@ -511,6 +576,20 @@ fn boundary_of(width: u32, height: u32, gray: &[u8]) -> Vec<f32> {
 // The buttons, down
 // ---------------------------------------------------------------------------
 
+/// The propagation job one Roto brush on one footage layer describes — the
+/// shared front half of a Propagate press and of the release-time solve.
+fn job_of(
+    layer: &LayerReference,
+    fx: &lumit_core::model::EffectInstance,
+) -> Result<lumit_render::roto::RotoJob, BridgeError> {
+    let media = match layer.item()?.kind {
+        LayerKind::Footage { item } => item,
+        _ => return Err(BridgeError::NotFootage),
+    };
+    let (path, fingerprint) = crate::api::track::media_source(layer, media)?;
+    lumit_render::roto::job_for(fx, path, &fingerprint, true).ok_or(BridgeError::NotFootage)
+}
+
 /// Press **Propagate** or **Cancel** on a Roto brush.
 ///
 /// Reached through [`crate::api::track::fire_effect_action`], which is the one
@@ -527,27 +606,56 @@ pub(crate) fn press(
             lumit_render::roto::cancel(fx.id);
             Ok(())
         }
-        PROPAGATE => {
-            let media = match layer.item()?.kind {
-                LayerKind::Footage { item } => item,
-                _ => return Err(BridgeError::NotFootage),
-            };
-            let (path, fingerprint) = crate::api::track::media_source(layer, media)?;
-            let job = lumit_render::roto::job_for(fx, path, &fingerprint, true);
-            let job = job.ok_or(BridgeError::NotFootage)?;
-            match lumit_render::roto::request(job) {
-                lumit_render::roto::Requested::Started => Ok(()),
-                // Every refusal has a name and the status row reads it back;
-                // what the *press* owes the caller is only that it did not
-                // start, which is one error rather than seven.
-                lumit_render::roto::Requested::Refused(e) => {
-                    lumit_render::roto::note_refusal(fx.id, e);
-                    Err(BridgeError::AnalysisBusy)
-                }
+        PROPAGATE => match lumit_render::roto::request(job_of(layer, fx)?) {
+            lumit_render::roto::Requested::Started => Ok(()),
+            // Every refusal has a name and the status row reads it back;
+            // what the *press* owes the caller is only that it did not
+            // start, which is one error rather than seven.
+            lumit_render::roto::Requested::Refused(e) => {
+                lumit_render::roto::note_refusal(fx.id, e);
+                Err(BridgeError::AnalysisBusy)
             }
-        }
+        },
         _ => Err(BridgeError::InvalidParam),
     }
+}
+
+/// Solve the scribbled frame's own matte, now — the release-time feedback a
+/// committed stroke asks for (K-723, docs/impl/roto.md §6 step 1).
+///
+/// The same job a Propagate press builds, stopped after `frame`: the walk runs
+/// from the base toward it, lends back every cached frame whose strokes did not
+/// change, and files what it solves in the ordinary sidecar — so a later
+/// Propagate resumes from it rather than repeating it. Progress lands in the
+/// same map the status row polls, which is where "Solving…" comes from while
+/// the second or so passes.
+///
+/// `true` when the job started. `false` is a **quiet** refusal — another job
+/// holding the one slot, offline media — because this is best-effort feedback
+/// on the way out of a gesture that already succeeded: the stroke is filed and
+/// visible either way, and Propagate remains the press that reports its
+/// refusals.
+#[frb(sync)]
+pub fn roto_solve_frame(
+    layer: LayerReference,
+    effect: Uuid,
+    frame: i64,
+) -> Result<bool, BridgeError> {
+    let item = layer.item()?;
+    let fx = item
+        .effects
+        .iter()
+        .find(|e| e.id == effect)
+        .ok_or(BridgeError::InvalidEffect)?;
+    if fx.effect.match_name != ROTO_BRUSH {
+        return Err(BridgeError::InvalidEffect);
+    }
+    let mut job = job_of(&layer, fx)?;
+    job.stop_after = Some(frame);
+    Ok(matches!(
+        lumit_render::roto::request(job),
+        lumit_render::roto::Requested::Started
+    ))
 }
 
 #[cfg(test)]

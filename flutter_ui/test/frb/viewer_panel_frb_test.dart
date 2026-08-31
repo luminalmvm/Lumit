@@ -37,6 +37,8 @@ import 'package:lumit_flutter/panels/viewer_overlays.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_paint.dart';
 import 'package:lumit_flutter/panels/viewer_rulers.dart';
+import 'package:lumit_flutter/panels/viewer_tool_cursor.dart'
+    show DrawnPointerRegion;
 import 'package:lumit_flutter/panels/viewer_zoom.dart';
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -2881,6 +2883,18 @@ void main() {
       await mount(tester, p);
 
       expect(find.byType(ViewerPaintLayer), findsOneWidget);
+      // K-724: the hardware crosshair leads — the overlay asks the platform
+      // for the precise pointer instead of hiding it, so aiming happens at
+      // input rate however slowly the application is repainting. The ring is
+      // decoration.
+      expect(
+        tester
+            .widget<DrawnPointerRegion>(find.descendant(
+                of: find.byType(ViewerPaintLayer),
+                matching: find.byType(DrawnPointerRegion)))
+            .cursor,
+        SystemMouseCursors.precise,
+      );
       expect(p.layer.getPaint(), isEmpty);
 
       final fitted = fittedRect(tester, p.comp);
