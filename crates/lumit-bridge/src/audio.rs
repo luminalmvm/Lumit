@@ -210,10 +210,7 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
                 for effect in &c.effects {
                     let name = effect.effect.match_name.as_str();
-                    if let Some(id) = name
-                        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
-                        .or_else(|| name.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX))
-                    {
+                    if let Some(id) = lumit_core::fx::audio_plugin_id(name) {
                         disabled.contains(id).hash(&mut h);
                     }
                 }

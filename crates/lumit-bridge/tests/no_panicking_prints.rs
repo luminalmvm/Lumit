@@ -14,15 +14,17 @@
 //! gate: it reads the shipping half of every engine source file and fails on a
 //! standard print macro, so the fix cannot quietly come undone.
 //!
-//! Two crates are exempt by design, and both are command-line programs run
-//! from a terminal rather than code loaded into the editor: `lumit-bench`,
-//! whose printed report *is* its output, and `lumit-ofx-broker`, whose three
-//! lines are usage and fatal-error text on its way out.
+//! Three crates are exempt by design, and all are command-line programs run
+//! outside the editor process: `lumit-bench`, whose printed report *is* its
+//! output, and the two brokers — `lumit-ofx-broker` and `lumit-aplug-broker`
+//! — whose few lines are usage and fatal-error text on their way out. A
+//! broker dying is already its designed failure mode (one dry block and a
+//! badge, K-696), so a print that panics costs nothing a fatal exit did not.
 
 use std::path::{Path, PathBuf};
 
 /// Crates whose console output is the product, not a diagnostic.
-const EXEMPT_CRATES: [&str; 2] = ["lumit-bench", "lumit-ofx-broker"];
+const EXEMPT_CRATES: [&str; 3] = ["lumit-bench", "lumit-ofx-broker", "lumit-aplug-broker"];
 
 /// The macros that panic on a failed write.
 const BANNED: [&str; 4] = ["println!(", "eprintln!(", "print!(", "eprint!("];
