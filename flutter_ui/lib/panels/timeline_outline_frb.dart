@@ -175,12 +175,12 @@ class _GroupSeam extends StatefulWidget {
 /// one hairline moving a pixel. Sixty of those a second is sixty rebuilds of
 /// the panel a second.
 ///
-/// So the gesture holds its own total and draws its own answer — a line where
-/// the seam would land, which is the only thing that moves under the pointer —
-/// and the panel hears about it once, when the hand lets go. That is the rule
-/// every other drag in this panel already follows: a bar stages in
-/// [BarDragPreview], a key in `_KeyLaneState`, a work-area edge in the ruler's
-/// own `_dragFrame`.
+/// So the gesture holds its own total, publishes it for the outline half alone
+/// to draw at (T4's live width — clamped and snapped, so the seam stands where
+/// the release will land it), and the panel's stored width hears about it
+/// once, when the hand lets go. That is the rule every other drag in this
+/// panel already follows: a bar stages in [BarDragPreview], a key in
+/// `_KeyLaneState`, a work-area edge in the ruler's own `_dragFrame`.
 class _GroupSeamState extends State<_GroupSeam> {
   /// How far the seam has been dragged since the button went down, or null
   /// when no drag is in flight.
@@ -227,9 +227,18 @@ class _GroupSeamState extends State<_GroupSeam> {
             // Where the seam will land, drawn only while the hand is on it.
             // `accent` because this *is* the one thing being aimed at, and it
             // is gone the moment the button lifts.
+            //
+            // **On the seam itself, not offset by the drag** (owner,
+            // 2026-08-31: "the ghost divisor line was moving faster than the
+            // mouse"). The live resize (T4) already re-lays the header out at
+            // the width the release will commit — clamped and snapped by
+            // [snapGroupWidth] — so this very seam is standing where the drag
+            // will land it. The line used to add the raw travel on top of
+            // that, which drew it at twice the pointer's speed and past the
+            // width the release would refuse.
             if (staged != null)
               Positioned(
-                left: groupDividerWidth / 2 + staged,
+                left: groupDividerWidth / 2 - 0.5,
                 top: 0,
                 bottom: 0,
                 child: IgnorePointer(

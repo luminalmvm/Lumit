@@ -7370,6 +7370,57 @@ void main() {
           reason: 'the travel landed once, not twice');
     });
 
+    /// **The preview line rides the seam, 1:1 with the pointer, and stops at
+    /// the clamp** (owner, 2026-08-31: the ghost "was moving faster than the
+    /// mouse in either direction" and ran past the smallest and largest widths).
+    /// The live resize already re-lays the header out at the clamped, snapped
+    /// width the release will commit, so the seam itself is the landing place —
+    /// the line used to add the raw travel on top of that, doubling its speed.
+    testWidgets('the seam preview tracks the pointer and stops at the clamp',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final seam = find.byKey(const ValueKey('tl-seam-identity'));
+      final preview = find.byKey(const ValueKey('tl-seam-preview'));
+      final before = tester.getRect(seam);
+
+      final gesture = await tester.startGesture(before.center);
+      await tester.pump(const Duration(milliseconds: 100));
+      // Clear of the shipped width's snap notch, then read the pair.
+      for (var i = 0; i < 4; i++) {
+        await gesture.moveBy(const Offset(-10, 0));
+        await tester.pump();
+      }
+      expect(tester.getRect(seam).center.dx, closeTo(before.center.dx - 40, 1),
+          reason: 'the seam follows the pointer 1:1');
+      expect(tester.getRect(preview).center.dx,
+          closeTo(tester.getRect(seam).center.dx, 1),
+          reason: 'and the preview line stands on the seam, not ahead of it');
+
+      // Far past the identity group's minimum: the seam and its preview both
+      // stop where the release would, and the pointer carries on alone.
+      await gesture.moveBy(const Offset(-500, 0));
+      await tester.pump();
+      final min = minGroupWidth(TimelineGroup.identity);
+      final defaultWidth = defaultGroupWidths[TimelineGroup.identity]!;
+      expect(tester.getRect(seam).center.dx,
+          closeTo(before.center.dx - (defaultWidth - min), 1),
+          reason: 'the seam is clamped at the narrowest the column can be');
+      expect(tester.getRect(preview).center.dx,
+          closeTo(tester.getRect(seam).center.dx, 1),
+          reason: 'and the preview never promises a width the release '
+              'would refuse');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(seam).center.dx,
+          closeTo(before.center.dx - (defaultWidth - min), 1),
+          reason: 'the release lands exactly where the preview stood');
+    });
+
     /// **`Ctrl+C` then `Ctrl+V` round-trips a block of keys — in Layers.**
     /// The chord goes through the shell's own copy/paste, which hands it to
     /// whichever panel has claimed it (K-300).
