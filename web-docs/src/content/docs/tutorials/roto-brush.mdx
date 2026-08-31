@@ -6,19 +6,19 @@ sidebar:
 ---
 
 The [Roto brush](/effects/utility/roto-brush/) cuts a moving subject out of a shot
-from a few scribbles, one frame at a time only where the automatic answer goes wrong.
+from a few scribbles.
 
 ## 1. Stroke the base frame
 
 1. Add a **Roto brush** effect to the footage layer.
 2. Pick the **Roto brush** tool (`Alt+W`). **Size** on the options bar sets the
    scribble's width.
-3. Scrub to a clear frame — one where the subject separates well. It does not have to
-   be the first frame.
-4. Drag through the subject. The stroke draws green, and the matte appears as soon as
-   you release.
+3. Scrub to a frame where the subject separates well. It does not have to be the first
+   frame.
+4. Drag through the subject. The stroke draws green, and the matte appears when you
+   release.
 5. Where the matte grabs too much, hold `Alt` and drag through the background — a red
-   stroke, claiming "not the subject".
+   stroke.
 
 The frame you stroked first becomes the **base frame**; the effect's card shows it,
 and **Set to current frame** moves it. If you draw no background stroke, the frame's
@@ -30,28 +30,24 @@ Set **View** on the card to **Boundary** to see the edge drawn over the picture,
 ## 2. Propagate
 
 Press **Propagate** on the effect's card. The matte is carried outward from the base
-frame in both directions, following the shot's motion, as a background job — roughly a
-second per 1080p frame, and you can keep working while it runs. The card shows how far
-the span reaches; **Cancel** keeps the frames already solved.
+frame in both directions as a background job, and you can keep working while it runs.
+The card shows how far the span reaches; **Cancel** keeps the frames already solved.
 
 ## 3. Correct a frame
 
 Scrub the result. Where the matte leaks or drops a limb:
 
 1. Scribble **across** the wrong region — foreground where it lost the subject, `Alt`
-   where it grabbed background. A dab beside the leak is not enough; cover it.
-2. Propagate again. Only the frames from the correction outward are re-solved; the
-   rest are reused, so a fix late in the shot is quick.
+   where it grabbed background.
+2. Propagate again. Only the frames from the correction outward are re-solved.
 
-Corrections carry forward, away from the base frame. A leak between the subject and a
-same-coloured wall may creep back after a few frames — stroke it again where it does.
+Corrections carry forward, away from the base frame.
 
 ## 4. Refine the edge
 
-**Refine radius** on the card sets how wide the softened band round the edge is, and
-covers most footage. Where one spot needs more — hair, motion blur, smoke — pick the
-**Refine edge** tool (with the Roto brush on the strip) and paint over it; the band
-widens exactly where you painted.
+**Refine radius** on the card sets how wide the softened band round the edge is. Where
+one spot needs more, pick the **Refine edge** tool (with the Roto brush on the strip) and
+paint over it; the band widens where you painted.
 
 ## Related
 

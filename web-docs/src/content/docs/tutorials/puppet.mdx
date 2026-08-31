@@ -5,26 +5,26 @@ sidebar:
   order: 4
 ---
 
-Puppet bends a layer without cutting it apart: a mesh is laid over everything the
-layer draws, pins hold or move spots of it, and the picture bends between them.
+Puppet bends a layer without cutting it apart: a mesh is laid over the layer, pins hold
+or move spots of it, and the picture bends between them.
 
 ## 1. Place pins
 
-1. Select the layer — a cutout character on its own layer works best.
+1. Select the layer.
 2. Pick the **Puppet position pin** tool (`Ctrl+P`). A wireframe appears over the
    layer: the mesh, cut to the picture's opaque shape.
-3. Click to drive a pin in. Put one on each part that should hold still — hips,
-   shoulders — and one on each part that will move.
+3. Click to place a pin. Put one on each part that should hold still, and one on each
+   part that will move.
 
-A click outside the mesh, or on a layer with nothing opaque, is refused with a line in
-the status area. **Density** and **Expansion** on the options bar set how fine the
-mesh is and how far past the edge it reaches; the defaults are fine to start.
+A click outside the mesh, or on a layer with nothing opaque, is refused. **Density** and
+**Expansion** on the options bar set how fine the mesh is and how far past the edge it
+reaches.
 
 ## 2. Drag
 
 Drag a pin. The wireframe follows the pointer, and the picture takes the deformation
-when you release. Everything between the pins bends rather than stretches — an arm
-bends at the elbow instead of smearing — and the pins you left alone hold their spots.
+when you release. Everything between the pins bends rather than stretches, and the pins
+you left alone hold their spots.
 
 One drag is one undo step; `Escape` abandons a drag in flight.
 
@@ -36,21 +36,18 @@ number under each pin. Animate a pin like any other property:
 1. Turn on the stopwatch on the pin's position.
 2. Move the playhead, drag the pin, repeat.
 
-The keyframes take the same interpolation, easing and graph editing as everything
-else. Rename a pin inline on its row; delete it from the row's right-click menu.
+The keyframes take the same interpolation, easing and graph editing as everything else.
+Rename a pin on its row; delete it from the row's right-click menu.
 
 ## 4. Starch, overlap and bend
 
 The other three pin tools share the strip slot with the first:
 
-- **Starch pin**: stiffens the region round it, so a torso stays rigid while the limbs
-  bend. **Amount** sets how strongly; the pin row's value column sets how far it
-  reaches.
-- **Overlap pin**: says which part draws in front when the picture folds over itself —
-  a hand crossing the body passes in front rather than tearing.
-- **Bend pin**: with the bend tool, dragging around the pin turns the region about it,
-  and `Alt`-dragging resizes it — a hand waving from the wrist, without the wrist
-  travelling. Both numbers keyframe like the rest.
+- **Starch pin**: stiffens the region round it. **Amount** sets how strongly; the pin
+  row's value column sets how far it reaches.
+- **Overlap pin**: says which part draws in front when the picture folds over itself.
+- **Bend pin**: dragging around the pin turns the region about it, and `Alt`-dragging
+  resizes it. Both numbers keyframe like the rest.
 
 ## Related
 
