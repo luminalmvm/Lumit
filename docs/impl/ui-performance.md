@@ -962,6 +962,63 @@ package that reopens it, in the order evidence would be gathered:
   term at all (live and empty rasters within 1 ms on stock, this project's saved
   layout) — re-measure it before building anything else on it.
 
+**The partial-repaint spike, measured on Lumit itself (2026-08-31).** The §7.1
+prototype's 62.5 → 1.85 ms was a smoke app — a heavy static scene and one small
+animating widget. Run on Lumit in the owner's conditions (the spike
+`flutter_windows.dll` swapped under the identical built app with
+`LUMIT_PARTIAL_REPAINT=1`, stock restored after; the §6 probe, two runs each way, the
+same day; playback and idle read off the VM-service timeline's raster events since the
+probe has no playback gesture), the factor of 34 does not transfer, because the win
+exists only where a frame's damage is small — and the rasterizer hands the embedder
+**one bounding rect**, so any gesture whose changes sit in opposite corners of the
+window is a full repaint with extra steps. Medians over the two runs of each
+(fps / raster med / span p90):
+
+| Gesture | Stock | Partial repaint |
+|---|---|---|
+| Idle, 3 s | 0 frames scheduled | 0 frames scheduled |
+| Playhead drag, fresh | 34.8–35.2 / 25.3–25.6 / 53.6–53.7 | **50.3–54.2 / 14.8–16.0 / 35.4–42.5** |
+| Graph mode, playhead drag | 33.1–36.2 / 25.0–26.4 / 51.4–60.1 | **49.1–50.7 / 15.7 / 51.8–53.4** |
+| Playhead drag, measuring off | 30.1–36.4 / 24.6–29.8 / 52.0–67.5 | **48.8–50.3 / 15.6–16.0 / 50.9–52.6** |
+| Playhead drag, revisited | 28.1–28.7 / 32.0–32.1 / 72.4–72.7 | 25.6–27.8 / 34.1–36.4 / 82.1–82.2 |
+| Zoom fly | 34.7–37.0 / 24.6–26.5 / 50.8–55.3 | 31.7–32.7 / 27.4–28.7 / 63.1–66.4 |
+| Work-area drag | 34.5–36.5 / 25.0–26.9 / 55.2–59.2 | 33.9–34.1 / 27.4–27.5 / 59.8–64.1 |
+| Scroll lanes | 11.0–11.6 / 29.2–30.8 | 11.1 / 29.6–31.4 |
+| **Playback** (space, preview live) | ~5 texture frames/s, raster 37.0–38.7 | ~4.4–5.0/s, raster **39.9–45.1** |
+
+Reading it: the scrub — the one gesture whose typical frame moves only the playhead
+column and the readouts — drops from ~25 ms of raster to ~15 and from 35 to ~50 fps,
+with the occasional 60 ms frame where a fresh render lands (the always-dirty Viewer
+texture joins the damage). Everything else is unmoved or ~2–5 ms **worse**, which is
+the single-sample store the flag forces (measured above) plus a damage rect that
+reaches window size: a zoom or scroll dirties the whole band, and **playback — the case
+the feature exists for — pays full price**, because each texture update unions the
+Viewer rect with the moving playhead and the time readouts, and that bounding rect *is*
+the window. Idle was already zero frames on stock; there was nothing to save. **The
+60 fps mandate is not met**: the best gesture reaches ~50 fps, the rest sit where stock
+sits.
+
+Correctness, driven by hand on the patched build (and now verifiable at the
+framebuffer: `PrintWindow` with `PW_RENDERFULLCONTENT` returns the real presented
+pixels on this machine, where `toImage` re-rasterises the layer tree and cannot see
+repaint bugs): a menu opened over the canvas during live playback, a modal dialog with
+its scrim, and a window restore/re-maximise cycle all healed to the pixel; theme
+consistent throughout; Viewer content correct during playback and paused jumps; a
+2.5-minute playback soak ran clean; the Event Log shows no fault from any of the four
+runs (the day's one `0xc0000005` was the Debug runner at 08:45, before them, at its
+own offset). One observation to re-test before trusting: a paused jump to ~35 s sat
+on the empty checkerboard for over 6 s in the patched session where stock filled
+within 6 s under a near-matched history — but the same patched session filled a 25 s
+jump within 2 s and played that region correctly, so it reads as engine render
+scheduling, not the repaint path.
+
+What the spike still owes before it can be judged further: a `host_release` build
+(all numbers above are `host_profile`); **per-layer damage regions** — splitting the
+one bounding rect, or letting the compositor scissor the always-dirty texture layer
+separately, is precisely the lever the playback row says is missing; and the risks
+its own report names untested — platform views, a second view or window, DPI and
+monitor changes, the process-global continuity flag, the light theme.
+
 Until one of those moves, WP-2..WP-6 stand on their own: they are the frames Lumit is
 responsible for, and each is measured against the backend that ships.
 
