@@ -3,15 +3,16 @@
 //! # In plain terms
 //!
 //! This is a very small program whose whole job is to be expendable. Lumit
-//! starts one of these per `.clap` module, hands it the module and a pipe, and
-//! never loads the plugin itself. Everything the plugin does — being started,
+//! starts one of these per plugin module — a `.clap` file or a `.vst3` bundle,
+//! and one binary serves both — hands it the module and a pipe, and never loads
+//! the plugin itself. Everything the plugin does — being started,
 //! describing itself, playing sound — happens here.
 //!
 //! When it crashes, one block of sound is lost and Lumit starts another one.
 //! The layer plays that block **dry** and carries a calm badge. That is the
 //! entire design (docs/12 §1, docs/impl/audio-plugins.md §5).
 //!
-//! It reads two arguments — the `.clap` file and the pipe name — and speaks the
+//! It reads two arguments — the module and the pipe name — and speaks the
 //! protocol in `lumit_aplug::ipc::proto`. Its first word is a version number,
 //! because two programs that disagree about the shape of a message must find out
 //! before one of them acts on the other's bytes.
@@ -22,8 +23,8 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::Arc;
 
+use lumit_aplug::abi::AnyModule;
 use lumit_aplug::def::{AudioHost, InstanceSetup, LocalHost};
 use lumit_aplug::describe::describe_module_except;
 use lumit_aplug::ipc::handles::{Handle, Registry, KIND_INSTANCE};
@@ -32,7 +33,6 @@ use lumit_aplug::ipc::proto::{
     Bring, BrokerMessage, HostMessage, InstanceId, Slot, PROTOCOL_VERSION,
 };
 use lumit_aplug::ipc::ring::Ring;
-use lumit_aplug::module::Module;
 use lumit_aplug::process::{ParamEvent, INTERLEAVED_LEN};
 
 /// The protocol version this broker announces. Normally [`PROTOCOL_VERSION`];
@@ -44,7 +44,7 @@ const PROTOCOL_ENV: &str = "LUMIT_APLUG_BROKER_PROTOCOL";
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let (Some(module), Some(pipe_name)) = (args.next(), args.next()) else {
-        eprintln!("usage: lumit-aplug-broker <module.clap> <pipe name>");
+        eprintln!("usage: lumit-aplug-broker <module.clap|module.vst3> <pipe name>");
         return ExitCode::FAILURE;
     };
     let Some(pipe_name) = pipe_name.to_str().map(str::to_owned) else {
@@ -72,8 +72,9 @@ fn run(module_path: PathBuf, pipe_name: &str) -> Result<(), String> {
         .unwrap_or(PROTOCOL_VERSION);
     say(&mut sender, &BrokerMessage::Hello { version })?;
 
-    // The module is **not** opened yet. Opening it runs `clap_entry.init`, which
-    // is third-party code, and a host that has only just said hello has not yet
+    // The module is **not** opened yet. Opening it runs a `clap_entry.init` or
+    // an `InitDll`, which is third-party code either way, and a host that has
+    // only just said hello has not yet
     // told us which plugins the user switched off. It opens on the first
     // question that needs it, which is the describe that carries that list.
     let mut session = Session {
@@ -97,7 +98,7 @@ fn say(sender: &mut SendHalf, message: &BrokerMessage) -> Result<(), String> {
 /// The broker's whole state. One module, one pipe, one ring.
 struct Session {
     module_path: PathBuf,
-    module: Option<Arc<Module>>,
+    module: Option<AnyModule>,
     receiver: RecvHalf,
     sender: SendHalf,
     ring: Option<Ring>,
@@ -155,9 +156,13 @@ impl Session {
     }
 
     /// The module, opening it if this is the first question that needs it.
-    fn module(&mut self) -> Option<Arc<Module>> {
+    ///
+    /// Which standard it speaks is read off the file's own name (`AnyModule`),
+    /// so **one broker binary serves both** — the pipe, the ring, the handle
+    /// registry and the watchdog are the same code either way (K-707).
+    fn module(&mut self) -> Option<AnyModule> {
         if self.module.is_none() {
-            self.module = Module::open(&self.module_path).ok().map(Arc::new);
+            self.module = AnyModule::open(&self.module_path).ok();
         }
         self.module.clone()
     }
@@ -194,7 +199,7 @@ impl Session {
             params: bring.params,
             offline: bring.offline,
         };
-        match LocalHost::open(module, &setup) {
+        match LocalHost::open(&module, &setup) {
             Ok(host) => {
                 let latency = host.latency();
                 let warning = host.warning().map(str::to_owned);

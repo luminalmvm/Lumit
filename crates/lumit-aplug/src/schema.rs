@@ -15,16 +15,19 @@
 //! # The mapping decisions, written down once
 //!
 //! * **The row id is the plugin's own parameter id, spelled `p<number>`.**
-//!   CLAP's stable key is a `u32`, not a name — plugins rename knobs across
+//!   Both standards' stable key is a `u32`, not a name — plugins rename knobs across
 //!   versions and reorder them freely, and §4 is explicit that the id is the
 //!   key and the index never is. So `p1234` is what the project file stores
 //!   and what an expression addresses. It is not pretty. The alternative —
 //!   deriving the id from the name — is a saved project silently losing a
 //!   keyframed value the first time a vendor rewords a label, which is worse
 //!   than ugly.
-//! * **Every CLAP parameter is one row.** There are no vectors in CLAP: a knob
-//!   is a `double` between a minimum and a maximum, so nothing spreads into
-//!   `_x`/`_y` the way an OFX 2-D parameter does.
+//! * **Every parameter is one row.** Neither standard has vectors: a knob is a
+//!   `double` between a minimum and a maximum, so nothing spreads into `_x`/`_y`
+//!   the way an OFX 2-D parameter does. VST3's own values are normalised nought
+//!   to one, but the range this sees is the **plain** one the controller
+//!   converts to, because a plain number is what a person reads and keyframes
+//!   (docs/impl/audio-plugins.md §4).
 //! * **A closed range is a [`ParamKind::Slider`].** CLAP's minimum and maximum
 //!   are the only legal values a parameter has, which is exactly what a Slider
 //!   declares — a Float would offer a box to type a number the plugin will
@@ -58,10 +61,21 @@ use lumit_core::fx::{
 
 use crate::describe::{ParamDescription, PluginDescriptor, Rejection};
 
-/// The catalogue name prefix an audio plugin's effect answers to — spelled
+/// The catalogue name prefix a **CLAP** plugin's effect answers to — spelled
 /// once, in the engine, so the crate that mints the name and the walks that
-/// read it cannot drift (K-700).
+/// read it cannot drift (K-700). VST3's is beside it and
+/// [`Abi::prefix`](crate::abi::Abi::prefix) chooses between them (K-707).
 pub const MATCH_PREFIX: &str = lumit_core::fx::CLAP_MATCH_PREFIX;
+
+/// The name one described plugin's effect answers to: its standard's prefix and
+/// its own identifier.
+///
+/// One function, so the scan that offers the effect and the schema that declares
+/// it cannot spell the same name two ways.
+#[must_use]
+pub fn match_name(plugin: &PluginDescriptor) -> String {
+    format!("{}{}", plugin.abi.prefix(), plugin.id)
+}
 
 /// The schema row id one CLAP parameter mints.
 ///
@@ -148,7 +162,7 @@ pub fn schema_of(plugin: &PluginDescriptor) -> Result<EffectSchema, Rejection> {
     let params: &'static [ParamSchema] = leak_slice(rows);
 
     Ok(EffectSchema {
-        match_name: leak(&format!("{MATCH_PREFIX}{}", plugin.id)),
+        match_name: leak(&match_name(plugin)),
         label: leak(&plugin.label),
         version: major_of(&plugin.version),
         // None of Lumit's own categories is a claim about somebody else's

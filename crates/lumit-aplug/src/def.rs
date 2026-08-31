@@ -9,9 +9,9 @@
 //! * [`AudioEffectDef`] is the catalogue entry — one value implementing the
 //!   same [`EffectDef`] trait every built-in implements (K-593), so nothing
 //!   downstream can tell an EQ plugin from a Gaussian blur except by what it
-//!   does. **Both plugin standards collapse into this one type**: when VST3
-//!   arrives (AP4) it mints the same declaration and nothing after describe
-//!   changes.
+//!   does. **Both plugin standards collapse into this one type**: VST3 mints
+//!   the same declaration as CLAP, and nothing after describe changed to let it
+//!   (K-707).
 //! * [`AudioHost`] is where the sound goes. One method per thing the chain
 //!   worker needs — a block, the latency, the blob to save — and two
 //!   implementations behind it: [`LocalHost`], which loads the plugin into this
@@ -22,13 +22,14 @@
 //! # Why the lock is not a lock across FFI
 //!
 //! [`LocalHost`] keeps its instance behind a mutex because a `&self` method has
-//! to reach a plugin that CLAP insists is single-threaded. That mutex is held
+//! to reach a plugin that both standards insist is single-threaded. That mutex is held
 //! across a call into somebody else's code, which docs/14 §7 forbids **where
 //! the plugin can call back and want the same lock**. It cannot: the only host
 //! functions a CLAP plugin can reach from inside `process` are the three
 //! request flags, and those are atomics
-//! ([`HostFlags`](crate::instance::HostFlags)) that take nothing. The host
-//! offers no extensions at all in v1, so there is no second door.
+//! ([`HostFlags`](crate::instance::HostFlags)) that take nothing; VST3's
+//! component handler is the same shape, one atomic flag. The host offers no
+//! extensions at all in v1, so there is no second door.
 //!
 //! It is also uncontended by construction — one instance is processed by one
 //! chain worker, and parallelism is across layers
@@ -41,11 +42,11 @@ use std::time::Duration;
 use lumit_core::fx::{AudioProcessor, EffectDef, EffectSchema, ParamId};
 use serde::{Deserialize, Serialize};
 
+use crate::abi::{AnyInstance, AnyModule};
 use crate::describe::PluginDescriptor;
-use crate::instance::{HostError, Instance};
+use crate::instance::HostError;
 use crate::ipc::broker::{Broker, BrokerError};
 use crate::ipc::proto::{Bring, InstanceId};
-use crate::module::Module;
 use crate::process::{Block, ParamEvent, INTERLEAVED_LEN};
 use crate::schema::{value_routes, ValueRoute};
 
@@ -118,7 +119,7 @@ pub trait AudioHost: Send + Sync {
     fn save(&self) -> Result<Vec<u8>, HostError>;
 }
 
-/// A plugin loaded into **this** process.
+/// A plugin loaded into **this** process, of either standard.
 ///
 /// For tests, and for anything Lumit itself ships. The shipping arrangement for
 /// third-party code is the broker (AP2): a plugin that dies must cost one block
@@ -131,7 +132,7 @@ pub struct LocalHost {
 
 /// The plugin and its scratch, together because a block needs both.
 struct Running {
-    instance: Instance,
+    instance: AnyInstance,
     block: Block,
 }
 
@@ -145,8 +146,8 @@ impl LocalHost {
     /// parameters at all is not an error: it degrades to a
     /// [`LocalHost::warning`] and the plugin still plays, which is CLAP's whole
     /// design and docs/12 §1's rule about losing nothing.
-    pub fn open(module: Arc<Module>, setup: &InstanceSetup) -> Result<Self, HostError> {
-        let mut instance = Instance::create(module, &setup.plugin_id)?;
+    pub fn open(module: &AnyModule, setup: &InstanceSetup) -> Result<Self, HostError> {
+        let mut instance = module.create(&setup.plugin_id)?;
         let mut warning = None;
 
         if let Some(bytes) = &setup.state {
@@ -203,13 +204,7 @@ impl LocalHost {
     /// on it by re-activating and re-placing.
     #[must_use]
     pub fn wants_restart(&self) -> bool {
-        self.with(|running| {
-            running
-                .instance
-                .host_flags()
-                .restart
-                .load(std::sync::atomic::Ordering::Relaxed)
-        })
+        self.with(|running| running.instance.wants_restart())
     }
 
     /// Run `body` with the instance in hand.
@@ -229,8 +224,9 @@ impl AudioHost for LocalHost {
     ) -> Result<(), HostError> {
         self.with(|running| {
             running.block.load(input);
-            running.block.set_events(events);
-            running.instance.process(&mut running.block, steady)?;
+            running
+                .instance
+                .process(&mut running.block, events, steady)?;
             running.block.store(output);
             Ok(())
         })
@@ -301,7 +297,8 @@ impl<'a> BlockJob<'a> {
 /// A plugin hosted **in a broker process** — the shipping arrangement
 /// (docs/12 §1, docs/impl/audio-plugins.md §5).
 ///
-/// One broker per `.clap` module, shared by every plugin in it and by every
+/// One broker per module — a `.clap` file or a `.vst3` bundle — shared by every
+/// plugin in it and by every
 /// instance of every plugin in it, behind one lock: a module holding forty
 /// effects gets one process, not forty (K-592). The lock is short and
 /// uncontended by construction — one instance is driven by one chain worker,
@@ -436,9 +433,8 @@ impl Drop for BrokerHost {
 
 /// An audio plugin, as an entry in the effect catalogue (K-593).
 ///
-/// One type for both standards: CLAP fills it today, VST3 fills the same one in
-/// AP4, and nothing downstream of describe knows which standard a plugin
-/// speaks.
+/// One type for both standards, and since K-707 both really do fill it: nothing
+/// downstream of describe knows which standard a plugin speaks.
 pub struct AudioEffectDef {
     schema: &'static EffectSchema,
     routes: Vec<ValueRoute>,
@@ -488,9 +484,11 @@ impl AudioEffectDef {
         &self.routes
     }
 
-    /// The plugin parameter one schema row addresses.
+    /// The plugin parameter one schema row addresses. A CLAP parameter id or a
+    /// VST3 `ParamID` — the same `u32` either way, which is why one route table
+    /// serves both (K-707).
     #[must_use]
-    pub fn clap_id(&self, row: ParamId) -> Option<u32> {
+    pub fn plugin_param(&self, row: ParamId) -> Option<u32> {
         self.routes
             .iter()
             .find(|route| route.id == row)
@@ -503,7 +501,7 @@ impl AudioEffectDef {
         &self.defaults
     }
 
-    /// The `.clap` file this came out of.
+    /// The `.clap` file or `.vst3` bundle this came out of.
     #[must_use]
     pub fn module(&self) -> &Path {
         &self.module
@@ -520,7 +518,7 @@ impl AudioEffectDef {
     pub fn setup(&self, state: Option<Vec<u8>>, values: &[(ParamId, f64)]) -> InstanceSetup {
         let mut params = self.defaults.clone();
         for (row, value) in values {
-            if let Some(id) = self.clap_id(*row) {
+            if let Some(id) = self.plugin_param(*row) {
                 if let Some(slot) = params.iter_mut().find(|(known, _)| *known == id) {
                     slot.1 = *value;
                 } else {
@@ -580,8 +578,8 @@ impl EffectDef for AudioEffectDef {
 /// The whole of the translation is the parameter ids: the engine addresses a
 /// row by its [`ParamId`] hash and the plugin by its own stable `u32`, and
 /// [`ValueRoute`] is the map between them, worked out once at describe. Both
-/// standards land here — VST3's front end in AP4 fills the same routes from its
-/// own `ParamID`s and nothing below this line changes.
+/// standards land here — VST3's front end fills the same routes from its own
+/// `ParamID`s, and nothing below this line changed to let it (K-707).
 pub struct HostedAudio {
     host: Box<dyn AudioHost>,
     routes: Vec<ValueRoute>,

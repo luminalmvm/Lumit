@@ -10829,6 +10829,33 @@ fn an_unknown_effect_is_a_badged_placeholder_and_never_an_error() {
         "the instance is kept exactly as it was, so saving cannot lose it"
     );
 
+    // An audio plugin is the same story whichever standard minted the name:
+    // both prefixes land in one namespace, and a machine without the plugin
+    // badges it as missing rather than as an effect from the future (K-707).
+    for name in [
+        "clap:com.nobody.notinstalled",
+        "vst3:0123456789abcdef0123456789abcdef",
+    ] {
+        let absent = crate::api::effect::read_instance_info(
+            &instance(EffectNamespace::Clap, name),
+            lumit_core::time::Rational::ZERO,
+        );
+        assert_eq!(
+            absent.badge_reason.as_deref(),
+            Some("plugin_missing"),
+            "{name} is a plugin this machine has not got"
+        );
+        assert_eq!(
+            absent.name, name,
+            "and the instance is kept exactly as it was"
+        );
+        assert_eq!(
+            lumit_core::fx::instantiate(name),
+            None,
+            "a name nothing answers to instantiates nothing, rather than              borrowing some other effect's declaration"
+        );
+    }
+
     let stranger = crate::api::effect::read_instance_info(
         &instance(EffectNamespace::Placeholder, "from_a_newer_lumit"),
         lumit_core::time::Rational::ZERO,

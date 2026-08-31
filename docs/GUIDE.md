@@ -14214,3 +14214,67 @@ report says so rather than drawing them wrong.
 
 The details — the exact order, which kernel serves which style, what an import
 keeps — are pinned in `docs/impl/layer-styles.md`.
+
+## 53. The other plugin standard, and why it cost so little to add, in plain terms
+
+Sections 43 to 49 describe Lumit learning to run somebody else's audio plugins. All of it
+was written against **CLAP**, the newer and simpler of the two standards, on purpose: the
+point of doing the easy one first was to build the road, not the destination. This section
+is about the destination arriving — Lumit now runs **VST3** plugins too — and about why
+that turned out to be a small change rather than a second version of everything.
+
+### Two standards, one road
+
+A VST3 plugin is a folder rather than a file, its knobs are described by a *second* object
+sitting beside the one that makes the sound, and its values travel as a number between
+nought and one rather than the number a person actually reads. Those are real differences
+and they all had to be handled. But they are all differences in the **first ten seconds** of
+a plugin's life — finding it, opening it, asking what it is.
+
+Everything after that was already written and none of it changed: the plugin is described
+into ordinary Lumit properties, so its Threshold keyframes exactly as a blur's Radius does;
+it runs in the same separate program (section 44) so that its crash costs one short piece of
+sound and not your session; it is fed through the same shared block of memory with the same
+deadline and the same three-strikes rule; it sits in the same place in the mix, ahead of the
+fader (section 49); and it saves its settings into the project as the same opaque lump of
+bytes nobody reads.
+
+The place where the two standards stop being two is a small file called `abi`. It holds an
+either-or: *either* a CLAP plugin *or* a VST3 one, with the same fourteen questions asked of
+both. Which one you have got is decided by the file's own name, once, and never asked again.
+
+### The three awkward bits, and what was done about each
+
+**A plugin in two halves.** VST3 splits a plugin into a part that processes sound and a part
+that owns the knobs, and they can be two separate objects. When Lumit reloads a project it
+has to hand the saved settings to *both* of them; giving it to only one is the classic bug
+where the knobs say one thing and the sound does another. So Lumit stores the two halves'
+memories as one lump — a length, then one, then the other — and always unpacks it into both.
+
+**Numbers that change shape at the door.** A VST3 plugin wants nought-to-one; a person
+wants "2.5 dB". The knob-owning half knows how to convert, so Lumit asks it, every single
+time, at the moment a value crosses over. Never once and cached — because a plugin that has
+just loaded a preset may have quietly changed what its range means.
+
+**No way to set a value between blocks.** CLAP lets a host say "the gain is now 0.5" at any
+moment. VST3 only listens to values that arrive attached to a piece of sound. So Lumit
+attaches the project's current values to *every* piece of sound it sends, with any
+automation for that moment laid over the top. It costs a little more work per block, and it
+is the reason the rule "what the project says beats what the plugin remembers" holds on
+both standards rather than only one.
+
+### How it is tested without a single third-party plugin
+
+Lumit ships its own eight little test plugins — a gain, a crasher, one that hangs, one that
+writes down every call the host makes, and so on (section 43). Rather than write eight more
+for VST3, the same library now answers to both standards: laid out one way it is a `.clap`
+file, laid out the other it is a `.vst3` folder, and the knobs it claims to have come from
+one shared table so the two faces cannot drift apart. Every promise made about CLAP is
+therefore asked again, word for word, of VST3: the same schema rows, the same sample-exact
+sound, the same saved settings coming back byte for byte, and the same one short piece of
+sound lost when the plugin dies mid-block.
+
+What that cannot prove is the binding itself against somebody else's real, shipping plugin —
+a fixture agrees with the host by construction. That is what the conformance run against
+free plugin suites, and a hands-on pass with a couple of commercial ones, are for, and they
+are still owed before any release claims VST3 hosting.

@@ -163,6 +163,12 @@ impl Block {
     pub(crate) fn parts(&mut self) -> (&mut [f32], &mut [f32], &[clap_event_param_value]) {
         (&mut self.input, &mut self.output, &self.events)
     }
+
+    /// The two planar buffers, for a boundary that carries its events some other
+    /// way — VST3's ride in a queue object rather than in the call (K-707).
+    pub(crate) fn planes(&mut self) -> (&mut [f32], &mut [f32]) {
+        (&mut self.input, &mut self.output)
+    }
 }
 
 /// One Lumit parameter event, in CLAP's own shape.

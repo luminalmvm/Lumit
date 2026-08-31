@@ -56,8 +56,17 @@ pub const OFX_MATCH_PREFIX: &str = "ofx:";
 /// What every **CLAP audio plugin's** `match_name` begins with (K-700) — the
 /// host mints `clap:<plugin id>`, and this is the one place the prefix is
 /// spelled, so the crate that writes it and the crates that read it cannot
-/// drift. VST3 will mint `vst3:` the same way in AP4.
+/// drift.
 pub const CLAP_MATCH_PREFIX: &str = "clap:";
+
+/// What every **VST3 audio plugin's** `match_name` begins with (K-707) — the
+/// host mints `vst3:<class id>`, the class id spelled as its 32 hex digits.
+///
+/// Beside CLAP's rather than instead of it, and both land in the same
+/// [`EffectNamespace::Clap`]: the namespace says "an audio plugin", and which
+/// standard it speaks is a fact only the host needs, carried by the prefix
+/// (docs/impl/audio-plugins.md §4).
+pub const VST3_MATCH_PREFIX: &str = "vst3:";
 
 /// Which namespace an entry in the catalogue belongs to, from its match name.
 ///
@@ -68,7 +77,9 @@ pub const CLAP_MATCH_PREFIX: &str = "clap:";
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
-    } else if match_name.starts_with(CLAP_MATCH_PREFIX) {
+    } else if match_name.starts_with(CLAP_MATCH_PREFIX)
+        || match_name.starts_with(VST3_MATCH_PREFIX)
+    {
         EffectNamespace::Clap
     } else {
         EffectNamespace::Builtin

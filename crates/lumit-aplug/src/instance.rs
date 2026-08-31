@@ -86,6 +86,11 @@ pub enum HostError {
     /// `start_processing` answered false.
     #[error("the plugin refused to start processing")]
     StartRefused,
+    /// A VST3 plugin would not take a stereo pair on its main buses. v1 hosts
+    /// stereo effect plugins and guessing an up-mix on somebody else's behalf is
+    /// a guess (docs/impl/audio-plugins.md §4).
+    #[error("the plugin would not take a stereo bus arrangement")]
+    BusRefused,
     /// `process` answered `CLAP_PROCESS_ERROR`.
     #[error("the plugin answered its block with an error")]
     ProcessFailed,

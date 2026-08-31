@@ -17,8 +17,15 @@ lumit-core = { path = "../lumit-core" }
 # The CLAP C declarations, MIT/Apache-2.0. A hand-written binding would be a
 # second copy of somebody else's headers, and the headers move (1.2.2 today).
 clap-sys = "0.5"
+# The VST3 declarations, MIT/Apache-2.0. Steinberg's own ABI is COM-style
+# vtables; these are flat `#[repr(C)]` tables of exactly that shape — the plain
+# projection docs/impl/audio-plugins.md §1 asks for, arrived at by generation
+# rather than by hand. No SDK source is vendored here and none is needed to
+# build: the bindings ship pre-generated (K-702).
+vst3 = "0.3"
 # A `.clap` is a plain DLL/dylib opened at run time; libloading is the portable
-# `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
+# `LoadLibraryW`/`dlopen` wrapper and is already in the tree. A `.vst3` bundle's
+# payload is opened the same way.
 libloading = "0.8"
 thiserror = "2"
 # The quirks table is data, not code (docs/impl/audio-plugins.md §5), so it is a

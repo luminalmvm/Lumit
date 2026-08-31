@@ -5,9 +5,13 @@
 //! A host cannot be tested against nothing, and it should not be tested only
 //! against somebody else's plugin: a commercial plugin cannot be shipped in a
 //! repository, and a free one changes underneath the tests. So these are
-//! plugins of our own — the smallest things that are genuinely CLAP plugins.
-//! A `.clap` file is a shared library exporting one symbol, `clap_entry`, and
-//! that is exactly what this crate builds.
+//! plugins of our own — the smallest things that are genuinely plugins. A
+//! `.clap` file is a shared library exporting one symbol, `clap_entry`; a
+//! `.vst3` bundle is a shared library exporting `GetPluginFactory`. This crate
+//! builds **one** library that exports both (K-707), so the eight personalities
+//! below can be laid out either way and the host tested against both standards
+//! without a second fixture drifting from the first. VST3's own half is
+//! [`vst3`].
 //!
 //! There are eight, because the host has eight kinds of answer to give and each
 //! needs something to give it to (see [`Kind`]): a plugin that multiplies by a
@@ -31,6 +35,9 @@
 //! reach a plugin that is not in the test's own process any more.
 
 #![allow(non_upper_case_globals)]
+#![allow(non_snake_case)]
+
+pub mod vst3;
 
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::{Mutex, OnceLock};
@@ -127,8 +134,12 @@ impl Kind {
     }
 
     /// The parameters this kind declares: id, name, range, default, flags.
+    ///
+    /// One table, both faces (K-707): the VST3 controller mints its own
+    /// `ParameterInfo` from exactly these, so the two cannot claim different
+    /// ranges for the same knob.
     #[must_use]
-    fn params(self) -> &'static [ParamDecl] {
+    pub(crate) fn params(self) -> &'static [ParamDecl] {
         match self {
             Kind::Gain => &[ParamDecl {
                 id: PARAM_GAIN,
@@ -178,19 +189,19 @@ impl Kind {
 
     /// Whether this kind has an audio input. Only the instrument has none.
     #[must_use]
-    const fn has_input(self) -> bool {
+    pub(crate) const fn has_input(self) -> bool {
         !matches!(self, Kind::Instrument)
     }
 }
 
-/// One declared parameter.
-struct ParamDecl {
-    id: clap_id,
-    name: &'static [u8],
-    min: f64,
-    max: f64,
-    default: f64,
-    flags: u32,
+/// One declared parameter, in **plain** units — the numbers a person reads.
+pub(crate) struct ParamDecl {
+    pub(crate) id: clap_id,
+    pub(crate) name: &'static [u8],
+    pub(crate) min: f64,
+    pub(crate) max: f64,
+    pub(crate) default: f64,
+    pub(crate) flags: u32,
 }
 
 /// [`Kind::Gain`]'s only parameter — the multiplier.
@@ -234,11 +245,18 @@ static PARAM_LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Record one host call. Only the reporter writes: a test that reads the log
 /// would otherwise see whatever else the suite happened to be doing.
-fn note(kind: Kind, what: &'static str) {
+pub(crate) fn note(kind: Kind, what: &'static str) {
     if kind == Kind::Reporter {
         if let Ok(mut log) = LOG.lock() {
             log.push(what);
         }
+    }
+}
+
+/// Record one parameter event the echo personality was sent.
+pub(crate) fn param_log(line: String) {
+    if let Ok(mut log) = PARAM_LOG.lock() {
+        log.push(line);
     }
 }
 

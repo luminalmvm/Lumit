@@ -4,11 +4,17 @@
 //!
 //! A freshly opened module has told us a name and a vendor and nothing else.
 //! **Describe** is the conversation where one plugin says what sound it wants,
-//! what knobs it has, and how far behind its output runs. In CLAP that
-//! conversation needs a live plugin — the audio ports and the parameters are
-//! *extensions*, and only a created plugin has any — so describe creates one,
-//! asks, and throws it away. It happens once per plugin, at scan time, before
-//! any copy of the effect exists on any layer.
+//! what knobs it has, and how far behind its output runs. Both standards need a
+//! live plugin for it — CLAP's audio ports and parameters are *extensions* only
+//! a created plugin has, and VST3's buses and parameters live on an initialised
+//! component and its controller — so describe creates one, asks, and throws it
+//! away. It happens once per plugin, at scan time, before any copy of the effect
+//! exists on any layer.
+//!
+//! **One answer for both** (K-707): everything below is written once and filled
+//! by either front end, so nothing downstream of this file knows which standard
+//! a plugin speaks except by the [`Abi`] on the descriptor, which exists for one
+//! reason — the prefix its match name is spelled with.
 //!
 //! # Who is turned away, and why it is a report line
 //!
@@ -19,14 +25,15 @@
 //!   layer's sound to go into;
 //! * a plugin whose main ports are not two channels, because Lumit's mix is
 //!   stereo and guessing an up-mix on somebody else's behalf is a guess;
-//! * a plugin with no `audio-ports` extension, which cannot say what it wants.
+//! * a plugin that declares no audio buses at all, which cannot say what it
+//!   wants — a CLAP plugin with no `audio-ports` extension, or a VST3 component
+//!   with no buses.
 //!
 //! None of the three is an error the person who opened Lumit did anything
 //! about. Each is one calm line in a report, exactly as the OFX scan's are
 //! (docs/12 §2.6), and the scan carries on to the next plugin in the file.
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use clap_sys::ext::params::{
     CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_BYPASS, CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY,
@@ -35,8 +42,8 @@ use clap_sys::ext::params::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::instance::{HostError, Instance};
-use crate::module::Module;
+use crate::abi::{Abi, AnyModule};
+use crate::instance::HostError;
 
 /// Channels a v1 main port must have.
 pub const STEREO: u32 = 2;
@@ -156,7 +163,13 @@ impl ParamDescription {
 /// Everything one plugin said about itself.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PluginDescriptor {
-    /// The plugin's own stable identifier.
+    /// Which standard it speaks (K-707). The one fact about a plugin's
+    /// provenance that survives describe, because the effect's match name is
+    /// spelled from it and a saved project has to name the plugin it wants back.
+    #[serde(default)]
+    pub abi: Abi,
+    /// The plugin's own stable identifier. A CLAP plugin's own id string; a
+    /// VST3 class id, as the 32 hex digits that name it.
     pub id: String,
     /// The name a person sees.
     pub label: String,
@@ -249,7 +262,7 @@ pub struct ScanReport {
 /// Blocking, and not to be called from the interface's thread: it runs
 /// somebody else's start-up code once per plugin in the file.
 #[must_use]
-pub fn describe_module(module: &Arc<Module>) -> ScanReport {
+pub fn describe_module(module: &AnyModule) -> ScanReport {
     describe_module_except(module, &BTreeSet::new())
 }
 
@@ -261,7 +274,7 @@ pub fn describe_module(module: &Arc<Module>) -> ScanReport {
 /// whole difference between a disable that means something and a filter on a
 /// list.
 #[must_use]
-pub fn describe_module_except(module: &Arc<Module>, disabled: &BTreeSet<String>) -> ScanReport {
+pub fn describe_module_except(module: &AnyModule, disabled: &BTreeSet<String>) -> ScanReport {
     let mut report = ScanReport::default();
     for entry in module.entries() {
         if disabled.contains(&entry.id) {
@@ -283,7 +296,7 @@ pub fn describe_module_except(module: &Arc<Module>, disabled: &BTreeSet<String>)
 /// # Errors
 ///
 /// A [`Rejection`], which is a report line rather than a failure.
-pub fn describe(module: &Arc<Module>, plugin_id: &str) -> Result<PluginDescriptor, Rejection> {
+pub fn describe(module: &AnyModule, plugin_id: &str) -> Result<PluginDescriptor, Rejection> {
     let entry = module
         .entries()
         .iter()
@@ -291,7 +304,7 @@ pub fn describe(module: &Arc<Module>, plugin_id: &str) -> Result<PluginDescripto
         .ok_or_else(|| Rejection::NotCreated(HostError::NoSuchPlugin(plugin_id.to_owned())))?
         .clone();
 
-    let instance = Instance::create(Arc::clone(module), plugin_id)?;
+    let instance = module.create(plugin_id)?;
     let ports = instance.ports();
     if ports.inputs.is_empty() && ports.outputs.is_empty() {
         return Err(Rejection::NoAudioPorts);
@@ -308,6 +321,7 @@ pub fn describe(module: &Arc<Module>, plugin_id: &str) -> Result<PluginDescripto
     }
 
     Ok(PluginDescriptor {
+        abi: module.abi(),
         id: entry.id,
         label: entry.name,
         vendor: entry.vendor,

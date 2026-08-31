@@ -22244,3 +22244,47 @@ modelled and imported (no file migration when their kernels land) but not render
 the panel does not offer them and the AE import report says so. Global light is baked
 into per-style angles at import. Timeline grows a Styles fold after Effects; the panel
 a Styles section; both reuse the effect parameter row machinery unchanged.
+
+## K-707 — VST3 is a second front end onto AP1's road: the same descriptor, the same broker binary, the same seam, and the `vst3` crate rather than a hand-written binding
+
+**DECIDED** (AP4, docs/impl/audio-plugins.md §1, §4, §5, §9). Lumit hosts VST3 as well as
+CLAP, and hosts it by *adding a front end* rather than by adding a path. `lumit-aplug`
+grows a `vst3` module — bundle layout, `GetPluginFactory`, `IComponent`/`IAudioProcessor`
+and `IEditController` — and an `abi` module whose `AnyModule`/`AnyInstance` ask both
+standards the same fourteen questions. Everything downstream is AP1–AP3's code, unchanged:
+one `PluginDescriptor`, one `AudioEffectDef`, one `EffectSchema`, one broker **binary**
+(the file's own extension is what says which standard it speaks), one shared-memory ring,
+one deadline, one three-strike watchdog, one switched-off list, one `chain_bake`. The
+enum is deliberate over a trait: there are exactly two standards and VST2 is dead for us
+(K-683), so an open set would be flexibility nobody asked for.
+
+**Licensing.** The VST3 SDK is dual-licensed — a proprietary Steinberg agreement or GPLv3
+— and Lumit takes the GPLv3 branch, which needs no signed agreement and no notice beyond
+this one. **No SDK source is vendored.** The declarations come from the `vst3` crate
+(MIT/Apache-2.0, coupler-rs), which ships pre-generated flat `#[repr(C)]` vtables and needs
+no SDK present to build. That is a recorded deviation from the note's "bind
+`vst3_c_api.h`": the crate's output *is* that projection's shape and its interface ids, and
+the alternative — six hundred lines of hand-written COM vtables and hand-copied GUIDs whose
+first wrong byte is undefined behaviour no in-tree test could catch — is the worse of the
+two. Same reasoning as `clap-sys`, and the note's §1 now says so.
+
+**The mappings, each a one-way door once a project has been saved.** A plugin's identifier
+is its **class id spelled as 32 hex digits** — the vendor's stable key, as a CLAP plugin's
+id string is; its match name is `vst3:<that>`, beside `clap:`. Rows stay `p<parameter id>`.
+Properties hold **plain** values and the controller converts at the boundary every time,
+never cached across a state load. The two VST3 state blobs — processor and controller —
+are stored as one opaque blob, four bytes of length and then the two runs, and loaded into
+**both** halves (`setState`, `setComponentState`, controller `setState`) because a state
+that reaches one half leaves the knobs and the sound disagreeing. Both standards keep
+`EffectNamespace::Clap`: the namespace answers "is this an audio plugin", which is the only
+question anything downstream asks, and which standard it speaks rides on the prefix.
+
+**Two ceilings, named rather than discovered.** VST3 has no `flush` — a processor learns
+values only from the queue that rides with a block — so the project's values are laid into
+**every** block as its baseline, at a cost of one queue point per parameter per block; and
+the component and controller are **not** connected through `IConnectionPoint`, which costs
+nothing while v1 is parameters-only and no plugin window exists (§6). Parameter *groups*
+wait on `IUnitInfo`, which is AP5's panel question. The conformance bench and the manual
+pass against real plugins (§7 plans 8 and 9) are unchanged and still owed: the in-tree
+fixture now wears both faces, so every AP1 assertion is asked of VST3 too, but a fixture
+cannot prove a binding against somebody else's binary.

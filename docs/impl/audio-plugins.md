@@ -1,8 +1,9 @@
 # Audio plugin hosting: CLAP and VST3 (K-683)
 
-**Built so far: AP1 (K-692), AP2 (K-696) and AP3 (K-700).** §1–§5 and §7 plans 1–7
-describe code that exists; §6 and AP4–AP5 are still design. **Two things AP3 settled
-differently from the words below, both recorded in K-700 and marked where they occur:**
+**Built so far: AP1 (K-692), AP2 (K-696), AP3 (K-700) and AP4 (K-707).** §1–§5 and §7
+plans 1–7 describe code that exists, for **both** standards; §6 and AP5 are still design.
+**Two things AP3 settled differently from the words below, both recorded in K-700 and
+marked where they occur:**
 §3's per-layer chain worker and lookahead ring are *not* built — a layer's chain is baked
 over its whole placed span at plan-build time, which keeps the callback off the broker more
 firmly and makes preview == export structural; and §3's splice ramp is **linear**, not
@@ -39,8 +40,16 @@ those five steps refusing to be simple.
   so Lumit takes the GPLv3 branch cleanly, no signed agreement. Two loads to bear: the
   ABI is COM-style C++ vtables, and the plugin is split into an `IComponent`/
   `IAudioProcessor` (the DSP) and an `IEditController` (parameters and UI) that may be
-  *separate objects* the host must wire together. Steinberg ships an official plain-C
-  projection (`vst3_c_api.h`, same dual licence) — bind that, never the C++ headers.
+  *separate objects* the host must wire together. Bind the **flat** vtables, never the C++
+  headers: Steinberg ships an official plain-C projection (`vst3_c_api.h`, same dual
+  licence) of exactly that shape.
+  > **What AP4 bound instead (K-707).** The `vst3` crate (MIT/Apache-2.0, coupler-rs) —
+  > pre-generated flat `#[repr(C)]` vtables and interface ids of that same projection's
+  > shape, needing no SDK present to build and vendoring no SDK source into this repo. The
+  > alternative was six hundred lines of hand-written COM vtables and hand-copied GUIDs
+  > whose first wrong byte is undefined behaviour no in-tree test could catch. Same
+  > reasoning as `clap-sys` on the CLAP side, and the same licence position: we host under
+  > GPLv3, which is what makes VST3 hostable here at all.
 - **VST2 is dead for us**: Steinberg stopped granting licences in 2018; there is no
   GPLv3-compatible road. Not hosted, not planned, recorded in K-683.
 
@@ -48,6 +57,13 @@ The order is CLAP host first (AP1), then the API-agnostic seams (AP2, AP3), then
 a second front end (AP4) onto a pipeline already proven end to end. Both APIs collapse
 into one internal definition (`AudioEffectDef`, §4) the way OFX collapsed into
 `OfxEffectDef` — nothing downstream of describe knows which standard a plugin speaks.
+
+That last sentence is now a fact about the code rather than an intention (K-707).
+`lumit-aplug::abi` is the seam: `AnyModule`/`AnyInstance` are two-armed enums that ask both
+standards the same fourteen questions, chosen by the file's own extension, and everything
+past describe — the schema, the catalogue entry, the broker **binary**, the ring, the
+deadline, the strike count, the switched-off list, `chain_bake` — is written once. An enum
+rather than a trait because there are exactly two standards and VST2 is dead for us.
 
 ## 2. Where a plugin sits in the mix (decided)
 
@@ -164,6 +180,14 @@ row `p1234` (K-692). It is not pretty and it is not the parameter's name, becaus
 is not stable — a vendor rewording a label would otherwise silently orphan a keyframed
 value in every saved project. VST3 mints the same shape from its own `ParamID`.
 
+The **plugin's** id is spelled by the same rule and for the same reason. A CLAP plugin has
+a stable id string of its own; a VST3 class has a 16-byte class id, so a VST3 plugin's
+identifier is **that class id as 32 hex digits**, its match name is `vst3:<those digits>`,
+and that is what the switched-off list holds and a saved project stores (K-707). Neither
+standard's parameter *groups* fully survive in v1: CLAP's `module` path becomes the panel's
+twirls, and VST3's units need `IUnitInfo`, which is AP5's question — its rows are top-level
+until then.
+
 Latency is asked for **only while the plugin is active**: CLAP's `latency.get` is an
 active-state call and a describe never activates, so a descriptor records *whether* a
 plugin reports latency and the chain reads the number off the live instance.
@@ -174,10 +198,18 @@ as CLAP `CLAP_EVENT_PARAM_VALUE` events / VST3 `IParameterChanges` queue points,
 by time (CLAP requires it). Sample-accurate intra-block ramps are a later refinement if
 a sweep ever audibly staircases; the envelope precedent says it will not at 10 ms.
 
+> **VST3 has no `flush`, so the baseline rides too (K-707).** CLAP can hand a plugin a
+> value outside a block; a VST3 processor learns values only from the queue that comes with
+> one. So the project's values are laid into **every** block as its baseline, with that
+> block's own automation over the top — which is what makes "properties win over stale
+> state" true on that side as well. The cost is one queue point per parameter per block,
+> and it is named rather than hidden.
+
 **State**: an opaque blob in the `.lum`, per instance: `{api, plugin id, plugin version,
 bytes}` — CLAP `state` extension streams one blob; VST3 stores **two** (processor
-`IComponent::getState` + controller `IEditController::getState`). Never parsed, always
-round-tripped, exactly like OFX custom parameters (docs/12 §2.2) under the K-040
+`IComponent::getState` + controller `IEditController::getState`), carried as one blob of
+four bytes of length and then the two runs, and loaded into **both** halves (K-707).
+Never parsed, always round-tripped, exactly like OFX custom parameters (docs/12 §2.2) under the K-040
 versioned schema. Missing plugin at load = docs/12 §1's inert placeholder: rows, blob and
 keyframes preserved, identity render, badge, nothing lost on save. Instantiation order:
 create → load state (while deactivated; VST3 also `setComponentState` on the controller
@@ -207,7 +239,8 @@ one and a half users. What carries over verbatim as *rules* (all learned the har
 K-589/K-592/K-594):
 
 - One broker process per vendor module (a `.clap` file / `.vst3` bundle); a bundle's
-  plugins share one broker.
+  plugins share one broker. **One broker binary serves both standards** (K-707): the
+  module's own file name says which it is, and nothing else in the broker differs.
 - Handle registry with magic+kind validation — bad handle answers, never UB.
 - The pipe is its own (never the child's stdout — plugins `printf`); first word is the
   protocol version; length-prefixed bincode.
@@ -251,10 +284,19 @@ not broken. Recorded in K-683 so nobody discovers the gap in a release note.
    Rust cdylib exporting `clap_entry` with switchable personalities — fixed gain
    (processed == expected, sample-exact), reporter (records every host call for
    order-of-actions assertions), latency N, crash-on-block-N, hang, state echo,
-   param-event echo. Most of AP1–AP3's tests drive it.
+   param-event echo. Most of AP1–AP3's tests drive it. **Since AP4 the same library
+   exports `GetPluginFactory` as well** (K-707), so the eight personalities can be laid
+   out as a `.clap` file or as a `.vst3` bundle from one build — one declaration table,
+   two faces, and no second fixture to drift from the first. The VST3 half is split
+   (a component class and a controller class per personality), because the split is the
+   shape a host gets wrong.
 2. **Order of actions** pinned verbatim like `RENDER_ACTIONS` (K-591): factory →
    describe → create → load state → set params → activate → start_processing → blocks →
    stop → deactivate → destroy; a test records what the plugin observed and compares.
+   **Two lists, not one** (K-707): `HOST_ACTIONS` and `VST3_HOST_ACTIONS`, because the
+   standards differ in what the host *does* and not only in what it calls it — two objects
+   created and terminated separately, buses negotiated at activate, and no `flush`.
+   Pretending one order covered both would hide exactly the differences that matter.
 3. **Chain seam**: empty chain leaves the decoded buffer untouched (pointer-equal);
    gain-plugin chain matches hand-computed output through *both* the live plan and the
    baked mixdown, sample for sample (the K-172 preview==export shape); insert runs
@@ -288,13 +330,16 @@ not broken. Recorded in K-683 so nobody discovers the gap in a release note.
 | AP1 | CLAP host core ✅ | `lumit-aplug`: discovery, module load, describe → `AudioEffectDef`, params/state/latency/process against `LocalHost`; test plugin; plans 1, 2, 6, 7 (K-692) |
 | AP2 | Broker isolation ✅ | `lumit-aplug-broker`: pipe + block ring + watchdog + disable list + quirks table + brokered scan; plan 5 (K-696) |
 | AP3 | Mix-graph seam ✅ | `EffectDef::open_audio` + `fx::audio_chain`: whole-span bake (no worker or ring, K-700), dry fallback with a linear splice, latency shift, per-block param envelopes read through the driver walk, `plugin_state` in the `.lum`, offline bake, CLAP registered from the bridge; plans 3, 4 (K-700) |
-| AP4 | VST3 host | `vst3_c_api` bindings, component/controller wiring, bus arrangement, queues, two-blob state, through the same broker and seam; plan 8 both APIs |
+| AP4 | VST3 host ✅ | `lumit-aplug::vst3` + `abi`: bundle layout, factory, component/controller wiring, stereo bus arrangement, normalised/plain at the boundary, per-block queues, two-blob state, through the same broker binary and the same seam; the in-tree fixture wears both faces; plans 1, 2, 6, 7 for VST3 and plan 5 through `run_chain` (K-707). Plans 8 and 9 — the conformance bench and the manual pass against real plugins — still owed |
 | AP5 | Panel surface | Effects & presets audio category, rows in Effect controls, badges, per-plugin disable UI, arb keys; GUI window recorded as the follow-on |
 
 ## 9. Traps, collected
 
 - VST3's component/controller split: state loads must hit both halves
   (`setComponentState` on the controller) or knobs and sound disagree after reload.
+- VST3's buses are negotiated at **activate**, not declared at describe: `setBusArrangements`
+  to a stereo pair, then `activateBus` the mains and switch every aux and sidechain off. A
+  plugin that refuses the pair is refused, never up-mixed on its behalf.
 - VST3 normalised values in queues vs plain in properties — convert at the boundary,
   every time, from the controller.
 - CLAP event lists must be time-sorted; an unsorted list is undefined per spec and

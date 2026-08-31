@@ -8,15 +8,15 @@
 
 use std::ffi::c_char;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 use lumit_aplug_testplug::{Kind, PARAM_GAIN, PARAM_KNOB, PARAM_SWEEP, STATE_ECHO_DEFAULT};
 use lumit_core::fx::{EffectDef, ParamId, ParamKind};
 
+use crate::abi::AnyModule;
 use crate::def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost};
 use crate::describe::{describe, describe_module};
-use crate::discover::{scan, scan_dir, search_paths, ScanOptions};
-use crate::module::Module;
+use crate::discover::{clap_search_paths, scan, scan_dir, search_paths, ScanOptions};
 use crate::process::{Block, ParamEvent, BLOCK_FRAMES, INTERLEAVED_LEN};
 use crate::schema::schema_of;
 use crate::HOST_ACTIONS;
@@ -25,13 +25,13 @@ use crate::HOST_ACTIONS;
 
 /// Serialises every test that loads the module, because the plugin's logs are
 /// one set of statics shared by the whole process.
-fn fixture_lock() -> MutexGuard<'static, ()> {
+pub(crate) fn fixture_lock() -> MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
     LOCK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The test plugin's file name on this platform.
-fn cdylib_name() -> &'static str {
+pub(crate) fn cdylib_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "lumit_aplug_testplug.dll"
     } else if cfg!(target_os = "macos") {
@@ -42,7 +42,7 @@ fn cdylib_name() -> &'static str {
 }
 
 /// Where Cargo put the test plugin, if it built it.
-fn built_cdylib() -> Option<PathBuf> {
+pub(crate) fn built_cdylib() -> Option<PathBuf> {
     let name = cdylib_name();
     let exe = std::env::current_exe().ok()?;
     let mut dir = exe.parent()?;
@@ -81,28 +81,29 @@ fn fixture() -> Option<&'static Path> {
 }
 
 /// Say why a test did nothing, by name, so a skip is never silent.
-fn skipped(test: &str) {
+pub(crate) fn skipped(test: &str) {
     eprintln!("{test}: the test plugin was not built, so nothing was checked");
 }
 
 /// The module, open.
-fn open_module() -> Option<Arc<Module>> {
-    let path = fixture()?;
-    Module::open(path).ok().map(Arc::new)
+fn open_module() -> Option<AnyModule> {
+    AnyModule::open(fixture()?).ok()
 }
 
 /// One of the eight, by kind.
-fn plugin_id(kind: Kind) -> String {
+pub(crate) fn plugin_id(kind: Kind) -> String {
     String::from_utf8_lossy(kind.id())
         .trim_end_matches('\0')
         .to_string()
 }
 
-/// Read one of the test plugin's own exports.
-fn read_export(symbol: &[u8]) -> Vec<String> {
-    let Some(path) = fixture() else {
-        return Vec::new();
-    };
+/// Read one of the test plugin's own exports, out of the copy loaded from
+/// `path`.
+///
+/// The path matters: the loader keys a module by file, so the `.clap` copy and
+/// the `.vst3` copy of the same library are two modules with two sets of
+/// statics, and a test must read the one its host loaded (K-707).
+pub(crate) fn read_export(path: &Path, symbol: &[u8]) -> Vec<String> {
     // SAFETY: the same file the host loaded; the loader answers with the same
     // module, and the symbol is one this crate's own test plugin exports.
     let library = match unsafe { libloading::Library::new(path) } {
@@ -129,21 +130,25 @@ fn read_export(symbol: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// Every host call the reporter saw, in the copy loaded from `path`.
+pub(crate) fn action_log_of(path: &Path) -> Vec<String> {
+    read_export(path, b"LumitTestPlugLog\0")
+}
+
 /// Every host call the reporter saw.
 fn action_log() -> Vec<String> {
-    read_export(b"LumitTestPlugLog\0")
+    fixture().map(action_log_of).unwrap_or_default()
 }
 
 /// Every parameter event the echo plugin was sent.
 fn param_log() -> Vec<String> {
-    read_export(b"LumitTestPlugParamLog\0")
+    fixture().map_or_else(Vec::new, |path| {
+        read_export(path, b"LumitTestPlugParamLog\0")
+    })
 }
 
-/// Empty both logs.
-fn reset_log() {
-    let Some(path) = fixture() else {
-        return;
-    };
+/// Empty both logs in the copy loaded from `path`.
+pub(crate) fn reset_log_of(path: &Path) {
     // SAFETY: as `read_export`.
     let Ok(library) = (unsafe { libloading::Library::new(path) }) else {
         return;
@@ -158,8 +163,15 @@ fn reset_log() {
     unsafe { reset() };
 }
 
+/// Empty both logs.
+fn reset_log() {
+    if let Some(path) = fixture() {
+        reset_log_of(path);
+    }
+}
+
 /// A ramp, as Lumit carries sound: interleaved stereo, one whole block.
-fn a_ramp() -> Vec<f32> {
+pub(crate) fn a_ramp() -> Vec<f32> {
     (0..INTERLEAVED_LEN)
         .map(|index| index as f32 / INTERLEAVED_LEN as f32)
         .collect()
@@ -172,7 +184,7 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
     // Env vars are process-wide, so this borrows the same lock the module
     // tests use rather than racing them.
     let _guard = fixture_lock();
-    let standard = search_paths();
+    let standard = clap_search_paths();
     #[cfg(target_os = "windows")]
     assert!(
         standard.len() >= 2 && standard.iter().all(|path| path.ends_with("CLAP")),
@@ -181,7 +193,7 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
 
     let extra = Path::new("Z:").join("elsewhere");
     std::env::set_var("CLAP_PATH", &extra);
-    let widened = search_paths();
+    let widened = clap_search_paths();
     std::env::remove_var("CLAP_PATH");
 
     assert_eq!(
@@ -190,6 +202,17 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
         "CLAP_PATH adds to the standard folders, it never replaces them"
     );
     assert_eq!(widened.last(), Some(&extra));
+
+    // And one scan looks in both standards' folders, in that order (K-707).
+    let both = search_paths();
+    assert!(
+        both.len() > standard.len(),
+        "a scan looks for VST3 as well as CLAP: {both:?}"
+    );
+    assert!(
+        both.starts_with(&standard),
+        "CLAP's folders are still there, and still first: {both:?}"
+    );
 }
 
 #[test]
@@ -342,7 +365,7 @@ fn a_row_is_named_by_the_plugins_own_parameter_id() {
     );
 
     let def = AudioEffectDef::new(&descriptor, Box::leak(Box::new(schema)), module.path());
-    assert_eq!(def.clap_id(ParamId::new("p1")), Some(PARAM_GAIN));
+    assert_eq!(def.plugin_param(ParamId::new("p1")), Some(PARAM_GAIN));
     assert_eq!(def.defaults(), &[(PARAM_GAIN, 1.0)]);
     assert!(!def.is_image_op(), "an audio effect touches no picture");
 }
@@ -358,8 +381,8 @@ fn the_order_of_actions_is_the_one_written_down() {
     // The module has already enumerated its plugins, so reset and enumerate
     // again: the log has to start at the factory.
     reset_log();
-    let module = match Module::open(module.path()) {
-        Ok(module) => Arc::new(module),
+    let module = match AnyModule::open(module.path()) {
+        Ok(module) => module,
         Err(_) => return skipped("the_order_of_actions_is_the_one_written_down"),
     };
     let _ = describe_module(&module);
@@ -370,7 +393,7 @@ fn the_order_of_actions_is_the_one_written_down() {
         params: vec![(PARAM_KNOB, 0.75)],
         offline: false,
     };
-    let host = LocalHost::open(Arc::clone(&module), &setup).expect("the reporter opens");
+    let host = LocalHost::open(&module, &setup).expect("the reporter opens");
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
     host.process(&a_ramp(), &mut output, &[], 0)
         .expect("one block");
@@ -392,7 +415,7 @@ fn a_gain_plugin_multiplies_every_sample_exactly() {
         params: vec![(PARAM_GAIN, 0.5)],
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &setup).expect("the gain plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
 
     let input = a_ramp();
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
@@ -417,7 +440,7 @@ fn a_parameter_event_inside_a_block_reaches_the_plugin() {
         params: vec![(PARAM_GAIN, 1.0)],
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &setup).expect("the gain plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
 
     let input = vec![1.0f32; INTERLEAVED_LEN];
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
@@ -444,14 +467,14 @@ fn latency_is_read_off_the_live_plugin() {
         plugin_id: plugin_id(Kind::Latency),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(Arc::clone(&module), &setup).expect("the latency plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the latency plugin opens");
     assert_eq!(host.latency(), lumit_aplug_testplug::LATENCY_DEFAULT);
 
     let quiet = InstanceSetup {
         plugin_id: plugin_id(Kind::Gain),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &quiet).expect("the gain plugin opens");
+    let host = LocalHost::open(&module, &quiet).expect("the gain plugin opens");
     assert_eq!(host.latency(), 0, "an effect with no delay reports none");
 }
 
@@ -469,7 +492,7 @@ fn a_state_blob_round_trips_byte_identical() {
         state: Some(blob.clone()),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(Arc::clone(&module), &setup).expect("the state plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the state plugin opens");
     assert_eq!(host.save().expect("it saves"), blob);
     assert_eq!(host.warning(), None, "nothing went wrong bringing it up");
 
@@ -478,7 +501,7 @@ fn a_state_blob_round_trips_byte_identical() {
         plugin_id: plugin_id(Kind::StateEcho),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &fresh).expect("it opens without a blob");
+    let host = LocalHost::open(&module, &fresh).expect("it opens without a blob");
     assert_eq!(host.save().expect("it saves"), STATE_ECHO_DEFAULT);
 }
 
@@ -496,7 +519,7 @@ fn properties_win_over_a_stale_state() {
         params: vec![(PARAM_GAIN, 2.0)],
         offline: false,
     };
-    let host = LocalHost::open(module, &setup).expect("the gain plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
 
     let input = vec![1.0f32; INTERLEAVED_LEN];
     let mut output = vec![0.0f32; INTERLEAVED_LEN];
@@ -523,7 +546,7 @@ fn a_plugin_that_saves_nothing_is_not_a_failure() {
         state: Some(vec![]),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &setup).expect("an empty blob does not stop it opening");
+    let host = LocalHost::open(&module, &setup).expect("an empty blob does not stop it opening");
     assert_eq!(host.warning(), None);
 }
 
@@ -539,7 +562,7 @@ fn a_param_sweep_arrives_as_sorted_per_block_events() {
         plugin_id: plugin_id(Kind::ParamEcho),
         ..InstanceSetup::default()
     };
-    let host = LocalHost::open(module, &setup).expect("the echo plugin opens");
+    let host = LocalHost::open(&module, &setup).expect("the echo plugin opens");
     reset_log();
 
     let input = vec![0.0f32; INTERLEAVED_LEN];

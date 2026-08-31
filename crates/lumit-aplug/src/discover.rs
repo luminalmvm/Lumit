@@ -3,9 +3,11 @@
 //! # In plain terms
 //!
 //! Everything else in this crate could host a plugin somebody handed it by
-//! path. This is the part that goes looking: it reads the standard CLAP folders
-//! (and anything `CLAP_PATH` adds), opens each `.clap` file it finds, asks
-//! every plugin in it to describe itself, and hands back a list plus a report.
+//! path. This is the part that goes looking: it reads the standard CLAP and
+//! VST3 folders (and anything `CLAP_PATH` or `VST3_PATH` adds), opens each
+//! plugin file it finds, asks every plugin in it to describe itself, and hands
+//! back a list plus a report. **One scan, one report, one switched-off list**
+//! for both standards (K-707).
 //! After that a plugin is an effect like any other — it goes in the layer's
 //! effect stack, its knobs keyframe, and the Graph panel draws it as a node.
 //!
@@ -30,8 +32,9 @@
 //! program running.
 //!
 //! [`scan_brokered`] is the shipping one (§5): the module is opened, started and
-//! enumerated inside a broker process, and what crosses back is descriptors. A
-//! file that kills the process at load costs a report line and nothing else.
+//! enumerated inside a broker process — the **same** broker binary for both
+//! standards — and what crosses back is descriptors. A file that kills the
+//! process at load costs a report line and nothing else.
 //! The two answer with the same [`ScanOutcome`], so nothing downstream can tell
 //! which one ran.
 
@@ -39,11 +42,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::abi::AnyModule;
 use crate::def::AudioEffectDef;
 use crate::describe::{describe_module_except, PluginDescriptor, Refusal};
 use crate::ipc::broker::{Broker, BrokerConfig, DisableList};
-use crate::module::Module;
-use crate::schema::{schema_of, MATCH_PREFIX};
+use crate::schema::{match_name, schema_of};
 
 /// The standard CLAP folders on this platform, plus whatever `CLAP_PATH` adds.
 ///
@@ -51,7 +54,7 @@ use crate::schema::{schema_of, MATCH_PREFIX};
 /// installer writes to, and the per-user one that needs no administrator
 /// (docs/impl/audio-plugins.md §5).
 #[must_use]
-pub fn search_paths() -> Vec<PathBuf> {
+pub fn clap_search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     #[cfg(target_os = "windows")]
@@ -89,11 +92,75 @@ pub fn search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// The loadable binaries in one directory.
+/// The standard VST3 folders on this platform, plus whatever `VST3_PATH` adds
+/// (K-707).
 ///
-/// A `.clap` is a plain shared library on Windows and Linux. On macOS it is a
-/// bundle directory whose binary sits at `Contents/MacOS/<name>`, so both
-/// shapes are accepted and the directory case is followed one level in.
+/// The same two shapes as CLAP's — one shared, one per-user — at the locations
+/// Steinberg's own module locator uses. `VST3_PATH` is the SDK's own extra-paths
+/// variable and is honoured for the same reason `CLAP_PATH` is: a person who
+/// keeps plugins somewhere else should not have to move them.
+#[must_use]
+pub fn vst3_search_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(common) = std::env::var_os("COMMONPROGRAMFILES") {
+            paths.push(PathBuf::from(common).join("VST3"));
+        }
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            paths.push(
+                PathBuf::from(local)
+                    .join("Programs")
+                    .join("Common")
+                    .join("VST3"),
+            );
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        paths.push(PathBuf::from("/Library/Audio/Plug-Ins/VST3"));
+        if let Some(home) = std::env::var_os("HOME") {
+            paths.push(PathBuf::from(home).join("Library/Audio/Plug-Ins/VST3"));
+        }
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        paths.push(PathBuf::from("/usr/lib/vst3"));
+        if let Some(home) = std::env::var_os("HOME") {
+            paths.push(PathBuf::from(home).join(".vst3"));
+        }
+    }
+
+    if let Some(extra) = std::env::var_os("VST3_PATH") {
+        paths.extend(std::env::split_paths(&extra));
+    }
+    paths
+}
+
+/// Every folder a scan looks in: CLAP's, then VST3's (K-707).
+///
+/// One list rather than two calls, because there is one scan. A folder that does
+/// not exist costs a failed `read_dir` and nothing else, which is what a machine
+/// with only one of the two standards installed pays.
+#[must_use]
+pub fn search_paths() -> Vec<PathBuf> {
+    let mut paths = clap_search_paths();
+    paths.extend(vst3_search_paths());
+    paths
+}
+
+/// The plugin files in one directory, of either standard.
+///
+/// A `.clap` is a plain shared library on Windows and Linux; on macOS it is a
+/// bundle directory whose binary sits at `Contents/MacOS/<name>`, so both shapes
+/// are accepted and the directory case is followed one level in.
+///
+/// A `.vst3` is handed back **as the bundle**, folder and all: which binary
+/// inside it belongs to this machine is a question with a platform-shaped
+/// answer, and [`crate::vst3::payload`] is the one place that answers it. The
+/// bundle is also the thing a person points at, and the key one broker process
+/// is kept per (K-592).
 ///
 /// Sorted, so two runs discover plugins in the same order — which is what makes
 /// an effect list stable between sessions.
@@ -105,22 +172,25 @@ pub fn scan_dir(dir: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("clap") {
-            continue;
-        }
-        if path.is_file() {
-            found.push(path);
-            continue;
-        }
-        let inside = path.join("Contents").join("MacOS");
-        let Ok(binaries) = std::fs::read_dir(&inside) else {
-            continue;
-        };
-        for binary in binaries.flatten() {
-            let binary = binary.path();
-            if binary.is_file() {
-                found.push(binary);
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(crate::vst3::BUNDLE_EXTENSION) => found.push(path),
+            Some("clap") => {
+                if path.is_file() {
+                    found.push(path);
+                    continue;
+                }
+                let inside = path.join("Contents").join("MacOS");
+                let Ok(binaries) = std::fs::read_dir(&inside) else {
+                    continue;
+                };
+                for binary in binaries.flatten() {
+                    let binary = binary.path();
+                    if binary.is_file() {
+                        found.push(binary);
+                    }
+                }
             }
+            _ => continue,
         }
     }
     found.sort();
@@ -153,7 +223,8 @@ impl ScanOptions {
 
 /// One plugin that became an effect.
 pub struct DiscoveredPlugin {
-    /// The name the catalogue answers to — `clap:` and the plugin's own id.
+    /// The name the catalogue answers to — the standard's prefix and the
+    /// plugin's own id: `clap:<id>` or `vst3:<class id>` (K-707).
     pub match_name: String,
     /// The plugin's own identifier, which is what the switched-off list names.
     pub identifier: String,
@@ -161,7 +232,7 @@ pub struct DiscoveredPlugin {
     pub label: String,
     /// Who wrote it.
     pub vendor: String,
-    /// Which `.clap` file it came out of.
+    /// Which `.clap` file or `.vst3` bundle it came out of.
     pub module: PathBuf,
     /// The definition everything downstream sees (K-593).
     pub def: AudioEffectDef,
@@ -191,10 +262,10 @@ pub fn scan(options: &ScanOptions) -> ScanOutcome {
     outcome
 }
 
-/// One `.clap` file, opened, described and closed.
+/// One plugin file, opened, described and closed.
 fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) {
-    let module = match Module::open(binary) {
-        Ok(module) => Arc::new(module),
+    let module = match AnyModule::open(binary) {
+        Ok(module) => module,
         Err(error) => {
             outcome.skipped.push(skip_line(binary, &error.to_string()));
             return;
@@ -210,7 +281,7 @@ fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) 
 /// Scan the named directories with every module opened **inside a broker
 /// process** — the shipping arrangement (docs/impl/audio-plugins.md §5).
 ///
-/// One broker per `.clap` file, spawned, asked, and shut down again: the
+/// One broker per plugin file, spawned, asked, and shut down again: the
 /// descriptors are cached here and a layer that later wants a live instance gets
 /// a broker of its own. A module that will not load, or that takes its process
 /// down while loading, is one line in the report and costs the rest of the
@@ -277,7 +348,7 @@ fn offer(
             }
         };
         outcome.found.push(DiscoveredPlugin {
-            match_name: format!("{MATCH_PREFIX}{}", descriptor.id),
+            match_name: match_name(descriptor),
             identifier: descriptor.id.clone(),
             label: descriptor.label.clone(),
             vendor: descriptor.vendor.clone(),

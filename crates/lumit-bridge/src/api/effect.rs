@@ -192,7 +192,8 @@ pub struct BridgePluginScan {
 }
 
 /// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) **and the standard
-/// CLAP folders** (and `CLAP_PATH`), and offer what is found as effects.
+/// CLAP and VST3 folders** (and `CLAP_PATH`, `VST3_PATH`), and offer what is
+/// found as effects.
 ///
 /// **Deliberately not `frb(sync)`**: this opens other people's bundles and
 /// spawns a broker process per bundle, which is tens of milliseconds at best
@@ -227,15 +228,22 @@ pub fn rescan_plugins() -> BridgePluginScan {
     scan
 }
 
-/// The **audio** half of a rescan: the machine's CLAP folders, described in a
-/// broker process, registered into the same catalogue (K-700).
+/// The **audio** half of a rescan: the machine's CLAP *and VST3* folders,
+/// described in a broker process, registered into the same catalogue (K-700,
+/// K-707).
+///
+/// One call for both standards on purpose. `search_paths` is both standards'
+/// folders, `scan_brokered` spawns the same broker binary for either kind of
+/// file, and what comes back is the same definition — so a VST3 plugin becomes
+/// an effect by exactly the road a CLAP one does, and the frontend cannot tell
+/// which it got except by the match name.
 ///
 /// One list of switched-off identifiers serves both hosts (K-594), and the
 /// session's copy is written before the scan for the same reason the OFX one
 /// is: a plugin switched off earlier must be switched off for *this* session's
 /// mixes too, not merely absent from the listing.
 ///
-/// A machine with no CLAP folder scans nothing, registers nothing and reports
+/// A machine with neither folder scans nothing, registers nothing and reports
 /// nothing, which is what a build with no audio plugins installed should cost.
 fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePluginScan) {
     lumit_aplug::set_disabled(&prefs.disabled);
@@ -285,19 +293,21 @@ fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePlugi
 /// answer still holds for this session.
 #[frb(sync)]
 pub fn set_plugin_enabled(effect: String, enabled: bool) -> Result<(), BridgeError> {
-    // Two hosts, one preference file (K-594): the name's own prefix says which
-    // host is told, and the file is written the same way either way.
-    let identifier = match (
-        effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX),
-        effect.strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX),
-    ) {
+    // Three prefixes, two hosts, one preference file (K-594, K-707): the name's
+    // own prefix says which host is told, and the file is written the same way
+    // whichever it was. CLAP and VST3 are one host and one switched-off list —
+    // the identifier is a plugin id or a class id, and the list holds either.
+    let audio = effect
+        .strip_prefix(lumit_core::fx::CLAP_MATCH_PREFIX)
+        .or_else(|| effect.strip_prefix(lumit_core::fx::VST3_MATCH_PREFIX));
+    let identifier = match (effect.strip_prefix(lumit_core::fx::OFX_MATCH_PREFIX), audio) {
         (Some(ofx), _) => {
             lumit_ofx::discover::set_enabled(ofx, enabled);
             ofx
         }
-        (_, Some(clap)) => {
-            lumit_aplug::set_enabled(clap, enabled);
-            clap
+        (_, Some(plugin)) => {
+            lumit_aplug::set_enabled(plugin, enabled);
+            plugin
         }
         _ => return Ok(()),
     };

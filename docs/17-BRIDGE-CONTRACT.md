@@ -614,6 +614,16 @@ alongside its OFX ones and registers what it finds into the same catalogue, and
 `set_plugin_enabled` takes a `clap:` match name as readily as an `ofx:` one, writing to the
 one preference file both hosts read.
 
+**VST3 added nothing to this contract either (K-707).** The same two calls see more again:
+`rescan_plugins` scans the machine's VST3 folders alongside its CLAP and OFX ones, and
+`set_plugin_enabled` takes a `vst3:` match name as readily as the other two — one host, one
+switched-off list, one preference file. A VST3 plugin's identifier is its **class id spelled
+as 32 hex digits** rather than a vendor's own string, and its rows are `p<parameter id>` as
+CLAP's are, so a saved project names it the same way it names anything else. Which standard
+a plugin speaks is carried by the match name's prefix and by nothing else: the namespace on
+`EffectKey` is `Clap` for both, because the namespace answers "is this an audio plugin",
+which is the only question anything downstream asks.
+
 The one thing that crosses **nowhere** is a plugin's opaque state blob: it is a field on
 the effect instance, written into the `.lum` and handed back to the plugin, and no panel
 has any business reading it.

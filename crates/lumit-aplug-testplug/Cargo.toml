@@ -16,6 +16,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # The C declarations, so the plugin side and the host side cannot drift.
 clap-sys = "0.5"
+# The same for VST3: one library exports `clap_entry` and `GetPluginFactory`
+# both, so the two faces of the fixture are one build (K-702).
+vst3 = "0.3"
 
 # A plugin is the other side of a C ABI; same override as the host crate.
 [lints.clippy]

@@ -23,7 +23,9 @@ use crate::process::ParamEvent;
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
-pub const PROTOCOL_VERSION: u32 = 1;
+///
+/// Two, since a descriptor carries the standard the plugin speaks (K-707).
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Which instance a message is about — the bits of a
 /// [`Handle`](crate::ipc::handles::Handle), which the host mints and the broker
