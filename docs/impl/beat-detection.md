@@ -26,7 +26,12 @@ n − last_onset ≥ 3 frames                            // 32 ms debounce
 ```
 
 δ (sensitivity, the user slider, default 1.5; lower = more markers), λ small absolute
-floor (silence guard, e.g. 90th percentile of SF × 0.05). Onset time = parabolic
+floor (silence guard, e.g. 90th percentile of SF × 0.05). λ must keep a **hard minimum**
+as well as that percentile: over digital silence every SF is exactly zero, so the local-max
+test passes at every frame, the adaptive mean is zero, and a purely relative λ is a
+threshold of nothing — the debounce alone then decides how many "beats" a silent clip has.
+Real audio's flux runs in the hundreds even at a single 16-bit LSB, so the minimum can sit
+far below anything audible. Onset time = parabolic
 interpolation of the peak (sub-frame), converted to a **grid-quantised rational**
 ([rational-time.md](rational-time.md) §4).
 

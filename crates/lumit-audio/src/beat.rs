@@ -126,7 +126,14 @@ fn pick_onsets(
     }
     let mut sorted = env.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let lambda = 0.05 * percentile(&sorted, 0.9);
+    // λ is the small additive term that keeps a near-flat envelope from
+    // peaking, and it needs an absolute floor as well as a relative one: over
+    // digital silence every flux is exactly zero, so the local-max test passes
+    // everywhere (0 ≥ 0), the adaptive mean is zero, and a purely relative
+    // threshold is a threshold of nothing. Measured, the flux of real audio
+    // runs in the hundreds even for a signal at a single 16-bit LSB, so a floor
+    // this far below that rejects silence and nothing else.
+    let lambda = (0.05 * percentile(&sorted, 0.9)).max(1e-3);
     let max_env = sorted[n - 1].max(1e-9);
     let delta = sensitivity.max(0.1);
 
@@ -195,7 +202,11 @@ fn estimate_bpm(env: &[f32], env_fps: f64) -> f64 {
     if lag_min >= lag_max {
         return 0.0;
     }
-    let mut best = (0usize, f32::MIN);
+    // The comb score is a sum of products of non-negative terms, so it is zero
+    // only for a flat envelope — silence. Starting the search at zero rather
+    // than f32::MIN leaves `best.0` unset in that case, and the check below
+    // reports the tempo as indeterminate instead of naming the fastest lag.
+    let mut best = (0usize, 0.0f32);
     for lag in lag_min..=lag_max {
         let bpm = env_fps * 60.0 / lag as f64;
         let pref = if (70.0..=180.0).contains(&bpm) {
@@ -377,6 +388,38 @@ mod tests {
         assert!(a.onsets.is_empty());
         let b = analyse_mono(&[], 48_000, 1.5);
         assert!(b.onsets.is_empty() && b.bpm == 0.0);
+    }
+
+    #[test]
+    fn digital_silence_yields_no_onsets_at_any_sensitivity() {
+        // Regression: a silent buffer longer than one window used to fill with
+        // markers. Zero flux is a local maximum everywhere and the adaptive
+        // mean is zero too, so every frame cleared a purely relative threshold
+        // and the debounce alone decided how many "beats" a silent clip had.
+        let rate = 48_000;
+        let silence = vec![0f32; rate as usize * 5];
+        for percent in [0u8, 50, 70, 80, 100] {
+            let a = analyse_mono(&silence, rate, delta_from_sensitivity(percent));
+            assert!(
+                a.onsets.is_empty(),
+                "silence gave {} onsets at sensitivity {percent}",
+                a.onsets.len()
+            );
+            // Indeterminate, not the fastest lag the comb could name.
+            assert_eq!(a.bpm, 0.0, "silence claimed {} BPM", a.bpm);
+            // And with a BPM handed in (the override the bridge applies), the
+            // grid has nothing to fill: snapping cannot invent a beat.
+            let times: Vec<f64> = a.onsets.iter().map(|o| o.time).collect();
+            assert!(snap_to_grid(&times, 120.0, 0.045).is_empty());
+        }
+        // Stereo silence takes the same path.
+        assert!(analyse_stereo(
+            &vec![0f32; rate as usize * 4],
+            rate,
+            delta_from_sensitivity(80)
+        )
+        .onsets
+        .is_empty());
     }
 
     #[test]
