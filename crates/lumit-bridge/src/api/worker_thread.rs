@@ -3568,7 +3568,22 @@ fn render_comp_with_preview(
         .ok_or(BridgeError::InvalidLayer)?;
 
     if let Some(effects) = req.effects {
-        comp.layers[index].effects = effects;
+        // **Which list this is, read off the ids** (docs/impl/layer-styles.md
+        // §5). A style parameter is dragged through the same staging path an
+        // effect parameter is — one list read, edited, and sent along with the
+        // request — so what arrives here is either the whole effect stack or
+        // the whole style list, and the layer itself says which. Without this
+        // a drag on a shadow's Distance would preview the layer with its
+        // effect stack *replaced by its styles*.
+        let layer = &mut comp.layers[index];
+        if effects
+            .first()
+            .is_some_and(|f| layer.styles.iter().any(|s| s.id == f.id))
+        {
+            layer.styles = effects;
+        } else {
+            layer.effects = effects;
+        }
     }
     if let Some(drivers) = req.drivers {
         // The nodes only: the wires are the document's, and a driver whose

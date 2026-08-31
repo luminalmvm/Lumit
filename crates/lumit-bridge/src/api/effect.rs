@@ -82,6 +82,40 @@ pub fn list_effects() -> Vec<BridgeEffectInfo> {
     catalogue(|_| true)
 }
 
+/// The **layer styles** the Add-style menu offers (docs/impl/layer-styles.md
+/// §6, K-706): the seven that render, in §2's pinned painting order.
+///
+/// Deliberately **not** part of [`list_effects`]: the effect browser, the
+/// command palette and the Add-effect menu all walk that list, and offering
+/// "Drop shadow (style)" there beside the Drop shadow effect would be the wrong
+/// answer to every search for a shadow. A style is added from the Layer menu and
+/// from the panel's own Styles heading, and both read this.
+///
+/// Its own tiny shape rather than [`BridgeEffectInfo`], because a style has none
+/// of what that carries: no browse category (they are one fixed family), no
+/// sockets (nothing wires to a style's declaration before it is on a layer), and
+/// no provenance (all nine are Lumit's).
+#[frb(sync)]
+pub fn list_styles() -> Vec<BridgeStyleInfo> {
+    lumit_core::fx::offered_styles()
+        .map(|def| BridgeStyleInfo {
+            name: def.schema().match_name.to_owned(),
+            label: def.schema().label.to_owned(),
+        })
+        .collect()
+}
+
+/// One entry of [`list_styles`]: the match name [`add_style`] takes, and the
+/// English label the menu row shows through the engine-label table.
+///
+/// [`add_style`]: crate::api::layer::LayerReference::add_style
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeStyleInfo {
+    pub name: String,
+    pub label: String,
+}
+
 /// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
 ///

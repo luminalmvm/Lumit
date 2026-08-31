@@ -137,3 +137,19 @@ pub fn normalise_styles(styles: &mut Vec<EffectInstance>) {
 pub fn all() -> impl Iterator<Item = &'static dyn EffectDef> {
     STYLE_DEFS.builtins()
 }
+
+/// The two styles v1 **declares but does not render** (§8): Satin's
+/// offset-alpha intersection shading, and Bevel and emboss's lighting model.
+///
+/// They have structs so that an imported project keeps every value losslessly
+/// and no `.lum` migrates the day their kernels land — but a menu must not
+/// offer a style that draws nothing, so [`offered`] leaves them out. Written
+/// down once, here, because two lists of the same two names is how one of them
+/// goes stale.
+pub const UNRENDERED: [&str; 2] = ["style_satin", "style_bevel_emboss"];
+
+/// The styles the **Add style** menu offers — the seven that render (§8), in
+/// §2's order.
+pub fn offered() -> impl Iterator<Item = &'static dyn EffectDef> {
+    all().filter(|d| !UNRENDERED.contains(&d.schema().match_name))
+}

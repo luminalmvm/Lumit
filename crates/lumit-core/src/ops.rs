@@ -181,6 +181,24 @@ pub enum Op {
         layer: Uuid,
         effects: Vec<crate::model::EffectInstance>,
     },
+    /// Replace a layer's whole **style list** (docs/impl/layer-styles.md §1,
+    /// K-706).
+    ///
+    /// `SetLayerEffects`' twin for the second list, and coarse and exactly
+    /// invertible for the same reason: adding a style, removing one, toggling
+    /// one and editing one of its parameters are all "the list is now this".
+    ///
+    /// The list is **normalised on the way in**
+    /// ([`crate::fx::normalise_styles`]): at most one instance of each style,
+    /// and sorted into §2's painting order. The invariant is enforced here
+    /// rather than in each caller because it is a property of the document, not
+    /// of the command that wrote it — a hand-edited file and an add command both
+    /// come out in order.
+    SetLayerStyles {
+        comp: Uuid,
+        layer: Uuid,
+        styles: Vec<crate::model::EffectInstance>,
+    },
     /// Replace a layer's whole **driver graph** (K-471 §3): its drivers, its
     /// wires and its canvas positions.
     ///
@@ -703,6 +721,7 @@ impl Op {
             Op::SetLayerPuppet { .. } => "Edit puppet",
             Op::SetShapeContents { .. } => "Edit shape",
             Op::SetLayerEffects { .. } => "Edit effects",
+            Op::SetLayerStyles { .. } => "Edit layer styles",
             Op::SetLayerGraph { .. } => "Edit drivers",
             Op::SetLayerFx { .. } => "Fx switch",
             Op::SetLayerThreeD { .. } => "3D switch",
@@ -794,6 +813,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerPuppet { comp, layer, .. }
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
+        | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
@@ -1142,6 +1162,30 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                         graph: Box::new(restored),
                     },
                 ],
+            })
+        }
+        Op::SetLayerStyles {
+            comp,
+            layer,
+            styles,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let mut next = styles.clone();
+            crate::fx::normalise_styles(&mut next);
+            let previous = std::mem::replace(&mut l.styles, next);
+            // No graph pruning twin: a driver wires to the effect *stack*
+            // (`LayerGraph::validate` is checked against `effects`), and a style
+            // is not a box on that canvas — so removing one can leave no
+            // dangling wire behind.
+            Ok(Op::SetLayerStyles {
+                comp: *comp,
+                layer: *layer,
+                styles: previous,
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {

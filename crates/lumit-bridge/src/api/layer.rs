@@ -18,6 +18,14 @@ use crate::api::{
     BridgeError,
 };
 
+/// The layer-styles seam's own tests (K-706). Its own file beside the module
+/// rather than a corner of `api/tests.rs`, because what it exercises is one
+/// feature's commands and reading it should not mean scrolling past eleven
+/// thousand lines of everything else.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod style_tests;
+
 /// A layer's on/off switches, read as a group because the Timeline draws them
 /// as one column block and reading them one at a time would be six crossings
 /// per row per frame.
@@ -554,6 +562,26 @@ pub struct BridgePuppet {
     /// How far the opaque region is grown before the outline is walked, px.
     pub expansion: f64,
     pub pins: Vec<BridgePuppetPin>,
+}
+
+/// The wireframe the Viewer draws over a puppeted layer: the mesh as it stands
+/// at the frame the render last built, in the layer's own pixels.
+///
+/// **Read, never stored.** No triangle is in the document or in a project file
+/// (docs/impl/puppet.md §1.4); this is the mesh the render just warped the
+/// pixels through, handed over so the overlay cannot disagree with the picture.
+/// Flat lists rather than pairs and triples: at the vertex cap that is 3000
+/// numbers, and a flat `Float64List` crosses as one buffer.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgePuppetGhost {
+    /// Deformed vertex positions, `x, y, x, y…`, layer px at natural size.
+    pub vertices: Vec<f64>,
+    /// Three vertex indices per triangle, flattened.
+    pub triangles: Vec<u32>,
+    /// Pins whose rest position falls outside the mesh: kept, drawn hollow,
+    /// contributing nothing until the mesh grows back (§6).
+    pub inert: Vec<Uuid>,
 }
 
 impl BridgePuppetPinKind {
@@ -1346,6 +1374,16 @@ pub struct BridgeLayerInfo {
     /// Every effect on the layer, with every parameter's value (K-184). Plain
     /// data for *drawing*; an edit reads fresh instance handles at commit time.
     pub effects: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The layer's **styles** (docs/impl/layer-styles.md §5, K-706), in §2's
+    /// pinned painting order — the same shape as [`Self::effects`] because a
+    /// style *is* an effect instance in a second, order-locked list.
+    ///
+    /// A separate field rather than a flag on the stack: the two lists are
+    /// drawn as two groups, they commit through two ops, and the Effect
+    /// controls panel's stack must never offer a style where a reorder or a
+    /// paste would land. Empty on nearly every layer, which is what makes
+    /// carrying it here free.
+    pub styles: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
     /// The label colour index into the theme's palette, drawn as the outline's
     /// swatch. Out-of-range values wrap rather than fault.
     pub label: u8,
@@ -1364,6 +1402,11 @@ pub struct BridgeLayerInfo {
     /// reason the masks are: the Timeline lists them, and the Viewer needs to
     /// know a layer has some without asking per frame.
     pub paint: Vec<BridgeStroke>,
+    /// The layer's puppet (K-704), or None on a layer nobody has pinned —
+    /// which is most layers. Carried for the same reason the masks and the
+    /// strokes are: the Timeline draws a group row and a row per pin, and the
+    /// Viewer needs to know a layer is puppeted without asking per frame.
+    pub puppet: Option<BridgePuppet>,
     /// A shape layer's art (K-237), bottom first; empty on every other kind.
     /// Carried for the same reason again — and for one more: the art *is* the
     /// layer's size, so the Viewer's wireframe reads it here.
@@ -1514,6 +1557,11 @@ pub(crate) fn read_layer_info(
             .iter()
             .map(|e| crate::api::effect::read_instance_info(e, layer.start_offset.0))
             .collect(),
+        styles: layer
+            .styles
+            .iter()
+            .map(|s| crate::api::effect::read_instance_info(s, layer.start_offset.0))
+            .collect(),
         label: layer.label,
         matte: layer.matte.as_ref().map(|m| BridgeMatte {
             layer: m.layer,
@@ -1534,6 +1582,10 @@ pub(crate) fn read_layer_info(
             .iter()
             .map(|s| BridgeStroke::read_at(s, layer.start_offset.0))
             .collect(),
+        puppet: layer
+            .puppet
+            .as_ref()
+            .map(|p| BridgePuppet::read_at(p, layer.start_offset.0)),
         markers: layer
             .markers
             .iter()
@@ -2666,6 +2718,129 @@ impl LayerReference {
             return Err(BridgeError::NoSuchPin);
         }
         self.commit_puppet(Some(block))
+    }
+
+    /// The wireframe this layer is showing, or `None` when no frame carrying a
+    /// mesh on it has been built — an unpinned layer with no tool armed on it,
+    /// or one with nothing opaque to cut a mesh from.
+    ///
+    /// Cheap and call-shaped rather than part of the read model on purpose: it
+    /// changes with the *frame*, not with the document, so the Viewer holds it
+    /// against the playhead and the revision exactly as it holds an animated
+    /// mask's path, and a hover asks nothing (K-184, K-681).
+    #[frb(sync)]
+    pub fn puppet_ghost(&self) -> Result<Option<BridgePuppetGhost>, BridgeError> {
+        // Named to be sure the layer is real; the ghost itself is the render's.
+        let _ = self.item()?;
+        let Some(ghost) = lumit_render::puppet::ghost(self.layer_id) else {
+            return Ok(None);
+        };
+        let mut vertices = Vec::with_capacity(ghost.deformed.len() * 2);
+        for v in &ghost.deformed {
+            vertices.push(v[0]);
+            vertices.push(v[1]);
+        }
+        let mut triangles = Vec::with_capacity(ghost.mesh.triangles.len() * 3);
+        for t in &ghost.mesh.triangles {
+            triangles.extend_from_slice(t);
+        }
+        Ok(Some(BridgePuppetGhost {
+            vertices,
+            triangles,
+            inert: ghost.inert.clone(),
+        }))
+    }
+
+    /// Ask the render for this layer's mesh before it has a puppet — what
+    /// arming a puppet tool does, and what makes the first pin placeable
+    /// (docs/impl/puppet.md §5).
+    ///
+    /// One layer at a time: arming it on another stands the first one down.
+    /// [`disarm_puppet_preview`] takes the last one down when the tool is put
+    /// away. Not an edit — nothing about the document changes, and undo has
+    /// never heard of it.
+    #[frb(sync)]
+    pub fn arm_puppet_preview(&self, density: f64, expansion: f64) {
+        lumit_render::puppet::arm(Some((self.layer_id, density, expansion)));
+    }
+
+    /// Place a pin of `kind` where the picture shows `(x, y)` at `frame`, in
+    /// layer pixels — the click the four Puppet tools make.
+    ///
+    /// Three things happen here rather than on the frontend, because all three
+    /// are rules rather than drawing. The point is looked up in the **deformed**
+    /// mesh, which is the one the user aimed at, and carried back to where that
+    /// spot sits at rest, which is where a pin is stored. A layer with no block
+    /// gets one, with this frame as its reference time — so the first pin and
+    /// the block it creates are a single undo step. And a click with no mesh
+    /// under it, or outside the one there is, is refused as a value: no block is
+    /// made and no pin floats.
+    ///
+    /// Returns the new pin's id, so the caller can select the row it just made.
+    #[frb(sync)]
+    pub fn add_puppet_pin_at(
+        &self,
+        frame: i64,
+        kind: BridgePuppetPinKind,
+        name: String,
+        x: f64,
+        y: f64,
+    ) -> Result<Uuid, BridgeError> {
+        let layer = self.item()?;
+        let ghost = lumit_render::puppet::ghost(self.layer_id).ok_or(BridgeError::PuppetNoMesh)?;
+        let (tri, bary) =
+            lumit_core::puppet::locate_in(&ghost.deformed, &ghost.mesh.triangles, [x, y])
+                .ok_or(BridgeError::PuppetOutsideMesh)?;
+        let corners = ghost
+            .mesh
+            .triangles
+            .get(tri)
+            .ok_or(BridgeError::PuppetOutsideMesh)?;
+        let mut rest = [0.0f64; 2];
+        for (w, i) in bary.iter().zip(corners.iter()) {
+            let v = ghost
+                .mesh
+                .vertices
+                .get(*i as usize)
+                .ok_or(BridgeError::PuppetOutsideMesh)?;
+            rest[0] += w * v[0];
+            rest[1] += w * v[1];
+        }
+
+        let mut block = match layer.puppet {
+            Some(block) => block,
+            None => {
+                let rate = self.composition()?.frame_rate;
+                let at = rate
+                    .time_of_frame(frame)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+                let local =
+                    at.0.checked_sub(layer.start_offset.0)
+                        .map_err(|_| BridgeError::InvalidTime)?;
+                lumit_core::puppet::PuppetBlock::new(local)
+            }
+        };
+        // ponytail: the pin is stored at rest and holds nothing at this frame,
+        // so pinning an *already deformed* puppet pulls that spot back to rest
+        // rather than holding it where it was clicked. The upgrade is two keys
+        // on x/y — rest at the reference time, the clicked point at this frame —
+        // which is only worth writing when the ordinary flow (pins placed on the
+        // rest pose, as After Effects teaches) is not enough. Observable
+        // trigger: a pin added part-way through an animation making the puppet
+        // jump.
+        block.pins.push(lumit_core::puppet::PuppetPin::new(
+            kind.write(),
+            name,
+            rest[0],
+            rest[1],
+        ));
+        let id = block
+            .pins
+            .last()
+            .map(|p| p.id)
+            .ok_or(BridgeError::NoSuchPin)?;
+        self.commit_puppet(Some(block))?;
+        Ok(id)
     }
 
     #[frb(ignore)]
@@ -5307,19 +5482,63 @@ impl LayerReference {
         &self,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        let mut effects = self.item()?.effects;
-        edit(&mut effects)?;
+        self.with_instances(false, edit)
+    }
 
-        let proj = self.project()?;
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
-            .commit(lumit_core::Op::SetLayerEffects {
+    /// [`Self::with_effects`] for either of the layer's two instance lists —
+    /// its effect stack, or its **styles** (docs/impl/layer-styles.md §5,
+    /// K-706).
+    ///
+    /// A style is an `EffectInstance` in a second, order-locked list, so the
+    /// only thing that differs between editing one and editing an effect is
+    /// which list is read and which op commits it. Both live here, which is why
+    /// no command below grows a style branch of its own.
+    #[frb(ignore)]
+    fn with_instances(
+        &self,
+        styles: bool,
+        edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let mut list = if styles { layer.styles } else { layer.effects };
+        edit(&mut list)?;
+
+        let op = if styles {
+            lumit_core::Op::SetLayerStyles {
                 comp: self.comp_id,
                 layer: self.layer_id,
-                effects,
-            })
-            .map_err(BridgeError::OpError)?;
+                styles: list,
+            }
+        } else {
+            lumit_core::Op::SetLayerEffects {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                effects: list,
+            }
+        };
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
         Ok(())
+    }
+
+    /// **The one find-instance-on-layer lookup** (docs/impl/layer-styles.md
+    /// §5): whether `id` names a style rather than an effect.
+    ///
+    /// The effect stack is searched first, then the style list — ids are unique
+    /// across both, so the order is only a statement about which is the common
+    /// case. `false` for an id on neither list, which leaves the caller's own
+    /// "no such instance" error to be the one the user sees rather than
+    /// inventing a second one here.
+    ///
+    /// Every param command — set a value, move a key, bypass, remove — routes
+    /// through this rather than asking whether its caller was a styles panel.
+    /// That is the whole of what makes a style row's stopwatch, drag, driver
+    /// wire and expression the *same* code as an effect row's.
+    #[frb(ignore)]
+    fn is_style(&self, id: Uuid) -> Result<bool, BridgeError> {
+        let layer = self.item()?;
+        Ok(!layer.effects.iter().any(|e| e.id == id) && layer.styles.iter().any(|s| s.id == id))
     }
 
     /// Append the built-in effect named `name` to this layer's stack — or, when
@@ -5376,13 +5595,14 @@ impl LayerReference {
         })
     }
 
-    /// Remove `effect` from this layer's stack. An effect that is no longer there
-    /// is an error rather than a silent success, so a double-click on Remove
-    /// cannot look as though it deleted a second effect.
+    /// Remove `effect` from this layer's stack — **or from its style list**,
+    /// whichever holds it ([`Self::is_style`]). An effect that is no longer
+    /// there is an error rather than a silent success, so a double-click on
+    /// Remove cannot look as though it deleted a second effect.
     #[frb(sync)]
     pub fn remove_effect(&self, effect: &BridgeEffectInstance) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_effects(move |effects| {
+        self.with_instances(self.is_style(id)?, move |effects| {
             let before = effects.len();
             effects.retain(|e| e.id != id);
             if effects.len() == before {
@@ -5417,9 +5637,11 @@ impl LayerReference {
         })
     }
 
-    /// Enable or bypass `effect`. A bypassed effect renders as identity and is
-    /// not animatable (docs/08 §1.5 — the effect's own Mix parameter is the
-    /// animatable dial).
+    /// Enable or bypass `effect` — **or a style**, whichever list holds it
+    /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
+    /// the command the effect row already had. A bypassed effect renders as
+    /// identity and is not animatable (docs/08 §1.5 — the effect's own Mix
+    /// parameter is the animatable dial).
     #[frb(sync)]
     pub fn set_effect_enabled(
         &self,
@@ -5427,7 +5649,7 @@ impl LayerReference {
         enabled: bool,
     ) -> Result<(), BridgeError> {
         let id = effect.id();
-        self.with_effects(move |effects| {
+        self.with_instances(self.is_style(id)?, move |effects| {
             let instance = effects
                 .iter_mut()
                 .find(|e| e.id == id)
@@ -5448,6 +5670,13 @@ impl LayerReference {
     /// resurrect that effect on mouse-up, and reordering or deleting would have
     /// two paths — this one, which cannot say what it meant, and the dedicated
     /// ops above, which can.
+    ///
+    /// **It commits the style list just as readily** (docs/impl/layer-styles.md
+    /// §5): a list staged from [`Self::get_styles`] names style ids, and
+    /// [`Self::is_style`] routes it to the style op. That is deliberate rather
+    /// than a coincidence of naming — a style's parameters are dragged, typed,
+    /// keyed and expression-driven through exactly this path, and giving them a
+    /// second commit would be a second place for the two to drift.
     #[frb(sync)]
     pub fn set_effects(&self, effects: Vec<BridgeEffectInstance>) -> Result<(), BridgeError> {
         let staged: Vec<EffectInstance> = effects
@@ -5455,13 +5684,69 @@ impl LayerReference {
             .map(BridgeEffectInstance::get_effects)
             .collect();
 
-        self.with_effects(move |current| {
+        // An empty staged list is an empty *effect* stack: there is nothing to
+        // ask the lookup about, and clearing the style list is `remove_effect`'s
+        // job rather than a silent consequence of a stale panel.
+        let styles = match staged.first() {
+            Some(first) => self.is_style(first.id)?,
+            None => false,
+        };
+        self.with_instances(styles, move |current| {
             let same_stack = current.len() == staged.len()
                 && current.iter().zip(&staged).all(|(a, b)| a.id == b.id);
             if !same_stack {
                 return Err(BridgeError::StaleEffectStack);
             }
             *current = staged;
+            Ok(())
+        })
+    }
+
+    /// This layer's **styles** as staged copies, exactly as
+    /// [`Self::get_effects`] hands out the stack's
+    /// (docs/impl/layer-styles.md §5).
+    ///
+    /// The twin, and nothing more: what comes back are ordinary
+    /// [`BridgeEffectInstance`] handles, so `get_value` / `set_value` and
+    /// [`Self::set_effects`] are the read and the write, and every parameter
+    /// control the panel already has works on a style row unchanged.
+    #[frb(sync)]
+    pub fn get_styles(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+        let layer = self.item()?;
+        Ok(layer
+            .styles
+            .iter()
+            .map(|s| BridgeEffectInstance::new(s.clone(), layer.start_offset.0))
+            .collect())
+    }
+
+    /// Add the layer style named `name` — one of the nine
+    /// (docs/impl/layer-styles.md §1).
+    ///
+    /// **Refused rather than duplicated** when the layer already wears that
+    /// style: Photoshop's family is nine named slots, not a stack, so a second
+    /// Drop shadow is not a thing the document can hold. The menu greys the row
+    /// out, and this is the rule behind the greying rather than a second
+    /// opinion about it.
+    ///
+    /// Where it lands is not the caller's to say: the op normalises the list
+    /// into §2's painting order, so a Stroke added before a Drop shadow still
+    /// composites behind it. An unknown name — an effect's match name, a typo —
+    /// is refused, and nothing is committed either way.
+    #[frb(sync)]
+    pub fn add_style(&self, name: String) -> Result<(), BridgeError> {
+        if lumit_core::fx::style_index(&name).is_none() {
+            return Err(BridgeError::UnknownEffectName);
+        }
+        let instance = lumit_core::fx::instantiate(&name).ok_or(BridgeError::UnknownEffectName)?;
+        self.with_instances(true, move |styles| {
+            if styles
+                .iter()
+                .any(|s| s.effect.match_name == instance.effect.match_name)
+            {
+                return Err(BridgeError::InvalidEffect);
+            }
+            styles.push(instance);
             Ok(())
         })
     }
@@ -5781,4 +6066,15 @@ fn map_end_value(map: &lumit_core::anim::Property) -> Option<lumit_core::time::R
     let last = keys.last()?;
     lumit_core::time::Rational::from_f64_on_grid(last.value, lumit_core::time::Rational::FLICK_DEN)
         .ok()
+}
+
+/// Stand the puppet mesh preview down (see
+/// [`LayerReference::arm_puppet_preview`]) — a puppet tool put away, or the
+/// selection moved off the layer it was armed on.
+///
+/// Free-standing because it names no layer: there is one preview, and this is
+/// the end of it.
+#[frb(sync)]
+pub fn disarm_puppet_preview() {
+    lumit_render::puppet::arm(None);
 }

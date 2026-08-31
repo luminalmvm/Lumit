@@ -544,6 +544,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerPuppet { comp, layer, .. }
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
+        | Op::SetLayerStyles { comp, layer, .. }
         | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }

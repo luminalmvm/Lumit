@@ -275,6 +275,10 @@ impl fmt::Display for BridgeError {
             BridgeError::NoSuchMask => write!(f, "No such mask on this layer"),
             BridgeError::NoSuchPin => write!(f, "No such puppet pin on this layer"),
             BridgeError::NoPuppet => write!(f, "That layer has no puppet yet"),
+            BridgeError::PuppetNoMesh => {
+                write!(f, "Nothing opaque on this layer to build a mesh from")
+            }
+            BridgeError::PuppetOutsideMesh => write!(f, "That point is outside the puppet's mesh"),
             BridgeError::EmptyStroke => write!(f, "A paint stroke needs at least one point"),
             BridgeError::NoSuchStroke => write!(f, "No such paint stroke on this layer"),
             BridgeError::NotShape => write!(f, "That layer is not a shape layer"),

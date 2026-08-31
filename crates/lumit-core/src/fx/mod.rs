@@ -86,5 +86,8 @@ pub use params::*;
 pub use registry::*;
 pub use resolved::*;
 pub use schema::*;
-pub use styles::{normalise_styles, style_index, style_is_outer, STYLE_DEFS};
+pub use styles::{
+    normalise_styles, offered as offered_styles, style_index, style_is_outer, STYLE_DEFS,
+    UNRENDERED as UNRENDERED_STYLES,
+};
 pub use temporal::*;
