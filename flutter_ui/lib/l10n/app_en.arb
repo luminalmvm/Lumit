@@ -11208,5 +11208,17 @@
   "histSetGroupColour": "Set group colour",
   "@histSetGroupColour": {
     "description": "A row of the Edit > History window: the name of one edit that was made (setting a layer group's label colour). Sent by the engine as English and looked up here."
+  },
+  "beatsNoSound": "No beats: nothing in this composition is sounding — a mute or a solo can silence the mix.",
+  "@beatsNoSound": {
+    "description": "One line in the status bar at the bottom of the window, after beat detection was asked for (the Audio panel's Generate button, the Timeline's more menu, or Composition > Detect beats) and the engine found no audible source to listen to. Calm, not an error: soloing a picture layer, or muting the only layer with sound, silences the whole mix. 'Mute' and 'solo' are the two layer switches of those names."
+  },
+  "beatsNoneFound": "No beats stood out in this composition's audio.",
+  "@beatsNoneFound": {
+    "description": "One line in the status bar at the bottom of the window, after beat detection ran over audio that was there but placed no markers - the sound has no clear rhythm, the sensitivity is too low, or the work area holds none. Calm, not an error."
+  },
+  "audioChainNotBuilt": "The audio chain could not be built on this layer.",
+  "@audioChainNotBuilt": {
+    "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Duck under…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
   }
 }

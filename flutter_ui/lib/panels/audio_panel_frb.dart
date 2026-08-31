@@ -361,14 +361,28 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     );
     // The same busy card the toolbar's one-click detection shows: detection
     // reads whole files and can take seconds, and silence would read as a
-    // command that did not land. A comp with no audio does nothing, calmly.
+    // command that did not land.
+    //
+    // **A refusal says why.** This used to be `onError: (_) {}`, so a comp
+    // whose mix is silenced — a soloed picture row (K-435) is the everyday way
+    // — placed no markers, cleared the grid and explained nothing. It is one
+    // sentence rather than one per reason because a `BridgeError` reaches Dart
+    // as an opaque handle with nothing readable on it: `NoAudio` is what the
+    // engine answers here in every case a person can cause (docs/09 §5), the
+    // rest being a project that closed or a machine with no renderer.
+    // ponytail: one sentence for the whole refusal; split it the day
+    // BridgeError carries a reason id across the bridge.
+    final app = context.read<LumitState>();
     showBusyWhile(
-      context.read<LumitState>().busy,
+      app.busy,
       l10n.detectingBeats,
       comp.detectBeats(options: options).then<void>((found) {
         if (mounted) setState(() => _lastBpm = found.bpm);
         ui.model.refresh();
-      }, onError: (_) {}),
+        // A run that placed nothing is a legitimate answer (docs/09 §5) and
+        // used to be an indistinguishable one: no markers, no grid, no word.
+        if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
+      }, onError: (_) => app.postNotice(l10n.beatsNoSound)),
     );
   }
 
@@ -845,6 +859,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     try {
       graph = layer.getGraph();
     } catch (_) {
+      _sayChainRefused();
       return;
     }
     final targets = <(String, BridgeInputRef)>[];
@@ -962,6 +977,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
       remap = layer.newDriver(name: 'remap');
       smooth = layer.newDriver(name: 'smooth');
     } catch (_) {
+      _sayChainRefused();
       return;
     }
     if (listenTo != null) {
@@ -1012,8 +1028,23 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
         ),
       );
     } catch (_) {
+      _sayChainRefused();
       return;
     }
     widget.onChanged();
+  }
+
+  /// The one word a refused template gets.
+  ///
+  /// Reading the graph, minting the three drivers and committing the wiring can
+  /// each refuse — a layer that has gone, a driver name this build does not
+  /// know, wiring the engine will not take — and all three used to `return`
+  /// without a sound, so the button read as dead. Which of the three it was is
+  /// not something the user can act on differently, and a `BridgeError` reaches
+  /// Dart as an opaque handle anyway, so they share a sentence.
+  void _sayChainRefused() {
+    if (!mounted) return;
+    Provider.of<LumitState>(context, listen: false)
+        .postNotice(l10n.audioChainNotBuilt);
   }
 }

@@ -393,16 +393,21 @@ Future<void> _showMoreMenu(
       onChanged();
     case 'beats':
       // Seconds-long on a long comp, so it runs off-thread and the markers
-      // appear when it finishes; a comp with no audio, or a machine with no
-      // pipeline, says so by doing nothing rather than by an alarm. The card
-      // is up for those seconds so the silence is not mistaken for a command
-      // that did not land, and it comes down either way.
+      // appear when it finishes. The card is up for those seconds so the
+      // silence is not mistaken for a command that did not land, and it comes
+      // down either way — and a comp with nothing sounding in it now says so
+      // on the status line rather than by leaving the Timeline unchanged.
+      final app = context.read<LumitState>();
       showBusyWhile(
-        context.read<LumitState>().busy,
+        app.busy,
         l10n.detectingBeats,
-        comp
-            .detectBeats(options: BridgeBeatOptions.standard())
-            .then<void>((_) => onChanged(), onError: (_) {}),
+        comp.detectBeats(options: BridgeBeatOptions.standard()).then<void>(
+          (found) {
+            onChanged();
+            if (found.placed == 0) app.postNotice(l10n.beatsNoneFound);
+          },
+          onError: (_) => app.postNotice(l10n.beatsNoSound),
+        ),
       );
     case _:
       return;

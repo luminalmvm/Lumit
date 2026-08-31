@@ -251,7 +251,11 @@ same decoded ring, so it is warm wherever the cache bar is warm.
 - **While it runs**: detection is seconds-long on a long composition, so the shell puts up
   the same card it shows while a project opens, reading "Detecting beats", and takes it
   down when the markers land — or when the analysis finds nothing, which a composition
-  with no audio is entitled to.
+  with no audio is entitled to. **Finding nothing is said, not mimed**: a run that had
+  nothing to listen to, and a run that placed no markers, each leave one calm line on the
+  status line. A composition can be silenced by a switch some way from the Audio panel — a
+  soloed picture row takes the whole mix down — so a *Generate* that changed nothing on
+  screen and explained nothing read as a button that did not work.
 - **Snapping**: when snap is enabled, edit points, layer in/out points, keyframes, the
   work area, and marker-trigger effects ([08-EFFECTS.md](08-EFFECTS.md) §1.4) snap to beat
   markers during drags, with the standard snap affordance from
