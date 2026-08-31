@@ -18,9 +18,18 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `edit_shape_item`, `empty`, `empty`, `is_style`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
+
+/// Stand the puppet mesh preview down (see
+/// [`LayerReference::arm_puppet_preview`]) — a puppet tool put away, or the
+/// selection moved off the layer it was armed on.
+///
+/// Free-standing because it names no layer: there is one preview, and this is
+/// the end of it.
+void disarmPuppetPreview() =>
+    BridgeLib.instance.api.crateApiLayerDisarmPuppetPreview();
 
 /// One window of a source's waveform, summarised to exactly the buckets the
 /// lane asked for (K-280).
@@ -304,6 +313,17 @@ class BridgeLayerInfo {
   /// data for *drawing*; an edit reads fresh instance handles at commit time.
   final List<BridgeEffectInstanceInfo> effects;
 
+  /// The layer's **styles** (docs/impl/layer-styles.md §5, K-706), in §2's
+  /// pinned painting order — the same shape as [`Self::effects`] because a
+  /// style *is* an effect instance in a second, order-locked list.
+  ///
+  /// A separate field rather than a flag on the stack: the two lists are
+  /// drawn as two groups, they commit through two ops, and the Effect
+  /// controls panel's stack must never offer a style where a reorder or a
+  /// paste would land. Empty on nearly every layer, which is what makes
+  /// carrying it here free.
+  final List<BridgeEffectInstanceInfo> styles;
+
   /// The label colour index into the theme's palette, drawn as the outline's
   /// swatch. Out-of-range values wrap rather than fault.
   final int label;
@@ -326,6 +346,12 @@ class BridgeLayerInfo {
   /// reason the masks are: the Timeline lists them, and the Viewer needs to
   /// know a layer has some without asking per frame.
   final List<BridgeStroke> paint;
+
+  /// The layer's puppet (K-704), or None on a layer nobody has pinned —
+  /// which is most layers. Carried for the same reason the masks and the
+  /// strokes are: the Timeline draws a group row and a row per pin, and the
+  /// Viewer needs to know a layer is puppeted without asking per frame.
+  final BridgePuppet? puppet;
 
   /// A shape layer's art (K-237), bottom first; empty on every other kind.
   /// Carried for the same reason again — and for one more: the art *is* the
@@ -425,11 +451,13 @@ class BridgeLayerInfo {
     required this.transform,
     required this.axisModes,
     required this.effects,
+    required this.styles,
     required this.label,
     this.matte,
     this.retime,
     required this.masks,
     required this.paint,
+    this.puppet,
     required this.shapeContents,
     required this.markers,
     required this.flow,
@@ -460,11 +488,13 @@ class BridgeLayerInfo {
       transform.hashCode ^
       axisModes.hashCode ^
       effects.hashCode ^
+      styles.hashCode ^
       label.hashCode ^
       matte.hashCode ^
       retime.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
+      puppet.hashCode ^
       shapeContents.hashCode ^
       markers.hashCode ^
       flow.hashCode ^
@@ -497,11 +527,13 @@ class BridgeLayerInfo {
           transform == other.transform &&
           axisModes == other.axisModes &&
           effects == other.effects &&
+          styles == other.styles &&
           label == other.label &&
           matte == other.matte &&
           retime == other.retime &&
           masks == other.masks &&
           paint == other.paint &&
+          puppet == other.puppet &&
           shapeContents == other.shapeContents &&
           markers == other.markers &&
           flow == other.flow &&
@@ -899,6 +931,44 @@ class BridgePuppet {
           density == other.density &&
           expansion == other.expansion &&
           pins == other.pins;
+}
+
+/// The wireframe the Viewer draws over a puppeted layer: the mesh as it stands
+/// at the frame the render last built, in the layer's own pixels.
+///
+/// **Read, never stored.** No triangle is in the document or in a project file
+/// (docs/impl/puppet.md §1.4); this is the mesh the render just warped the
+/// pixels through, handed over so the overlay cannot disagree with the picture.
+/// Flat lists rather than pairs and triples: at the vertex cap that is 3000
+/// numbers, and a flat `Float64List` crosses as one buffer.
+class BridgePuppetGhost {
+  /// Deformed vertex positions, `x, y, x, y…`, layer px at natural size.
+  final Float64List vertices;
+
+  /// Three vertex indices per triangle, flattened.
+  final Uint32List triangles;
+
+  /// Pins whose rest position falls outside the mesh: kept, drawn hollow,
+  /// contributing nothing until the mesh grows back (§6).
+  final List<UuidValue> inert;
+
+  const BridgePuppetGhost({
+    required this.vertices,
+    required this.triangles,
+    required this.inert,
+  });
+
+  @override
+  int get hashCode => vertices.hashCode ^ triangles.hashCode ^ inert.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePuppetGhost &&
+          runtimeType == other.runtimeType &&
+          vertices == other.vertices &&
+          triangles == other.triangles &&
+          inert == other.inert;
 }
 
 /// One puppet pin, in layer pixels — a point parameter is pixels everywhere in
@@ -1643,6 +1713,28 @@ class LayerReference {
   void addPuppetPin({required BridgePuppetPin pin}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddPuppetPin(that: this, pin: pin);
 
+  /// Place a pin of `kind` where the picture shows `(x, y)` at `frame`, in
+  /// layer pixels — the click the four Puppet tools make.
+  ///
+  /// Three things happen here rather than on the frontend, because all three
+  /// are rules rather than drawing. The point is looked up in the **deformed**
+  /// mesh, which is the one the user aimed at, and carried back to where that
+  /// spot sits at rest, which is where a pin is stored. A layer with no block
+  /// gets one, with this frame as its reference time — so the first pin and
+  /// the block it creates are a single undo step. And a click with no mesh
+  /// under it, or outside the one there is, is refused as a value: no block is
+  /// made and no pin floats.
+  ///
+  /// Returns the new pin's id, so the caller can select the row it just made.
+  UuidValue addPuppetPinAt(
+          {required PlatformInt64 frame,
+          required BridgePuppetPinKind kind,
+          required String name,
+          required double x,
+          required double y}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAddPuppetPinAt(
+          that: this, frame: frame, kind: kind, name: name, x: x, y: y);
+
   /// Add one piece of art on top of this shape layer's stack.
   void addShapeItem({required BridgeShapeItem item}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddShapeItem(that: this, item: item);
@@ -1657,6 +1749,34 @@ class LayerReference {
   /// would be a Timeline row with nothing behind it.
   void addStroke({required BridgeStroke stroke}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceAddStroke(that: this, stroke: stroke);
+
+  /// Add the layer style named `name` — one of the nine
+  /// (docs/impl/layer-styles.md §1).
+  ///
+  /// **Refused rather than duplicated** when the layer already wears that
+  /// style: Photoshop's family is nine named slots, not a stack, so a second
+  /// Drop shadow is not a thing the document can hold. The menu greys the row
+  /// out, and this is the rule behind the greying rather than a second
+  /// opinion about it.
+  ///
+  /// Where it lands is not the caller's to say: the op normalises the list
+  /// into §2's painting order, so a Stroke added before a Drop shadow still
+  /// composites behind it. An unknown name — an effect's match name, a typo —
+  /// is refused, and nothing is committed either way.
+  void addStyle({required String name}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceAddStyle(that: this, name: name);
+
+  /// Ask the render for this layer's mesh before it has a puppet — what
+  /// arming a puppet tool does, and what makes the first pin placeable
+  /// (docs/impl/puppet.md §5).
+  ///
+  /// One layer at a time: arming it on another stands the first one down.
+  /// [`disarm_puppet_preview`] takes the last one down when the tool is put
+  /// away. Not an edit — nothing about the document changes, and undo has
+  /// never heard of it.
+  void armPuppetPreview({required double density, required double expansion}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceArmPuppetPreview(
+          that: this, density: density, expansion: expansion);
 
   /// The layer's source audio summarised across `[start_seconds,
   /// end_seconds)` of the **layer's own clock**, in `buckets` buckets
@@ -2257,6 +2377,19 @@ class LayerReference {
         that: this,
       );
 
+  /// This layer's **styles** as staged copies, exactly as
+  /// [`Self::get_effects`] hands out the stack's
+  /// (docs/impl/layer-styles.md §5).
+  ///
+  /// The twin, and nothing more: what comes back are ordinary
+  /// [`BridgeEffectInstance`] handles, so `get_value` / `set_value` and
+  /// [`Self::set_effects`] are the read and the write, and every parameter
+  /// control the panel already has works on a style row unchanged.
+  List<BridgeEffectInstance> getStyles() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetStyles(
+        that: this,
+      );
+
   /// All the switches at once.
   BridgeLayerSwitches getSwitches() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetSwitches(
@@ -2424,9 +2557,23 @@ class LayerReference {
   void pasteSequenceShape({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferencePasteSequenceShape(that: this, text: text);
 
-  /// Remove `effect` from this layer's stack. An effect that is no longer there
-  /// is an error rather than a silent success, so a double-click on Remove
-  /// cannot look as though it deleted a second effect.
+  /// The wireframe this layer is showing, or `None` when no frame carrying a
+  /// mesh on it has been built — an unpinned layer with no tool armed on it,
+  /// or one with nothing opaque to cut a mesh from.
+  ///
+  /// Cheap and call-shaped rather than part of the read model on purpose: it
+  /// changes with the *frame*, not with the document, so the Viewer holds it
+  /// against the playhead and the revision exactly as it holds an animated
+  /// mask's path, and a hover asks nothing (K-184, K-681).
+  BridgePuppetGhost? puppetGhost() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferencePuppetGhost(
+        that: this,
+      );
+
+  /// Remove `effect` from this layer's stack — **or from its style list**,
+  /// whichever holds it ([`Self::is_style`]). An effect that is no longer
+  /// there is an error rather than a silent success, so a double-click on
+  /// Remove cannot look as though it deleted a second effect.
   void removeEffect({required BridgeEffectInstance effect}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceRemoveEffect(that: this, effect: effect);
@@ -2568,9 +2715,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipSpeed(
           that: this, clip: clip, percent: percent, endPercent: endPercent);
 
-  /// Enable or bypass `effect`. A bypassed effect renders as identity and is
-  /// not animatable (docs/08 §1.5 — the effect's own Mix parameter is the
-  /// animatable dial).
+  /// Enable or bypass `effect` — **or a style**, whichever list holds it
+  /// ([`Self::is_style`]), which is what makes a style row's own on/off tick
+  /// the command the effect row already had. A bypassed effect renders as
+  /// identity and is not animatable (docs/08 §1.5 — the effect's own Mix
+  /// parameter is the animatable dial).
   void setEffectEnabled(
           {required BridgeEffectInstance effect, required bool enabled}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetEffectEnabled(
@@ -2587,6 +2736,13 @@ class LayerReference {
   /// resurrect that effect on mouse-up, and reordering or deleting would have
   /// two paths — this one, which cannot say what it meant, and the dedicated
   /// ops above, which can.
+  ///
+  /// **It commits the style list just as readily** (docs/impl/layer-styles.md
+  /// §5): a list staged from [`Self::get_styles`] names style ids, and
+  /// [`Self::is_style`] routes it to the style op. That is deliberate rather
+  /// than a coincidence of naming — a style's parameters are dragged, typed,
+  /// keyed and expression-driven through exactly this path, and giving them a
+  /// second commit would be a second place for the two to drift.
   void setEffects({required List<BridgeEffectInstance> effects}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetEffects(that: this, effects: effects);

@@ -213,6 +213,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgePuppet dco_decode_box_autoadd_bridge_puppet(dynamic raw);
 
   @protected
+  BridgePuppetGhost dco_decode_box_autoadd_bridge_puppet_ghost(dynamic raw);
+
+  @protected
   BridgePuppetPin dco_decode_box_autoadd_bridge_puppet_pin(dynamic raw);
 
   @protected
@@ -614,6 +617,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgePuppet dco_decode_bridge_puppet(dynamic raw);
 
   @protected
+  BridgePuppetGhost dco_decode_bridge_puppet_ghost(dynamic raw);
+
+  @protected
   BridgePuppetPin dco_decode_bridge_puppet_pin(dynamic raw);
 
   @protected
@@ -718,6 +724,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeStrokePoint dco_decode_bridge_stroke_point(dynamic raw);
+
+  @protected
+  BridgeStyleInfo dco_decode_bridge_style_info(dynamic raw);
 
   @protected
   BridgeSwatch dco_decode_bridge_swatch(dynamic raw);
@@ -956,6 +965,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeStrokePoint> dco_decode_list_bridge_stroke_point(dynamic raw);
 
   @protected
+  List<BridgeStyleInfo> dco_decode_list_bridge_style_info(dynamic raw);
+
+  @protected
   List<BridgeSwatch> dco_decode_list_bridge_swatch(dynamic raw);
 
   @protected
@@ -1068,6 +1080,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePuppet? dco_decode_opt_box_autoadd_bridge_puppet(dynamic raw);
+
+  @protected
+  BridgePuppetGhost? dco_decode_opt_box_autoadd_bridge_puppet_ghost(
+      dynamic raw);
 
   @protected
   BridgeRational? dco_decode_opt_box_autoadd_bridge_rational(dynamic raw);
@@ -1314,6 +1330,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePuppet sse_decode_box_autoadd_bridge_puppet(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgePuppetGhost sse_decode_box_autoadd_bridge_puppet_ghost(
       SseDeserializer deserializer);
 
   @protected
@@ -1780,6 +1800,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgePuppet sse_decode_bridge_puppet(SseDeserializer deserializer);
 
   @protected
+  BridgePuppetGhost sse_decode_bridge_puppet_ghost(
+      SseDeserializer deserializer);
+
+  @protected
   BridgePuppetPin sse_decode_bridge_puppet_pin(SseDeserializer deserializer);
 
   @protected
@@ -1901,6 +1925,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeStrokePoint sse_decode_bridge_stroke_point(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeStyleInfo sse_decode_bridge_style_info(SseDeserializer deserializer);
 
   @protected
   BridgeSwatch sse_decode_bridge_swatch(SseDeserializer deserializer);
@@ -2188,6 +2215,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeStyleInfo> sse_decode_list_bridge_style_info(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeSwatch> sse_decode_list_bridge_swatch(
       SseDeserializer deserializer);
 
@@ -2317,6 +2348,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePuppet? sse_decode_opt_box_autoadd_bridge_puppet(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgePuppetGhost? sse_decode_opt_box_autoadd_bridge_puppet_ghost(
       SseDeserializer deserializer);
 
   @protected
@@ -2577,6 +2612,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_puppet(
       BridgePuppet self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_puppet_ghost(
+      BridgePuppetGhost self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_puppet_pin(
@@ -3094,6 +3133,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_puppet(BridgePuppet self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_puppet_ghost(
+      BridgePuppetGhost self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_puppet_pin(
       BridgePuppetPin self, SseSerializer serializer);
 
@@ -3229,6 +3272,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_stroke_point(
       BridgeStrokePoint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_style_info(
+      BridgeStyleInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_swatch(BridgeSwatch self, SseSerializer serializer);
@@ -3525,6 +3572,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeStrokePoint> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_style_info(
+      List<BridgeStyleInfo> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_swatch(
       List<BridgeSwatch> self, SseSerializer serializer);
 
@@ -3663,6 +3714,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_puppet(
       BridgePuppet? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_puppet_ghost(
+      BridgePuppetGhost? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_rational(

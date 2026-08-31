@@ -645,8 +645,10 @@ has any business reading it.
 a density, an expansion and a list of `BridgePuppetPin` — and **no mesh crosses this seam
 in either direction**. The triangles are rebuilt engine-side from the layer's own alpha and
 cached there, so a future triangulator changes nothing in any saved project *and* nothing
-in any panel; the overlay's ghost will ride the per-frame overlay data the transform gizmos
-already use (PU3), not a mesh fetched per rebuild.
+in any panel. The overlay's ghost is that rule kept rather than broken (K-716): the render
+*publishes* the mesh it just warped the pixels through, and the frontend holds it against the
+layer, the frame counter and the revision — so the wireframe cannot disagree with the picture
+and a hover fetches nothing.
 
 Five calls on `LayerReference`, all shaped like the mask ones and for the same reason —
 each commits one `Op::SetLayerPuppet`, which replaces the whole block and is exactly
@@ -662,6 +664,23 @@ invertible, so every puppet edit is one undo step:
   edits. **Moving a pin is `set_puppet_pin`**: its `x`/`y` are ordinary `BridgeScalar`
   channels, so a drag with the stopwatch on lands a keyframe through exactly the machinery
   a mask's opacity uses, and `NoSuchPin` is the calm answer to a stale id.
+
+Three more since PU3 (K-716), none of which put a triangle in the document:
+
+- `puppet_ghost()` answers the wireframe this layer is showing at the frame the render last
+  built — the deformed vertices, flat; the triangles, flat; and the ids of the pins that have
+  gone inert. `None` when no frame carrying a mesh on this layer has been built. Read against
+  the layer, the frame counter and the document revision, exactly as an animated mask's path
+  is, so a hover costs nothing (K-184, K-681).
+- `arm_puppet_preview(density, expansion)` asks the render for a mesh on a layer that has no
+  block yet — which is what makes the *first* pin placeable — and the free
+  `disarm_puppet_preview()` stands it down. One layer at a time; not an edit, and undo has
+  never heard of it.
+- `add_puppet_pin_at(frame, kind, name, x, y)` is the click. It looks the point up in the
+  **deformed** mesh, carries it back to rest through the same barycentric coordinates, and
+  makes the block if there is none — so the first pin and its block are one op. Its two
+  refusals are values: `PuppetNoMesh` when there is nothing to pin, `PuppetOutsideMesh` when
+  the point falls outside the mesh. Neither leaves a block behind.
 
 Two conventions this seam keeps rather than invents. Every time on it is **composition**
 time, carried across the layer's start offset (K-213) — the pins' keyframes and the block's
@@ -754,8 +773,19 @@ thread, over the media file — and this is the doorway.
   an untouched frame is explained rather than mysterious. A **cancelled** run reports the same
   shape as a finished one, because it is the same kind of answer: the frames it reached are
   kept (K-540).
+- **Two more since RB3** (K-717), both read once per frame change and never per rebuild:
+  `roto_source_frame(layer, frame)` answers **which frame of the file** a composition frame
+  shows on that layer — the decode planner's own arithmetic (`layer_time` → `source_time_at` →
+  `frame_pick`), because a layer's start offset and its Retime map live in the document and Dart
+  cannot evaluate a property curve; and `roto_boundary(effect, frame)` answers **where the
+  propagated matte's edge runs**, as `[x0, y0, …]` in source pixels, for the **Boundary** view
+  the effect hands to the overlay. Both refuse honestly: a non-footage layer or unprobeable media
+  is `NotFootage`, and no run, no span or no cache folder is an empty edge.
 - **What is not a call**: the matte itself. It is pixels, it is large, and the render path
-  already reads it out of the store on the way to the card; nothing about it needs to cross.
+  already reads it out of the store on the way to the card; nothing about it needs to cross. Its
+  **outline** does, because the Boundary view is the overlay's to draw and an outline is a few
+  thousand numbers rather than two megabytes — thinned to a fixed cap engine-side, so the answer
+  never grows with the picture.
 
 ### The export dialogue's settings cross flat (K-479, K-485, K-503)
 

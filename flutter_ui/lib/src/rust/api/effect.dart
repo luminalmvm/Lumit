@@ -14,7 +14,7 @@ import 'roto.dart';
 part 'effect.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animation_at`, `badge_of`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `derived_params_of`, `document_for`, `fill_derived`, `hard_bounds`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -31,6 +31,22 @@ part 'effect.freezed.dart';
 /// canvas's narrower question: which entries may be *dropped on the graph*.
 List<BridgeEffectInfo> listEffects() =>
     BridgeLib.instance.api.crateApiEffectListEffects();
+
+/// The **layer styles** the Add-style menu offers (docs/impl/layer-styles.md
+/// §6, K-706): the seven that render, in §2's pinned painting order.
+///
+/// Deliberately **not** part of [`list_effects`]: the effect browser, the
+/// command palette and the Add-effect menu all walk that list, and offering
+/// "Drop shadow (style)" there beside the Drop shadow effect would be the wrong
+/// answer to every search for a shadow. A style is added from the Layer menu and
+/// from the panel's own Styles heading, and both read this.
+///
+/// Its own tiny shape rather than [`BridgeEffectInfo`], because a style has none
+/// of what that carries: no browse category (they are one fixed family), no
+/// sockets (nothing wires to a style's declaration before it is on a layer), and
+/// no provenance (all nine are Lumit's).
+List<BridgeStyleInfo> listStyles() =>
+    BridgeLib.instance.api.crateApiEffectListStyles();
 
 /// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
 /// same shape and the same schema order as [`list_effects`].
@@ -1358,6 +1374,31 @@ sealed class BridgeSideInterp with _$BridgeSideInterp {
   const factory BridgeSideInterp.auto(
     BridgeAutoSide field0,
   ) = BridgeSideInterp_Auto;
+}
+
+/// One entry of [`list_styles`]: the match name [`add_style`] takes, and the
+/// English label the menu row shows through the engine-label table.
+///
+/// [`add_style`]: crate::api::layer::LayerReference::add_style
+class BridgeStyleInfo {
+  final String name;
+  final String label;
+
+  const BridgeStyleInfo({
+    required this.name,
+    required this.label,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ label.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeStyleInfo &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          label == other.label;
 }
 
 /// The unit a parameter's number is in (K-443) — what the row draws as its

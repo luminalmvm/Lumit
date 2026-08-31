@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `press`, `read`, `read`, `roto_block_mut`, `roto_block`
+// These functions are ignored because they are not marked as `pub`: `boundary_of`, `media_rate`, `press`, `read`, `read`, `roto_block_mut`, `roto_block`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The Roto brush `effect` on `layer`, as its status row draws it.
@@ -21,6 +21,52 @@ import 'package:uuid/uuid.dart';
 BridgeRotoStatus rotoStatus(
         {required LayerReference layer, required UuidValue effect}) =>
     BridgeLib.instance.api.crateApiRotoRotoStatus(layer: layer, effect: effect);
+
+/// Which frame of the **file** this layer is showing at composition frame
+/// `frame` (K-248, K-717).
+///
+/// A stroke's `frame` is a source frame index, and the viewer only knows the
+/// composition's ruler. Between the two sit the layer's start offset and its
+/// Retime map, both of which live in the document and neither of which Dart can
+/// evaluate — a Retime is a property curve. So the one number the gesture is
+/// missing is asked for here, through exactly the arithmetic the decode planner
+/// does (`layer_time` → `source_time_at` → `frame_pick`), because a stroke filed
+/// against the wrong frame of a retimed layer would seed a frame the user never
+/// looked at and be silently, invisibly wrong.
+///
+/// Read on a frame change and held, never per rebuild (K-681).
+///
+/// `NotFootage` for anything but a footage layer, and for media that will not
+/// probe: a Roto brush on a layer with no file behind it has no source frame to
+/// name, which is a refusal rather than a guess at zero.
+PlatformInt64 rotoSourceFrame(
+        {required LayerReference layer, required PlatformInt64 frame}) =>
+    BridgeLib.instance.api
+        .crateApiRotoRotoSourceFrame(layer: layer, frame: frame);
+
+/// Where the propagated matte's **edge** runs at `frame`, as
+/// `[x0, y0, x1, y1, …]` in source raster pixels (K-717).
+///
+/// The Roto brush's **Boundary** view keeps the picture and asks the viewer to
+/// draw the edge over it (`lumit_core::fx::effects::roto_brush::VIEW_OPTIONS`),
+/// which is the overlay's business rather than the stack's. This is the one
+/// thing the overlay cannot work out for itself: the matte is in the store, and
+/// the matte itself deliberately never crosses (docs/17) — it is two megabytes
+/// a frame of pixels the render path already reads on its own way to the card.
+/// Its outline is a few thousand numbers.
+///
+/// Empty — no run, outside the propagated span, the cache folder deleted — is
+/// the passthrough's honest answer and never a fault.
+///
+/// ponytail: a full-plane scan per frame change (~2 ms at 1080p) emitting
+/// stride-thinned edge *pixels* rather than a traced contour, so a hairline edge
+/// draws as dots rather than as a line. The upgrade is a contour traced once and
+/// filed with the run. Observable trigger: the boundary reading as dotted at
+/// ordinary magnification, or a scrub with the overlay up dropping frames.
+Float32List rotoBoundary(
+        {required UuidValue effect, required PlatformInt64 frame}) =>
+    BridgeLib.instance.api
+        .crateApiRotoRotoBoundary(effect: effect, frame: frame);
 
 /// Why a propagation produced no mattes.
 ///
