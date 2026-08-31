@@ -194,7 +194,17 @@ impl MarkerContext {
     /// (the v1 §1.4 scope — named-layer binding and label filters follow),
     /// each translated into the layer's local time, sorted ascending.
     pub fn for_layer(comp: &Composition, layer: &Layer) -> Self {
-        let off = layer.start_offset.0;
+        Self::at_offset(comp, layer.start_offset.0)
+    }
+
+    /// The context at comp time itself — for an effect stack with no layer
+    /// clock to convert through: a group header's (docs/impl/group-effects.md
+    /// §1, K-731). The same beats `for_layer` reads, unshifted.
+    pub fn for_comp(comp: &Composition) -> Self {
+        Self::at_offset(comp, crate::time::Rational::ZERO)
+    }
+
+    fn at_offset(comp: &Composition, off: crate::time::Rational) -> Self {
         let mut beats: Vec<f64> = comp
             .markers
             .iter()

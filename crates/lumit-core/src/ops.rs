@@ -375,6 +375,19 @@ pub enum Op {
         group: Uuid,
         label: u8,
     },
+    /// Replace a group header's whole effect stack (docs/impl/group-effects.md,
+    /// K-731): [`Op::SetLayerEffects`]' shape for
+    /// [`crate::group::LayerGroup::effects`], coarse and exactly invertible —
+    /// add, remove, reorder, toggle and every param edit commit the new list.
+    /// No graph-pruning twin, because
+    /// a group carries no driver graph; and the lock has nothing to say about
+    /// it, matching the other group ops — a group is not lockable, and its
+    /// members' locks guard the members.
+    SetGroupEffects {
+        comp: Uuid,
+        group: Uuid,
+        effects: Vec<crate::model::EffectInstance>,
+    },
     /// Set a composition's motion-blur shutter (K-120): the master enable plus
     /// the shutter angle/phase and sample count.
     SetCompMotionBlur {
@@ -741,6 +754,10 @@ impl Op {
             Op::UngroupLayers { .. } => "Ungroup layers",
             Op::SetGroupName { .. } => "Rename group",
             Op::SetGroupLabel { .. } => "Set group colour",
+            // The same undo label the layer's stack edit wears: what was
+            // edited is an effect stack either way, and one string is one
+            // translation (K-005).
+            Op::SetGroupEffects { .. } => "Edit effects",
             Op::SetLayerCollapse { .. } => "Collapse switch",
             Op::SetCompMotionBlur { .. } => "Composition motion blur",
             Op::SetCompBackground { .. } => "Composition background",
@@ -1501,6 +1518,25 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 group: *group,
                 label: previous,
+            })
+        }
+        Op::SetGroupEffects {
+            comp,
+            group,
+            effects,
+        } => {
+            let g = doc
+                .comp_mut(*comp)
+                .ok_or(OpError::UnknownComp)?
+                .groups
+                .iter_mut()
+                .find(|g| g.id == *group)
+                .ok_or(OpError::UnknownGroup)?;
+            let previous = std::mem::replace(&mut g.effects, effects.clone());
+            Ok(Op::SetGroupEffects {
+                comp: *comp,
+                group: *group,
+                effects: previous,
             })
         }
         Op::SetLayerMotionBlur {

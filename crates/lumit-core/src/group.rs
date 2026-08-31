@@ -6,8 +6,13 @@
 //! third", "the background plates" — with a triangle on it. Twirl it shut and
 //! those layers fold away behind a single row; twirl it open and they are back
 //! exactly where they were. That is the whole of it. **Nothing about the
-//! picture changes**: the layers render in the same order, with the same
-//! blends and the same mattes, whether the group is open, shut, or never made.
+//! picture changes while the header carries no effects**: the layers render in
+//! the same order, with the same blends and the same mattes, whether the group
+//! is open, shut, or never made. Drop effects on the header
+//! ([`LayerGroup::effects`], docs/impl/group-effects.md, K-731) and the group
+//! renders as an implicit per-frame precompose — the members composited alone,
+//! the header's stack run on that one picture — which is the only frame on
+//! which grouping is allowed to change anything.
 //! Lumit already has a tool that *does* change the picture by collapsing
 //! layers — Precompose, which packs them into a comp of their own — and the
 //! two sit side by side deliberately: the group is the cheap organisational
@@ -49,6 +54,21 @@ pub struct LayerGroup {
     /// puts them in stack order, because the stack is the only order that
     /// means anything here.
     pub members: Vec<Uuid>,
+    /// The header's effect stack (docs/impl/group-effects.md, K-731). Same
+    /// shape as `Layer::effects`. Empty = the K-702 group: invisible to the
+    /// render walk, byte-identical picture, and every project saved before
+    /// this field existed re-saves byte-identical (skipped while empty).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<crate::model::EffectInstance>,
+}
+
+/// Whether a group's header stack would act on this frame at all: any enabled
+/// instance. The render walk, the frame key and the Timeline's fx tick all ask
+/// this one question, so "live" cannot drift apart between them
+/// (docs/impl/group-effects.md §2).
+#[must_use]
+pub fn header_live(group: &LayerGroup) -> bool {
+    group.effects.iter().any(|e| e.enabled)
 }
 
 /// The members a group **actually draws over**: the longest unbroken run of
@@ -141,6 +161,7 @@ mod tests {
             name: "G".into(),
             label: 0,
             members: ids(members),
+            effects: Vec::new(),
         }
     }
 

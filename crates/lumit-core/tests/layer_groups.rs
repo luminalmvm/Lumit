@@ -88,6 +88,7 @@ fn group_of_ids(name: &str, members: &[Uuid]) -> Box<LayerGroup> {
         name: name.into(),
         label: 0,
         members: members.to_vec(),
+        effects: Vec::new(),
     })
 }
 
@@ -288,6 +289,70 @@ fn a_project_with_no_groups_round_trips_byte_identical() {
         .unwrap()
         .groups
         .is_empty());
+}
+
+/// **Effects on the header** (docs/impl/group-effects.md §5, K-731):
+/// `SetGroupEffects` round-trips exactly; Ungroup discards the stack with the
+/// band and one undo restores both, because the inverse carries the whole
+/// group and the group now carries its effects.
+#[test]
+fn a_headers_effect_stack_round_trips_and_survives_ungroup_undo() {
+    let (doc, comp, ids) = doc_with_four();
+    let store = DocumentStore::new(doc);
+    let group = group_of_ids("Lower third", &ids[1..3]);
+    let group_id = group.id;
+    store
+        .commit(Op::GroupLayers {
+            comp,
+            index: 0,
+            group,
+        })
+        .unwrap();
+
+    let blur = lumit_core::fx::instantiate("blur").expect("blur is a builtin");
+    let dressed = store
+        .commit(Op::SetGroupEffects {
+            comp,
+            group: group_id,
+            effects: vec![blur.clone()],
+        })
+        .unwrap();
+    assert_eq!(dressed.comp(comp).unwrap().groups[0].effects.len(), 1);
+
+    // The op is exactly invertible: one undo is the empty list again, and
+    // one redo the dressed one.
+    let undone = store.undo().unwrap().unwrap();
+    assert!(undone.comp(comp).unwrap().groups[0].effects.is_empty());
+    store.redo().unwrap();
+
+    let bare = store
+        .commit(Op::UngroupLayers {
+            comp,
+            group: group_id,
+        })
+        .unwrap();
+    assert!(
+        bare.comp(comp).unwrap().groups.is_empty(),
+        "the band is gone, and its wardrobe with it"
+    );
+    let restored = store.undo().unwrap().unwrap();
+    let g = &restored.comp(comp).unwrap().groups[0];
+    assert_eq!(g.id, group_id);
+    assert_eq!(
+        g.effects,
+        vec![blur],
+        "undoing the ungroup restores the header's stack with the band"
+    );
+
+    // An unknown group refuses calmly, like the other group ops.
+    assert!(matches!(
+        store.commit(Op::SetGroupEffects {
+            comp,
+            group: Uuid::now_v7(),
+            effects: Vec::new(),
+        }),
+        Err(OpError::UnknownGroup)
+    ));
 }
 
 /// A grouped project round-trips too, and a member deleted out from under a

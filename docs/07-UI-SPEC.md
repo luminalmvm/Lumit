@@ -1467,8 +1467,11 @@ measurement — the panel shows the numbers, it does not turn them on.
 
 A **layer group** ([01-GLOSSARY.md](01-GLOSSARY.md)) is a named band over an unbroken run
 of layers: a header row in the outline with its members indented beneath it, and a combined
-bar in the lane half. It is **organisation only** — see
-[03-DATA-MODEL.md](03-DATA-MODEL.md) §5.4 — and MUST never change the picture.
+bar in the lane half. It is organisation — see
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §5.4 — and MUST never change the picture **while the
+header carries no effects**. A header with a live effect stack scopes those effects to the
+members as an implicit per-frame precompose (docs/impl/group-effects.md, K-731), which is
+the one sanctioned way a group reaches the picture.
 
 - **Ctrl+G** groups the selected layers; **Ctrl+Shift+G** ungroups. A selection that is not
   a contiguous run of the stack MUST be refused, and the stack MUST NOT be rearranged to
@@ -2498,7 +2501,7 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
   selected layer's Volume and Pan (K-694 — pan shipped, reversing the earlier deferral)
   with their stopwatches, fade in/out wells with the three curve chips (K-695), and the
   two graph-template buttons — *Drive with audio…* (Audio level → Remap → Smooth onto a
-  picked parameter) and *Lower behind…* (the ducking move in plain words, K-730: the
+  picked parameter) and *Lower behind…* (the ducking move in plain words, K-731: the
   inverted chain onto this layer's Volume socket, K-697).
 - **Level meters**: the Audio panel's Levels section draws the output's stereo bars with
   the panel-side peak hold and the sticky clip lamp; the **Mixer** panel (docs/09 §3.1,

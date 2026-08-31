@@ -23078,3 +23078,40 @@ No manual page on docs.lumitlab.com mentions the old label, so nothing is owed t
 
 Tests: `audio_panel_frb_test` (the renamed test drives the same staged chain);
 `engine_labels_test` and the arb gates stand as always.
+
+## K-731 — Effects on a layer group header scope to the members: an implicit per-frame precompose
+
+**Status: PROPOSED (2026-08-31).** Owner ask: "apply effects onto the group
+head itself, and it acts like an adjustment layer for the effects within it,
+but not outside." Amends K-702's promise; design in
+docs/impl/group-effects.md. The note's two open questions were answered by the
+owner (2026-08-31) and are folded in here: **effects only** — the unit's own
+draw keeps its pinned 100/Normal and no opacity dial or blend-mode row appears
+on the header; and **the Timeline gets real lanes in v1** — the group header
+twirls open like a layer and its effect keyframes get lanes, the K-702
+row-shape change accepted.
+
+`LayerGroup` gains an `effects: Vec<EffectInstance>` (serde-skipped while
+empty). When the header stack is live and the drawn run non-empty, the build
+walk wraps the run's draws in one comp-sized `DrawSource::Nested` unit whose
+`fx` is the header's stack resolved at comp time — the Precomp layer's
+existing render path, no new staging. K-702's "identical picture grouped or
+ungrouped" is reworded **"…when the header carries no effects"** in
+group.rs, docs/03 §5.4 and docs/07 §4.2a; on every frame where no header is
+live, the walk stays group-blind and every existing key and cached frame
+holds. Members inside a live unit composite in isolation (Photoshop's
+non-Pass-Through group rule): blend modes stop reaching the backdrop below
+the group while the header is live. Mattes and layer inputs cross the
+boundary unchanged in both directions, because matte sources render alone by
+construction. The frame key feeds, per live group only, the drawn run — **by
+stack position and length, not by member id** (one amendment to the note's §4
+text: identity never feeds a key, so a duplicated comp keeps sharing its
+original's cache) — and the resolved header stack. The occlusion cull refuses
+whenever any header is live: a header's stack can thin its members' coverage,
+and the decode planner asks the same function. One new op, `SetGroupEffects`,
+the `SetLayerEffects` shape; Ungroup discards the stack (undo restores it);
+Pre-compose group moves it onto the Precomp layer. v1 boundaries, each named
+in the note with its upgrade: the unit is uncached (K-421 stance),
+temporal/flow effects on a header are inert or passthrough, and group params
+take no node-graph wires. The Effect controls panel edits the stack; the
+Timeline shows an fx tick on the header and lanes for its keyframes.

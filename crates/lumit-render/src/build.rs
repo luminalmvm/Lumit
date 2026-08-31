@@ -1369,13 +1369,17 @@ pub fn build_comp_draws_at(
     // on, and an effect walking another layer's shape is a question nobody has
     // asked. That is why nothing is rendered here — unlike a matte, this input
     // is not a picture, and the whole point of the seam is that a coverage
-    // buffer cannot say which way is *along* a curve.
-    let mask_paths_for = |layer: &lumit_core::model::Layer,
+    // buffer cannot say which way is *along* a curve. Takes the two lists
+    // rather than a `Layer` so a group header's stack — which has no masks at
+    // all — walks the same carriage (docs/impl/group-effects.md §2): every
+    // declared row still gets its slot, each an empty polyline, which is the
+    // effect's documented no-op.
+    let mask_paths_for = |effects: &[lumit_core::model::EffectInstance],
+                          masks: &[lumit_core::mask::Mask],
                           slt: f64|
      -> Vec<lumit_core::mask::MaskPolyline> {
         use lumit_core::model::EffectNamespace;
-        layer
-            .effects
+        effects
             .iter()
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
@@ -1396,7 +1400,7 @@ pub fn build_comp_draws_at(
                 {
                     return lumit_core::mask::MaskPolyline::default();
                 }
-                lumit_core::mask::mask_path_at(&layer.masks, e.mask_ref(param), self_default, slt)
+                lumit_core::mask::mask_path_at(masks, e.mask_ref(param), self_default, slt)
             })
             .collect()
     };
@@ -1414,12 +1418,11 @@ pub fn build_comp_draws_at(
     //
     // No lock is held past this call: the store clones an `Arc` out from under
     // its own guard, and what lands here is that same allocation.
-    let roto_mattes_for = |layer: &lumit_core::model::Layer,
+    let roto_mattes_for = |effects: &[lumit_core::model::EffectInstance],
                            source_frame: i64|
      -> Vec<Option<crate::draw::RotoMatteDraw>> {
         use lumit_core::model::EffectNamespace;
-        layer
-            .effects
+        effects
             .iter()
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter(|e| e.effect.match_name == lumit_core::roto::ROTO_BRUSH)
@@ -1458,7 +1461,13 @@ pub fn build_comp_draws_at(
     // scanned frame would make one picture cost a thousand driver walks. The
     // birth schedule of a driven rate therefore follows the track it was
     // authored on — named here, and PS4's business when a wire can reach it.
-    let points_schedules_for = |layer: &lumit_core::model::Layer,
+    // `owner` is the layer the stack sits on — `None` for a group header's
+    // stack (docs/impl/group-effects.md §2), which has no camera-projected
+    // stream, no wires to bring one in, and no layer id for an expression to
+    // name: its schedules still fill one slot per declared row, so the 1:1
+    // walk in `run_ops` holds.
+    let points_schedules_for = |owner: Option<&lumit_core::model::Layer>,
+                                effects: &[lumit_core::model::EffectInstance],
                                 slt: f64,
                                 frame_slt: f64|
      -> Vec<lumit_core::fx::points::PointsSchedule> {
@@ -1467,22 +1476,23 @@ pub fn build_comp_draws_at(
         // **The camera carriage** (K-561), worked out once for the layer: a
         // stream's third axis is only visible through the comp's camera, and
         // the camera is no more a number in the bag than the layer's clock is.
-        let projection = points_projection(
-            expr_doc,
-            comp,
-            layer,
-            t_comp,
-            slt,
-            Arc::new(ExpressionContext {
-                document: expr_doc.clone(),
-                comp: Some(comp.id),
-                layer: Some(layer.id),
-                comp_time: t_comp,
-                current_depth: 0,
-            }),
-        );
-        layer
-            .effects
+        let projection = owner.and_then(|layer| {
+            points_projection(
+                expr_doc,
+                comp,
+                layer,
+                t_comp,
+                slt,
+                Arc::new(ExpressionContext {
+                    document: expr_doc.clone(),
+                    comp: Some(comp.id),
+                    layer: Some(layer.id),
+                    comp_time: t_comp,
+                    current_depth: 0,
+                }),
+            )
+        });
+        effects
             .iter()
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
@@ -1499,7 +1509,7 @@ pub fn build_comp_draws_at(
                 let context = Arc::new(ExpressionContext {
                     document: expr_doc.clone(),
                     comp: Some(comp.id),
-                    layer: Some(layer.id),
+                    layer: owner.map(|l| l.id),
                     comp_time: t_comp,
                     current_depth: 0,
                 });
@@ -1509,16 +1519,21 @@ pub fn build_comp_draws_at(
                 // (points-stream.md §3.3). In px@comp — the units a stream is
                 // data in (K-419) — and rescaled into the raster by whichever
                 // consumer draws it.
-                let (input, input_from) = points_input_for(
-                    layer,
-                    e,
-                    def,
-                    t,
-                    dt,
-                    projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
-                    &context,
-                    &audio,
-                );
+                let (input, input_from) = match owner {
+                    Some(layer) => points_input_for(
+                        layer,
+                        e,
+                        def,
+                        t,
+                        dt,
+                        projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
+                        &context,
+                        &audio,
+                    ),
+                    // A group carries no graph, so no wire can bring a stream
+                    // in: the consumer's documented empty input.
+                    None => (Vec::new(), None),
+                };
                 // **A generator has no births to schedule** (K-598): its points
                 // are arithmetic over its own parameters, and what it wants
                 // from this carriage is the camera and the clock. A *consumer*
@@ -1564,11 +1579,174 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
+    // **Live groups** (docs/impl/group-effects.md §2, K-731): a group whose
+    // header stack has an enabled instance and whose drawn run is non-empty
+    // renders as an implicit per-frame precompose — the run's draws collected
+    // and wrapped in one comp-sized Nested draw carrying the header's stack.
+    // This is the only reading of `Composition.groups` the render ever makes,
+    // so on every frame where no header is live the walk stays group-blind
+    // and K-702's byte-identical promise holds.
+    let stack_ids: Vec<uuid::Uuid> = comp.layers.iter().map(|l| l.id).collect();
+    let mut live_spans: Vec<(usize, usize, &lumit_core::group::LayerGroup)> = Vec::new();
+    for g in &comp.groups {
+        if !lumit_core::group::header_live(g) {
+            continue;
+        }
+        let run = lumit_core::group::drawn_members(&stack_ids, g);
+        let Some(first) = run.first() else {
+            continue;
+        };
+        let Some(start) = stack_ids.iter().position(|id| id == first) else {
+            continue;
+        };
+        let end = start + run.len();
+        // A layer sits in one group's run (`group_of`'s first-wins rule); a
+        // hand-edited overlap keeps the first span and reads the loser as the
+        // ungrouped layers it looks like — degrade, not fault.
+        if live_spans.iter().any(|(s, e, _)| start < *e && *s < end) {
+            continue;
+        }
+        live_spans.push((start, end, g));
+    }
+    // A group carries no driver graph (§1), so its matte carriage resolves
+    // against an empty one.
+    let group_graph = lumit_core::graph::LayerGraph::default();
+    // Close a live group's unit: everything the walk collected past `mark`
+    // becomes the `draws` of one comp-sized Nested draw — the Precomp layer's
+    // own render path from the first line to the last — whose `fx` is the
+    // header's stack resolved at comp time. If every member was gated out
+    // (eyes off, solo elsewhere), or the stack resolves to no op at all, the
+    // group contributes nothing / the members stay as they were: no members,
+    // no act, and no op, no isolation.
+    let wrap_unit =
+        |draws: &mut Vec<CompLayerDraw>, mark: usize, group: &lumit_core::group::LayerGroup| {
+            if draws.len() <= mark {
+                return;
+            }
+            let context = Arc::new(ExpressionContext {
+                document: expr_doc.clone(),
+                comp: Some(comp.id),
+                layer: None,
+                comp_time: t_comp,
+                current_depth: 0,
+            });
+            let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+            // Resolve time is comp time (§1): a group has no in point, start
+            // offset or Retime, so there is no layer clock to convert through,
+            // and its marker context is the comp's own.
+            let markers = lumit_core::fx::MarkerContext::for_comp(comp);
+            let (fx_ids, fx) = lumit_core::fx::resolve_stack_temporal_named(
+                &group.effects,
+                lumit_core::fx::ResolvedDrivers::NONE,
+                t_comp,
+                frame_t,
+                comp_diag,
+                1.0,
+                &markers,
+                context,
+            );
+            if fx.is_empty() {
+                // Enabled instances that all resolve to nothing (a Posterize
+                // Time alone, an unknown plugin): no op would run, so wrapping
+                // would isolate the members' blends for no picture gain.
+                return;
+            }
+            let members = draws.split_off(mark);
+            let (w, h) = (comp.width as f32, comp.height as f32);
+            draws.push(CompLayerDraw {
+                layer: group.id,
+                source: DrawSource::Nested {
+                    width: comp.width,
+                    height: comp.height,
+                    // Transparent where nothing covers it (K-241), exactly as
+                    // a Precomp's intermediate is.
+                    background: [0.0, 0.0, 0.0, 0.0],
+                    draws: members,
+                    // The comp's own active camera, so 3D members land exactly
+                    // where they did; the finished slab is one 2D picture.
+                    camera: crate::track::camera_pose(doc, comp, t_comp),
+                    // Uncached in v1 (§4): the K-421 stance the adjustment
+                    // path takes for its below-composite.
+                    key: None,
+                    paint: Vec::new(),
+                    paint_time: t_comp,
+                },
+                natural_size: (w, h),
+                // Identity placement: comp-sized, drawn where the members
+                // always landed.
+                position: (w * 0.5, h * 0.5),
+                anchor: (w * 0.5, h * 0.5),
+                scale: (100.0, 100.0),
+                rotation_deg: 0.0,
+                // Pinned 100/Normal (the owner's answer in the note's Open
+                // questions): effects only, no group opacity or blend dial.
+                opacity: 100.0,
+                z: 0.0,
+                rotation_x_deg: 0.0,
+                rotation_y_deg: 0.0,
+                three_d: false,
+                matte: None,
+                blend: lumit_gpu::Blend::Normal,
+                mask_cov: None,
+                pre: None,
+                fx,
+                fx_ids,
+                neighbours: Vec::new(),
+                // Temporal/flow effects on a header are inert or pass through
+                // in v1 (§3, K-544's documented degrade): nothing builds
+                // neighbours or flow for the unit.
+                flow_fields: Vec::new(),
+                lut_files: lut_files(&group.effects, t_comp),
+                dof_inputs: dof_inputs_for(group.id, &group.effects),
+                mattes: mattes_for(group.id, &group.effects, &group_graph),
+                mask_paths: mask_paths_for(&group.effects, &[], t_comp),
+                // No source frames of a group's own, so nothing was ever
+                // propagated: a Roto brush on a header passes through.
+                roto_mattes: roto_mattes_for(&group.effects, 0),
+                points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t),
+                flare_lens_files: flare_lens_files(&group.effects, t_comp),
+                // The stack resolved at comp scale but runs on the render
+                // target (K-266) — realise rescales, exactly the adjustment
+                // arm's setting.
+                fx_ref_width: Some(comp.width as f32),
+                fx_input_key: None,
+                mb: Vec::new(),
+                // The members were each already lit; shading the slab would
+                // light them twice.
+                lights: Vec::new(),
+                temporal_below: None,
+                accumulation_below: None,
+                flow_below: Vec::new(),
+            });
+        };
+    // The open unit while the walk is inside a live span: the span's start
+    // index, its group, and where in `draws` its members began.
+    let mut open_unit: Option<(usize, &lumit_core::group::LayerGroup, usize)> = None;
+
     // Solo / isolate (K-105): while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
+        // The walk is bottom-up, so a unit opens at its span's bottom row and
+        // closes the moment the walk moves above its top — checked before any
+        // of this row's own gates, so a skipped row still closes a unit it
+        // does not belong to.
+        if let Some((start, group, mark)) = open_unit {
+            if idx < start {
+                open_unit = None;
+                wrap_unit(&mut draws, mark, group);
+            }
+        }
+        if open_unit.is_none() {
+            if let Some((start, _, g)) = live_spans
+                .iter()
+                .find(|(s, e, _)| (*s..*e).contains(&idx))
+                .copied()
+            {
+                open_unit = Some((start, g, draws.len()));
+            }
+        }
         let context = Arc::new(ExpressionContext {
             document: expr_doc.clone(),
             comp: Some(comp.id),
@@ -2032,12 +2210,17 @@ pub fn build_comp_draws_at(
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
                     mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
-                    mask_paths: mask_paths_for(layer, lt),
+                    mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
                     // An adjustment layer has no source frames of its own, so
                     // nothing was ever propagated through it: a Roto brush
                     // there passes through, honestly.
                     roto_mattes: Vec::new(),
-                    points_schedules: points_schedules_for(layer, lt, frame_lt),
+                    points_schedules: points_schedules_for(
+                        Some(layer),
+                        &layer.effects,
+                        lt,
+                        frame_lt,
+                    ),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
                     // the render target (K-266) — realise rescales.
@@ -2234,9 +2417,9 @@ pub fn build_comp_draws_at(
             // identically (K-031).
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
-            mask_paths: mask_paths_for(layer, lt),
-            roto_mattes: roto_mattes_for(layer, source_frame),
-            points_schedules: points_schedules_for(layer, lt, frame_lt),
+            mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
+            roto_mattes: roto_mattes_for(&layer.effects, source_frame),
+            points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
             fx_input_key,
@@ -2252,6 +2435,10 @@ pub fn build_comp_draws_at(
             accumulation_below: None,
             flow_below,
         });
+    }
+    // A live span reaching the top of the stack closes with the walk itself.
+    if let Some((_, group, mark)) = open_unit {
+        wrap_unit(&mut draws, mark, group);
     }
     draws
 }

@@ -529,6 +529,10 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::UngroupLayers { comp, .. }
         | Op::SetGroupName { comp, .. }
         | Op::SetGroupLabel { comp, .. }
+        // A header's effect stack scopes to the whole run of members it acts
+        // on (K-731), so the comp is the honest scope, as for the adjustment
+        // switch below.
+        | Op::SetGroupEffects { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
         // beneath it, and one that stops leaves those layers alone again — so
         // the comp is the honest scope, not the one row that changed.

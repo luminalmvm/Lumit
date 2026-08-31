@@ -1,8 +1,11 @@
 # Effects on a layer group
 
-Status: **PROPOSED** (owner feature ask, 2026-08-31; decision entry text at the
-end of this note — the build package appends it to docs/02-DECISIONS.md and
-numbers it). Amends one sentence of K-702's promise; reverses nothing else.
+Status: **BUILT** (owner feature ask, 2026-08-31; logged as **K-731** in
+docs/02-DECISIONS.md — the number the code comments cite). Amends one sentence
+of K-702's promise; reverses nothing else. One amendment against this note's
+own §4 text is recorded in the entry: the frame key feeds the drawn run by
+stack position and length, never by member id, because identity never feeds a
+key (a duplicated comp shares its original's cache).
 
 **In plain terms.** A layer group today is a label: a named band over a run of
 layers with a triangle on it, and the render walk never reads it — grouped or
@@ -190,10 +193,12 @@ with "the effects act on the members": no members, no act.
 The key must move when the picture can. In `feed_comp` (lumit-eval/src/lib.rs),
 after the layer walk, for each **live** group (same definition as §2):
 
-- feed a `b"group-fx/"` tag, the drawn-run member ids **in stack order** (a
-  member drifting out of the run changes which pixels the effect reaches, so
-  it must retire cached frames), and the header stack exactly the way a
-  layer's effects feed — resolved values at `t_comp`, live instances only.
+- feed a `b"group-fx/"` tag, the drawn run **by stack position and length**
+  (a member drifting out of the run changes which pixels the effect reaches,
+  so it must retire cached frames — but never by member id: identity never
+  feeds a key, so a duplicated comp keeps sharing its original's cache), and
+  the header stack exactly the way a layer's effects feed — resolved values
+  at `t_comp`, live instances only.
 - A group that is not live feeds **nothing**, so every key ever made — and
   K-702's "grouping changes no key" tests — hold bit-for-bit.
 

@@ -37,6 +37,15 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     if comp.active_camera(t).is_some() {
         return None;
     }
+    // A live group header (docs/impl/group-effects.md, K-731) can reach any
+    // pixel: its unit re-composites the members, its stack can thin their
+    // coverage (a blur's soft edge on a full-frame solid), and its layer
+    // inputs can read a layer below. Over-cautious by design, like everything
+    // here: while any header is live, nothing culls — and the decode planner,
+    // which asks this same function, keeps decoding what the unit will draw.
+    if comp.groups.iter().any(crate::group::header_live) {
+        return None;
+    }
     let any_solo = crate::model::any_picture_solo(comp);
     let drawn = |l: &Layer| {
         // An Audio layer never draws (K-435), so it is never an occluder and
@@ -396,6 +405,22 @@ mod tests {
             (
                 "adjustment above",
                 Box::new(|c| c.layers.insert(0, layer(LayerKind::Adjustment, 1, 1))),
+            ),
+            (
+                // A live group header (K-731) can thin its members' coverage
+                // — a blur's soft edge on a full-frame solid — so no header
+                // may be live anywhere while the cull stands.
+                "live group header",
+                Box::new(|c| {
+                    let member = c.layers[0].id;
+                    c.groups.push(crate::group::LayerGroup {
+                        id: Uuid::now_v7(),
+                        name: "g".into(),
+                        label: 0,
+                        members: vec![member],
+                        effects: vec![layer_ref_effect(member)],
+                    });
+                }),
             ),
             (
                 "camera",

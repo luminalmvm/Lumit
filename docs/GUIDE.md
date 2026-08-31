@@ -14069,10 +14069,12 @@ colour tick. Click the triangle and the three rows fold away behind the band. Cl
 and they are back, exactly as they were.
 
 The important word in that paragraph is *exactly*. **A group changes nothing about the
-picture.** The layers render in the same order, with the same blend modes, the same mattes
-and the same parents, whether the band is open, shut, or never made at all. If you deleted
-every group in a project the exported file would be identical to the last byte. A group is a
-label on a filing cabinet, not a change to what is inside it.
+picture — as long as its header carries no effects.** The layers render in the same order,
+with the same blend modes, the same mattes and the same parents, whether the band is open,
+shut, or never made at all. If you deleted every plain group in a project the exported file
+would be identical to the last byte. A group is a label on a filing cabinet, not a change
+to what is inside it — until you deliberately drop effects on the band itself, which is the
+one job it can do to the picture and has a section of its own below.
 
 ### The other kind of fold
 
@@ -14092,7 +14094,7 @@ So there are two folds, and they are deliberately different weights:
 
 | | What it does | Does it change the render? |
 |---|---|---|
-| **Group** | Puts a labelled band over a run of rows and hides them behind it | No. Never. |
+| **Group** | Puts a labelled band over a run of rows and hides them behind it | Only if you put effects on the band itself |
 | **Pre-compose** | Packs the layers into a new composition, one layer in their place | Yes — that is the point |
 
 They are not rivals, and they are wired together: right-click a group's header and one of
@@ -14148,6 +14150,47 @@ The bar beside the band is the same idea in time. It stretches from the earliest
 the group to the latest end, and dragging it slides every member together, keeping their
 timing relative to one another. You cannot trim it, only move it — trimming a band would
 have to decide which member's edge you meant, and there is no honest answer to that.
+
+### Effects on the band itself: the invisible pre-compose
+
+Say the lower third — three grouped layers — needs a blur, and only the lower third. An
+**adjustment layer** cannot say that: it blurs *everything* below it, background plates
+included. Pre-compose can say it, but now the three layers live in another composition you
+have to open every time a title changes. What you want is to drop the blur on the group's
+band and have it mean "these three, together, and nothing else".
+
+That is exactly what it does, and the trick is that Lumit already owned the machinery. Ask
+what "blur these layers composited together" even means and you arrive at: draw the members
+on their own canvas first, blur that one picture, then set the finished picture into the
+comp as a single flat image. That is precisely what a Pre-comp layer does every frame. So
+when a group's header carries a live effect, the renderer quietly performs that same move
+per frame — members drawn alone, the header's effects run on the result, one slab
+composited back where the members were. Nothing new was invented; the group borrows the
+pre-compose's engine without you having to make (or open, or maintain) a second
+composition. Delete the effects and the group goes back to being pure filing, byte for
+byte.
+
+The borrowed engine explains the two things that change while the band is dressed, and why
+they are features rather than bugs:
+
+- **Blend modes stop reaching under the group.** A member set to Multiply darkens the
+  other members, but no longer the plate below the band — because the members now
+  composite on their own canvas first, and you cannot blur a picture that has not been
+  finished yet. Photoshop's groups make the same choice for the same reason.
+- **An adjustment layer inside the group only reaches the group.** Inside the members'
+  own canvas, "everything below me" ends at the canvas floor.
+
+Mattes are unaffected either way — a matte is its own private render of its source, so a
+member can matte an outsider and an outsider can matte a member, dressed band or not. And
+a band whose members are all hidden does nothing at all: no members, nothing to composite,
+so even a flare on the header draws no flare.
+
+You edit the band's effects the way you edit a layer's — click the header, and the Effect
+controls panel shows its stack; the keyframes get lanes under the header like any layer's.
+Ungroup throws the band away, effects and all (undo brings both back), and *Pre-compose
+group* carries the effects onto the new Pre-comp layer, where they mean exactly what they
+meant — that equivalence is not a happy accident, it is the design, and a test holds the
+two pictures byte-identical.
 
 ## 51. Puppet pins, in plain terms
 

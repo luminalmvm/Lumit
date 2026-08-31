@@ -1490,3 +1490,172 @@ fn a_matte_from_tagged_footage_carries_its_own_colour_space() {
         ),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Effects on a layer group (docs/impl/group-effects.md §2, K-731): the wrap,
+// asserted on the draw list itself so it runs on CI machines with no GPU.
+// ---------------------------------------------------------------------------
+
+/// A solid layer for the group tests below — solids draw with no decoded
+/// pixels, which keeps these tests device-free.
+fn grouped_scene(
+    effects: Vec<lumit_core::model::EffectInstance>,
+    member_visible: bool,
+) -> (std::sync::Arc<Document>, Composition) {
+    use lumit_core::model::{ProjectItem, SolidDef};
+    let def = Uuid::now_v7();
+    let mut doc = Document::new();
+    doc.items.push(ProjectItem::Solid(SolidDef {
+        id: def,
+        name: "s".into(),
+        colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+        width: 16,
+        height: 16,
+        extra: serde_json::Map::new(),
+    }));
+    let mk = |name: &str| Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: name.into(),
+        kind: LayerKind::Solid { def },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        pan: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        puppet: None,
+        effects: Vec::new(),
+        styles: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let above = mk("above");
+    let mut member = mk("member");
+    member.switches.visible = member_visible;
+    let below = mk("below");
+    let group = lumit_core::group::LayerGroup {
+        id: Uuid::now_v7(),
+        name: "band".into(),
+        label: 0,
+        members: vec![member.id],
+        effects,
+    };
+    let comp = Composition {
+        master_volume_db: 0.0,
+        groups: vec![group],
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: "Comp".into(),
+        width: 64,
+        height: 64,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: vec![above, member, below],
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    (std::sync::Arc::new(doc), comp)
+}
+
+fn draws_of(doc: &std::sync::Arc<Document>, comp: &Composition) -> Vec<crate::draw::CompLayerDraw> {
+    let map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    let mut visited = vec![comp.id];
+    build_comp_draws(doc, comp, 0.0, &map, &mut visited)
+}
+
+// K-702, reworded: while the header carries no live effect the walk stays
+// group-blind — the same three plain draws, in the same order, no Nested unit.
+#[test]
+fn a_group_with_no_live_header_builds_the_ungrouped_draws() {
+    let (doc, comp) = grouped_scene(Vec::new(), true);
+    let mut bypassed = lumit_core::fx::instantiate("blur").expect("a builtin");
+    bypassed.enabled = false;
+    let (doc_b, comp_b) = grouped_scene(vec![bypassed], true);
+
+    for (doc, comp) in [(&doc, &comp), (&doc_b, &comp_b)] {
+        let draws = draws_of(doc, comp);
+        assert_eq!(draws.len(), 3, "one plain draw per layer, no unit");
+        assert!(
+            draws
+                .iter()
+                .all(|d| matches!(d.source, DrawSource::Pixels { .. })),
+            "and none of them is a Nested wrap"
+        );
+        // Bottom-up build order, unchanged.
+        let ids: Vec<Uuid> = draws.iter().map(|d| d.layer).collect();
+        let mut stack: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
+        stack.reverse();
+        assert_eq!(ids, stack);
+    }
+}
+
+// A live header wraps exactly the member run in one comp-sized Nested draw
+// carrying the resolved stack, between the unwrapped neighbours.
+#[test]
+fn a_live_header_wraps_the_run_in_one_nested_draw() {
+    let blur = lumit_core::fx::instantiate("blur").expect("a builtin");
+    let (doc, comp) = grouped_scene(vec![blur], true);
+    let draws = draws_of(&doc, &comp);
+    assert_eq!(draws.len(), 3, "below, the unit, above");
+    // Bottom-up: below first, then the unit, then above.
+    assert_eq!(draws[0].layer, comp.layers[2].id);
+    assert_eq!(draws[2].layer, comp.layers[0].id);
+    let unit = &draws[1];
+    assert_eq!(
+        unit.layer, comp.groups[0].id,
+        "the profiler's row is the group"
+    );
+    let DrawSource::Nested {
+        width,
+        height,
+        draws: inner,
+        key,
+        ..
+    } = &unit.source
+    else {
+        panic!("a live header builds a Nested unit");
+    };
+    assert_eq!((*width, *height), (comp.width, comp.height), "comp-sized");
+    assert!(key.is_none(), "uncached in v1 (§4)");
+    assert_eq!(inner.len(), 1, "the member's own draw, unchanged, inside");
+    assert_eq!(inner[0].layer, comp.layers[1].id);
+    assert!(!unit.fx.is_empty(), "the header's stack rides the unit");
+    assert_eq!(unit.fx_ids.len(), unit.fx.len());
+    assert_eq!(unit.opacity, 100.0);
+    assert!(!unit.three_d);
+    assert_eq!(
+        unit.fx_ref_width,
+        Some(comp.width as f32),
+        "resolved at comp scale, rescaled by realise (K-266)"
+    );
+}
+
+// An empty run runs nothing: every member gated out means no unit draw at
+// all, however loud the header's stack.
+#[test]
+fn an_empty_run_contributes_no_unit_draw() {
+    let blur = lumit_core::fx::instantiate("blur").expect("a builtin");
+    let (doc, comp) = grouped_scene(vec![blur], false);
+    let draws = draws_of(&doc, &comp);
+    assert_eq!(draws.len(), 2, "the two neighbours and nothing else");
+    assert!(
+        draws.iter().all(|d| d.layer != comp.groups[0].id),
+        "no unit for an empty run"
+    );
+}

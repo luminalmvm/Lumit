@@ -2487,6 +2487,7 @@ impl CompositionReference {
             name,
             label: 0,
             members: layer_ids,
+            effects: Vec::new(),
         };
         let id = group.id;
         let proj = self.project()?;

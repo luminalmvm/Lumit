@@ -272,6 +272,36 @@ fn feed_comp(
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
+    // **Live group headers** (docs/impl/group-effects.md §4, K-731). A group
+    // whose header stack has an enabled instance and whose drawn run is
+    // non-empty renders as one wrapped unit, so the key must carry (a) which
+    // members the effects reach — a member drifting out of the run changes
+    // which pixels the stack sees, so it must retire cached frames — and (b)
+    // the stack itself, fed exactly as a layer's effects feed (resolved
+    // values at comp time, live instances only). A group that is not live
+    // feeds nothing, so every key ever made holds bit-for-bit.
+    let stack_ids: Vec<Uuid> = comp.layers.iter().map(|l| l.id).collect();
+    for g in &comp.groups {
+        if !lumit_core::group::header_live(g) {
+            continue;
+        }
+        let run = lumit_core::group::drawn_members(&stack_ids, g);
+        if run.is_empty() {
+            continue;
+        }
+        h.update(b"group-fx/");
+        // The run feeds by stack POSITION, never by id — identity never feeds
+        // a key (a duplicated comp shares its original's cache). The span's
+        // start and length say exactly which of the drawn rows the header's
+        // stack reaches, and they move the moment a member drifts out of the
+        // run or back in.
+        let start = stack_ids.iter().position(|id| Some(id) == run.first());
+        h.update(&(start.unwrap_or(0) as u32).to_le_bytes());
+        h.update(&(run.len() as u32).to_le_bytes());
+        feed_effect_stack(
+            h, true, &g.effects, None, comp, doc, t, t, quality, stamper, visited, true,
+        )?;
+    }
     Some(())
 }
 
@@ -356,7 +386,10 @@ fn feed_effect_stack(
     h: &mut blake3::Hasher,
     fx_on: bool,
     effects: &[lumit_core::model::EffectInstance],
-    marker_layer: &lumit_core::model::Layer,
+    // `None` for a stack with no layer at all — a group header's (K-731,
+    // docs/impl/group-effects.md §4): no driver graph to fold, and the marker
+    // context is the comp's own, unshifted.
+    marker_layer: Option<&lumit_core::model::Layer>,
     comp: &Composition,
     doc: &Arc<Document>,
     t: f64,
@@ -395,30 +428,29 @@ fn feed_effect_stack(
     // uses it. That costs a needless miss when somebody edits a keyframe under
     // a live wire, and it can never cause a stale hit — the safe direction, and
     // far cheaper than running the whole graph inside the key walk.
-    let driven = !marker_layer.graph.edges.is_empty();
-    let drivers: &[lumit_core::model::EffectInstance] = if driven {
-        &marker_layer.graph.nodes
-    } else {
-        &[]
+    let driven_layer = marker_layer.filter(|l| !l.graph.edges.is_empty());
+    let drivers: &[lumit_core::model::EffectInstance] = match driven_layer {
+        Some(l) => &l.graph.nodes,
+        None => &[],
     };
-    if driven {
+    if let Some(l) = driven_layer {
         h.update(b"graph/");
         feed_f64(h, lt);
         feed_f64(
             h,
             lumit_core::fx::temporal_window(
-                &marker_layer.graph,
+                &l.graph,
                 lt,
                 std::sync::Arc::new(lumit_core::expression::ExpressionContext {
                     document: doc.clone(),
                     comp: Some(comp.id),
-                    layer: Some(marker_layer.id),
+                    layer: Some(l.id),
                     comp_time: t,
                     current_depth: 0,
                 }),
             ),
         );
-        for edge in &marker_layer.graph.edges {
+        for edge in &l.graph.edges {
             feed_edge(h, edge);
         }
     }
@@ -571,7 +603,9 @@ fn feed_effect_stack(
                         .and_then(|s| s.mask_paths().find(|(id, _)| *id == p.id))
                         .is_some_and(|(_, sd)| sd);
                     match lumit_core::mask::mask_index_for_path_param(
-                        &marker_layer.masks,
+                        // A group header owns no masks, so a path row on one
+                        // reads as unset — the documented no-op (K-731).
+                        marker_layer.map_or(&[][..], |l| &l.masks[..]),
                         *named,
                         self_default,
                     ) {
@@ -608,7 +642,7 @@ fn feed_effect_stack(
                     // other layers' own `feed_layer` calls (draw order is
                     // content). Recursing here would re-hash the same
                     // source for no gain.
-                    if *lref == Some(marker_layer.id) {
+                    if marker_layer.is_some_and(|l| *lref == Some(l.id)) {
                         h.update(&[2]);
                         continue;
                     }
@@ -656,7 +690,7 @@ fn feed_effect_stack(
                                     h,
                                     src.switches.fx,
                                     &src.effects,
-                                    src,
+                                    Some(src),
                                     comp,
                                     doc,
                                     t,
@@ -712,8 +746,9 @@ fn feed_effect_stack(
                 // Manual-mode Flash reports no window at all and keeps
                 // its time-free keys — no over-invalidation.
                 if s.traits.beat_input {
-                    let ctx = mctx.get_or_insert_with(|| {
-                        lumit_core::fx::MarkerContext::for_layer(comp, marker_layer)
+                    let ctx = mctx.get_or_insert_with(|| match marker_layer {
+                        Some(l) => lumit_core::fx::MarkerContext::for_layer(comp, l),
+                        None => lumit_core::fx::MarkerContext::for_comp(comp),
                     });
                     if let Some(w) = lumit_core::fx::marker_window(e, lt, ctx) {
                         h.update(b"fx-markers");
@@ -882,7 +917,7 @@ fn feed_layer(
         h,
         layer.switches.fx,
         &layer.effects,
-        layer,
+        Some(layer),
         comp,
         doc,
         t,
@@ -902,7 +937,7 @@ fn feed_layer(
         h,
         layer.switches.fx,
         &layer.styles,
-        layer,
+        Some(layer),
         comp,
         doc,
         t,
@@ -1097,7 +1132,7 @@ fn feed_layer(
                         h,
                         src.switches.fx,
                         &src.effects,
-                        src,
+                        Some(src),
                         comp,
                         doc,
                         t,

@@ -386,15 +386,24 @@ Invariants (binding, per K-020/K-022):
 ### 5.4 Layer groups (K-702)
 
 `Composition.groups: Vec<LayerGroup>` — named bands over runs of `layers`, each holding an
-id, a name, a label colour (the K-567 palette a layer's own chip indexes) and its member
-ids. Drawn as a header row in the Timeline's outline with its members indented beneath it.
+id, a name, a label colour (the K-567 palette a layer's own chip indexes), its member
+ids, and — K-731 — an `effects: Vec<EffectInstance>` on the header, the same shape as
+`Layer::effects` and serde-skipped while empty. Drawn as a header row in the Timeline's
+outline with its members indented beneath it.
 
-**Organisation only. The render walk never reads this field.** A composition builds the
-identical frame whether its layers are grouped, ungrouped, folded or open; grouping moves
-no layer, changes no blend and breaks no matte. The collapse that *does* change how the
-picture is built is **precompose** (§5.2, [07-UI-SPEC.md](07-UI-SPEC.md) §13.4), and the
-two are wired together rather than confused: a group's header offers *Pre-compose group*,
-handing its members to the existing command.
+**Organisation, until the header wears effects.** A composition builds the identical
+frame whether its layers are grouped, ungrouped, folded or open **when the header carries
+no effects**; grouping moves no layer, changes no blend and breaks no matte. A header
+with a live effect stack renders its drawn run as an **implicit per-frame precompose**
+(docs/impl/group-effects.md, K-731): the members composited alone into one comp-sized
+unit, the header's stack run on that texture, the slab composited back at 100/Normal —
+the Precomp layer's own render path, so the effects reach the members and nothing else.
+Members inside a live unit composite in isolation (blend modes stop reaching the backdrop
+below the group while the header is live), mattes cross the boundary intact both ways,
+and an empty drawn run contributes nothing at all. The collapse that packs layers into a
+comp of their own is still **precompose** (§5.2, [07-UI-SPEC.md](07-UI-SPEC.md) §13.4),
+and the two stay wired together: a group's header offers *Pre-compose group*, handing its
+members to the existing command — and its header stack across with them.
 
 - **A list beside the layers, not a mark on each one** — the shape `Project::item_labels`
   and `Project::proxies` already use. It keeps grouping out of every path that reads a
