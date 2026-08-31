@@ -38,6 +38,7 @@ mod fx_colour;
 mod fx_distort;
 mod layers;
 mod props;
+mod styles;
 mod table;
 mod time;
 

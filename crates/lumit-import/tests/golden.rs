@@ -1345,3 +1345,69 @@ fn the_golden_document_round_trips_through_a_saved_project() {
         5.0,
     );
 }
+
+/// **The twenty-two layers carrying the Layer Styles group wear no style, and
+/// the import puts none on them** (K-706, docs/impl/layer-styles.md §7).
+///
+/// After Effects lists all ten style slots on any layer that has ever had the
+/// group, switched off or not, and every one of the bundle's two hundred and
+/// twenty slots is off — nobody in the fixture project actually dressed a
+/// layer. So the map stage's own rule is what this pins: an off slot is a style
+/// nobody added, and importing them would put eighty disabled instances on
+/// layers that show none in After Effects.
+///
+/// The positive half — the angle formula, the opacity, the order and every
+/// report row — is in `src/map/styles/tests.rs`, against hand-built groups, so
+/// each can be pinned exactly rather than hunted for in a megabyte of JSON.
+/// What lives here is the fact only the real capture can prove.
+#[test]
+fn the_bundles_layer_styles_are_all_switched_off_and_none_import() {
+    let mut groups = 0usize;
+    let mut slots = 0usize;
+    fn walk(props: &[lumit_import::capture::Property], groups: &mut usize, slots: &mut usize) {
+        for node in props {
+            if node.match_name.as_deref() == Some("ADBE Layer Styles") {
+                *groups += 1;
+                for style in node.children() {
+                    if style.match_name.as_deref() != Some("ADBE Blend Options Group") {
+                        *slots += 1;
+                        assert_eq!(
+                            style.enabled,
+                            Some(false),
+                            "a style switched on would give this layer one, and the counts below \
+                             would need saying differently"
+                        );
+                    }
+                }
+            }
+            walk(node.children(), groups, slots);
+        }
+    }
+    for comp in &golden().0.capture.comps {
+        for layer in &comp.layers {
+            walk(&layer.properties, &mut groups, &mut slots);
+        }
+    }
+    assert_eq!(groups, 22, "the layers carrying the group");
+    assert_eq!(slots, 220, "ten slots apiece");
+
+    for item in &doc().items {
+        if let ProjectItem::Composition(comp) = item {
+            for layer in &comp.layers {
+                assert!(
+                    layer.styles.is_empty(),
+                    "{} wears a style nobody switched on",
+                    layer.name
+                );
+            }
+        }
+    }
+
+    // And no style row reached the report, which is what "nothing to say"
+    // looks like: the gradient ramps the DOM refuses are still counted by the
+    // capture, and the map stage never visited them.
+    assert!(!report().rows.iter().any(|row| matches!(
+        &row.reason,
+        Reason::EffectParamNotCarried { effect, .. } if effect == "Layer styles"
+    )));
+}

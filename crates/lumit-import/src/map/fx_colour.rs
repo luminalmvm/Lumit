@@ -163,7 +163,7 @@ fn suggest(conv: &mut Conv<'_>, path: &ItemPath, node: &Property, instead: &str)
 /// One instance under construction: the capture node on one side, a Lumit
 /// instance carrying its schema defaults on the other, and a report to write
 /// the difference into.
-struct Fx<'a> {
+pub(super) struct Fx<'a> {
     /// After Effects' name for the effect, as the report row says it.
     ae: &'static str,
     node: &'a Property,
@@ -180,7 +180,7 @@ impl<'a> Fx<'a> {
     /// every declared default, or `None` when this build does not ship that
     /// effect — which an edited `ae-effect-map.toml` can now ask for, and which
     /// is a placeholder rather than a panic when it does (docs/14 §4).
-    fn new(path: &ItemPath, node: &'a Property, row: &'static Row) -> Option<Fx<'a>> {
+    pub(super) fn new(path: &ItemPath, node: &'a Property, row: &'static Row) -> Option<Fx<'a>> {
         let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
         // An effect switched off in After Effects imports switched off.
         inst.enabled = node.enabled.unwrap_or(true);
@@ -193,22 +193,48 @@ impl<'a> Fx<'a> {
         })
     }
 
+    /// The same, for an effect that is **not in the mapping table**: the layer
+    /// styles (K-706), whose nine match names are a fixed family rather than
+    /// entries an `ae-effect-map.toml` could add or take away.
+    ///
+    /// `ae` is what the report calls it and `lumit` is the match name to build.
+    /// Everything after this point is identical, which is the point: a style's
+    /// dials come across through the same `float`, `colour`, `toggle`, `choice`
+    /// and report calls an effect's do.
+    pub(super) fn of(
+        path: &ItemPath,
+        node: &'a Property,
+        ae: &'static str,
+        lumit: &str,
+    ) -> Option<Fx<'a>> {
+        let mut inst = lumit_core::fx::instantiate(lumit)?;
+        // A style switched off in After Effects imports switched off.
+        inst.enabled = node.enabled.unwrap_or(true);
+        Some(Fx {
+            ae,
+            node,
+            here: path.property(display_name(node, match_name_of(node))),
+            at: path.clone(),
+            inst,
+        })
+    }
+
     /// One of the effect's parameter leaves. After Effects presents an
     /// effect's parameters flat, with its groups as marker nodes among them,
     /// so a direct search of the children finds everything; [`find`]'s deeper
     /// walk covers a future Bridge that nests them.
-    fn leaf(&self, ae_id: &str) -> Option<&'a Property> {
+    pub(super) fn leaf(&self, ae_id: &str) -> Option<&'a Property> {
         find(self.node.children(), ae_id)
     }
 
     /// A parameter's still value, for the switches and option lists that do
     /// not animate in Lumit.
-    fn still(&self, ae_id: &str) -> Option<f64> {
+    pub(super) fn still(&self, ae_id: &str) -> Option<f64> {
         let node = self.leaf(ae_id)?;
         super::props::axis_of(node.value.as_ref()?, 0)
     }
 
-    fn set(&mut self, lumit_id: &str, value: EffectValue) {
+    pub(super) fn set(&mut self, lumit_id: &str, value: EffectValue) {
         if let Some(p) = self.inst.params.iter_mut().find(|p| p.id == lumit_id) {
             p.value = value;
         }
@@ -218,13 +244,20 @@ impl<'a> Fx<'a> {
     /// the still value, to every keyframe's value, and to every bezier
     /// handle's speed, which is in value-units a second and so scales with the
     /// value (K-025).
-    fn float(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str, k: f64, c: f64) {
+    pub(super) fn float(
+        &mut self,
+        conv: &mut Conv<'_>,
+        ae_id: &str,
+        lumit_id: &str,
+        k: f64,
+        c: f64,
+    ) {
         self.float_axis(conv, ae_id, 0, lumit_id, k, c);
     }
 
     /// The same, from one axis of a multi-dimensional AE parameter — a point's
     /// x or y.
-    fn float_axis(
+    pub(super) fn float_axis(
         &mut self,
         conv: &mut Conv<'_>,
         ae_id: &str,
@@ -251,7 +284,7 @@ impl<'a> Fx<'a> {
 
     /// An AE point onto Lumit's adjacent `_x`/`_y` pair (docs/08 §1.1 — a
     /// point is two floats and a naming convention).
-    fn point(&mut self, conv: &mut Conv<'_>, ae_id: &str, x: &str, y: &str, k: f64) {
+    pub(super) fn point(&mut self, conv: &mut Conv<'_>, ae_id: &str, x: &str, y: &str, k: f64) {
         self.float_axis(conv, ae_id, 0, x, k, 0.0);
         self.float_axis(conv, ae_id, 1, y, k, 0.0);
     }
@@ -259,7 +292,7 @@ impl<'a> Fx<'a> {
     /// An AE colour onto a Lumit colour. The three light channels cross from
     /// the project's display space into scene-linear (K-026) and the alpha
     /// lane passes through, exactly as a solid's colour does.
-    fn colour(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
+    pub(super) fn colour(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) {
         let Some(node) = self.leaf(ae_id) else {
             return;
         };
@@ -292,7 +325,7 @@ impl<'a> Fx<'a> {
     }
 
     /// An AE checkbox — stored as a number — onto a Lumit switch.
-    fn toggle(&mut self, ae_id: &str, lumit_id: &str) {
+    pub(super) fn toggle(&mut self, ae_id: &str, lumit_id: &str) {
         if let Some(v) = self.still(ae_id) {
             self.set(lumit_id, EffectValue::Bool(v.abs() > f64::EPSILON));
         }
@@ -300,7 +333,7 @@ impl<'a> Fx<'a> {
 
     /// An AE dropdown onto a Lumit one, by index. `f` returns the Lumit index
     /// and whether the entry is the same entry rather than the nearest.
-    fn choice(
+    pub(super) fn choice(
         &mut self,
         conv: &mut Conv<'_>,
         ae_id: &str,
@@ -321,7 +354,7 @@ impl<'a> Fx<'a> {
     }
 
     /// An AE Random Seed onto a Lumit Seed.
-    fn seed(&mut self, ae_id: &str, lumit_id: &str) {
+    pub(super) fn seed(&mut self, ae_id: &str, lumit_id: &str) {
         if let Some(v) = self.still(ae_id) {
             let v = if v.is_finite() {
                 v.clamp(0.0, f64::from(u32::MAX))
@@ -336,7 +369,7 @@ impl<'a> Fx<'a> {
     /// "First mask" entry, which is what an unset AE reference means too;
     /// an index naming a mask the import did not bring over falls back to it
     /// and says so.
-    fn mask(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) -> Option<f64> {
+    pub(super) fn mask(&mut self, conv: &mut Conv<'_>, ae_id: &str, lumit_id: &str) -> Option<f64> {
         let index = self.still(ae_id).unwrap_or(0.0).round() as i64;
         let found = usize::try_from(index - 1)
             .ok()
@@ -358,7 +391,7 @@ impl<'a> Fx<'a> {
     // --- report rows ----------------------------------------------------
 
     /// An After Effects control with no Lumit counterpart.
-    fn drop_param(&mut self, conv: &mut Conv<'_>, param: &str) {
+    pub(super) fn drop_param(&mut self, conv: &mut Conv<'_>, param: &str) {
         conv.report.row(
             self.here.clone(),
             Outcome::Adjusted,
@@ -370,13 +403,13 @@ impl<'a> Fx<'a> {
     }
 
     /// Several of them at once — an After Effects group Lumit has nothing for.
-    fn drop_params(&mut self, conv: &mut Conv<'_>, params: &[&str]) {
+    pub(super) fn drop_params(&mut self, conv: &mut Conv<'_>, params: &[&str]) {
         for param in params {
             self.drop_param(conv, param);
         }
     }
 
-    fn approx_named(&mut self, conv: &mut Conv<'_>, param: &str, imported_as: &str) {
+    pub(super) fn approx_named(&mut self, conv: &mut Conv<'_>, param: &str, imported_as: &str) {
         conv.report.row(
             self.here.clone(),
             Outcome::Adjusted,
@@ -390,7 +423,7 @@ impl<'a> Fx<'a> {
 
     /// The same number in the other side's units (docs/08 §2.3). Nothing was
     /// lost; the figure on the dial is not the figure After Effects showed.
-    fn rebased(&mut self, conv: &mut Conv<'_>, param: &str) {
+    pub(super) fn rebased(&mut self, conv: &mut Conv<'_>, param: &str) {
         conv.report.row(
             self.here.clone(),
             Outcome::Adjusted,
@@ -402,7 +435,7 @@ impl<'a> Fx<'a> {
     }
 
     /// The effect mapped whole and evaluates differently by construction.
-    fn differs(&mut self, conv: &mut Conv<'_>, detail: &str) {
+    pub(super) fn differs(&mut self, conv: &mut Conv<'_>, detail: &str) {
         conv.report.row(
             self.here.clone(),
             Outcome::Adjusted,
@@ -414,7 +447,7 @@ impl<'a> Fx<'a> {
     }
 
     /// An After Effects control that read the clock, become keyframes.
-    fn clock(&mut self, conv: &mut Conv<'_>, param: &str) {
+    pub(super) fn clock(&mut self, conv: &mut Conv<'_>, param: &str) {
         conv.report.row(
             self.here.clone(),
             Outcome::Adjusted,
@@ -425,7 +458,7 @@ impl<'a> Fx<'a> {
         );
     }
 
-    fn done(self) -> Option<EffectInstance> {
+    pub(super) fn done(self) -> Option<EffectInstance> {
         Some(self.inst)
     }
 }

@@ -137,6 +137,12 @@ pub(crate) fn map_layer(
 
     let (retime, interpolation) = retime(conv, &path, ae, props, local_in, local_out);
 
+    // The layer's own transform, in hand before the styles are mapped: §3's
+    // pre-transform deviation is visible exactly on a turned or squashed layer,
+    // and that is what decides whether the import says so.
+    let transform = transform(conv, &path, props);
+    let styles = super::styles::styles(conv, &path, props, &transform);
+
     let layer = Layer {
         id,
         name,
@@ -144,7 +150,7 @@ pub(crate) fn map_layer(
         in_point,
         out_point,
         start_offset,
-        transform: transform(conv, &path, props),
+        transform,
         matte: matte(conv, &path, ae, index, ids),
         parent: parent(conv, &path, ae, ids),
         label: u8::try_from(ae.label.unwrap_or(0)).unwrap_or(0),
@@ -161,7 +167,7 @@ pub(crate) fn map_layer(
         paint: Vec::new(),
         puppet: None,
         effects,
-        styles: Vec::new(),
+        styles,
         // AE has no driver graph, so an import never produces one (K-471 §4);
         // the round trip is untouched.
         graph: Default::default(),
