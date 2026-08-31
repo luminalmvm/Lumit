@@ -191,7 +191,10 @@ fn the_search_paths_are_the_standard_ones_plus_clap_path() {
         "the two Windows folders both end in CLAP: {standard:?}"
     );
 
-    let extra = Path::new("Z:").join("elsewhere");
+    // Not a drive letter: `split_paths` splits on `:` on Unix, so "Z:/elsewhere"
+    // arrives as two paths there and the count below is one too many. The
+    // temporary directory is one path on every platform this builds for.
+    let extra = std::env::temp_dir().join("lumit-clap-elsewhere");
     std::env::set_var("CLAP_PATH", &extra);
     let widened = clap_search_paths();
     std::env::remove_var("CLAP_PATH");

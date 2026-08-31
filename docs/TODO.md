@@ -44,20 +44,12 @@ surfaced and deliberately left open, so it is not re-derived:
     no reason. `thumbnail` returns `None` for undecodable and missing alike, and only
     missing wears a badge. Testers reading that as "it would not import" is what raised
     it. Wants the probe's error carried to the row and said in one line.
-- **The Crowdin branch's last translations are not in the files.** `origin/translation/main` (c5845a78) was merged, and its five `.arb`s lost to the
-    site tool's own output, which is newer and much fuller. What it had and ours do
-    not: 152 keys in Kazakh, 134 in Ukrainian, 42 in German, 37 in each Chinese. Their
-    words are in that commit; offer those keys on the translation page rather than
-    hand-editing a translation (CLAUDE.md, K-653).
-- The front page's hero picture (web/src/assets/shots/hero.png) is a placeholder -
-    a capture of the owner's own project standing in for the owner's own screenshot,
-    and for the clip that replaces it after that. The video slots the three unrecorded
-    clips sat in are gone; the page is pictures until a clip exists.
-
-## Now - the preview must keep up
-
-These sit above everything else: they are what the editor feels like in the hand.
-
+- **Some languages went backwards when the Crowdin branch merged.** Its five `.arb`s
+    lost to the site tool's own output, which is newer and much fuller, but it had keys
+    theirs do not: 152 in Kazakh, 134 in Ukrainian, 42 in German, 37 in each Chinese.
+    Those keys are simply untranslated again, so the translation page already lists them
+    for whoever wants them - nothing to do here. The community's earlier words for them
+    are in c5845a78 if anyone wants to compare.
 - **The flare's raster still draws the cells it culled.** After K-263 a batch
     draws exactly its own cells, but a cell the guards kill is still stored and
     still submitted as a degenerate off-screen triangle. Compacting to just the

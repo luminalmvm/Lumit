@@ -272,7 +272,13 @@ unsafe extern "C" fn sink_push(
 /// back exactly as it found it.
 pub struct Denormals {
     /// The MXCSR word as it was, or `None` where this architecture has no such
-    /// word to save.
+    /// word to save. Only `Drop` reads it, and only on x86, so on Apple silicon
+    /// it is a field nobody reads rather than a field nobody sets - which is
+    /// what `-D warnings` sees.
+    #[cfg_attr(
+        not(any(target_arch = "x86", target_arch = "x86_64")),
+        allow(dead_code)
+    )]
     previous: Option<u32>,
 }
 
