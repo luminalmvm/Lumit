@@ -313,14 +313,15 @@ UI (only the touched test files, per standing policy):
 
 ## Open questions
 
-- **Group opacity and blend mode.** Once the slab exists, giving the header an
-  opacity dial and a blend mode is nearly free (the unit's own draw already
-  has both fields, pinned at 100/Normal) — and it is Photoshop's full group
-  model. Wanted, or is that scope creep on an organisational tool?
-- **Timeline lanes for group effect keyframes** (§6's ponytail): is
-  panel-plus-graph-editor editing acceptable to ship, or are lanes under the
-  header a v1 requirement — accepting the K-702 row-shape change that
-  implies?
+Both questions this note left open were answered by the owner on 2026-08-31,
+so they are requirements now, not questions:
+
+- **Group opacity and blend mode: no.** Effects only — the unit's own draw
+  keeps its pinned 100/Normal, and no dial or mode row appears on the header.
+- **Timeline lanes: yes, in v1.** The group header twirls open like a layer
+  and its effects get real lanes — the K-702 row-shape change is accepted.
+  §6's panel-only ponytail ceiling is therefore not a ceiling but a stop the
+  build must pass through: GE2 ships the twirl and the lanes.
 
 ## Proposed decision entry (for docs/02-DECISIONS.md — appended and numbered by GE1, not by this note)
 
