@@ -237,11 +237,27 @@ codesign --force $signopts --sign "$identity" \
 # online can still see it. A ticket covers exactly what was submitted, which is
 # why this happens twice — once for the .app the updater downloads as a bare
 # .zip (K-297), once for the .dmg below.
+# `notarytool submit --wait` exits 0 whenever it managed to *ask* Apple, whatever
+# Apple said, so the status has to be read. Without this an Invalid submission
+# walks on to `stapler`, which fails with "Record not found" - a message about a
+# missing ticket rather than about the rejection behind it, with the reasons left
+# on Apple's side where nobody looks. Ask for them here instead.
 notarise() {
-    xcrun notarytool submit "$1" --wait \
+    local out id status
+    out="$(xcrun notarytool submit "$1" --wait \
         --key "$APPLE_API_KEY_PATH" \
         --key-id "$APPLE_API_KEY_ID" \
-        --issuer "$APPLE_API_ISSUER_ID"
+        --issuer "$APPLE_API_ISSUER_ID")"
+    printf '%s\n' "$out"
+    status="$(printf '%s\n' "$out" | awk '/^ *status: /{print $2; exit}')"
+    [ "$status" = "Accepted" ] && return 0
+    id="$(printf '%s\n' "$out" | awk '/^ *id: /{print $2; exit}')"
+    echo "::error::Notarisation came back $status for $1. Apple's own reasons:" >&2
+    xcrun notarytool log "$id" \
+        --key "$APPLE_API_KEY_PATH" \
+        --key-id "$APPLE_API_KEY_ID" \
+        --issuer "$APPLE_API_ISSUER_ID" >&2 || true
+    exit 1
 }
 if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
     notarydir="$(mktemp -d)"
