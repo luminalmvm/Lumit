@@ -888,6 +888,12 @@ fn propagate(
     // stages with the pair reversed, so they share one closure rather than two
     // copies (docs/impl/roto.md §3).
     let mut done = 1usize;
+    // Hoisted beside `rgb` and `matte`, and for the same reason: a solved frame
+    // refills them rather than allocating them. `validity` never changes at all
+    // — every pixel of a full-raster field is valid — so it is built once here.
+    let mut interleaved: Vec<f32> = Vec::with_capacity(n * 2);
+    let mut prev_f: Vec<f32> = Vec::with_capacity(n);
+    let validity = vec![1u8; n];
     for direction in [1i64, -1] {
         let mut prev_plane = base_plane.clone();
         let mut prev_rgba: Option<Vec<u8>> = None;
@@ -935,14 +941,13 @@ fn propagate(
                 let conf = lumit_flow::confidence(&bwd, &fwd);
                 let (u, v, conf) =
                     lumit_flow::field_to_size(&bwd, &conf, width as usize, height as usize);
-                let mut interleaved = Vec::with_capacity(n * 2);
-                let mut validity = Vec::with_capacity(n);
+                interleaved.clear();
                 for i in 0..n {
                     interleaved.push(u.get(i).copied().unwrap_or(0.0));
                     interleaved.push(v.get(i).copied().unwrap_or(0.0));
-                    validity.push(1u8);
                 }
-                let prev_f: Vec<f32> = prev_plane.iter().map(|&b| f32::from(b) / 255.0).collect();
+                prev_f.clear();
+                prev_f.extend(prev_plane.iter().map(|&b| f32::from(b) / 255.0));
                 let field = FlowField::new(&interleaved, &validity, &conf, width, height)
                     .map_err(|_| RotoFailure::NoFrames)?;
                 if lumit_roto::warp_and_seed(
