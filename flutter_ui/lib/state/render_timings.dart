@@ -57,6 +57,7 @@ class RenderTimings extends ChangeNotifier {
 
   int? _frame;
   double? _totalMs;
+  List<RenderStageMs> _stages = const [];
   Map<String, double> _layers = const {};
   Map<String, double> _effects = const {};
 
@@ -72,6 +73,13 @@ class RenderTimings extends ChangeNotifier {
   /// True while the engine is measuring — what the indicators read to tell
   /// "not measured" from "measured, and this layer cost nothing".
   bool get measuring => _measuring;
+
+  /// Where the total went, stage by stage (plan, decode, build, composite,
+  /// present), in the render's own order. Empty before the first measured
+  /// frame. This is what lets the header explain a total no layer row owns —
+  /// a heavy draw-list build, a slow decode — instead of leaving it hanging
+  /// over the column unattributed.
+  List<RenderStageMs> get stages => _stages;
 
   /// One layer's cost in milliseconds, or null when the last measured frame
   /// had no such layer (it was hidden, out of its span, or inside a Precomp).
@@ -100,6 +108,7 @@ class RenderTimings extends ChangeNotifier {
     } else {
       _frame = null;
       _totalMs = null;
+      _stages = const [];
       _layers = const {};
       _effects = const {};
     }
@@ -112,6 +121,13 @@ class RenderTimings extends ChangeNotifier {
     if (!_measuring) return;
     _frame = profile.frame.toInt();
     _totalMs = profile.totalMs;
+    _stages = [
+      RenderStageMs(RenderStageKind.plan, profile.planMs),
+      RenderStageMs(RenderStageKind.decode, profile.decodeMs),
+      RenderStageMs(RenderStageKind.build, profile.buildMs),
+      RenderStageMs(RenderStageKind.composite, profile.compositeMs),
+      RenderStageMs(RenderStageKind.present, profile.presentMs),
+    ];
     final layers = <String, double>{};
     final effects = <String, double>{};
     for (final layer in profile.layers) {
@@ -124,6 +140,34 @@ class RenderTimings extends ChangeNotifier {
     _effects = effects;
     notifyListeners();
   }
+}
+
+/// The five stages a render passes through, in order. The words shown for
+/// them come from the arb (`stagePlan`…`stagePresent`) — this is only which.
+enum RenderStageKind { plan, decode, build, composite, present }
+
+/// One stage's share of the measured frame.
+class RenderStageMs {
+  final RenderStageKind kind;
+  final double ms;
+  const RenderStageMs(this.kind, this.ms);
+}
+
+/// The stage that would explain the total to someone reading the column: the
+/// costliest stage, but only when it is not compositing (whose time the layer
+/// rows already itemise) and only when it genuinely dominates — owning more of
+/// the frame than every other stage combined. Null otherwise, and the header
+/// shows the plain total it always showed.
+RenderStageKind? dominantUnownedStage(List<RenderStageMs> stages) {
+  if (stages.isEmpty) return null;
+  var total = 0.0;
+  RenderStageMs? top;
+  for (final s in stages) {
+    total += s.ms;
+    if (top == null || s.ms > top.ms) top = s;
+  }
+  if (top == null || top.kind == RenderStageKind.composite) return null;
+  return top.ms > total - top.ms ? top.kind : null;
 }
 
 /// A measured cost as the indicators write it: milliseconds to one decimal

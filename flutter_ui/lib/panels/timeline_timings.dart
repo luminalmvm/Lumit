@@ -44,6 +44,15 @@ import '../widgets/controls.dart';
 class TimingsHeaderCell extends StatelessWidget {
   const TimingsHeaderCell({super.key});
 
+  /// The word for one stage, from the arb.
+  static String stageWord(RenderStageKind kind) => switch (kind) {
+        RenderStageKind.plan => l10n.stagePlan,
+        RenderStageKind.decode => l10n.stageDecode,
+        RenderStageKind.build => l10n.stageBuild,
+        RenderStageKind.composite => l10n.stageComposite,
+        RenderStageKind.present => l10n.stagePresent,
+      };
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -54,18 +63,35 @@ class TimingsHeaderCell extends StatelessWidget {
       builder: (context, _) {
         final on = timings.measuring;
         final total = timings.totalMs;
+        final stages = timings.stages;
+        // The total, and — when one stage the rows can never itemise owns
+        // most of it — that stage's name beside it: a 97 ms frame whose rows
+        // are all cheap used to hang unexplained over the column, and the
+        // usual culprit was the draw-list build, which belongs to no layer.
+        final culprit = on ? dominantUnownedStage(stages) : null;
+        final text = !on
+            ? l10n.timeColumn
+            : total == null
+                ? '…'
+                : culprit == null
+                    ? formatRenderMs(total)
+                    : '${formatRenderMs(total)} · ${stageWord(culprit)}';
+        // The tooltip carries the full split while there is one, so where the
+        // time went is a hover away even when no stage dominates.
+        final split = stages.isEmpty
+            ? l10n.tipRenderTime
+            : stages
+                .map((s) => '${stageWord(s.kind)} ${formatRenderMs(s.ms)}')
+                .join(' · ');
         return LumitTooltip(
-          message: l10n.tipRenderTime,
+          message: split,
           child: Align(
             alignment: Alignment.centerRight,
             child: Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Text(
-                !on
-                    ? l10n.timeColumn
-                    : total == null
-                        ? '…'
-                        : formatRenderMs(total),
+                text,
+                key: const ValueKey('tl-timings-header'),
                 style: t.small,
                 overflow: TextOverflow.ellipsis,
               ),

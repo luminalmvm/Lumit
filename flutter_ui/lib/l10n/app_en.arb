@@ -6067,6 +6067,26 @@
   "@timeColumn": {
     "description": "Heading of the Timeline's render-time column when nothing is being measured."
   },
+  "stagePlan": "plan",
+  "@stagePlan": {
+    "description": "Name of the render's planning stage (working out which source frames to read), shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."
+  },
+  "stageDecode": "decode",
+  "@stageDecode": {
+    "description": "Name of the render's decoding stage (reading source frames off disk), shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."
+  },
+  "stageBuild": "build",
+  "@stageBuild": {
+    "description": "Name of the render's draw-list building stage, shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."
+  },
+  "stageComposite": "composite",
+  "@stageComposite": {
+    "description": "Name of the render's compositing stage (drawing the layers on the graphics card), shown in the render-time column header's tooltip breakdown. One short lowercase word."
+  },
+  "stagePresent": "present",
+  "@stagePresent": {
+    "description": "Name of the render's presenting stage (display-encoding the finished frame and handing it over), shown in the render-time column header's tooltip breakdown. One short lowercase word."
+  },
   "timelineEmpty": "Open a composition, or drop footage here to make one.",
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."

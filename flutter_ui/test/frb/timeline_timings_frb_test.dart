@@ -80,6 +80,11 @@ void main() {
       p.uiState.renderTimings.report(BridgeFrameProfile(
         frame: BigInt.zero,
         totalMs: 12.5,
+        planMs: 0.5,
+        decodeMs: 1.0,
+        buildMs: 1.5,
+        compositeMs: 9.0,
+        presentMs: 0.5,
         layers: [
           BridgeLayerTiming(layer: p.layerId, ms: 8.5, effects: const []),
         ],
@@ -91,6 +96,32 @@ void main() {
       expect(find.text('12.50 ms'), findsOneWidget,
           reason: 'and the header shows what the whole frame cost, so a dash '
               'on a row below can be told from an engine saying nothing');
+    });
+
+    testWidgets('the header names the stage when no layer will ever own it',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      // The ~97 ms class: the draw-list build owns the frame while every
+      // layer row stays cheap — the total used to hang unexplained.
+      p.uiState.renderTimings.report(BridgeFrameProfile(
+        frame: BigInt.zero,
+        totalMs: 97,
+        planMs: 1,
+        decodeMs: 2,
+        buildMs: 90,
+        compositeMs: 3,
+        presentMs: 1,
+        layers: [
+          BridgeLayerTiming(layer: p.layerId, ms: 2.5, effects: const []),
+        ],
+      ));
+      await tester.pump();
+
+      expect(find.text('97.00 ms · build'), findsOneWidget,
+          reason: 'the header says where the time went, because the rows '
+              'below cannot');
     });
 
     /// The switch is in the bottom strip now, not in the column header: a
@@ -168,6 +199,11 @@ void main() {
       p.uiState.renderTimings.report(BridgeFrameProfile(
         frame: BigInt.zero,
         totalMs: 20,
+        planMs: 1,
+        decodeMs: 3,
+        buildMs: 2,
+        compositeMs: 13,
+        presentMs: 1,
         layers: [
           BridgeLayerTiming(
             layer: p.layerId,
