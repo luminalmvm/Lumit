@@ -232,8 +232,7 @@ class TransformRowsFrb extends StatelessWidget {
   /// One widget per transform row — for a caller that has to put each row in its
   /// own chrome (the Effect controls panel's hairline-separated rows).
   List<Widget> rows(BuildContext context) => [
-        for (final group
-            in transformGroups(threeD: threeD, modes: axisModes))
+        for (final group in transformGroups(threeD: threeD, modes: axisModes))
           TransformRowFrb(
             comp: comp,
             layer: layer,
@@ -345,8 +344,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     final ratio = _linkRatio ??= () {
       final time = timeOfFrame(widget.comp, frame);
       final x = sampledScalar(read(widget.transform, lead), time);
-      final y =
-          sampledScalar(read(widget.transform, partner), time);
+      final y = sampledScalar(read(widget.transform, partner), time);
       return x == 0 ? 1.0 : y / x;
     }();
     return value * ratio;
@@ -497,7 +495,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           children: [
             for (var i = 0; i < cells.length; i++) ...[
               if (i > 0) const SizedBox(width: 6),
-              _cell(transform, cells[i], frame, group: group),
+              // Flexible so an expression's field gives way in a narrow
+              // panel; a fixed-width value box ignores the loose constraint.
+              Flexible(child: _cell(transform, cells[i], frame, group: group)),
             ],
           ],
         ),
@@ -528,12 +528,13 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               ),
             ),
             SizedBox(
-                width: col.width + col.rightInset -
+                width: col.width +
+                    col.rightInset -
                     _valueAreaWidth(col, cells.length)),
           ] else
             for (final axis in cells) ...[
               const SizedBox(width: 6),
-              _cell(transform, axis, frame, group: group),
+              Flexible(child: _cell(transform, axis, frame, group: group)),
             ],
         ],
       ),
@@ -573,32 +574,34 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // value under the playhead, and a change writes it into the key sitting
     // there — or plants a new one — never flattening the curve.
 
+    // No Flexible of its own: two of the three call sites place the cell
+    // straight into a Row and wrap it themselves, and the third wraps it in
+    // Expanded — a Flexible here fought that Expanded over the same slot and
+    // took the whole Reveal fold down with a ParentDataWidget error.
     if (scalar case BridgeScalar_Expression scalar) {
-      return Flexible(
-        child: EffectParamRowExpression(
-            value: scalar,
-            set: (value) {
-              final field = (value as BridgeEffectValue_Float).field0;
+      return EffectParamRowExpression(
+          value: scalar,
+          set: (value) {
+            final field = (value as BridgeEffectValue_Float).field0;
 
-              if (field is BridgeScalar_Expression) {
-                _commitExpression(axis.prop, field.field0);
-              }
+            if (field is BridgeScalar_Expression) {
+              _commitExpression(axis.prop, field.field0);
+            }
 
-              if (field is BridgeScalar_Static) {
-                _commit(axis.prop, field.field0);
-              }
-            },
-            setLive: (value) {
-              _liveExpression(
-                  axis.prop,
-                  ((value as BridgeEffectValue_Float).field0
-                          as BridgeScalar_Expression)
-                      .field0);
-            },
-            comp: widget.comp,
-            frame: frame,
-            layer: widget.layer),
-      );
+            if (field is BridgeScalar_Static) {
+              _commit(axis.prop, field.field0);
+            }
+          },
+          setLive: (value) {
+            _liveExpression(
+                axis.prop,
+                ((value as BridgeEffectValue_Float).field0
+                        as BridgeScalar_Expression)
+                    .field0);
+          },
+          comp: widget.comp,
+          frame: frame,
+          layer: widget.layer);
     }
 
     // A rotation shows its whole turns beside its degrees (docs/07 §6.1): 30°
@@ -643,8 +646,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       );
     }
 
-    final sampled =
-        sampledScalar(scalar, timeOfFrame(widget.comp, frame));
+    final sampled = sampledScalar(scalar, timeOfFrame(widget.comp, frame));
     // No live preview mid-drag: staging a keyframed transform through the
     // static-preview path would lie about the curve. The release commits one
     // op — the key at the playhead updated or planted.
