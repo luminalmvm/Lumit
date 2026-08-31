@@ -1702,6 +1702,10 @@
   "@fxConsoleApplies": {
     "description": "The sentence at the foot of the Ctrl+Space FX console popover, saying what choosing a result will do."
   },
+  "fxConsoleCompositions": "Compositions",
+  "@fxConsoleCompositions": {
+    "description": "The FX console popover: the inline heading in the result list over the open project’s compositions, matching the category headings over the effects."
+  },
   "fxConsoleHint": "Search effects and compositions",
   "@fxConsoleHint": {
     "description": "Placeholder in the FX console’s search field."

@@ -3,8 +3,9 @@
 //
 // **In plain terms.** One box, four bands, top to bottom: a search row (the
 // magnifier, the query, and a kicker naming the key that opened it), a strip
-// of category kickers to browse by, the matching rows — each with its name,
-// its category and a small preview swatch — and one quiet sentence saying
+// of category kickers to browse by, the matching rows — grouped under small
+// inline kicker headings, the Settings-nav grammar, each row its name and a
+// small preview swatch — and one quiet sentence saying
 // what choosing a row will do. The radial ring the console used to raise, and
 // the hush it drew over the work, are gone by the owner's ruling: the list is
 // the offer, open from the first frame, and typing narrows it.
@@ -57,8 +58,9 @@ class FxConsoleEntry {
   final String label;
   final FxConsoleKind kind;
 
-  /// The group shown beside the label — an effect's category, or nothing.
-  /// It is also what the category strip filters by.
+  /// The group the row files under — an effect's category, or nothing. It is
+  /// the inline heading the list draws over the row's run, and what the
+  /// category strip filters by.
   final String? group;
   final VoidCallback run;
 
@@ -196,6 +198,7 @@ const double _popWidthMax = 720;
 const double _searchRowHeight = 28;
 const double _stripHeight = 22;
 const double _rowHeight = 26;
+const double _headingHeight = 20;
 const double _footHeight = 20;
 const double _margin = 8;
 
@@ -261,13 +264,30 @@ class _FxConsoleState extends State<_FxConsole> {
     return true;
   }
 
-  /// The matches, ranked by the query and then narrowed to the strip's
-  /// category. The category compares against the entry's own group, so the
-  /// strip needs no idea of what the groups mean.
-  List<FxConsoleEntry> get _matches => [
-        for (final entry in fxConsoleMatches(widget.model.entries, _query.text))
-          if (_category == null || entry.group == _category) entry,
-      ];
+  /// The inline heading a row files under (owner ruling, 2026-08-31): its own
+  /// group, a comp under Compositions, and nothing for a caller whose entries
+  /// carry no groups at all — the shader graph's list stays headingless.
+  String? _headingOf(FxConsoleEntry entry) =>
+      entry.group ??
+      (entry.kind == FxConsoleKind.composition
+          ? l10n.fxConsoleCompositions
+          : null);
+
+  /// The matches, ranked by the query, narrowed to the strip's category, and
+  /// then gathered so each heading's rows sit together: the best match's
+  /// group leads, and within a group the ranking holds. The category compares
+  /// against the entry's own group, so the strip needs no idea of what the
+  /// groups mean.
+  List<FxConsoleEntry> get _matches {
+    // A Dart map keeps insertion order, so first appearance in rank order is
+    // the group order.
+    final buckets = <String?, List<FxConsoleEntry>>{};
+    for (final entry in fxConsoleMatches(widget.model.entries, _query.text)) {
+      if (_category != null && entry.group != _category) continue;
+      (buckets[_headingOf(entry)] ??= []).add(entry);
+    }
+    return [for (final bucket in buckets.values) ...bucket];
+  }
 
   /// Every group the entries carry, in first-appearance order — the browse
   /// groupings the strip offers after All (K-645 files the drivers under
@@ -547,15 +567,40 @@ class _FxConsoleState extends State<_FxConsole> {
             style: t.small.copyWith(color: t.textMuted)),
       );
     }
+    // The rows under their inline headings (the Settings-nav grammar): a
+    // heading wherever the group changes — [_matches] has already gathered
+    // each group's rows together — and none at all for a headingless caller.
+    // Only entry rows are keyboard-reachable: [_highlighted] indexes
+    // [matches], which the headings are not in, so the arrows skip them by
+    // construction.
+    final rows = <Widget>[];
+    String? last;
+    for (var i = 0; i < matches.length; i++) {
+      final entry = matches[i];
+      final heading = _headingOf(entry);
+      if (heading != null && heading != last) {
+        rows.add(Container(
+          key: ValueKey<String>('fx-console-head-$heading'),
+          height: _headingHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.centerLeft,
+          child: Text(heading.toUpperCase(), style: _kickerStyle(t)),
+        ));
+      }
+      last = heading;
+      rows.add(_entryRow(t, entry, hot: i == _highlighted));
+    }
     return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: matches.length,
-          itemBuilder: (context, i) {
-            final entry = matches[i];
-            final hot = i == _highlighted;
-            return GestureDetector(
+      constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
+      // ponytail: children not builder — a console list is at most a few
+      // hundred rows; switch back to a builder if a plugin catalogue makes
+      // the open-frame build measurable.
+      child: ListView(shrinkWrap: true, children: rows),
+    );
+  }
+
+  Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>
+      GestureDetector(
               key: ValueKey<String>('fx-console-item-${entry.label}'),
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -573,10 +618,6 @@ class _FxConsoleState extends State<_FxConsole> {
                           overflow: TextOverflow.ellipsis,
                           style: hot ? t.bodyPrimary : t.body),
                     ),
-                    if (entry.group case final group?) ...[
-                      const SizedBox(width: 8),
-                      Text(group, style: t.kicker.copyWith(letterSpacing: 0.54)),
-                    ],
                     const SizedBox(width: 8),
                     // The preview swatch the board draws on every row. There
                     // is no per-effect render behind it yet, so it is the
@@ -599,7 +640,4 @@ class _FxConsoleState extends State<_FxConsole> {
                 ),
               ),
             );
-          },
-        ));
-  }
 }

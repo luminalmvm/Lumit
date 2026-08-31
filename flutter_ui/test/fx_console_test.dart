@@ -168,6 +168,47 @@ void main() {
       expect(applied, 'gaussian');
     });
 
+    /// Owner ruling (2026-08-31): no trailing per-row category kicker — the
+    /// results group under small inline kicker headings, the Settings-nav
+    /// grammar, and comps file under a Compositions heading of their own.
+    testWidgets('results group under inline headings, one per group',
+        (tester) async {
+      await open(
+        tester,
+        FxConsoleModel(entries: [
+          effect('Glow', group: 'Stylise'),
+          effect('Gaussian blur', group: 'Blur'),
+          effect('Inner glow', group: 'Stylise'),
+          comp('Scene 2'),
+        ]),
+      );
+      for (final head in ['Stylise', 'Blur', 'Compositions']) {
+        expect(find.byKey(ValueKey<String>('fx-console-head-$head')),
+            findsOneWidget,
+            reason: 'one heading per group, however its rows ranked');
+      }
+      expect(find.text('Stylise'), findsOneWidget,
+          reason: 'the strip only — the per-row trailing kicker is gone');
+    });
+
+    testWidgets('the arrows skip the headings, landing entry to entry',
+        (tester) async {
+      var applied = '';
+      await open(
+        tester,
+        FxConsoleModel(entries: [
+          effect('Glow', run: () => applied = 'glow', group: 'Stylise'),
+          effect('Gaussian blur', run: () => applied = 'blur', group: 'Blur'),
+        ]),
+      );
+      // One step down crosses the Blur heading; Enter must run the row under
+      // it, never the heading.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(applied, 'blur');
+    });
+
     testWidgets('the category strip narrows the list, and All lets it back',
         (tester) async {
       await open(
@@ -188,6 +229,10 @@ void main() {
           reason: 'another category\'s row is out');
       expect(item('Scene 2'), findsNothing,
           reason: 'a comp has no category, so a narrowed strip hides it');
+      expect(find.byKey(const ValueKey('fx-console-head-Stylise')),
+          findsOneWidget, reason: 'the chosen group keeps its heading');
+      expect(find.byKey(const ValueKey('fx-console-head-Blur')), findsNothing,
+          reason: 'a filtered-out group takes its heading with it');
 
       await tester.tap(find.byKey(const ValueKey('fx-console-cat-*all')));
       await tester.pumpAndSettle();

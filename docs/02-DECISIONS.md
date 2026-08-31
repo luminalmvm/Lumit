@@ -22436,3 +22436,56 @@ the propagation cannot see.
 New arb keys (Crowdin owes translations): `fxBoundary`, `fxFlowResolution`,
 `fxFlowSmoothness`, `fxHalf`, `fxMatteInverted`, `fxMatteMode`, `fxNative`, `fxPropagate`,
 `fxQuarter`, `fxRefineRadius`, `fxResult`, `fxRotoBrush`.
+
+## K-711 — The console's list groups under inline kicker headings; the trailing per-row category kicker goes
+
+**Status: DECIDED (2026-08-31).** Owner ruling from the design session, amending the
+console's result list (K-324 console, K-658 popover face). The category strip, the K-672
+width rule measured against it, and the Enter semantics are untouched.
+
+A result row no longer carries its category as a trailing kicker; instead the results
+gather under small **inline kicker headings** in the list itself — the Settings-nav
+grammar (K-465's section kicker, at list scale). The matches are still ranked as before,
+then gathered so each group's rows sit together in order of the groups' first appearance
+in the ranking, so the best match's group leads and Enter still applies the top match.
+Compositions gather under a **Compositions** heading of their own; a caller whose entries
+carry no groups at all (the shader graph) draws a headingless list, unchanged. The arrows
+skip the headings — only rows are keyboard-reachable. The category strip stays for
+filtering, and a narrowed list keeps the chosen group's heading.
+
+New arb key (Crowdin owes translations): `fxConsoleCompositions`.
+
+## K-711 — PU2 measured the puppet's three budgets, and two of them are what a CPU warp and a dense factorisation actually cost
+
+**DECIDED (2026-08-31).** Supersedes one sentence of [K-704](#k-704--puppet-ships-as-a-conforming-mesh-plus-the-closed-form-as-rigid-as-possible-solve-the-mesh-is-never-saved) — its
+"≤ 8 ms warp at 1080p, ≤ 100 ms mesh build, ≤ 1 ms per-frame solve at the cap" — and
+nothing else about it. `docs/impl/puppet.md` §3 and `docs/13-PERFORMANCE-RULES.md` §2 carry
+the new numbers as **B15–B17**, gated by `lumit-bench`'s `scenarios::puppet` on the
+pathological fixture: a 1920×1080 layer **fully covered** at default density.
+
+**Measured, on a development desktop:** warp 78 ms, mesh build 73 ms, solve 6.8 ms at a
+1270-vertex mesh. The mesh build was inside its budget as written; the other two were not,
+by an order of magnitude, and the reason is arithmetic rather than a slow implementation.
+The warp is one barycentric and one bilinear resample per pixel in f64 — two million of
+them do not fit 8 ms on one thread, and the profiling pass that hoisted the per-triangle
+constants out of the inner loop (two divisions a pixel, sixteen index multiplies a texel)
+took it from 154 ms to 78 without changing a single output byte. The solve at the vertex
+cap is a forward and back substitution through a dense 3000×3000 factor plus two
+1500×1500 ones: about eighteen million multiply-adds, which is milliseconds however it is
+written. K-704's estimates were not measured; these are.
+
+**The budgets are therefore B15 ≤ 80 ms, B16 ≤ 100 ms, B17 ≤ 8 ms on the reference
+desktop**, and each is read as a *rate* rather than a per-frame promise: the fixture covers
+the whole frame, which is the shape puppet is not for. About 40 ns a pixel warped means a
+400×600 cutout — an arm, a character — costs about 10 ms and scrubs inside B3.
+
+**Neither number is accepted as final.** K-704 already recorded both upgrade paths with an
+observable trigger apiece — the GPU warp when the bench exceeds its warp gate, the sparse
+factorisation when capped meshes make pin placement sticky — and this measurement is the
+trigger firing on the first and the arithmetic firing on the second. Until they land, the
+rows exist to stop either number getting *worse*: the ratio gate against the runner's own
+baseline, which is what every other budget gets.
+
+**What did not change:** the warp stays CPU at the paint/masks seam (K-704), the mesh stays
+unsaved and content-keyed, and the block still feeds the frame cache key. Only the three
+numbers moved, and they moved because they were measured.
