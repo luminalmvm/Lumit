@@ -778,6 +778,11 @@ pub(crate) fn adopt(
     // document is about to move into the store — and fired after the
     // registry lock, below.
     let solves = lumit_render::track::warm_jobs(&doc);
+    // And every roto matte its stroked brushes already have on disk, the same
+    // way and for the same reason (K-713): a file read per brush, decoding
+    // nothing, so a reopened project's subjects are cut before the first
+    // repaint rather than after the next Propagate.
+    let mattes = lumit_render::roto::warm_jobs(&doc);
 
     let journal = journal_for(&doc);
     let store = DocumentStore::new(doc);
@@ -839,6 +844,8 @@ pub(crate) fn adopt(
     // like everything else below it.
     lumit_render::track::clear();
     lumit_render::track::warm(solves);
+    lumit_render::roto::clear();
+    lumit_render::roto::warm(mattes);
 
     // After the clear, so this project's requests are not the ones
     // cancelled, and outside the registry lock.

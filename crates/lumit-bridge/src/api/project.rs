@@ -128,6 +128,12 @@ impl ProjectReference {
         // is untouched, so reopening reads every one of them straight back —
         // this is the session's copy being dropped, not the answer.
         lumit_render::track::clear();
+        // The roto mattes go the same way and for the same reason (K-713): the
+        // `roto/` sidecar is untouched, so reopening reads them back.
+        lumit_render::roto::clear();
+        // And so do the puppet wireframes the render left for the overlay
+        // (K-704): they name layers this project owned.
+        lumit_render::puppet::clear();
         drop(removed);
         Ok(())
     }
