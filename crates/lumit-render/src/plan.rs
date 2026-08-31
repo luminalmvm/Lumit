@@ -214,6 +214,17 @@ pub fn collect_comp_jobs(
     let occluder = (!spliced)
         .then(|| lumit_core::occlusion::occluder_index(doc, comp, t))
         .flatten();
+    // Solo / isolate (K-105, K-435): while a layer that *draws* is soloed, only
+    // soloed layers reach the picture — so only they are worth decoding. The
+    // same question the draw builder, the frame key and the occlusion cull all
+    // ask, asked here too, on the rule the occlusion comment above states: a
+    // layer that cannot be seen is a layer that is never decoded.
+    //
+    // Without it a comp with one soloed row still decoded every other visible
+    // row behind it. On a sixty-four-layer edit at full resolution that is
+    // dozens of simultaneous 4K decodes feeding a composite that draws one
+    // layer, which is the shape of a session that ends without a message.
+    let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut wanted: Vec<Uuid> = Vec::new();
     for (idx, l) in comp.layers.iter().enumerate() {
         if occluder.is_some_and(|o| idx > o) {
@@ -223,7 +234,7 @@ pub fn collect_comp_jobs(
         if l.audio_only {
             continue;
         }
-        if l.switches.visible && in_span(l) {
+        if l.switches.visible && in_span(l) && !(any_solo && !l.switches.solo) {
             // A layer acting as an adjustment (K-537) draws the composite
             // beneath it, so its OWN frames are never asked for — decoding them
             // would be a video decode nobody looks at. Only its own frames,
@@ -1337,5 +1348,140 @@ mod tests {
             "a collapsed precomp is never named, so it always decodes"
         );
         assert_eq!(asked.get(), 1, "and is never asked about");
+    }
+
+    /// **A soloed row is the only row decoded** (K-105, K-435). The draw
+    /// builder, the frame key and the occlusion cull all stop at a layer that
+    /// is not soloed while something that draws is; the decode planner did not,
+    /// so a comp with one row soloed still fetched every other visible row's
+    /// footage — pictures nothing composites and nobody sees. On a long edit at
+    /// full resolution that is dozens of 4K decodes behind a single drawn
+    /// layer.
+    ///
+    /// Soloing an **Audio** row must not touch the picture's decodes at all,
+    /// which is the half `any_picture_solo` exists for: it is checked here in
+    /// the same test so the two halves cannot drift apart.
+    #[test]
+    fn only_a_soloed_row_is_decoded_and_an_audio_solo_decodes_nothing_differently() {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{
+            Composition, Document, FootageItem, Layer, LayerKind, LinearColour, MediaRef, Switches,
+            TransformGroup,
+        };
+        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        use std::collections::HashMap;
+
+        let mut doc = Document::new();
+        let mut probes: HashMap<Uuid, crate::SourceProbe> = HashMap::new();
+        // Three footage rows, side by side and none covering the frame, so
+        // nothing here is answered by the occlusion cull instead.
+        let footage_layer = |doc: &mut Document, probes: &mut HashMap<_, _>| {
+            let item = Uuid::now_v7();
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
+                id: item,
+                name: "f".into(),
+                media: MediaRef {
+                    relative_path: "f.mp4".into(),
+                    absolute_path: "/f.mp4".into(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+            }));
+            probes.insert(
+                item,
+                crate::SourceProbe::Video {
+                    fps: 60.0,
+                    width: 64,
+                    height: 64,
+                    frames: 600,
+                    audio: true,
+                },
+            );
+            Layer {
+                graph: Default::default(),
+                markers: Vec::new(),
+                id: Uuid::now_v7(),
+                name: "l".into(),
+                kind: LayerKind::Footage { item },
+                in_point: CompTime(Rational::ZERO),
+                out_point: CompTime(Rational::new(10, 1).unwrap()),
+                start_offset: CompTime(Rational::ZERO),
+                transform: TransformGroup::default(),
+                matte: None,
+                parent: None,
+                label: 0,
+                volume_db: Property::zero(),
+                pan: Property::zero(),
+                audio_only: false,
+                adjustment: false,
+                retime: None,
+                interpolation: lumit_core::retime::Interpolation::default(),
+                parked_flow: None,
+                blend: lumit_core::model::BlendMode::default(),
+                masks: Vec::new(),
+                paint: Vec::new(),
+                effects: Vec::new(),
+                switches: Switches::default(),
+                extra: serde_json::Map::new(),
+            }
+        };
+        let a = footage_layer(&mut doc, &mut probes);
+        let b = footage_layer(&mut doc, &mut probes);
+        let c = footage_layer(&mut doc, &mut probes);
+        let comp_id = Uuid::now_v7();
+        doc.items.push(ProjectItem::Composition(Composition {
+            master_volume_db: 0.0,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: comp_id,
+            name: "c".into(),
+            width: 64,
+            height: 64,
+            frame_rate: FrameRate::new(60, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![a, b, c],
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        }));
+
+        let plan = |doc: &Document| {
+            plan_comp_frame(
+                doc,
+                doc.comp(comp_id).unwrap(),
+                0.0,
+                Quality::default(),
+                &probes,
+            )
+            .len()
+        };
+        assert_eq!(plan(&doc), 3, "no solo: every visible row decodes");
+
+        // The middle row soloed: it is the only one the compositor draws, so it
+        // is the only one worth fetching. **The regression** — this was 3.
+        doc.comp_mut(comp_id).unwrap().layers[1].switches.solo = true;
+        assert_eq!(plan(&doc), 1, "only the soloed row is decoded");
+
+        // A second solo widens the picture and the decodes with it, together.
+        doc.comp_mut(comp_id).unwrap().layers[2].switches.solo = true;
+        assert_eq!(plan(&doc), 2, "both soloed rows decode");
+
+        // An Audio row's solo says nothing about the picture (K-435), so every
+        // drawing row is decoded exactly as it was before the switch moved.
+        for layer in &mut doc.comp_mut(comp_id).unwrap().layers {
+            layer.switches.solo = false;
+        }
+        doc.comp_mut(comp_id).unwrap().layers[0].audio_only = true;
+        doc.comp_mut(comp_id).unwrap().layers[0].switches.solo = true;
+        assert_eq!(
+            plan(&doc),
+            2,
+            "soloing a music row leaves the picture's decodes alone"
+        );
     }
 }

@@ -52,6 +52,16 @@ to their own comp. Footage that the probe reports as alpha-free is a later exten
 predicate lives in `lumit-core`, which knows no probe. The frame key keeps hashing culled
 layers (over-keying is safe); preview and export stay byte-identical (K-031).
 
+**Solo culls decodes too (K-105, K-435).** The same rule reaches the other switch that
+decides whether a layer can be seen at all: while a layer that *draws* is soloed, the layers
+that are not soloed are not composited, so they are not decoded either. The draw builder, the
+frame key, the occlusion cull and the decode planner all ask
+`lumit_core::model::any_picture_solo`, so all four skip the same rows. Only the picture half
+counts — soloing an Audio layer leaves every drawing layer's decodes exactly as they were,
+which is what keeps the mixer's own `any_solo` (K-435, every soloed layer) a separate
+question. A soloed row's matte sources and effect layer inputs are still decoded, by the same
+reference walk that keeps them alive under the occlusion cull.
+
 ### 1.2 Render order for one layer
 
 For a visual layer at comp time `t`, the compiled subgraph is, in order:
