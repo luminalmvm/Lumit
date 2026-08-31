@@ -335,6 +335,7 @@ impl LayerReference {
             shift_property(&mut copy.transform.anchor_y, -y0);
         }
         copy.kind = lumit_core::model::LayerKind::Shape { contents };
+        crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
 
         let new_id = copy.id;
         self.commit(lumit_core::Op::AddLayer {
@@ -384,6 +385,7 @@ impl LayerReference {
         // or duplicated.
         lumit_core::fx::point_self_layer_params_at(&mut instance, copy.id);
         copy.effects.push(instance);
+        crate::edits::solo_on_arrival(&mut copy, comp.layers.iter());
 
         let new_id = copy.id;
         self.commit(lumit_core::Op::AddLayer {

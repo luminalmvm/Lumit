@@ -22753,3 +22753,51 @@ would send the reader to a switch that no longer changes this answer.
 which builds a GPU renderer to get at a walk that needs no graphics card; it now calls the walk
 directly. A machine with no adapter finds beats instead of answering `NoAudioPipeline`, and the
 bridge's own beats tests run without a GPU.
+
+## K-719 — A layer added into a comp that has a solo up is born soloed
+
+**Status:** DECIDED (2026-08-31, owner ruling). Amends the switches bullet of
+[docs/07-UI-SPEC.md](07-UI-SPEC.md) §4.2. Builds on K-105 (solo/isolate) and K-435 (solo is
+two questions, one for the picture and one for the mixer).
+
+**The ruling, in the owner's words:** "whenever you add a layer or smth into a comp with a
+solo, make sure that the item added is also soloed". Today a solid added while something is
+soloed lands invisible and inaudible — the command reads as having done nothing, which is the
+classic After Effects annoyance.
+
+**What counts as being added.** New content entering the comp: solids, text, shapes, nulls,
+adjustment layers, footage and audio placements, text-to-shapes and text-to-points, the solid
+or null a track point plants, a paste, and the Precomp layer Pre-compose leaves behind. The
+switch is set inside the same `Op::AddLayer`, so undo is still the one step that added the
+layer and there is no stray solo op to walk back through.
+
+**What does not count.** The exact-clone commands — duplicate, split, detach audio — whose
+contract is that the result behaves as the original did. They already copy the source layer's
+own solo switch, which is the right answer: forcing solo on to a detached audio row would
+make a row nobody was hearing start being heard, and K-701 promises detaching changes where
+the sound is edited and never what it is.
+
+**Counted per medium, because solo is two questions (K-435).** A layer with a picture asks
+whether any layer that *draws* is soloed; an Audio layer asks the mixer's question, every
+soloed layer. Reading only `any_solo` would blank the picture the moment a solid was added
+under an audio-only solo, which is a worse bug than the one being fixed.
+
+**A Camera, a Light and a Null are left out of it in both directions.** None of them draws, so
+soloing one would isolate the comp against a layer with nothing to show and the picture would
+go black; and the active camera and the lights are chosen by their visible switch and never by
+solo, so they work in a soloed comp untouched.
+
+**Pre-compose asks about the comp it leaves behind**, not the one it started with: the layers
+being packed away are excluded from the question, so a Precomp layer is soloed when a solo
+*stays* out here, and is not when the only solo went into the new comp with the layer carrying
+it.
+
+**Layer groups (K-702) need nothing.** A group header's solo is not stored on the group — the
+header reads on only when every member's own switch is on, and pressing it writes the ordinary
+per-layer ops. So a group with a soloed member is, to this rule, simply a comp with a soloed
+layer in it.
+
+**Where it lives:** one helper in the bridge, `edits::solo_on_arrival`, called by the
+new-content commit sites (`CompositionReference::add_at_top`, `add_solid_layer`, `precompose`,
+`place_footage`, the two text-conversion commands, and the tracked-point plant). `lumit-core`'s
+op application is untouched — ops replay on undo and redo, and must stay exact.

@@ -1354,7 +1354,11 @@ wanders into the panels behind it.
 3. **Switches** (glossary §2): visible, audible, solo, lock, shy, quality (draft/full),
    motion blur, adjustment, 3D, collapse (Precomp layers). One icon each; the comp-level
    shy filter button lives in the Timeline header. `Alt`-click a switch applies it
-   exclusively (solo-style) where that makes sense (visible, solo).
+   exclusively (solo-style) where that makes sense (visible, solo). **New content added
+   into a comp that has a solo up arrives soloed** (K-719) — a solid, a title, a shape, a
+   placement, a paste, the layer Pre-compose leaves behind — so it is on screen where it
+   was asked for; a Camera, a Light and a Null are left out of it, and the exact-clone
+   commands (duplicate, split, detach audio) keep the switch their source had.
 4. **Blend mode** dropdown.
 5. **Matte** dropdown + pick-whip: choose any layer in the comp as this layer's matte
    (AE 2023 semantics — glossary §6), with alpha/luma and invert toggles. One matte layer

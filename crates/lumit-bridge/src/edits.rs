@@ -98,6 +98,36 @@ pub(crate) fn base_layer(
     }
 }
 
+/// A layer born into a composition that already has a solo up wears solo too
+/// (K-719).
+///
+/// **In plain terms.** While something is soloed the comp shows only that
+/// layer, so anything added lands invisible and inaudible — you add a solid and
+/// nothing happens. Adding it soloed puts it where it was just asked for.
+///
+/// Counted the way the two halves of solo are counted (K-435): a layer with a
+/// picture asks whether any layer that *draws* is soloed, an Audio layer asks
+/// the mixer's question — every soloed layer. A Camera, a Light and a Null are
+/// left out of it in both directions ([`Layer::can_adjust`] is the same "shows
+/// something in the Viewer" question): none of them draws, so soloing one would
+/// blank the comp, and they are chosen by their visible switch and never by
+/// solo, so they work in a soloed comp untouched.
+///
+/// `existing` is what the comp holds around the newcomer, as an iterator
+/// because Pre-compose asks with the layers it is packing away left out. The
+/// switch is only ever set, never cleared: a pasted layer that was soloed where
+/// it was copied from stays soloed.
+pub(crate) fn solo_on_arrival<'a>(
+    layer: &mut Layer,
+    mut existing: impl Iterator<Item = &'a Layer>,
+) {
+    let audio_only = layer.audio_only;
+    if !audio_only && !layer.can_adjust() {
+        return;
+    }
+    layer.switches.solo |= existing.any(|l| l.switches.solo && (audio_only || !l.audio_only));
+}
+
 /// The ops that guarantee `kind`'s auto-filing folder exists, plus its id —
 /// `lumit-ui`'s `ensure_auto_folder_ops`, tracked by id so renaming or nesting
 /// the folder keeps the habit.

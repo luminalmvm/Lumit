@@ -696,6 +696,7 @@ pub fn add_layer_at_points(
     // 2.5D, or the position in z means nothing and the layer sits flat over the
     // picture wherever the camera goes.
     layer.switches.three_d = true;
+    crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
     let id = layer.id;
     ops.push(lumit_core::Op::AddLayer {
         comp: tracked.comp_id,

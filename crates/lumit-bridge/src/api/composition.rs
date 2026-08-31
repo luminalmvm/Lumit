@@ -660,7 +660,7 @@ impl CompositionReference {
         let doc = self.document()?;
         let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
 
-        let layer = crate::edits::base_layer(
+        let mut layer = crate::edits::base_layer(
             name,
             lumit_core::model::LayerKind::Solid { def },
             comp.duration.0,
@@ -671,6 +671,7 @@ impl CompositionReference {
                 comp.height,
             ),
         );
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
         ops.push(lumit_core::Op::AddLayer {
             comp: self.id,
@@ -968,6 +969,15 @@ impl CompositionReference {
             layer.blend = src.blend;
             layer.switches = src.switches.clone();
         }
+        // Asked of the layers that are staying: the soloed ones being packed
+        // away are about to leave, and a Precomp layer soloed on their account
+        // would isolate itself against a comp that has no solo left (K-719).
+        crate::edits::solo_on_arrival(
+            &mut layer,
+            comp.layers
+                .iter()
+                .filter(|l| !packed.iter().any(|p| p.id == l.id)),
+        );
         let layer_id = layer.id;
         ops.push(Op::AddLayer {
             comp: self.id,
@@ -1421,9 +1431,14 @@ impl CompositionReference {
         self.add_at_top(layer)
     }
 
-    /// Insert `layer` at the top of the stack.
+    /// Insert `layer` at the top of the stack, soloed if the comp is showing
+    /// only soloed layers (K-719, [`crate::edits::solo_on_arrival`]).
     #[frb(ignore)]
-    fn add_at_top(&self, layer: lumit_core::model::Layer) -> Result<LayerReference, BridgeError> {
+    fn add_at_top(
+        &self,
+        mut layer: lumit_core::model::Layer,
+    ) -> Result<LayerReference, BridgeError> {
+        crate::edits::solo_on_arrival(&mut layer, self.composition()?.layers.iter());
         let id = layer.id;
         self.commit(lumit_core::Op::AddLayer {
             comp: self.id,
@@ -1560,6 +1575,7 @@ impl CompositionReference {
                 crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
             );
             layer.audio_only = audio_only;
+            crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
             layer
         };
 

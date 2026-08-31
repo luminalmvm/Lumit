@@ -2479,6 +2479,22 @@ fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     assert!(rows[0].get_switches().expect("switches").audible);
     assert!(audible_jobs(&project, &outer) == before);
 
+    // **Somebody else's solo does not reach the sibling** (K-719). Detaching
+    // clones the row, solo and all; a row that was not being heard before the
+    // detach must not start being heard because of it, or the command changes
+    // the mix it promises to leave alone.
+    let mask = outer.add_solid_layer().expect("another row");
+    mask.set_switch(crate::api::layer::BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    let under_a_solo = audible_jobs(&project, &outer);
+    let sound = precomp.detach_audio().expect("detached");
+    assert!(
+        !sound.get_switches().expect("switches").solo,
+        "the sound of a row nobody was hearing stays out of the mix"
+    );
+    assert!(audible_jobs(&project, &outer) == under_a_solo);
+    project.undo().expect("undone");
+
     // A layer that is already nothing but sound has nothing left to detach
     // from, and says so rather than making a second copy of itself.
     let music_row = inner.get_layers().expect("layers").remove(0);
@@ -2502,6 +2518,93 @@ fn detaching_audio_from_something_silent_is_refused() {
         1,
         "a refusal leaves the comp as it was"
     );
+}
+
+/// **A layer born into a comp that is showing one row wears solo too** (K-719,
+/// owner). Adding a solid while something is soloed used to leave an invisible
+/// layer behind, which reads as the command having done nothing at all.
+#[test]
+fn a_layer_added_under_a_solo_arrives_soloed() {
+    use crate::api::layer::BridgeLayerSwitch;
+
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+    let first = comp.add_solid_layer().expect("solid");
+    assert!(
+        !first.get_switches().expect("switches").solo,
+        "a comp with no solo up hands out no solo"
+    );
+
+    first
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    let second = comp.add_solid_layer().expect("solid");
+    assert!(
+        second.get_switches().expect("switches").solo,
+        "the new layer is on screen, where it was just asked for"
+    );
+
+    // The switch is set inside the AddLayer op, so the whole thing is still the
+    // one step that added the layer.
+    project.undo().expect("undone");
+    let rows = comp.get_layers().expect("layers");
+    assert_eq!(rows.len(), 1, "one undo and the layer is simply gone");
+    assert!(
+        rows[0].get_switches().expect("switches").solo,
+        "the solo that was already up is untouched"
+    );
+
+    // Every other new-content road answers the same, this one through
+    // `add_at_top` rather than its own commit.
+    let text = comp.add_text_layer().expect("text");
+    assert!(text.get_switches().expect("switches").solo);
+
+    // A Camera and a Null show nothing of their own, so soloing one would blank
+    // the comp rather than reveal anything — and a camera is chosen by its
+    // visible switch, never by solo, so it works in a soloed comp untouched.
+    let camera = comp.add_camera_layer().expect("camera");
+    assert!(!camera.get_switches().expect("switches").solo);
+    let null = comp.add_null_layer().expect("null");
+    assert!(!null.get_switches().expect("switches").solo);
+}
+
+/// **Pre-compose asks the question of the comp it leaves behind** (K-719): a
+/// solo that stays out here hides the new Precomp layer unless it is soloed
+/// too, and a solo that moves *into* the new comp leaves nothing out here to
+/// isolate against.
+#[test]
+fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
+    use crate::api::layer::BridgeLayerSwitch;
+
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+    let stays = comp.add_solid_layer().expect("solid");
+    let packed = comp.add_solid_layer().expect("solid");
+    stays
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    let precomp = comp
+        .precompose(vec![packed.layer_id], "Packed".into(), false, false)
+        .expect("precomposed");
+    assert!(
+        precomp.get_switches().expect("switches").solo,
+        "the soloed layer stayed, so the new row has to be soloed to be seen"
+    );
+
+    let other = add_comp(&project, "Other");
+    let going = other.add_solid_layer().expect("solid");
+    let staying = other.add_solid_layer().expect("solid");
+    going
+        .set_switch(BridgeLayerSwitch::Solo, true)
+        .expect("soloed");
+    let precomp = other
+        .precompose(vec![going.layer_id], "Packed".into(), false, false)
+        .expect("precomposed");
+    assert!(
+        !precomp.get_switches().expect("switches").solo,
+        "the solo went into the new comp, and nothing out here is isolated"
+    );
+    assert!(!staying.get_switches().expect("switches").solo);
 }
 
 /// The comp's audio jobs with the mixer *strip* blanked: the strip is the row
