@@ -1,9 +1,11 @@
 # Layer styles
 
-Decision: K-706. Status: §10's first two packages have landed — the model, all
-nine declarations, the render seam, and **all seven v1 styles rendering on both
-paths** with §2's order pinned in pixels. Package 3 (fold, panel, menu, import)
-is still to build.
+Decision: K-706. Status: **all three of §10's packages have landed** — the
+model, all nine declarations, the render seam, all seven v1 styles rendering on
+both paths with §2's order pinned in pixels, and the frontend and importer
+halves: the bridge's styles accessor and shared instance lookup, the Timeline's
+Styles group, the panel's Styles section, the Layer menu's seven rows, and the
+`.aep` map stage.
 
 **In plain terms.** Photoshop lets you hang a wardrobe on a layer — a shadow
 behind it, a glow around it, a colour or gradient painted across its face, a
@@ -282,11 +284,24 @@ flags, and the derived group switch the DOM lies about; the golden capture
 holds full property sets for all nine styles). What is missing is only the
 **map** stage: `docs/11` currently says "placeholder".
 
-Mapping, per style, reusing the effects table machinery (`ae-effect-map.toml`
-entries with conversion fns, targeting `style_*` match names into
-`layer.styles` instead of the effect stack):
+**Only the styles After Effects reports as *on* are imported**, and that is the
+rule the built stage turned on. The DOM lists all ten slots on any layer that has
+ever carried the group whether or not anything was added — the golden bundle's
+twenty-two styled layers hold two hundred and twenty slots between them and not
+one is switched on — so importing the off ones would dress every such layer in
+styles nobody applied. Nothing distinguishes "added then switched off" from
+"never added", so the honest rule is the one that matches what the user sees.
 
-- **Opacity** `0..255 → %` — the Drop shadow effect's rebase, already written.
+Mapping, per style, reusing the effects mapper's own builder (`Fx`, given a
+constructor for a family that is fixed rather than table-driven, since the nine
+are not entries an `ae-effect-map.toml` could add or take away), targeting
+`style_*` match names into `layer.styles` instead of the effect stack:
+
+- **Opacity** crosses **one for one**. This line read `0..255 → %` when the note
+  was written, against the binary format's byte; the scripting DOM a bundle comes
+  from hands per cent already — the golden capture's own defaults read 75 and
+  100, not 191 and 255 — so a rebase would divide every imported shadow's
+  darkness by two and a half. The capture won.
 - **Angle**: AE/Photoshop measures the *light* counter-clockwise from +x;
   Lumit's style direction is from-up clockwise, and the shadow slides opposite
   the light: `θ_lumit = 270° − a_ae (mod 360)`. (Check: AE's 120° default →
@@ -305,8 +320,16 @@ entries with conversion fns, targeting `style_*` match names into
   *outer* style other than Normal/Multiply where the raster seam cannot honour
   it, and a styled layer whose transform makes §3's pre-transform deviation
   visible (rotation ≠ 0 or non-uniform scale).
-- The Blending Options subgroup (`ADBE Blend Options Group`) imports as report
-  rows only in v1.
+- The Blending Options subgroup (`ADBE Blend Options Group`) imports as one
+  report row, raised only on a layer that actually wears a style — a row about a
+  group nobody used is a row nobody can act on.
+- **Pattern Overlay** is the tenth slot After Effects lists and is not one of
+  §1's nine (a pattern needs an image library Lumit has no shape for). Named in
+  the report rather than dropped.
+- A style's blend mode reaches the Mix row's Blend choice on the **interior**
+  styles. The two outer ones composite *underneath* the picture, where that row
+  has nothing to combine with, so they keep Normal and the report names anything
+  After Effects had beyond Normal or Multiply.
 
 `docs/11-AE-IMPORT.md`'s Layer styles row moves from "placeholder" to "mapped"
 with the boundary list, in the import package's commit.
@@ -375,10 +398,20 @@ UI (only the touched test files):
    against the layer's edge, where both coverages are near their peak and being
    in front is the only thing that decides. Moving that sample outward is how
    the test stops meaning anything.
-3. **Fold + panel + menu + import.** Bridge styles accessors and the shared
-   instance lookup, add/remove/toggle commands, Timeline Styles group, panel
-   section, Layer-menu wiring, engine labels + arb keys, the §7 map stage,
-   docs/11 row update, golden-bundle assertions.
+3. ~~**Fold + panel + menu + import.**~~ **Landed.** `Op::SetLayerStyles`, the
+   bridge's `get_styles` / `add_style` and the one `is_style` lookup every
+   existing param command routes through — so remove and bypass are the effect
+   commands unchanged, and the add/remove/toggle trio the note asked for turned
+   out to be one command — the Timeline's Styles group and the panel's Styles
+   section on the existing row widgets, the Layer menu's seven rows, 35
+   engine-label keys, and the §7 map stage with docs/11's row and the
+   golden-bundle assertion.
+
+   **Three readings §7 left to the data**, and the data settled all three: an
+   off slot is a style nobody added (§7), opacity crosses one for one (§7), and
+   a blend mode is honourable on the interiors only — an outer style composites
+   *underneath*, where the injected Blend row has nothing to combine with, so
+   those keep Normal and the report names anything beyond Normal or Multiply.
 
 ## Open questions
 
