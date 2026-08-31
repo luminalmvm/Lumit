@@ -27,12 +27,18 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
 /// Show the dialogue and, on confirm, precompose. Returns when it closes.
+///
+/// [group] names the layer group being packed when the command came from a
+/// group header's *Pre-compose group* (K-731): the engine moves the header's
+/// effect stack onto the new Precomp layer and takes the emptied band away in
+/// the same undo step.
 Future<void> showPrecomposeDialogFrb({
   required BuildContext context,
   required CompositionReference comp,
   required List<LayerReference> selectedLayers,
   required LumitUiState ui,
   required Workspace workspace,
+  UuidValue? group,
 }) async {
   if (selectedLayers.isEmpty) return;
 
@@ -68,6 +74,7 @@ Future<void> showPrecomposeDialogFrb({
             name: name,
             leaveAttributes: !moveAttributes && layers.length == 1,
             adjustDuration: adjustDuration,
+            group: group,
           );
         } catch (_) {
           // The dialogue stays open saying so, rather than closing on a move

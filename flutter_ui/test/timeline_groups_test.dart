@@ -29,6 +29,7 @@ BridgeLayerGroup _group(String id, List<UuidValue> members) => BridgeLayerGroup(
       audible: true,
       solo: false,
       locked: false,
+      effects: const [],
     );
 
 const _gid = 'aaaaaaaa-0000-4000-8000-000000000000';

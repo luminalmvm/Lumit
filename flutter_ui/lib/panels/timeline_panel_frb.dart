@@ -683,6 +683,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             selectedLayers: layers,
             ui: ui,
             workspace: ui.workspace,
+            // Named so the engine carries the header's effect stack onto the
+            // new Precomp layer and retires the emptied band (K-731 §5).
+            group: g.id,
           );
         },
         onShift: (g, delta) {
