@@ -339,9 +339,10 @@ same decoded ring, so it is warm wherever the cache bar is warm.
   Number socket named Volume, and a driver chain wired onto it overrides the Volume
   keyframes in both mixers — evaluated per ~10 ms control step, clamped to the property's
   own range, keyframes returning the moment the wire breaks or bypasses. This is the
-  landing for the Audio panel's *Duck under…* template (Audio level → Remap inverted →
-  Smooth). The chain's own comp-mix tap reads the **pre-duck** mix, so one level of
-  ducking is heard and a duck driven by a duck terminates.
+  landing for the Audio panel's *Lower behind…* template (Audio level → Remap inverted →
+  Smooth) — the ducking move, labelled in plain words (K-730). The chain's own comp-mix
+  tap reads the **pre-duck** mix, so one level of ducking is heard and a duck driven by
+  a duck terminates.
 - Stereo is the v1 channel model; mono sources upmix centred.
 
 ## 7. Out of scope for v1

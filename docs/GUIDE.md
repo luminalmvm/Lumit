@@ -13872,9 +13872,10 @@ It is deliberately the only property socket. Volume is the one property the audi
 itself owns, and the mixer is where the wire's answer has to be baked; everything else a
 driver might move already has its own parameter sockets.
 
-### What Duck under actually builds
+### What Lower behind actually builds
 
-The Audio panel's *Duck under…* button writes three boxes onto the music layer and wires
+The Audio panel's *Lower behind…* button (the move audio engineers call *ducking* —
+the button says it in plain words) writes three boxes onto the music layer and wires
 them in a row: **Audio level** listening to the layer you picked (the voice-over),
 **Remap** turned upside down (silence in → 0 dB out, loud in → −18 dB out), and
 **Smooth** so the dip glides instead of fluttering, into the Volume socket. Nothing about

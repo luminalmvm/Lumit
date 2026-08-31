@@ -127,11 +127,12 @@ void main() {
           reason: 'the chain ends on the effect\'s own socket');
     });
 
-    /// *Duck under…* stages the inverted chain onto the selected layer's own
-    /// Volume socket (K-697): Audio level listening to the picked layer,
-    /// Remap upside down, Smooth, into the Layer out — and the engine
-    /// accepts the wire, which is the whole road being proved.
-    testWidgets('Duck under stages the inverted chain onto the Volume socket',
+    /// *Lower behind…* (the ducking template, K-730) stages the inverted
+    /// chain onto the selected layer's own Volume socket (K-697): Audio level
+    /// listening to the picked layer, Remap upside down, Smooth, into the
+    /// Layer out — and the engine accepts the wire, which is the whole road
+    /// being proved.
+    testWidgets('Lower behind stages the inverted chain onto the Volume socket',
         (tester) async {
       final p = await mount(tester, solids: 2);
       final layer = p.comp.getLayers().first;

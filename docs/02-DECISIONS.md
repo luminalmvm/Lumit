@@ -23057,3 +23057,24 @@ across a remount and a store reload), `easing_curve_test` (every shipped family 
 legal, monotone and non-degenerate), `timeline_selection_test` (an applied ease writes
 the drawn tangents on every selected span and a two-layer apply is one undo step —
 fails without the undo group).
+
+## K-730 — Ducking speaks plain English: the button says Lower behind
+
+**Status:** DECIDED — 2026-08-31 (owner ruling: "wtf does this mean? if it's a term audio
+engineers actually use sure, but surely theres a term more people would know???").
+Amends the approved AudioWorkspace board's own label, on the owner's word.
+
+*Duck* is real audio jargon — the radio and mixing term for one sound dipping while
+another plays — but the audience this editor is for should not need it. The Audio
+panel's template button becomes **Lower behind…** (`audioDuckUnder`, key kept, text
+renamed), which reads as what it does once a layer is picked: this sound is lowered
+behind that one. Its empty-menu line follows ("No other layer to lower this one
+behind."), and the arb descriptions keep the word *ducking* so a translator recognises
+the concept. Code identifiers, engine comments and the pre-duck tap keep the term —
+docs/09 §6 still names ducking as the move — because the ruling is about what the button
+says, not about striking a word the manuals may still explain.
+
+No manual page on docs.lumitlab.com mentions the old label, so nothing is owed there.
+
+Tests: `audio_panel_frb_test` (the renamed test drives the same staged chain);
+`engine_labels_test` and the arb gates stand as always.

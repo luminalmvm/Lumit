@@ -230,7 +230,7 @@ beyond (a "linear-phase everything" chain pushing a quarter second should be vis
 **Buses**: v1 hosts **stereo effect plugins only** — main in/out at 2ch (CLAP
 `audio-ports` mains; VST3 `setBusArrangements(kStereo)`), aux/sidechain buses left
 inactive, instruments (no main audio in) rejected at scan with a report row. The board's
-*Duck under* wiring is what will eventually feed a sidechain; it needs the driver seam,
+*Lower behind* (ducking) wiring is what will eventually feed a sidechain; it needs the driver seam,
 not a v1 guess.
 
 ## 5. Isolation: the OFX broker architecture, re-armed for audio

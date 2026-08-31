@@ -3486,7 +3486,7 @@
   },
   "fxVolume": "Volume",
   "@fxVolume": {
-    "description": "Node graph — the Layer out box's Volume socket, the port a Duck under wire lands on."
+    "description": "Node graph — the Layer out box's Volume socket, the port a Lower behind (ducking) wire lands on."
   },
   "fxWavelength": "Wavelength",
   "@fxWavelength": {
@@ -10026,17 +10026,17 @@
   "@audioDriveWith": {
     "description": "Audio panel button: opens a list of the selected layer's effect parameters, and wires an Audio level driver chain onto the chosen one, so the parameter follows the music. Ellipsis because a choice follows."
   },
-  "audioDuckUnder": "Duck under…",
+  "audioDuckUnder": "Lower behind…",
   "@audioDuckUnder": {
-    "description": "Audio panel button: opens a list of the other layers, and wires an inverted Audio level chain onto this layer's Volume so its sound dips while the chosen layer sounds - ducking, the radio/mixing term. Ellipsis because a choice follows."
+    "description": "Audio panel button: opens a list of the other layers, and wires an inverted Audio level chain onto this layer's Volume so its sound is lowered while the chosen layer sounds. Audio engineers call this ducking, but the label stays in plain words (owner ruling, K-730): this sound is lowered behind the picked one. Ellipsis because a choice follows."
   },
   "audioDriveNoTargets": "No free number parameters on this layer's effects.",
   "@audioDriveNoTargets": {
     "description": "Audio panel, the Drive with audio menu when the selected layer has no effect parameter a wire could land on (none of its effects have an unwired number parameter)."
   },
-  "audioDuckNoSources": "No other layer to duck under.",
+  "audioDuckNoSources": "No other layer to lower this one behind.",
   "@audioDuckNoSources": {
-    "description": "Audio panel, the Duck under menu when the composition has no other layer to listen to."
+    "description": "Audio panel, the Lower behind menu (the ducking template) when the composition has no other layer to listen to."
   },
   "fadeShapeEase": "Ease",
   "@fadeShapeEase": {
@@ -11639,6 +11639,6 @@
   },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
-    "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Duck under…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
+    "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
   }
 }

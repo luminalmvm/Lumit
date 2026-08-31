@@ -909,7 +909,8 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// *Duck under…*: pick the layer whose sound pushes this one down, then
+  /// *Lower behind…* (the ducking template, in plain words — K-730): pick the
+  /// layer whose sound pushes this one down, then
   /// stage the inverted chain onto this layer's own Volume socket (K-697) —
   /// Audio level listening to the picked layer, Remap upside down, Smooth,
   /// into the Layer out's Volume.

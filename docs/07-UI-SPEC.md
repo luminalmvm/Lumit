@@ -2498,8 +2498,8 @@ The v1 sync toolkit (K-050); the Composer workspace is future work specified in
   selected layer's Volume and Pan (K-694 — pan shipped, reversing the earlier deferral)
   with their stopwatches, fade in/out wells with the three curve chips (K-695), and the
   two graph-template buttons — *Drive with audio…* (Audio level → Remap → Smooth onto a
-  picked parameter) and *Duck under…* (the inverted chain onto this layer's Volume
-  socket, K-697).
+  picked parameter) and *Lower behind…* (the ducking move in plain words, K-730: the
+  inverted chain onto this layer's Volume socket, K-697).
 - **Level meters**: the Audio panel's Levels section draws the output's stereo bars with
   the panel-side peak hold and the sticky clip lamp; the **Mixer** panel (docs/09 §3.1,
   K-690/K-691) draws a strip per sounding row — name in the layer's label colour, pan
