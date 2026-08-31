@@ -37,7 +37,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
 import 'keyframe_controls_frb.dart';
-import 'mixer_panel_frb.dart' show panLabel;
+import 'mixer_panel_frb.dart' show PanPot, panLabel;
 import 'placeholder.dart';
 
 /// What the Range dropdown offers (docs/09 §5): the whole comp, or only the
@@ -625,6 +625,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
   BridgeFadeShape _fadeInShape = BridgeFadeShape.ease;
   BridgeFadeShape _fadeOutShape = BridgeFadeShape.ease;
 
+  /// The pot's live reading while it is being turned, or null at rest — the
+  /// Mixer strip's own shape: the drag shows here and commits once on release.
+  double? _dragPan;
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -640,9 +644,10 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
         final volumeValue = volume is BridgeScalar_Static
             ? volume.field0
             : sampledScalar(volume, timeOfFrame(widget.comp, frame));
-        final panValue = pan is BridgeScalar_Static
-            ? pan.field0
-            : sampledScalar(pan, timeOfFrame(widget.comp, frame));
+        final panValue = _dragPan ??
+            (pan is BridgeScalar_Static
+                ? pan.field0
+                : sampledScalar(pan, timeOfFrame(widget.comp, frame)));
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           child: Column(
@@ -710,6 +715,16 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   child: Text(l10n.audioPan,
                       style: t.body.copyWith(color: t.textMuted)),
                 ),
+                // The board's own dial beside the value well — the Mixer
+                // strip's pot, turning the same way (K-694).
+                PanPot(
+                  key: const ValueKey('audio-pan-pot'),
+                  value: panValue,
+                  onLive: (v) => setState(() => _dragPan = v),
+                  onCommit: (v) => _commitPan(pan, v, frame),
+                  onCancel: () => setState(() => _dragPan = null),
+                ),
+                const SizedBox(width: 6),
                 SizedBox(
                   width: 72,
                   child: DragValueField(
@@ -855,6 +870,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     widget.entry.layer.setPan(
       value: scalarWithValueAt(scalar, value, widget.comp, frame),
     );
+    setState(() => _dragPan = null);
     widget.onChanged();
   }
 

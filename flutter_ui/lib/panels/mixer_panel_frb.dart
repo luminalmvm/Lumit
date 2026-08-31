@@ -286,7 +286,7 @@ class _MixerStripState extends State<_MixerStrip> {
                 ),
                 const SizedBox(height: 4),
               ],
-              _PanPot(
+              PanPot(
                 key: ValueKey('pot-$id'),
                 value: panValue,
                 onLive: (v) => setState(() => _dragPan = v),
@@ -663,14 +663,16 @@ class _FaderPainter extends CustomPainter {
 }
 
 /// The pan pot: a small dial, −100 full left through centre to +100 full
-/// right (K-694). Vertical drag turns it; double-click recentres.
-class _PanPot extends StatelessWidget {
+/// right (K-694). Vertical drag turns it; double-click recentres. Public
+/// because the board draws the same pot on the Audio panel's Pan row, and one
+/// dial must turn the same way everywhere.
+class PanPot extends StatelessWidget {
   final double value;
   final ValueChanged<double> onLive;
   final ValueChanged<double> onCommit;
   final VoidCallback onCancel;
 
-  const _PanPot({
+  const PanPot({
     super.key,
     required this.value,
     required this.onLive,

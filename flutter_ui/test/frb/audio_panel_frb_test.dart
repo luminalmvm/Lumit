@@ -3,10 +3,15 @@
 // chains land as real wires the engine validates, Duck under's on the Layer
 // out's Volume socket (K-697).
 
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/audio_meters_feed.dart';
 import 'package:lumit_flutter/panels/audio_panel_frb.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 
 import 'frb_test_support.dart';
@@ -165,5 +170,93 @@ void main() {
           out.inputs.firstWhere((portInfo) => portInfo.id == 'volume');
       expect(volumePort.wired, isTrue);
     });
+
+    /// The board's Pan row carries the Mixer's own pot beside the value well:
+    /// turning it writes the same `Layer.pan` every other control writes.
+    testWidgets('the pan pot turns the selected layer\'s balance',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Cut');
+      p.uiState.setSelectedComp(comp);
+      final music = p.state.project!.importFootage(path: _toneWavFile());
+      comp.addFootageLayer(footage: music, asSequence: false);
+      p.uiState.selectedLayer.value = comp.getLayers().first;
+      p.uiState.model.refresh();
+      final feed = AudioMeterFeed();
+      feed.read = () => const [];
+      addTearDown(feed.dispose);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: AudioPanelFrb(feed: feed),
+      ));
+      // The audio probe is a real trip into FFmpeg; the sound rows appear
+      // once it answers.
+      await settleFrb(tester, minRounds: 8);
+
+      final pot = find.byKey(const ValueKey('audio-pan-pot'));
+      expect(pot, findsOneWidget, reason: 'the dial is drawn beside the well');
+
+      // A mouse, as on the desk this app ships for: touch slop swallows a
+      // short test drag. Several moves, because the first only wins the
+      // recogniser the arena and a real drag is a stream of them anyway.
+      final gesture = await tester.startGesture(tester.getCenter(pot),
+          kind: PointerDeviceKind.mouse);
+      for (var i = 0; i < 3; i++) {
+        await gesture.moveBy(const Offset(0, -10));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+
+      final pan = p.uiState.model.heldLayers.first.info.pan;
+      expect(pan, isA<BridgeScalar_Static>());
+      expect((pan as BridgeScalar_Static).field0, greaterThan(30),
+          reason: 'a real travel up is a real turn to the right, committed '
+              'once on release');
+      // The pot also answers a double-click (recentre), so its recogniser
+      // holds the double-tap window open after the release; let it lapse
+      // rather than ending the test with its timer pending.
+      await tester.pump(kDoubleTapTimeout);
+    });
   });
+}
+
+/// A real, probeable WAV: half a second of 8 kHz mono square wave, so the
+/// probe says the layer can make a sound and the sound rows are drawn.
+/// Written synchronously — an awaited async `dart:io` call in a `testWidgets`
+/// body hangs the test outright.
+String _toneWavFile() {
+  final dir = Directory.systemTemp.createTempSync('lumit-panel-pan');
+  final file = File('${dir.path}/tone.wav');
+  const rate = 8000;
+  const samples = 4000;
+  const dataBytes = samples * 2;
+  final out = BytesBuilder();
+  void ascii(String s) => out.add(s.codeUnits);
+  void u16(int v) => out.add([v & 0xff, (v >> 8) & 0xff]);
+  void u32(int v) =>
+      out.add([v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff]);
+  ascii('RIFF');
+  u32(36 + dataBytes);
+  ascii('WAVE');
+  ascii('fmt ');
+  u32(16);
+  u16(1);
+  u16(1);
+  u32(rate);
+  u32(rate * 2);
+  u16(2);
+  u16(16);
+  ascii('data');
+  u32(dataBytes);
+  final data = Uint8List(dataBytes);
+  for (var i = 0; i < samples; i++) {
+    final v = (i ~/ 9).isEven ? 12000 : -12000;
+    data[i * 2] = v & 0xff;
+    data[i * 2 + 1] = (v >> 8) & 0xff;
+  }
+  out.add(data);
+  file.writeAsBytesSync(out.toBytes());
+  return file.path;
 }
