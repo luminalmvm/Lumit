@@ -6036,13 +6036,17 @@ surfaces:
         let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
         let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
 
-        let build = |graph: Option<bool>| -> (Document, Uuid) {
+        // `radius` is the number under test: 0 is what the stack stores, and a
+        // wire is supposed to substitute 20 for it. The same 20 is also rendered
+        // *without* a wire below, so a frame that does not change can say which
+        // half is at fault rather than only that the two agree.
+        let build = |graph: Option<bool>, radius: f64| -> (Document, Uuid) {
             let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
             let (_, top) = matrix_top(&mut doc, comp_id, blue);
             let mut blur = lumit_core::fx::instantiate("blur").unwrap();
             for p in &mut blur.params {
                 if p.id == "radius" {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(0.0));
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(radius));
                 }
             }
             let blur_id = blur.id;
@@ -6085,21 +6089,45 @@ surfaces:
             (doc, comp_id)
         };
 
-        let render = |r: &mut HeadlessRenderer, graph: Option<bool>| -> Vec<u8> {
-            let (doc, comp_id) = build(graph);
+        let render = |r: &mut HeadlessRenderer, graph: Option<bool>, radius: f64| {
+            let (doc, comp_id) = build(graph, radius);
             let doc = DocumentStore::new(doc).snapshot();
             r.render_rgba(&doc, comp_id, 0, 1.0)
                 .expect("the comp renders")
                 .0
         };
 
-        let plain = render(&mut r, None);
-        let driven = render(&mut r, Some(true));
-        let bypassed = render(&mut r, Some(false));
+        let plain = render(&mut r, None, 0.0);
+        let driven = render(&mut r, Some(true), 0.0);
+        let bypassed = render(&mut r, Some(false), 0.0);
+        // The control: the same twenty, typed into the parameter rather than
+        // wired to it. If this frame matches `plain` too then the blur is what
+        // did not happen, and the wire is not on trial at all.
+        let stamped = render(&mut r, None, 20.0);
 
+        let worst = |a: &[u8], b: &[u8]| {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| x.abs_diff(*y))
+                .max()
+                .unwrap_or(0)
+        };
         assert_ne!(
-            plain, driven,
-            "a wire driving the radius to twenty must change the picture"
+            plain,
+            stamped,
+            "a radius of twenty typed straight into the parameter must change \
+             the picture before a wire can be blamed for anything (worst \
+             channel difference {})",
+            worst(&plain, &stamped),
+        );
+        assert_ne!(
+            plain,
+            driven,
+            "a wire driving the radius to twenty must change the picture, and \
+             the same twenty typed in does (worst channel difference driven {} \
+             vs stamped {})",
+            worst(&plain, &driven),
+            worst(&plain, &stamped),
         );
         assert_eq!(
             plain, bypassed,
