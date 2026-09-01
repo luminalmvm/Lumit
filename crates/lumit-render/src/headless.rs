@@ -6090,17 +6090,26 @@ surfaces:
         let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
         let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
 
-        // `radius` is the number under test: 0 is what the stack stores, and a
-        // wire is supposed to substitute 20 for it. The same 20 is also rendered
-        // *without* a wire below, so a frame that does not change can say which
-        // half is at fault rather than only that the two agree.
-        let build = |graph: Option<bool>, radius: f64| -> (Document, Uuid) {
+        // **Exposure, not a blur.** `matrix_top` builds a flat solid, and this
+        // effect renders on the layer's own raster before the transform - so a
+        // Gaussian blur, whose edges clamp, is the identity here at every radius,
+        // and the frames were rightly byte-identical on every conformant adapter.
+        // This desk's discrete card was the one machine that "passed", by a single
+        // least-significant bit of rounding on a handful of texels. A gain on a
+        // constant field is a real change, which is what this test needs to be
+        // about a wire at all.
+        //
+        // `stops` is the number under test: 0 is what the stack stores, and a wire
+        // is supposed to substitute 2 for it. The same 2 is also rendered *without*
+        // a wire below, so a frame that does not change can say which half is at
+        // fault rather than only that the two agree.
+        let build = |graph: Option<bool>, stops: f64| -> (Document, Uuid) {
             let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
             let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+            let mut blur = lumit_core::fx::instantiate("exposure").unwrap();
             for p in &mut blur.params {
-                if p.id == "radius" {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(radius));
+                if p.id == "stops" {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(stops));
                 }
             }
             let blur_id = blur.id;
@@ -6110,7 +6119,7 @@ surfaces:
                 let v = match p.id.as_str() {
                     "value" | "in_high" => 1.0,
                     "in_low" | "out_low" => 0.0,
-                    "out_high" => 20.0,
+                    "out_high" => 2.0,
                     _ => continue,
                 };
                 p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
@@ -6134,7 +6143,7 @@ surfaces:
                         },
                         to: InputRef::Param {
                             node: NodeRef::Effect(blur_id),
-                            port: "radius".into(),
+                            port: "stops".into(),
                         },
                     }],
                     layout: Vec::new(),
@@ -6155,10 +6164,11 @@ surfaces:
         let plain = render(&mut r, None, 0.0);
         let driven = render(&mut r, Some(true), 0.0);
         let bypassed = render(&mut r, Some(false), 0.0);
-        // The control: the same twenty, typed into the parameter rather than
-        // wired to it. If this frame matches `plain` too then the blur is what
-        // did not happen, and the wire is not on trial at all.
-        let stamped = render(&mut r, None, 20.0);
+        // The control: the same two stops, typed into the parameter rather than
+        // wired to it. If this frame matches `plain` too then the effect is what
+        // did not happen, and the wire is not on trial at all - which is exactly
+        // the mistake this test made for as long as it drove a blur.
+        let stamped = render(&mut r, None, 2.0);
 
         let worst = |a: &[u8], b: &[u8]| {
             a.iter()
@@ -6167,20 +6177,18 @@ surfaces:
                 .max()
                 .unwrap_or(0)
         };
-        assert_ne!(
-            plain,
-            stamped,
-            "a radius of twenty typed straight into the parameter must change \
-             the picture before a wire can be blamed for anything (worst \
-             channel difference {})",
+        assert!(
+            worst(&plain, &stamped) > 4,
+            "two stops typed straight into the parameter must change the picture \
+             before a wire can be blamed for anything (worst channel difference \
+             {})",
             worst(&plain, &stamped),
         );
-        assert_ne!(
-            plain,
+        assert_eq!(
             driven,
-            "a wire driving the radius to twenty must change the picture, and \
-             the same twenty typed in does (worst channel difference driven {} \
-             vs stamped {})",
+            stamped,
+            "a wire driving the stops to two must render what typing two renders \
+             (worst channel difference driven {} vs stamped {})",
             worst(&plain, &driven),
             worst(&plain, &stamped),
         );
