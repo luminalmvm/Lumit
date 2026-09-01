@@ -65,6 +65,15 @@ pub const STRIKES_BEFORE_DISABLED: u32 = 3;
 /// starting, not about a plugin thinking.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long a describe may take: the handshake's ceiling, or a quirks-table
+/// control deadline set longer than it. The audio broker's twin, for the same
+/// reason (K-751): the first describe opens the bundle from disk on a process
+/// that has only just said hello, which is a program starting rather than a
+/// plugin thinking, and nothing on a render waits on it.
+pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
+    HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
+}
+
 /// How many of the plugin's messages are kept. A plugin in a loop can call the
 /// message suite as fast as it likes; the host keeps the most recent few and
 /// drops the rest, because an unbounded queue fed by somebody else's code is
@@ -362,8 +371,8 @@ impl Broker {
     ///
     /// [`BrokerError`].
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
-        let control = self.config.quirks.control_timeout;
-        match self.action(&HostMessage::Describe, control, None) {
+        let deadline = describe_deadline(&self.config.quirks);
+        match self.action(&HostMessage::Describe, deadline, None) {
             Ok(BrokerMessage::Described { plugins }) => {
                 self.descriptors = plugins;
                 Ok(&self.descriptors)
@@ -863,5 +872,33 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod describe_deadline_tests {
+    use super::{describe_deadline, HANDSHAKE_TIMEOUT};
+    use crate::quirks::Quirks;
+    use std::time::Duration;
+
+    /// The shipped two-second control deadline is not what describe waits
+    /// under: the first describe opens the module, which is a program starting
+    /// (K-751).
+    #[test]
+    fn describe_takes_the_handshake_ceiling_by_default() {
+        let quirks = Quirks::default();
+        assert!(quirks.control_timeout < HANDSHAKE_TIMEOUT);
+        assert_eq!(describe_deadline(&quirks), HANDSHAKE_TIMEOUT);
+    }
+
+    /// A quirks-table entry that asks for longer than the handshake still gets
+    /// it: the table is the mechanism for a plugin that is genuinely slow.
+    #[test]
+    fn a_longer_control_deadline_from_the_table_still_wins() {
+        let quirks = Quirks {
+            control_timeout: Duration::from_secs(30),
+            ..Quirks::default()
+        };
+        assert_eq!(describe_deadline(&quirks), Duration::from_secs(30));
     }
 }

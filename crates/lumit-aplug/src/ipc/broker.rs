@@ -69,6 +69,22 @@ pub const STRIKES_BEFORE_DISABLED: u32 = 3;
 /// starting, not about a plugin thinking.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How long a describe may take: the handshake's ceiling, or a quirks-table
+/// control deadline set longer than it.
+///
+/// Describe is filed with the control actions, but the first one is not a
+/// plugin thinking — it is the broker **opening the module from disk** and
+/// asking every plugin in it what it is, on a process that has only just said
+/// hello. Under the two-second control deadline that is a cold cdylib load
+/// plus a virus scan plus whatever else the machine is doing, and on the
+/// Windows CI runner it was missed once in seven runs with the test module
+/// alone. Nothing on the audio path waits on describe, and a describe that
+/// genuinely hangs costs ten seconds instead of two, so it takes the ceiling
+/// sized for a program starting (K-751).
+pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
+    HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
+}
+
 /// The environment variable that overrides where the broker executable is, for
 /// a test or for a developer running from a build tree.
 pub const BROKER_EXE_ENV: &str = "LUMIT_APLUG_BROKER";
@@ -472,8 +488,8 @@ impl Broker {
     /// [`BrokerError`].
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
         let disabled = self.disabled_now().into_iter().collect();
-        let control = self.config.quirks.control_timeout;
-        match self.action(&HostMessage::Describe { disabled }, control) {
+        let deadline = describe_deadline(&self.config.quirks);
+        match self.action(&HostMessage::Describe { disabled }, deadline) {
             Ok(BrokerMessage::Described { plugins, rejected }) => {
                 self.descriptors = plugins;
                 self.rejected = rejected;
@@ -814,5 +830,33 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod describe_deadline_tests {
+    use super::{describe_deadline, HANDSHAKE_TIMEOUT};
+    use crate::quirks::Quirks;
+    use std::time::Duration;
+
+    /// The shipped two-second control deadline is not what describe waits
+    /// under: the first describe opens the module, which is a program starting
+    /// (K-751).
+    #[test]
+    fn describe_takes_the_handshake_ceiling_by_default() {
+        let quirks = Quirks::default();
+        assert!(quirks.control_timeout < HANDSHAKE_TIMEOUT);
+        assert_eq!(describe_deadline(&quirks), HANDSHAKE_TIMEOUT);
+    }
+
+    /// A quirks-table entry that asks for longer than the handshake still gets
+    /// it: the table is the mechanism for a plugin that is genuinely slow.
+    #[test]
+    fn a_longer_control_deadline_from_the_table_still_wins() {
+        let quirks = Quirks {
+            control_timeout: Duration::from_secs(30),
+            ..Quirks::default()
+        };
+        assert_eq!(describe_deadline(&quirks), Duration::from_secs(30));
     }
 }

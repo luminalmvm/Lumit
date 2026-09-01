@@ -108,7 +108,7 @@ The main process runs a thin proxy node in the evaluation graph.
   macOS) is the later optimisation for GPU-rendering plugins, reusing the LFX transport
   (§3.5).
 - **Watchdog policy**: every plugin call carries a deadline (default 10 s for `render`,
-  2 s for control actions; configurable per plugin in the quirks table). A missed deadline
+  2 s for control actions, except describe, which opens the module and so waits under the ten-second handshake ceiling (K-751); configurable per plugin in the quirks table). A missed deadline
   or a crashed process kills and restarts the server; the in-flight node renders as an
   errored placeholder for that frame. Three consecutive failures disable the plugin for the
   session with a calm notice — no modal, no red alarm. State is reconstructible because the

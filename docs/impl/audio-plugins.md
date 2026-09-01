@@ -251,7 +251,7 @@ K-589/K-592/K-594):
 - Blocks cross a shared-memory ring with per-slot header and hash. Blocks are 4 KB, not
   frames — the ring is small and the budget trivial.
 - Watchdog: **per-block deadline = the lookahead margin** (§3), not OFX's 10 s; control
-  actions (describe, activate, state) keep the 2 s. Three strikes → session disable +
+  actions (activate, state) keep the 2 s; describe waits under the ten-second handshake ceiling, because the first one opens the module from disk (K-751). Three strikes → session disable +
   badge. Broker crash = restart + replay describe/instance from cached descriptors +
   state blob; the block that died ships dry.
 - Discovery enumerates **inside the broker** (a `clap_entry.init` or `GetPluginFactory`
