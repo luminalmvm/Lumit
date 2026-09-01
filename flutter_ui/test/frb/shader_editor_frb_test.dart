@@ -154,6 +154,40 @@ void main() {
           reason: 'the badge carries the compiler\'s words too');
     });
 
+    /// **A long line runs off to the right rather than wrapping** (Airyz).
+    ///
+    /// The gutter is the reason this matters beyond taste: it draws one number
+    /// per newline and slides by the vertical offset, which is only true while
+    /// nothing wraps. A wrapped line used to take two rows and one number, and
+    /// every number under it was out by one.
+    testWidgets('a line longer than the window scrolls sideways',
+        (tester) async {
+      final p = withShader();
+      await mount(tester, p);
+      await openEditor(tester, p);
+
+      await type(tester, '// ${'x' * 400}\nfn shade() {}\n');
+      await tester.pump();
+
+      final hscroll = find.byKey(const ValueKey<String>('shader-editor-hscroll'));
+      final viewport = tester.getSize(hscroll);
+      final field = tester.getSize(
+          find.byKey(const ValueKey<String>('shader-editor-code')));
+      expect(field.width, greaterThan(viewport.width),
+          reason: 'the text is laid out at its own width, not the window\'s');
+
+      // The outer one: the field keeps a vertical Scrollable of its own
+      // inside it.
+      final position = tester.state<ScrollableState>(
+        find.descendant(of: hscroll, matching: find.byType(Scrollable)).first,
+      ).position;
+      expect(position.maxScrollExtent, greaterThan(0),
+          reason: 'and there is somewhere to scroll to');
+
+      // Three lines of text, three numbers - the claim the gutter rests on.
+      expect(find.text('1\n2\n3'), findsOneWidget);
+    });
+
     /// **The window resizes, and the well is what grows** (Airyz: "writing the
     /// shader in this tiny view is pretty annoying"). A grip that moved the
     /// frame's edge while the code well stayed its old height would be the
@@ -163,7 +197,10 @@ void main() {
       await mount(tester, p);
       await openEditor(tester, p);
 
-      final well = find.byKey(const ValueKey<String>('shader-editor-code'));
+      // The viewport, not the field: code does not wrap, so the field is as
+      // wide as its longest line whatever the window does. What the grip
+      // buys is more of it on screen.
+      final well = find.byKey(const ValueKey<String>('shader-editor-hscroll'));
       final before = tester.getSize(well);
 
       final grip = find.byKey(const ValueKey('window-resize-grip'));
@@ -174,7 +211,9 @@ void main() {
       final after = tester.getSize(well);
       expect(after.height, greaterThan(before.height + 60),
           reason: 'the well took the height the window gained');
-      expect(after.width, greaterThan(before.width + 100),
+      // The frame's own padding takes a little of each axis, so the well
+      // gains most of the drag rather than all of it.
+      expect(after.width, greaterThan(before.width + 90),
           reason: 'and the width');
     });
 

@@ -379,6 +379,20 @@ class _ShaderEditorState extends State<_ShaderEditor> {
 /// once and slid by however far the text has scrolled, which is the whole of
 /// what following it means. Both take the same text style, so line 40 in the
 /// gutter is beside line 40 in the text.
+///
+/// **Code does not wrap** (Airyz, 2026-09-01: "i think it'd be better rly if
+/// the text didn't wrap, and it was horizontally scrollable instead"). A
+/// multiline field has one axis and no `softWrap`, so the way to stop it
+/// wrapping is to lay it out at its own unwrapped width inside a horizontal
+/// viewport, which is what the [SingleChildScrollView] below is for. The
+/// width is measured from the longest line in a monospaced face, so it is one
+/// character's width times a count rather than a layout pass.
+///
+/// It also settles an old wrong: the gutter draws one number per newline and
+/// slides by the vertical offset, which is only true while no line wraps. A
+/// wrapped line took two rows and one number, and every number below it was
+/// out by one. Without wrapping, line N is at N × the line height, which is
+/// the assumption the gutter was built on all along.
 class _CodeWell extends StatelessWidget {
   final TextEditingController text;
   final ScrollController scroll;
@@ -397,6 +411,15 @@ class _CodeWell extends StatelessWidget {
     final code = t.mono.copyWith(color: t.textPrimary, height: 1.4);
     final numbers = code.copyWith(color: t.textMuted);
     final lines = '\n'.allMatches(text.text).length + 1;
+    // One character's advance in this face, which in a monospaced one is every
+    // character's advance. Measured on the style the field actually uses.
+    final probe = TextPainter(
+      text: TextSpan(text: 'M', style: code),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final longest = text.text
+        .split('\n')
+        .fold<int>(0, (most, line) => line.length > most ? line.length : most);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -428,16 +451,34 @@ class _CodeWell extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: HouseTextField(
-            key: const ValueKey<String>('shader-editor-code'),
-            controller: text,
-            multiline: true,
-            scrollController: scroll,
-            autofocus: true,
-            style: code,
-            // The well takes the width the row gives it, not a number of its
-            // own: a page of code is as wide as the window is.
-            width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // At least the room the row gives it, so a short shader still
+              // fills the well and the caret has somewhere to sit; wider when
+              // a line is longer than that, which is what scrolls.
+              final wanted = longest * probe.width + probe.width * 2;
+              final width =
+                  wanted > box.maxWidth ? wanted : box.maxWidth;
+              return SingleChildScrollView(
+                key: const ValueKey<String>('shader-editor-hscroll'),
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: width,
+                  child: HouseTextField(
+                    key: const ValueKey<String>('shader-editor-code'),
+                    controller: text,
+                    multiline: true,
+                    scrollController: scroll,
+                    autofocus: true,
+                    style: code,
+                    // The width is the box above's, not a number of this
+                    // field's own - an infinity inside a horizontal viewport
+                    // has nothing to be infinite against.
+                    width: width,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
