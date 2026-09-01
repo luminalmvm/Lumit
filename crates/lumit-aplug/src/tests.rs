@@ -692,3 +692,23 @@ fn denormals_flush_to_zero_inside_the_guard_and_are_restored_after() {
     let after = black_box(tiny) * black_box(half);
     assert_eq!(after, before, "the thread is given back as it was found");
 }
+
+// --------------------------------------------------------- console windows --
+
+/// A broker is a console program and Lumit is a windowed one, so on Windows a
+/// spawn without `CREATE_NO_WINDOW` opens a console window per plugin file
+/// during the start-up scan — reported against 0.3.0. Nothing in this process
+/// can observe whether a child was given a console, so the guard is that the
+/// spawn still asks for none.
+#[test]
+fn the_broker_is_spawned_without_a_console_window() {
+    let source = include_str!("ipc/broker.rs");
+    assert!(
+        source.contains("no_console(&mut command);"),
+        "the broker spawn must ask for no console window"
+    );
+    assert!(
+        source.contains("command.creation_flags(CREATE_NO_WINDOW);"),
+        "no_console must be CREATE_NO_WINDOW and nothing else"
+    );
+}

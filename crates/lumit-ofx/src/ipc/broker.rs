@@ -99,6 +99,26 @@ pub fn broker_exe() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(name))
 }
 
+/// Start the broker with no console window of its own.
+///
+/// A broker is a console program and Lumit is a windowed one, so on Windows
+/// every spawn opens a console window in front of the editor — one per plugin
+/// file, all at once, during the start-up scan. `CREATE_NO_WINDOW` gives the
+/// child no console at all instead. Nothing is lost by it: the protocol was
+/// never on the child's standard streams (see `ipc::pipe`), and its output is
+/// already sent to nowhere.
+fn no_console(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        /// `CREATE_NO_WINDOW`, from winbase.h.
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    let _ = command;
+}
+
 /// What can go wrong before there is a broker to blame.
 #[derive(Debug, Error)]
 pub enum BrokerError {
@@ -293,6 +313,7 @@ impl Broker {
             // on standard output in the first place (see `ipc::pipe`).
             .stdin(Stdio::null())
             .stdout(Stdio::null());
+        no_console(&mut command);
         for (key, value) in &self.config.env {
             command.env(key, value);
         }
