@@ -12028,8 +12028,8 @@ fn setting_a_shader_source_is_one_undo_step() {
     layer.add_effect("custom_shader".into()).expect("added");
     // What a fresh instance opens with - the starter example since
     // 2026-09-01 - is what one undo has to put back.
-    let before = lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0])
-        .map(str::to_owned);
+    let before =
+        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0]).map(str::to_owned);
 
     set_shader(&layer, TWO_ROWS, None);
     assert_eq!(
@@ -12039,8 +12039,7 @@ fn setting_a_shader_source_is_one_undo_step() {
 
     undo_once(&project);
     assert_eq!(
-        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0])
-            .map(str::to_owned),
+        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0]).map(str::to_owned),
         before,
         "one undo takes the whole edit back"
     );
