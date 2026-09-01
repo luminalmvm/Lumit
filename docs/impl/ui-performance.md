@@ -685,10 +685,12 @@ reason worth knowing when the next platform-only budget failure appears: the sof
 renderer there lands its first frame inside the test's counting window, while a Windows
 worker's cold shader build takes seconds and never does. The edit budget doubled
 exactly — every row twice, plus the column's first number appearing — and the same
-count is reproduced on Windows by counting *through* the worker's first frame under
+count is reproduced on Windows by counting *through* the worker's first report under
 the cold-worker ceiling, which is what the regression test does — a repeat ask for the
 frame on screen is served from the cache and reports nothing, so a second composite is
-not something a test can simply request.
+not something a test can simply request. It waits on the report (the column's header
+filling in), not on the frame: the Linux runner's DMA-BUF present fails on software
+Vulkan, so the picture never reaches Dart there while the profile does.
 
 ## 5. What does not change
 

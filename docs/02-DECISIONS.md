@@ -23819,5 +23819,9 @@ frame before counting, which is what the regression test does.
 **Two things a test has to know here.** A repeat request for a frame the cache already
 holds produces no report, whatever measuring says — a first draft of the regression test
 asked for the frame on screen again and passed against the very defect. So it counts
-*through the worker's first frame*, which is always a composite, and waits for it under
-the cold-worker ceiling, because on Windows that frame is the shader build.
+*through the worker's first report*, which is of a composite, and waits for it under the
+cold-worker ceiling, because on Windows that frame is the shader build. It waits for the
+*report* — the header filling in — and not for the frame: on the Linux runner the DMA-BUF
+present fails on software Vulkan and the picture never reaches Dart, while the profile of
+that same render is sent regardless. A wait on `frameArrived` there waits for ever, and
+that is how the first push of this fix failed its own test on the platform that found it.

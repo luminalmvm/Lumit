@@ -1266,40 +1266,44 @@ void main() {
     /// lands the worker's first frame inside the counting window, while the
     /// Windows shader build takes seconds and lands nothing.
     ///
-    /// So this counts *through* the first frame, on every platform — the cold
-    /// worker's, under its own ceiling — and asks that nothing outside the
-    /// column rebuilt for it. The cells are expected to: that is the column
-    /// filling in.
+    /// So this counts *through* the first report, on every platform — the
+    /// cold worker's first frame, under its own ceiling — and asks that
+    /// nothing outside the column rebuilt for it. The cells are expected to:
+    /// that is the column filling in.
+    ///
+    /// **It waits for the report, not for the frame.** The header reads `…`
+    /// until a report lands and a number after it, and that is the signal:
+    /// on the Linux runner the frame itself never reaches Dart — the DMA-BUF
+    /// present fails on software Vulkan and the picture is dropped — while
+    /// the profile of that same render is sent regardless. Waiting on
+    /// `frameArrived` there waits for ever, and would let this test pass
+    /// vacuously on the one platform that found the defect.
     testWidgets('a measured frame redraws the numbers, not the rows',
         (tester) async {
-      final p = await mountTall(tester);
+      await mountTall(tester);
+      String? header() {
+        final found = find.byKey(const ValueKey('tl-timings-header'));
+        if (found.evaluate().isEmpty) return null;
+        return tester.widget<Text>(found).data;
+      }
+
+      bool reported() => RegExp(r'(ms| s)$').hasMatch(header() ?? '');
       rebuilds
         ..reset()
         ..counting = true;
-      await settleFrb(tester,
-          until: () => p.ui.frameArrived.value > 0,
-          maxRounds: coldWorkerRounds);
+      await settleFrb(tester, until: reported, maxRounds: coldWorkerRounds);
       await settleFrb(tester, minRounds: 4);
       rebuilds
         ..counting = false
         ..remove();
 
-      expect(p.ui.frameArrived.value, greaterThan(0),
-          reason: 'no frame ever arrived, so nothing here was measured');
       // ignore: avoid_print
       print('FRAME REBUILDS ${rebuilds.total}');
       // ignore: avoid_print
       print(rebuilds.ranking());
-      // The header reads `…` until a report lands and a number after it —
-      // the proof that a measured frame actually arrived inside the window.
-      // The cells' own builders rebuild for it; the cell *widgets* do not, so
-      // their count is no evidence either way.
-      final header = tester
-          .widget<Text>(find.byKey(const ValueKey('tl-timings-header')))
-          .data;
-      expect(header, matches(RegExp(r'(ms| s)$')),
-          reason: 'the column never filled in ($header), so no report was '
-              'measured');
+      expect(reported(), isTrue,
+          reason: 'the column never filled in (${header()}), so no report '
+              'was measured');
       expect(rebuilds.byName['TimelinePanelFrb'] ?? 0, 0,
           reason: 'a frame report rebuilt the whole panel: '
               '${rebuilds.ranking()}');
