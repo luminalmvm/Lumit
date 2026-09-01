@@ -377,10 +377,29 @@ mod tests {
     /// been — the frontend's fallback covers that exactly as it covers a
     /// platform with no implementation at all, and asserting otherwise here
     /// would fail on a perfectly healthy machine.
+    ///
+    /// **Unless there is no card.** A runner with no graphics hardware has
+    /// nothing for DXGI to report the memory of, and answering 0 there is the
+    /// truth rather than a fault — which is why this asks the same question
+    /// `lumit_gpu::no_adapter` does — `LUMIT_REQUIRE_GPU`, spelled out here
+    /// because this crate does not depend on lumit-gpu: it says whether this
+    /// machine is *supposed* to have a card. CI sets it on the jobs whose
+    /// runners are confirmed to enumerate an adapter and deliberately not on
+    /// the Windows one (ci.yml says so in its own words), so the gate holds
+    /// wherever it means anything and stands down where it does not.
     #[test]
     fn the_card_says_how_big_it_is_where_it_can_be_asked_without_a_renderer() {
         #[cfg(any(windows, target_os = "macos"))]
         {
+            let required =
+                std::env::var("LUMIT_REQUIRE_GPU").is_ok_and(|v| !v.is_empty() && v != "0");
+            if !required && video_memory_bytes() == 0 {
+                eprintln!(
+                    "skipping: no card to report the memory of, and \
+                     LUMIT_REQUIRE_GPU is not set"
+                );
+                return;
+            }
             assert!(
                 video_memory_bytes() > 0,
                 "the card's memory should be positive on Windows/macOS"
