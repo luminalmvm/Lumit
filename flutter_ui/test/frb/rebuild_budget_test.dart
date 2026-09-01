@@ -1285,7 +1285,11 @@ void main() {
         return tester.widget<Text>(found).data;
       }
 
-      bool reported() => RegExp(r'(ms| s)$').hasMatch(header() ?? '');
+      // `Time` and `…` carry no digit; any report does — and on a runner
+      // where one stage dominates the frame, the header ends in that stage's
+      // name (`332 ms · present`), not in the unit, which is what a suffix
+      // match missed on Linux.
+      bool reported() => RegExp(r'\d').hasMatch(header() ?? '');
       final rows = bandPaints(tester, 'tl-outline-blocks').blocks.length;
 
       // Off, and settled: the column goes, and whatever the worker reported
