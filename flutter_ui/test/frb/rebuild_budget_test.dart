@@ -1256,5 +1256,56 @@ void main() {
       // stopped following the document.
       expect(layer.getSwitches().locked, isTrue);
     });
+
+    /// **A measured frame is not an edit** (K-750). With the render-time column
+    /// on — the default — the engine reports what every composited frame cost,
+    /// and the panel used to answer each report with a `setState` of its own:
+    /// the whole Timeline rebuilt for numbers that only the column's cells and
+    /// header read, and they already listen for themselves. That was the Linux
+    /// CI failure of the test above, exactly doubled: the software renderer
+    /// lands the worker's first frame inside the counting window, while the
+    /// Windows shader build takes seconds and lands nothing.
+    ///
+    /// So this counts *through* the first frame, on every platform — the cold
+    /// worker's, under its own ceiling — and asks that nothing outside the
+    /// column rebuilt for it. The cells are expected to: that is the column
+    /// filling in.
+    testWidgets('a measured frame redraws the numbers, not the rows',
+        (tester) async {
+      final p = await mountTall(tester);
+      rebuilds
+        ..reset()
+        ..counting = true;
+      await settleFrb(tester,
+          until: () => p.ui.frameArrived.value > 0,
+          maxRounds: coldWorkerRounds);
+      await settleFrb(tester, minRounds: 4);
+      rebuilds
+        ..counting = false
+        ..remove();
+
+      expect(p.ui.frameArrived.value, greaterThan(0),
+          reason: 'no frame ever arrived, so nothing here was measured');
+      // ignore: avoid_print
+      print('FRAME REBUILDS ${rebuilds.total}');
+      // ignore: avoid_print
+      print(rebuilds.ranking());
+      // The header reads `…` until a report lands and a number after it —
+      // the proof that a measured frame actually arrived inside the window.
+      // The cells' own builders rebuild for it; the cell *widgets* do not, so
+      // their count is no evidence either way.
+      final header = tester
+          .widget<Text>(find.byKey(const ValueKey('tl-timings-header')))
+          .data;
+      expect(header, matches(RegExp(r'(ms| s)$')),
+          reason: 'the column never filled in ($header), so no report was '
+              'measured');
+      expect(rebuilds.byName['TimelinePanelFrb'] ?? 0, 0,
+          reason: 'a frame report rebuilt the whole panel: '
+              '${rebuilds.ranking()}');
+      expect(rebuilds.byName['OutlineRow'] ?? 0, 0,
+          reason: 'a frame report rebuilt the outline rows: '
+              '${rebuilds.ranking()}');
+    });
   }, skip: !engineAvailable);
 }

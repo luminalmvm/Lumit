@@ -23796,3 +23796,28 @@ that Viewer — which separates a decode fault from a picture-transport one.
 
 The cost is a window that is briefly its default size on the way up, which is what the
 Windows runner's SW_MAXIMIZE-at-show has always done.
+
+
+## K-750 — A measured frame redraws the numbers, not the Timeline
+
+**DECIDED** (2026-09-01). `TimelinePanelFrb` no longer rebuilds itself on every
+`RenderTimings` report. It rebuilds only when `measuring` flips — the one change that is a
+layout change, because the render-time column comes and goes with it — and the column's
+cells and header, which already carry their own `ListenableBuilder` on `RenderTimings`,
+redraw the numbers by themselves. The attach-site comment had said exactly this and the
+handler had not done it.
+
+**Why it was found on Linux CI and nowhere else, which is the part worth recording.** The
+rebuild-budget gate counts what an edit's follow-on rebuilds. A frame arriving *inside*
+that window is a second full wave, and Linux's software renderer lands the worker's first
+frame inside the window while a Windows worker's cold shader build takes seconds and
+lands nothing. So Windows measured 27 rows rebuilt and Linux 54 — the whole tree exactly
+twice, plus the column's first number appearing — and nothing about the count was a
+threshold set too tight. The same 54 is reproduced on Windows by waiting for that first
+frame before counting, which is what the regression test does.
+
+**Two things a test has to know here.** A repeat request for a frame the cache already
+holds produces no report, whatever measuring says — a first draft of the regression test
+asked for the frame on screen again and passed against the very defect. So it counts
+*through the worker's first frame*, which is always a composite, and waits for it under
+the cold-worker ceiling, because on Windows that frame is the shader build.

@@ -1694,6 +1694,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Switching measuring off takes the render-time column away entirely, and
     // the outline is that much narrower for it — a layout change, so the panel
     // has to hear about it rather than only the cells inside the column.
+    _measuringWas = _ui!.renderTimings.measuring;
     _ui!.renderTimings.addListener(_onTimingsChanged);
     // The FX console's Keyframe ring plants a key and then asks for its row to
     // be on screen (K-326). Ensure-open, not the reveal keys' toggle: showing
@@ -1778,7 +1779,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// was cleared. Held, for the reason [didChangeDependencies] gives.
   Listenable? _cacheRevision;
 
+  /// Whether measuring was on the last time this panel heard from
+  /// [RenderTimings] — the only thing about a report the *panel* cares about.
+  bool _measuringWas = true;
+
+  /// A report from [RenderTimings]: either a measured frame's numbers, which
+  /// the column's cells and header redraw for themselves (each carries its own
+  /// `ListenableBuilder`), or the measuring switch flipping, which takes the
+  /// whole column away or puts it back — a layout change, and the one case
+  /// the panel rebuilds for (K-750).
+  ///
+  /// It used to rebuild for both. With measuring on by default, every
+  /// composited frame rebuilt two hundred rows for one column of milliseconds
+  /// — the second wave the rebuild-budget gate caught on Linux CI, where the
+  /// software renderer lands the first frame inside the counting window.
   void _onTimingsChanged() {
+    final measuring = _ui?.renderTimings.measuring ?? _measuringWas;
+    if (measuring == _measuringWas) return;
+    _measuringWas = measuring;
     if (mounted) setState(() {});
   }
 

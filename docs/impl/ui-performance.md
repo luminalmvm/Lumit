@@ -673,6 +673,23 @@ delivers the stream event and the per-frame check is what they were relying on. 
 the same "an edit's follow-on is one wave" problem WP-5 owns (§7 item 5), and it should
 be answered there once, not smuggled in here at the cost of the suite that guards it.
 
+**A measured frame is a per-frame fact, and the panel treated it as a revision** (K-750,
+2026-09-01). With the render-time column on — the default — the worker reports what
+every composited frame cost, and `TimelinePanelFrb` answered each report with a
+`setState` of its own: the whole Timeline rebuilt for numbers that only the column's
+cells and its header read, and both already listen to `RenderTimings` for themselves.
+The panel's listener exists for one thing, the *layout* change when measuring is
+switched off and the column goes with it, and it now rebuilds the panel only when
+`measuring` flips. Found by the rebuild-budget gate on Linux CI and nowhere else, for a
+reason worth knowing when the next platform-only budget failure appears: the software
+renderer there lands its first frame inside the test's counting window, while a Windows
+worker's cold shader build takes seconds and never does. The edit budget doubled
+exactly — every row twice, plus the column's first number appearing — and the same
+count is reproduced on Windows by counting *through* the worker's first frame under
+the cold-worker ceiling, which is what the regression test does — a repeat ask for the
+frame on screen is served from the cache and reports nothing, so a second composite is
+not something a test can simply request.
+
 ## 5. What does not change
 
 - **The two-trees refusal stands** (docs/TODO, "The Timeline's two halves are still
