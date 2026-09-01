@@ -1263,24 +1263,22 @@ void main() {
     /// the whole Timeline rebuilt for numbers that only the column's cells and
     /// header read, and they already listen for themselves. That was the Linux
     /// CI failure of the test above, exactly doubled: the software renderer
-    /// lands the worker's first frame inside the counting window, while the
+    /// lands the worker's first report inside the counting window, while the
     /// Windows shader build takes seconds and lands nothing.
     ///
-    /// So this counts *through* the first report, on every platform — the
-    /// cold worker's first frame, under its own ceiling — and asks that
-    /// nothing outside the column rebuilt for it. The cells are expected to:
-    /// that is the column filling in.
-    ///
-    /// **It waits for the report, not for the frame.** The header reads `…`
-    /// until a report lands and a number after it, and that is the signal:
-    /// on the Linux runner the frame itself never reaches Dart — the DMA-BUF
-    /// present fails on software Vulkan and the picture is dropped — while
-    /// the profile of that same render is sent regardless. Waiting on
-    /// `frameArrived` there waits for ever, and would let this test pass
-    /// vacuously on the one platform that found the defect.
+    /// **How a report is made to land inside the window, on every platform.**
+    /// Measuring is switched off before the count and on inside it. The flip
+    /// on is the one report the panel *is* allowed to rebuild for — the column
+    /// comes back, which is layout — and it asks the engine for a fresh
+    /// measured composite, whose report then arrives while the counter is
+    /// running. So: one panel rebuild and one pass over the rows for the flip,
+    /// and nothing more for the report that follows it. Counting from an
+    /// unsettled mount catches the panel's own mount follow-on instead, and
+    /// counting after a settle misses the report on a fast runner — both were
+    /// tried, on CI.
     testWidgets('a measured frame redraws the numbers, not the rows',
         (tester) async {
-      await mountTall(tester);
+      final p = await mountTall(tester);
       String? header() {
         final found = find.byKey(const ValueKey('tl-timings-header'));
         if (found.evaluate().isEmpty) return null;
@@ -1288,9 +1286,24 @@ void main() {
       }
 
       bool reported() => RegExp(r'(ms| s)$').hasMatch(header() ?? '');
+      final rows = bandPaints(tester, 'tl-outline-blocks').blocks.length;
+
+      // Off, and settled: the column goes, and whatever the worker reported
+      // during the mount is cleared with it.
+      p.ui.renderTimings.setMeasuring(false);
+      await settleFrb(tester, minRounds: 4);
+      expect(reported(), isFalse,
+          reason: 'measuring off should leave no number in the header');
+
       rebuilds
         ..reset()
         ..counting = true;
+      p.ui.renderTimings.setMeasuring(true);
+      // The flip asks for the frame itself; asked again here in case the
+      // wiring ever changes, since a second ask for the same frame is at
+      // worst a cache hit.
+      p.ui.requestFrame();
+      await tester.pump();
       await settleFrb(tester, until: reported, maxRounds: coldWorkerRounds);
       await settleFrb(tester, minRounds: 4);
       rebuilds
@@ -1304,11 +1317,12 @@ void main() {
       expect(reported(), isTrue,
           reason: 'the column never filled in (${header()}), so no report '
               'was measured');
-      expect(rebuilds.byName['TimelinePanelFrb'] ?? 0, 0,
-          reason: 'a frame report rebuilt the whole panel: '
+      // The flip's own rebuild, and no other.
+      expect(rebuilds.byName['TimelinePanelFrb'] ?? 0, lessThanOrEqualTo(1),
+          reason: 'a frame report rebuilt the whole panel again: '
               '${rebuilds.ranking()}');
-      expect(rebuilds.byName['OutlineRow'] ?? 0, 0,
-          reason: 'a frame report rebuilt the outline rows: '
+      expect(rebuilds.byName['OutlineRow'] ?? 0, lessThanOrEqualTo(rows),
+          reason: 'a frame report rebuilt the outline rows again: '
               '${rebuilds.ranking()}');
     });
   }, skip: !engineAvailable);

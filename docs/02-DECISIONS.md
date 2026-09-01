@@ -23825,3 +23825,25 @@ cold-worker ceiling, because on Windows that frame is the shader build. It waits
 present fails on software Vulkan and the picture never reaches Dart, while the profile of
 that same render is sent regardless. A wait on `frameArrived` there waits for ever, and
 that is how the first push of this fix failed its own test on the platform that found it.
+
+
+## K-751 — Describe waits under the handshake ceiling, not the control one
+
+**DECIDED** (2026-09-01). Both brokers' `describe` now wait `HANDSHAKE_TIMEOUT` (ten
+seconds), or a quirks-table control deadline where one is set longer. Every other control
+action keeps docs/12 §2.3's two seconds.
+
+**Why describe is different.** It is filed with the control actions, and the first one is
+not a plugin thinking: it is the broker *opening the module from disk* and asking every
+plugin in it what it is, on a process that has only just said hello. Under two seconds that
+is a cold cdylib load, a virus scan of a freshly built file, and whatever else the machine
+is doing — and on the Windows CI runner, with four other test binaries running, it was
+missed once in seven runs on the test module alone, as `nothing, before the deadline` from
+`a_plugin_switched_off_mid_session_is_skipped_on_the_next_batch`. Locally the whole suite
+takes under a second. Nothing on the audio path or a render waits on describe, and a
+describe that genuinely hangs now costs ten seconds instead of two, so it takes the ceiling
+already sized for a program starting.
+
+**Not a test change.** Raising the test's own floor would have hidden the same miss in a
+session, where a user's first plugin scan on a slow disk is exactly this load under exactly
+this deadline.
