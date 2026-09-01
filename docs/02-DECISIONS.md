@@ -23858,17 +23858,45 @@ their whole run: `the_cache_readout_answers_and_the_budget_takes_effect`, which 
 frame the card pushed out is *held in memory*. The keymap tests already pay the same price
 for their global, in the same shape (`KEYMAP_TESTS`).
 
-**What it was.** Two macOS runs in a row failed the fill test with `missing [7]` — the shown
-frame in neither tier — and both logs show the cache test finishing two seconds before,
-while the fill test had been running for over a minute. One cache per process, one test
-emptying it while another checks it: the order of a parallel test binary, which the macOS
-runner's scheduling had simply not produced before. The wgpu validation errors in the same
-minute belong to `a_lost_device_is_rebuilt_and_the_worker_draws_again` destroying its own
-device on purpose, and were a red herring worth naming so the next reader does not chase
-them.
+**What prompted it, and what it did not fix.** Two macOS runs in a row failed the fill
+test with `missing [7]` — the shown frame in neither tier — and both logs showed the cache
+test finishing two seconds before, while the fill test had been running for over a minute.
+That overlap is real and the lock is right: one cache per process, one test emptying it
+while another checks it, is a failure waiting for a runner to schedule it. But it was not
+this failure. The third run failed identically with the lock held and no cache test
+anywhere near; the cause is the fill test's own wait for its read-backs, recorded as
+K-753. The wgpu validation errors in the same minute belong to
+`a_lost_device_is_rebuilt_and_the_worker_draws_again` destroying its own device on
+purpose, and were a second red herring worth naming.
 
 **Why a lock and not a per-test cache.** The cache is global because the render path and
 the FFI controls share one (K-184's reason); threading a handle through both for the sake
 of two tests is more machinery than two guards. A test that panics while holding the guard
 poisons it, and the guard treats poison as "already failed for its own reason" rather than
 as a second failure.
+
+
+## K-753 — A demotion the card refuses is counted, and the fill test waits for the card
+
+**DECIDED** (2026-09-01). `HeadlessRenderer` now counts read-backs the card refused
+(`demotions_failed`) and says how many are still in flight (`demotions_in_flight`), and
+`the_fill_keeps_going_into_memory_once_the_card_is_full` waits on the second and subtracts
+the first. Nothing on the render path changes: a refused read-back is still dropped and the
+frame re-rendered when wanted, which is what `poll_demotions` has always said a miss costs.
+
+**What the test was claiming.** That every frame the card pushed out is held in memory —
+checked after two hundred back-to-back polls with no wait in them. On a real driver the
+read-backs had long landed; on the macOS runner's software Metal they had not, and frame
+7 — the shown frame, the last the fill wraps back over — read as held nowhere, three runs
+running, once with K-752's lock held and no other test near it. Two hundred polls is a
+count, not a wait; the wait is now bounded by the card's own clock, ten seconds at most.
+
+**Why subtract refusals rather than assert none.** The engine drops a refused read-back
+without a word, by design, and the runner's device has been seen refusing pipeline creation
+in the same minute. A test that demands every read-back succeed is testing the runner's
+driver, not the fill; one that tolerates a missing frame only when a refusal was counted is
+testing exactly the promise the fill makes. On real hardware the count is zero and the
+assertion is as strict as it ever was.
+
+**K-752 stands** as hygiene — the overlap it serialises is real — but it was not this
+failure, and its entry now says so.

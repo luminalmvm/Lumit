@@ -138,6 +138,11 @@ pub struct HeadlessRenderer {
     /// demotion ladder (docs/06 §5.3). Bounded by
     /// [`MAX_DEMOTIONS_IN_FLIGHT`]; drained by [`Self::poll_demotions`].
     demotions: Vec<Demotion>,
+    /// Read-backs the card refused (see [`Self::poll_demotions`]): the frames
+    /// that left VRAM and reached no lower tier. A count, because a test that
+    /// asserts every evicted frame is held somewhere has to be able to tell a
+    /// dropped demotion from a leak (K-753).
+    demotions_failed: u64,
     /// Display textures that left the cache and can hold the next promoted
     /// frame — see [`Self::upload_frame_texture`]. Bounded by
     /// [`MAX_POOLED_TEXTURES`].
@@ -556,6 +561,7 @@ impl HeadlessRenderer {
                 lru
             },
             demotions: Vec::new(),
+            demotions_failed: 0,
             upload_pool: Vec::new(),
             frame_texture_version: 0,
             frame_texture_hits: 0,
@@ -1868,11 +1874,26 @@ impl HeadlessRenderer {
                         provenance: demotion.provenance,
                     });
                 }
-                Some(Err(_)) => {}
+                Some(Err(_)) => self.demotions_failed += 1,
             }
         }
         self.demotions = still_running;
         done
+    }
+
+    /// How many demotion read-backs are still on their way down from the card.
+    /// Zero means [`Self::poll_demotions`] has nothing left to hand over.
+    #[must_use]
+    pub fn demotions_in_flight(&self) -> usize {
+        self.demotions.len()
+    }
+
+    /// How many demotion read-backs the card has refused so far. Each is a
+    /// frame that left VRAM and reached no lower tier, by design (a miss costs
+    /// a render); a test counting held frames subtracts these (K-753).
+    #[must_use]
+    pub fn demotions_failed(&self) -> u64 {
+        self.demotions_failed
     }
 
     /// Put a frame held as bytes back on the graphics card — the way UP the
