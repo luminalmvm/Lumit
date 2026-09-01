@@ -4172,6 +4172,17 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   dropdown on the Settings window's Appearance page — the old separate light/dark and
   background-ramp rows folded into it. An older save that used the two-row picker migrates its
   choice into the new one automatically, so nobody's theme resets on upgrade.
+  **When a shipped default changes and your file already disagrees** (K-742). The settings
+  file writes every preference out, whether you chose it or Lumit did, which is fine until
+  Lumit changes what it ships: the file still holds yesterday's default, nothing in it says
+  whether you picked that or it was written for you, and so the new default only ever reaches
+  a machine that has never run Lumit before. That is what happened to the playback mode —
+  Every frame became the shipped answer (K-670) and every existing install carried on opening
+  on Adaptive. So the file carries a **version number**, and a deliberate reversal of a
+  default may spend it: the file is read, that one preference is put back to the shipped
+  value, and the version moves up so it never happens twice. Anything you pick afterwards
+  stays picked. It costs a re-pick to anyone who had genuinely chosen the old value, which is
+  why it is a recorded decision each time rather than something Lumit does casually.
 - `flutter_ui/lib/icons/icons.dart` — **the icons, by name** (K-085, K-440).
   Little pictures like the play triangle or the padlock are asked for here by name: the
   `LumitIcon` list is the set of names the panels use, and this file decides what each one
@@ -7531,6 +7542,13 @@ What it does not do: refine while you hold still mid-drag. Pause with the button
 down and the coarse picture stays until you release. That would need a timer per
 gesture at every drag site, for a case that release answers a moment later
 anyway.
+
+And it can be turned off. Settings ▸ Performance ▸ Full resolution while
+dragging renders a drag at exactly the resolution the Viewer is showing, which
+is what somebody with a fast card and a light composition would rather have: the
+budget is a trade, and it is not everyone's trade. It is off by default, because
+the machine that cannot afford a full-resolution drag is the one that cannot
+tell you so. On, a heavy composition drags exactly as slowly as it really is.
 
 ### How far an effect reaches, and why the tile has a margin (K-433)
 
@@ -12716,6 +12734,16 @@ Groups and pages, the plugin's own way of tidying its controls, become the panel
 collapsible sections, so a plugin with thirty controls arrives already organised the way its
 author organised it.
 
+One more thing about values, because it surprises people who know that **Lumit** owns them.
+A plugin is allowed to *write* its own controls, and quite often does — the moment it is
+created it settles a few of them, the way a dialogue fills in sensible defaults before you
+see it. Lumit accepts the write into the copy of the values that plugin is reading from.
+It does not travel any further than that: it is not an undo step, and the next frame reads
+Lumit's own rows again, because the numbers on the layer are the ones you and your keyframes
+put there. Refusing the write outright is not an option, though — the shared code library
+almost every commercial plugin is built on treats a refusal there as fatal, and gives up
+before the effect exists at all.
+
 ### What a clip, an image and a render action are
 
 Three words do most of the work once a plugin is actually being asked for pictures, and
@@ -12958,6 +12986,13 @@ escape hatch for people who keep their plugins somewhere else. Inside those fold
 plugin is a *bundle*: a folder named `Something.ofx.bundle` with the actual library buried
 a couple of levels down under `Contents`. Lumit reads all of those folders once when it
 starts, and again whenever you ask it to rescan — after installing something, say.
+
+It reads the folders *underneath* them too, and that is not a nicety. Every vendor who
+sells a suite rather than one effect puts it in a folder of its own — `Red Giant Universe`,
+`Magic Bullet Suite`, `Boris FX` — so a host that looked only at the top of the plugins
+folder would find nothing at all on a machine with a hundred plugins installed. The walk
+stops four folders down, which is deeper than any installer goes and shallow enough that a
+folder which somehow contains itself cannot spin forever.
 
 For each bundle it finds, Lumit starts the separate little program described above, asks
 every plugin inside to describe itself, and turns each answer into an effect. From that

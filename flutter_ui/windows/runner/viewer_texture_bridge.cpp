@@ -1,6 +1,8 @@
 #include "viewer_texture_bridge.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <variant>
 
 namespace {
@@ -47,9 +49,7 @@ ViewerTextureBridge::ViewerTextureBridge(
 ViewerTextureBridge::~ViewerTextureBridge() {
   // Unregister everything still live before the registrar goes away.
   for (auto& pair : entries_) {
-    if (textures_ != nullptr) {
-      textures_->UnregisterTexture(pair.first, nullptr);
-    }
+    ReleaseEntry(pair.first, std::move(pair.second));
   }
   entries_.clear();
 }
@@ -161,8 +161,36 @@ void ViewerTextureBridge::Unregister(int64_t texture_id) {
   if (it == entries_.end()) {
     return;
   }
-  if (textures_ != nullptr) {
-    textures_->UnregisterTexture(texture_id, nullptr);
-  }
+  std::unique_ptr<Entry> entry = std::move(it->second);
   entries_.erase(it);
+  ReleaseEntry(texture_id, std::move(entry));
+}
+
+// Unregistering is ASYNCHRONOUS, and that is the whole reason the completion
+// callback exists in Flutter's API: the raster thread can still be inside the
+// descriptor callback above, which hands back a pointer *into* the Entry. This
+// used to delete the Entry the moment `UnregisterTexture` returned, so a
+// compositor part-way through a frame read freed memory.
+//
+// Which is why it reads as "it crashes when I drag a value while the timeline
+// is playing". A texture is re-registered whenever the picture's SIZE changes
+// (`ViewerTextureController.ensureRegistered`), and a live drag renders at the
+// drag's own reduced scale (K-383) while playback renders at its adaptive tier
+// — so a drag during playback alternates between two sizes and swaps the
+// texture on every frame, taking a fresh run at the race sixty times a second.
+// The same swap happens once at each end of any drag, which is the occasional
+// crash on a plain scale drag with nothing playing.
+//
+// The Entry is released *to* the callback rather than kept in `entries_`: it is
+// no longer ours to hand out, and the callback may well arrive after this
+// bridge has gone, which is also why nothing of `this` is captured. On the
+// shutdown path the engine may go before the callback runs; that leaks one
+// Entry into a process that is exiting.
+void ViewerTextureBridge::ReleaseEntry(int64_t texture_id,
+                                       std::unique_ptr<Entry> entry) {
+  if (textures_ == nullptr) {
+    return;
+  }
+  Entry* released = entry.release();
+  textures_->UnregisterTexture(texture_id, [released]() { delete released; });
 }

@@ -10,3 +10,8 @@ packaging/flatpak/bundle/
 flatpak-build/
 flatpak-repo/
 
+
+# The OFX support library writes this beside whatever ran a plugin — a bare
+# log of suite fetches and actions, no use to anybody after the run that made
+# it. Running the host from flutter_ui/ leaves one there.
+ofxTestLog.txt

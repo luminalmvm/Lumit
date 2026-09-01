@@ -1071,19 +1071,24 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // The gesture's travel is already in [shown] — folded in by [_withMove]
     // so that the handles and the curve move with the glyph rather than after
     // it — so there is nothing to add here.
-    var x = widget.axis.xOf(keyFrame(key, widget.fps));
+    final x = widget.axis.xOf(keyFrame(key, widget.fps));
     var y = _keyY(channel, index, range, height, isOut: isOut);
-    // A speed-lens dot in flight: sideways under the pointer, and the side
-    // being dragged sits at the speed the pointer is asking for.
+    // A speed-lens dot in flight: the side being dragged sits at the speed the
+    // pointer is asking for.
+    //
+    // **Its sideways travel is not added here** (K-747). The paragraph above
+    // is the rule and this block used to break it: `_keysWithDotTimeMove` has
+    // already put the key at its new frame in [shown], so `x += dot.dxPx` moved
+    // the dot a second time and it ran away from the pointer at twice the
+    // speed. Release then committed the one move and the dot snapped back to
+    // where the hand actually was — the jump that gave it away.
     final dot = _handleDrag;
     if (dot != null &&
         dot.dotOnly &&
         dot.channel.id == channel.id &&
-        dot.index == index) {
-      x += dot.dxPx;
-      if (dot.isOut == isOut) {
-        y = _yOf(dot.shownSpeed, range, height);
-      }
+        dot.index == index &&
+        dot.isOut == isOut) {
+      y = _yOf(dot.shownSpeed, range, height);
     }
     return Offset(x, y);
   }

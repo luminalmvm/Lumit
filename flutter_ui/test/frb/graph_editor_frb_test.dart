@@ -904,6 +904,48 @@ void main() {
       expect(opacityKeys(p.layer), hasLength(3), reason: 'nothing was lost');
     });
 
+    /// And it does not jump when the button comes up (K-747).
+    ///
+    /// The test above reads only the committed frame, which was always right —
+    /// the defect was entirely in the drawing. `_keysWithDotTimeMove` puts the
+    /// key at its new frame in the shown keys, and `_keyPoint` then added the
+    /// same travel to the glyph's x a second time, so the dot ran away at twice
+    /// the pointer's pace and snapped back to the hand on release.
+    ///
+    /// Asserted as "the dot is in the same place before and after the release"
+    /// rather than as a distance, because that is the complaint word for word —
+    /// and because it holds whatever the axis's zoom is doing. A travel that
+    /// runs into the end of the composition clamps both readings equally, which
+    /// a distance test would have quietly passed on (it did).
+    testWidgets('a speed dot does not jump when the drag is released',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pump();
+
+      final dot = find.byKey(ValueKey<String>(
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1-out'));
+      final gesture = await tester.startGesture(tester.getCenter(dot));
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(7, 0));
+        await tester.pump();
+      }
+      final held = tester.getCenter(dot).dx;
+      await gesture.up();
+      await tester.pumpAndSettle();
+      final landed = tester.getCenter(dot).dx;
+
+      expect(landed, closeTo(held, 1.0),
+          reason: 'the dot was drawn at $held while held and committed to '
+              '$landed, so the drawing was not showing the drag it would make');
+    });
+
     /// Ctrl+C / Ctrl+V: the in-app clipboard carries full easing, and pasting
     /// lands the earliest key on the playhead.
     testWidgets('copy and paste land keys on the playhead', (tester) async {

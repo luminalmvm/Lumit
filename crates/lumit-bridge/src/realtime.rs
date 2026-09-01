@@ -30,6 +30,7 @@
 //! switches back to Auto), so a fresh run starts optimistic at Full.
 
 use lumit_eval::schedule::{RealtimeController, COARSEST_TIER, FINEST_TIER};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// The session-lifetime controller behind its own lock (independent of the
@@ -91,10 +92,45 @@ pub(crate) fn drag_tier(width: u32, height: u32, scale: f32) -> u32 {
     COARSEST_TIER
 }
 
+/// Whether the user has asked for live drags to be rendered at the Viewer's own
+/// resolution — Settings → Performance, and off by default (K-744).
+///
+/// The switch exists because [`DRAG_PIXEL_BUDGET`] is a trade, not a truth: it
+/// buys a picture that keeps up with the pointer by giving up sharpness, and
+/// somebody with a fast card and a light composition is paying the price
+/// without needing to. Off is still the default, because the machine that
+/// cannot afford full-resolution drags is the one that cannot tell you so.
+///
+/// An atomic rather than a seat in the controller's lock: it is read on every
+/// drag frame and written twice a session, and it has nothing to do with what
+/// the controller is measuring.
+static FULL_RES_DRAGS: AtomicBool = AtomicBool::new(false);
+
+/// Set the [`FULL_RES_DRAGS`] preference. Called at boot with what the settings
+/// file held, and again whenever the switch is thrown.
+pub(crate) fn set_full_res_drags(on: bool) {
+    FULL_RES_DRAGS.store(on, Ordering::Relaxed);
+}
+
 /// The scale to render a live-drag frame at, given the scale the Viewer asked
 /// for and the comp's pixel size. See [`drag_tier`].
+///
+/// With [`FULL_RES_DRAGS`] on this is the Viewer's own scale unchanged — the
+/// drag budget is the only thing being turned off, so a drag then renders
+/// exactly as a committed frame does, and takes exactly as long.
 pub(crate) fn drag_scale(width: u32, height: u32, scale: f32) -> f32 {
-    scale * tier_scale(drag_tier(width, height, scale))
+    drag_scale_for(FULL_RES_DRAGS.load(Ordering::Relaxed), width, height, scale)
+}
+
+/// [`drag_scale`] with the preference passed in rather than read — the rule
+/// itself, so a test can state both answers without setting a session-wide
+/// switch the tests beside it are also reading.
+fn drag_scale_for(full_res: bool, width: u32, height: u32, scale: f32) -> f32 {
+    if full_res {
+        scale
+    } else {
+        scale * tier_scale(drag_tier(width, height, scale))
+    }
 }
 
 /// Report one genuine render's measured `cost_secs` at frame rate `fps`, but
@@ -132,8 +168,21 @@ pub(crate) fn reset() {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{drag_scale, drag_tier, DRAG_PIXEL_BUDGET};
+    use super::{drag_scale, drag_scale_for, drag_tier, DRAG_PIXEL_BUDGET};
     use lumit_eval::schedule::RealtimeController;
+
+    /// With the Settings switch on, the drag budget is off and a drag renders
+    /// at exactly the scale the Viewer asked for — including the 1080p case
+    /// below, which is the one the cap was built for (K-744).
+    #[test]
+    fn full_resolution_drags_ignore_the_budget() {
+        assert!((drag_scale_for(true, 1920, 1080, 1.0) - 1.0).abs() < 1e-6);
+        assert!((drag_scale_for(true, 3840, 2160, 0.5) - 0.5).abs() < 1e-6);
+        assert!((drag_scale_for(false, 1920, 1080, 1.0) - 1.0 / 3.0).abs() < 1e-6);
+        // And off is what the session starts on, so an untouched build drags
+        // exactly as it did before the switch existed.
+        assert!((drag_scale(1920, 1080, 1.0) - 1.0 / 3.0).abs() < 1e-6);
+    }
 
     /// A drag on a comp small enough to be cheap already is not degraded at all
     /// — softening a picture that was keeping up buys nothing and costs the

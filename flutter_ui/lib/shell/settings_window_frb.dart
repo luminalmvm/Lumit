@@ -678,7 +678,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _perfEdit(() {
           // The shipped default, read from the one place it is written down,
           // so Reset cannot drift from what a fresh install gets.
-          workspace.performance.playback = PerformanceSettings().playback;
+          final shipped = PerformanceSettings();
+          workspace.performance.playback = shipped.playback;
+          workspace.performance.fullResDragPreviews =
+              shipped.fullResDragPreviews;
+          setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
           workspace.settingsChanged();
           resetRealtime();
         });
@@ -1953,6 +1957,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
+          // Under the two playback rows because it is the same trade in the
+          // same place — how much resolution a moving picture gives up to keep
+          // up — and the drawing gives Performance no group of its own for a
+          // drag (K-744).
+          _flag(t, 'settings-full-res-drags',
+              l10n.settingsFullResolutionWhileDragging,
+              value: ui.workspace.performance.fullResDragPreviews, set: (on) {
+            ui.workspace.performance.fullResDragPreviews = on;
+            setFullResDragPreviews(fullRes: on);
+            ui.workspace.settingsChanged();
+          }),
           _row(
             t,
             l10n.settingsQualityTier,

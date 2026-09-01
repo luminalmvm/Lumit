@@ -83,6 +83,9 @@ class ViewerTextureBridge {
   // How many times Flutter has composited |texture_id| (see Entry::presented).
   uint64_t Presented(int64_t texture_id) const;
   void Unregister(int64_t texture_id);
+  // Give |entry| up to the engine, which deletes it once the unregistration
+  // has actually gone through (see the .cpp — unregistering is asynchronous).
+  void ReleaseEntry(int64_t texture_id, std::unique_ptr<Entry> entry);
 
   std::unique_ptr<flutter::PluginRegistrarWindows> registrar_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;

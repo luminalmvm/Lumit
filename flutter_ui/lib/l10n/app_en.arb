@@ -5337,6 +5337,10 @@
   "@settingsCustomColours": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsFullResolutionWhileDragging": "Full resolution while dragging",
+  "@settingsFullResolutionWhileDragging": {
+    "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."
+  },
   "settingsFramesWaitingToBeWritten": "Frames waiting to be written",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."
@@ -11717,6 +11721,14 @@
         "type": "String"
       }
     }
+  },
+  "startupFailedTitle": "Lumit could not start",
+  "@startupFailedTitle": {
+    "description": "Heading of the screen that takes the place of the whole editor when something went wrong before the window opened. Nothing else is on screen but this, the line below it, and the error itself."
+  },
+  "startupFailedBody": "Something went wrong on the way up. What follows is the reason and the file the same line was written to — the useful thing to send with a bug report.",
+  "@startupFailedBody": {
+    "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {

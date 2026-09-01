@@ -80,6 +80,24 @@ pub fn reset_realtime() -> BridgePlaybackTier {
     playback_tier()
 }
 
+/// Render live drags at the Viewer's own resolution instead of the drag budget
+/// (K-744, qualifying K-383).
+///
+/// K-383 caps a drag preview at a 640x360 raster so the picture keeps up with
+/// the pointer, and said the reduction needed no flag from the frontend. This
+/// is that flag, and only that: `true` renders a dragged frame exactly as a
+/// committed one, sharp and as slow as the composition really is. Everything
+/// else about a drag is unchanged.
+///
+/// A setting rather than a render argument, so it cannot be forgotten by a new
+/// drag call site — the same reason the reduction itself lives in the worker.
+/// The engine holds the live choice with no store behind it, so the settings
+/// file carries it and hands it back at boot, as the cache budgets do.
+#[frb(sync)]
+pub fn set_full_res_drag_previews(full_res: bool) {
+    crate::realtime::set_full_res_drags(full_res);
+}
+
 /// One rotating autosave beside a project.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

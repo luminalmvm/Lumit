@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -92,6 +93,35 @@ void main() {
       await tester
           .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 90)));
     }
+  });
+
+  // The crash a drag during playback was: the runner re-registers whenever the
+  // picture's SIZE changes, and a live drag renders at its own reduced scale
+  // while playback renders at its adaptive tier — so the two sizes alternate
+  // and the texture is swapped on every frame. Unregistering is asynchronous,
+  // and the runner used to free the entry the moment it asked, while the raster
+  // thread could still be reading the descriptor out of it.
+  //
+  // So: swap sizes as fast as a drag during playback does, announcing a frame
+  // between each, and require the process to still be here at the end. A real
+  // window is the only place this is answerable — freed memory is freed on the
+  // embedder's own raster thread, which no widget test has.
+  testWidgets('swapping the texture size does not take the runner down',
+      (tester) async {
+    final controller = ViewerTextureController();
+    // Never opened by the runner — the embedder opens the handle, and whether
+    // it can is beside the point here. The descriptor callback, which is what
+    // reads the freed entry, runs either way.
+    const handle = 0x1234;
+    for (var i = 0; i < 200 && controller.available; i++) {
+      final id = await controller.ensureRegistered(
+          handle, i.isEven ? 1920 : 960, i.isEven ? 1080 : 540);
+      if (id == null) break;
+      await controller.frameReady();
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await controller.dispose();
+    await tester.pumpAndSettle();
   });
 }
 

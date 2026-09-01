@@ -143,6 +143,32 @@ void main() {
           '0.1.0');
     });
 
+    test('the swap works from inside the folder being replaced', () {
+      // **The v0.2 -> v0.3 upgrade that never happened** (K-746). Lumit's own
+      // current directory is its install folder — Inno's shortcut takes
+      // `WorkingDir` from `{app}` — and Windows will not rename a folder a
+      // process is standing in. So the first rename threw, the update was
+      // rolled back before it began, and the restart button appeared to do
+      // nothing. Renaming a folder whose *executable* is running is fine and
+      // always was; it is only the working directory that holds it.
+      //
+      // Fails on Windows without the step-out in `swapInStagedUpdate`. On the
+      // other two it passes either way — they allow the rename — which is why
+      // this test is worth having in CI's Windows job specifically.
+      final site = install('0.1.0');
+      stage(site, '0.2.0');
+      final wasCurrent = Directory.current;
+      Directory.current = site.root;
+      try {
+        swapInStagedUpdate(site);
+      } finally {
+        Directory.current = wasCurrent;
+      }
+
+      expect(versionAt(site), '0.2.0');
+      expect(site.staging.existsSync(), isFalse);
+    });
+
     test('a version before last is cleared out of the way first', () {
       final site = install('0.1.0');
       site.previous.createSync();

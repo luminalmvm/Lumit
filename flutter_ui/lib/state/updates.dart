@@ -156,7 +156,8 @@ class UpdateRelease {
     if (assets is! List) return null;
 
     Map<String, dynamic>? chosen;
-    for (final suffix in assetSuffixesFor(platform, kind: kind)) {
+    for (final suffix
+        in assetSuffixesFor(platform, kind: kind, replaceable: replaceable)) {
       for (final raw in assets) {
         if (raw is! Map) continue;
         final asset = raw.cast<String, dynamic>();
@@ -192,21 +193,36 @@ class UpdateRelease {
 ///
 /// A per-user installation prefers the *package* — the plain archive of the
 /// application's own files — because that can be swapped in without an
-/// installer or an administrator. The installer stays second on the list, for
-/// an older installation sitting somewhere only an installer can write to.
+/// installer or an administrator. An installation Lumit cannot write beside
+/// gets the installer, and gets it as the **only** candidate.
+///
+/// **That last word is the whole of K-745.** [replaceable] used to be asked
+/// only of the delivery, not of the download, so an older installation in
+/// `Program Files` fetched the archive — correctly, the download worked — and
+/// was then told it would be applied by "installer", which means running the
+/// downloaded file. Running a `.zip` starts nothing. The update button did
+/// nothing, the application did not quit, and a restart by hand came back on
+/// the old version, because the archive it had was never going to be unpacked
+/// by anybody. The asset and the delivery are one decision and are taken here
+/// together.
+///
+/// Linux is the exception, and deliberately: there is no installer attachment
+/// to fall back to — the tarball is all a release carries — so an unwritable
+/// Linux installation still gets it, and [UpdateDelivery.installer] reveals it
+/// in the file manager rather than running it.
 ///
 /// A Flatpak is offered the Flatpak bundle and nothing else: the sandbox cannot
 /// be updated from inside, so the other attachments would be useless there.
 List<String> assetSuffixesFor(String platform,
-    {InstallKind kind = InstallKind.unknown}) {
+    {InstallKind kind = InstallKind.unknown, bool replaceable = false}) {
   if (kind == InstallKind.flatpak) return const ['.flatpak'];
   switch (platform) {
     case 'windows':
-      return kind == InstallKind.folder
+      return kind == InstallKind.folder && replaceable
           ? const ['windows-x64.zip', '.exe']
           : const ['.exe'];
     case 'macos':
-      return kind == InstallKind.bundle
+      return kind == InstallKind.bundle && replaceable
           ? const ['macos-arm64.zip', 'macos-x64.zip', 'macos.zip', '.dmg']
           : const ['.dmg'];
     default:

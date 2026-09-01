@@ -410,9 +410,27 @@ void main() {
         kind: InstallKind.folder,
         replaceable: false,
       );
-      // The archive is still the preferred *asset* — it is the delivery that
-      // changes, because an archive is no use where we cannot write.
       expect(release?.delivery, UpdateDelivery.installer);
+      // **And it downloads the installer, not the archive** (K-745). This test
+      // used to assert the opposite — the archive as the preferred asset, with
+      // only the delivery changing — which is what shipped, and it cannot work:
+      // `installer` delivery *runs the downloaded file*, and running a `.zip`
+      // starts nothing. That is the v0.2 upgrade that downloaded, offered a
+      // restart, did not restart, and came back on the old version.
+      expect(release?.assetName, endsWith('setup.exe'));
+    });
+
+    test('an unwritable Linux install still gets the tarball, to reveal', () {
+      // The exception, and on purpose: a release carries no Linux installer, so
+      // "installer" there means the file manager opens on the download. Taking
+      // the tarball away would leave a Linux user told there is no update.
+      final release = UpdateRelease.parse(
+        _releaseJson(),
+        platform: 'linux',
+        kind: InstallKind.folder,
+        replaceable: false,
+      );
+      expect(release?.assetName, endsWith('.tar.gz'));
     });
 
     test('a macOS bundle takes the zip, and a loose binary takes the image',

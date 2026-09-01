@@ -33,6 +33,14 @@
 // The old folder is left behind deliberately: its files are still open in the
 // running process, and Windows will not delete a loaded DLL. It is swept up on
 // the next launch, from the new copy, when nothing is holding it.
+//
+// **One trap, and it is not the one you would expect** (K-746). Renaming the
+// folder a running application lives in is fine on Windows — its executable and
+// libraries are mapped images and do not mind the path moving. What Windows
+// will not do is rename a folder that some process is *standing in*, and Lumit
+// stands in its own install folder, because that is where its shortcut starts
+// it. So the swap steps out to the temporary folder first. Without that, every
+// in-place update failed at the first rename.
 
 import 'dart:io';
 
@@ -224,20 +232,51 @@ void swapInStagedUpdate(InstallSite site) {
   // only ever the version before last, and nothing is holding it now.
   _removeQuietly(site.previous);
 
-  site.root.renameSync(site.previous.path);
+  // **Stand somewhere else first, or the swap cannot happen at all** (K-746).
+  //
+  // Windows refuses to rename a directory that is any process's current
+  // directory, and Lumit's own current directory is its install folder: the
+  // Start Menu shortcut Inno writes takes `WorkingDir` from `{app}` by default,
+  // and the relaunch after an update passes it explicitly. So the very first
+  // rename below failed every time, on every Windows machine, and an in-place
+  // update could never finish — it downloaded, offered a restart, and the
+  // restart did nothing because the swap had already thrown.
+  //
+  // Nothing else about the swap was wrong. A folder can be renamed with the
+  // application's own executable and libraries running out of it — Windows
+  // keeps those as mapped images and does not mind the path moving underneath
+  // them. It is only the working directory that holds the folder open.
+  final wasCurrent = Directory.current;
   try {
-    site.staging.renameSync(site.root.path);
-  } catch (error) {
-    // The dangerous half-second. Undo it now, while this code is in memory and
-    // does not need anything on disk: leaving the application with no folder at
-    // all is the one outcome worth going to lengths to avoid.
+    Directory.current = Directory.systemTemp;
+  } catch (_) {
+    // No temp folder to step into is not a reason not to try: the swap may
+    // still work, and failing here would refuse an update over a guess.
+  }
+  try {
+    site.root.renameSync(site.previous.path);
     try {
-      site.previous.renameSync(site.root.path);
-    } catch (_) {
-      // Both renames failed, which means the filesystem is refusing us
-      // entirely. Nothing here can fix that; the error below says so.
+      site.staging.renameSync(site.root.path);
+    } catch (error) {
+      // The dangerous half-second. Undo it now, while this code is in memory
+      // and does not need anything on disk: leaving the application with no
+      // folder at all is the one outcome worth going to lengths to avoid.
+      try {
+        site.previous.renameSync(site.root.path);
+      } catch (_) {
+        // Both renames failed, which means the filesystem is refusing us
+        // entirely. Nothing here can fix that; the error below says so.
+      }
+      rethrow;
     }
-    rethrow;
+  } finally {
+    try {
+      Directory.current = wasCurrent;
+    } catch (_) {
+      // Only reachable if the folder we were standing in is gone, which after
+      // a swap this far through means the caller is about to restart from the
+      // new one anyway.
+    }
   }
 }
 

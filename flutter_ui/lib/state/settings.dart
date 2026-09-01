@@ -45,6 +45,16 @@ class PerformanceSettings {
   /// The disk frame cache's budget in bytes. Null as for [cacheBudgetBytes].
   int? diskBudgetBytes;
 
+  /// Render a live drag at the Viewer's own resolution rather than the drag
+  /// budget (K-744).
+  ///
+  /// Off by default, which is K-383's rule: a drag preview is capped at a
+  /// 640x360 raster so the picture stays attached to the pointer. On, a dragged
+  /// frame is as sharp as a committed one and takes as long to make, which on a
+  /// heavy composition is the stall the cap exists to avoid — so this is a
+  /// choice for somebody whose machine can afford it, not a better default.
+  bool fullResDragPreviews;
+
   /// Where parked frames live, as the engine's own enum name
   /// (`appData` / `besideProject` / `custom`). Null means the engine's default.
   /// The frontend never interprets it beyond showing the choice — it hands the
@@ -68,6 +78,7 @@ class PerformanceSettings {
     this.diskBudgetBytes,
     this.diskCacheLocation,
     this.diskCacheFolder,
+    this.fullResDragPreviews = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -77,6 +88,7 @@ class PerformanceSettings {
         if (diskBudgetBytes != null) 'disk_budget_bytes': diskBudgetBytes,
         if (diskCacheLocation != null) 'disk_cache_location': diskCacheLocation,
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
+        'full_res_drag_previews': fullResDragPreviews,
       };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
@@ -95,6 +107,9 @@ class PerformanceSettings {
         diskBudgetBytes: _positiveInt(j['disk_budget_bytes']),
         diskCacheLocation: _nonEmpty(j['disk_cache_location']),
         diskCacheFolder: _nonEmpty(j['disk_cache_folder']),
+        // Absent — a file written before the switch existed — is off, which is
+        // the behaviour that file was written under.
+        fullResDragPreviews: j['full_res_drag_previews'] == true,
       );
 }
 

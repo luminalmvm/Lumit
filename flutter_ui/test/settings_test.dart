@@ -21,6 +21,21 @@ void main() {
     // Every frame, not adaptive (K-670): a fresh install shows the picture it
     // was asked for rather than a softened one.
     expect(p.playback, PlaybackMode.everyFrame);
+    // The drag budget stays on unless asked otherwise (K-744): it is what keeps
+    // a dragged value attached to the pointer on a heavy composition.
+    expect(p.fullResDragPreviews, isFalse);
+  });
+
+  test('full-resolution drag previews survive a settings round-trip', () {
+    final written = PerformanceSettings(fullResDragPreviews: true).toJson();
+    expect(PerformanceSettings.fromJson(written).fullResDragPreviews, isTrue);
+    // And a file written before the switch existed reads as off, which is the
+    // behaviour it was written under.
+    expect(
+      PerformanceSettings.fromJson({'playback': 'everyFrame'})
+          .fullResDragPreviews,
+      isFalse,
+    );
   });
 
   test('interface defaults are a no-op for existing installs', () {
@@ -419,6 +434,23 @@ void main() {
     });
     expect(p.cacheBudgetBytes, isNull);
     expect(p.vramBudgetBytes, isNull);
+  });
+
+  test('a settings file written before K-670 loads as every frame', () {
+    // The store is what an upgraded install actually has: version 1, holding
+    // the old default. Every frame is what it must open on (K-742).
+    final back = Workspace()
+      ..applyJson(const {
+        'version': 1,
+        'performance': {'playback': 'adaptive'},
+      });
+    expect(back.performance.playback, PlaybackMode.everyFrame);
+  });
+
+  test('adaptive chosen since the reset survives the next launch', () {
+    final ws = Workspace()..performance.playback = PlaybackMode.adaptive;
+    final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+    expect(back.performance.playback, PlaybackMode.adaptive);
   });
 
   test('workspace JSON round-trips appearance and settings', () {

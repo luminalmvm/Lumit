@@ -23562,3 +23562,237 @@ not through the bridge, deliberately — a diagnostic must work when the engine 
 Neither may be the reason anything fails. Every write is guarded and silent on failure, for
 the reason `faults.rs` gives in its own words: a diagnostic that can break the thing it is
 diagnosing is worse than none.
+
+## K-742 — Changing a shipped default resets the stored one, once
+
+**Date:** 2026-09-01 · **Status:** DECIDED · **Scope:** flutter_ui `state/workspace.dart`
+
+K-670 made **Every frame** the shipped playback mode, and only a machine with no settings
+file ever saw it. The settings store writes every preference out whether or not anybody
+chose it, so an install that had ever run an older build held `"playback": "adaptive"` — the
+*old* default, indistinguishable from a deliberate choice — and kept holding it through every
+upgrade. The default was reversed on the owner's own machine four times over and the owner's
+own machine never once opened on it.
+
+So the store carries a version, and a change of shipped default may spend it. `version: 2`
+means "the playback mode has been taken back to the default"; a store written at 1 has that
+done to it as it loads, a store already at 2 is left alone. Adaptive chosen after the reset
+therefore survives, and a preference nobody expressed stops outliving the decision that set
+it.
+
+The cost is named rather than avoided: somebody who *had* deliberately chosen Adaptive before
+this loses that choice once. There is nothing in a settings file that tells a chosen value
+from a written-out default, so the alternative is the value never moving again — and between
+one re-pick and a default that can never be corrected, the re-pick is cheaper.
+
+This is not licence to reset preferences on a whim. It applies where a shipped default is
+deliberately reversed, is recorded here when it is spent, and moves the version by one.
+
+## K-743 — A plugin may write its own controls, and a suite in a folder of its own is still found
+
+**DECIDED 2026-09-01**, closing the gap K-595 named and superseding its conclusion that
+closing it needed a piece of C. Reported from the field: every OFX plugin failed when
+applied to any footage, with a different error each time.
+
+**The report's cause was `paramSetValue`, and the varying errors are the tell.** The OFX
+support library that nearly every commercial plugin is built on settles some of its own
+parameters while `kOfxActionCreateInstance` is still running. This host answered
+`kOfxStatErrUnsupported`; the library turns a bad suite status into a thrown exception, the
+vendor's own handler catches it somewhere and returns whatever that vendor decided, and the
+instance never exists. One host defect, one status per vendor — which is exactly what "the
+error varies from ofx to ofx" describes, and why it read as many bugs rather than one.
+
+**Rust still cannot define a C-variadic function, and it turns out not to need to.** K-595
+recorded the fix as a small C shim on the grounds that the fixed-arity trick K-591 uses for
+`paramGetValue` works only because pointers all pass alike, and a write's `int` and
+`double` arrive in different registers. That is true on System V and it is not true on the
+ABI Lumit ships on: the Microsoft x64 convention requires a **variadic** caller to place a
+floating-point argument in the general-purpose register *as well as* the vector one,
+precisely so a callee that cannot know the type can still find it. So the trailing
+arguments are declared as four machine words (`OfxParamSlot`), and the parameter's own
+declared type — which the host has had since `paramDefine` — says how to read each: the low
+half for an `int`, the bit pattern for a `double`, the address for a string. No new crate,
+no build script, no C.
+
+The ceiling is K-591's, unchanged and for the same reason: System V does not duplicate, and
+Apple silicon passes variadic arguments on the stack rather than in registers at all. The
+test plugin shares these declarations, so both sides agree on every platform and the suite
+is green everywhere; a plugin nobody here wrote works on Windows. The real fix for both
+halves is the broker unpacking the call from a message rather than from a register
+(docs/impl/ofx-host.md §4), and it is one place rather than two.
+
+**The write lands in the snapshot and goes no further.** Lumit owns parameter storage
+(docs/12 §2.2), so the next render replaces the snapshot with the host's own resolved rows
+and a plugin's write stands only until then. That is enough for the writes plugins actually
+make — settling their controls as they are built — and it is deliberately *not* an undo
+step or a row changing under the user's hands. Giving a plugin's write a place in the
+document is still the package docs/12 §2.2 describes.
+
+**The second defect was found while verifying the first: the search path is recursive and
+this host was not.** Every vendor who ships a suite installs into a folder of their own
+inside the plugins folder. `bundle::scan_dir` read only the top level, so on the machine
+this was reproduced on — a hundred and twenty plugins installed — Lumit offered none of the
+ones that work. It now walks four levels down, which is deeper than any installer goes and
+is also the floor under a folder that contains itself, and it does not look inside a bundle
+for another bundle. `lumit-aplug`'s own `scan_dir` has the same shape and the same gap for
+VST3 vendor folders; it is not touched here, and it is named so it is not lost.
+
+**A plugin that refuses Lumit by name is not a host bug.** Two of the three commercial
+suites on the reproduction machine read `kOfxPropName` and answer
+`kOfxStatErrMissingHostFeature` without reading another property: HitFilm's Vegas bundle
+during `kOfxActionDescribe`, Red Giant Universe during `describeInContext`. Putting another
+host's name in that field gets past the check and straight into an access violation,
+because those plugins want that host's GPU environment too. There is nothing to fix, and
+impersonating a host is not a fix. It is recorded here so the next person to see
+`ErrMissingHostFeature` in a scan report does not go looking for a missing suite.
+
+
+
+## K-744 — The drag preview's resolution cap can be switched off
+
+**DECIDED** (2026-09-01). K-383 caps a live drag preview at a 640x360 raster and says the
+reduction "needs no flag from the frontend". It now has exactly one flag, and only one:
+Settings ▸ Performance ▸ **Full resolution while dragging**, off by default. On, a drag
+frame renders at the Viewer's own scale — as sharp as a committed frame and as slow as the
+composition really is. Nothing else about a drag changes, and K-383 stands in every other
+respect: the budget, the Quarter floor, the release commit, and the rule living in the
+worker rather than at each call site.
+
+**Why it is a setting and not a better default.** The cap is a trade — sharpness for a
+picture that keeps up — and it was chosen for the machine that cannot afford the sharp one.
+A user with a fast card and a light composition is paying that price without needing to,
+and they are the only person who can tell. So the default is unchanged (the cap on): the
+machine that genuinely cannot afford a full-resolution drag is precisely the one that
+cannot report that it cannot.
+
+**Where the flag lives.** In the engine, as a session-lifetime atomic set through
+`set_full_res_drag_previews`, read by `realtime::drag_scale` — not as an argument on
+`render_frame_with_preview`. That keeps K-383's own reason intact: a drag call site added
+next year cannot forget it, because there is nothing for it to pass. The engine holds the
+live choice with no store behind it, so the settings file carries it and hands it back at
+boot, exactly as the cache budgets do.
+
+**Budget B3 of docs/13-PERFORMANCE-RULES.md is unaffected**, because it gates the default
+path and the default is unchanged. Switched on, B3 is deliberately not met on a heavy
+composition — that is what the user has asked for, and it is the one place in the
+application where a budget is a preference rather than a rule.
+
+
+## K-745 — The asset downloaded and the way it is applied are one decision
+
+**DECIDED** (2026-09-01). `assetSuffixesFor` now takes `replaceable` as well as `kind`, so
+an installation Lumit cannot write beside is offered the **installer and nothing else**.
+Before, the shape of the install chose the download and the writability chose the delivery,
+independently — so a Windows folder install that could not be written to downloaded
+`windows-x64.zip` and was then told it would be applied "by installer", which means running
+the downloaded file. Running a `.zip` starts no process. The download succeeded, the restart
+button did nothing, and a restart by hand came back on the old version.
+
+A test asserted the old behaviour in as many words — "the archive is still the preferred
+*asset* — it is the delivery that changes" — which is why it shipped. It is corrected here:
+that sentence describes a state the applier cannot act on.
+
+**Linux keeps the tarball either way**, and that is not an oversight: a release carries no
+Linux installer, so `UpdateDelivery::installer` there means "reveal the file in the file
+manager". Taking the tarball away from an unwritable Linux install would tell that user
+there is no update at all, which is worse than showing them the file.
+
+**Also: the silent installer relaunches Lumit** (`packaging/windows/lumit.iss`). The `[Run]`
+entry carried `skipifsilent`, and `/SILENT` is precisely how Lumit runs the installer on
+itself — so that route also quit and never came back. Interactive installs are unchanged;
+`postinstall` still offers the launch as the final checkbox.
+
+## K-746 — The swap steps out of the folder it is about to rename
+
+**DECIDED** (2026-09-01). `swapInStagedUpdate` sets the process's current directory to the
+temporary folder before the two renames, and puts it back afterwards. Without it **no
+in-place update on Windows could ever finish**: Windows refuses to rename a directory that
+any process is standing in, and Lumit stands in its own install folder, because Inno's Start
+Menu shortcut takes `WorkingDir` from `{app}` and the post-update relaunch passes it
+explicitly. The first rename threw, the swap rolled itself back correctly, and the user saw
+a "Restart now" button that did nothing.
+
+**What was never wrong is the design.** Measured on Windows 11: renaming a folder with the
+application's own executable running out of it **succeeds** — the image is mapped and does
+not mind its path moving — and renaming a folder that is a process's current directory
+**fails** with sharing violation 32. So K-297's two renames are sound, and only the ground
+the process was standing on had to move.
+
+**Existing installations cannot be rescued by this fix**, because the broken swap is in the
+copy already on disk. A release that publishes **no** `windows-x64.zip` is the lever: the
+older updater then falls through to the `.exe`, takes the installer route — which was never
+broken — and updates. Worth remembering the next time a release has to reach past a
+defective updater.
+
+
+## K-747 — A dragged speed dot is drawn once, not twice
+
+**DECIDED** (2026-09-01). `_keyPoint` no longer adds a speed-lens dot's sideways travel to
+the glyph's x. The travel is already in the shown keys — `_keysWithDotTimeMove` puts the key
+at its new frame so the curve and the handles move with it — and adding it again made the dot
+run away from the pointer at twice its pace, then snap back to the hand on release. The
+comment three lines above the defect already stated the rule it broke: "the gesture's travel
+is already in `shown` ... so there is nothing to add here."
+
+**The value lens never had it** because a value-lens key drag goes through `_keyDrag` and
+`_activeMove`, which folds the move into the shown keys and nothing else. Only the speed
+lens's dot drag had a second, private path to the glyph's position.
+
+**The regression test asserts the dot does not move when the button comes up**, rather than
+asserting a distance. Two reasons. It is the complaint word for word, and it holds whatever
+the axis's zoom is: the first attempt measured travel against the pointer's, and passed on
+the broken code, because the test harness's axis is 0.2 px per frame — a 70 px drag asks for
+335 frames, the key clamps at the end of the composition, and both readings clamp with it.
+A test that can be satisfied by a clamp is not testing the drawing.
+
+
+## K-748 — Skia on all three platforms, not just Windows
+
+**DECIDED** (2026-09-01, owner). K-732 pinned Skia in the Windows runner and left Linux and
+macOS on whatever Flutter defaults to. Flutter 3.47 defaults them to Impeller — a Flatpak
+log from a 0.3.0 user shows `Using the Impeller rendering backend (OpenGLESSDF)` — so two of
+the three shipped platforms were quietly running the renderer K-732 measured and rejected.
+The pin now covers all three. The performance case is K-732's and is not restated here.
+
+**Each platform says it the only way it can.** Windows has a typed C++ setter,
+`DartProject::set_impeller_switch`. The GTK and AppKit embedders have no equivalent, so both
+use the mechanism `flutter run --no-enable-impeller` itself uses on every desktop platform:
+the engine reads `FLUTTER_ENGINE_SWITCHES` / `FLUTTER_ENGINE_SWITCH_<N>` from the environment
+as it starts, and each runner sets `enable-impeller=false` there immediately before the call
+that creates the engine — `fl_view_new` on Linux, `FlutterViewController()` on macOS.
+
+**Appended, never overwritten.** Those variables are also how `flutter run` passes a debug
+session its switches, the VM service port among them. Setting the count to 1 would strip
+them and leave the tool unable to attach, so both runners read the count that is there and
+add one to it.
+
+**This is not the fix for the 0.3.0 Flatpak's missing picture**, and should not be recorded
+as one. That report was tested against the same switch, set from the command line, and the
+picture did not come back. Whether the switch actually took effect in that run is still open;
+either way the renderer pin stands on K-732's numbers, not on that bug.
+
+
+## K-749 — Linux maximises the window it has, not the one it is about to make
+
+**DECIDED** (2026-09-01). `gtk_window_maximize` moves out of `my_application_activate` and
+into `first_frame_cb`, immediately after the window is shown. Lumit still opens maximised on
+all three platforms; only the moment of asking changes.
+
+**What was wrong with asking early.** The call sat between `gtk_window_set_default_size` and
+`fl_view_new`, so it asked an unrealised window with no surface behind it to take a size.
+What the window manager makes of that and what the engine is told to render do not have to
+agree, and on at least one compositor they did not: the 0.3.0 Flatpak log from a user with no
+Viewer picture shows `Timed out waiting for OpenGL frame of size 1920x1080 (have 958x1078)` —
+the engine rendering for a maximised window against a half-tiled surface. Asking after the
+show makes it an ordinary resize instead: the window manager grants a size, the engine is
+told that size, and there is one answer rather than two.
+
+**It is the only change to the Linux runner between v0.2.0 and v0.3.0**, which is the whole
+reason it is suspected — "video output doesn't work, in 0.2 it did" from a Flatpak user, with
+that timeout in the log. **It is not confirmed as the cause.** The reporter was not available
+to test it, the fix is being shipped on the strength of the correlation and the log line, and
+if 0.3.1 does not clear it the next thing to establish is whether a *solid* layer draws in
+that Viewer — which separates a decode fault from a picture-transport one.
+
+The cost is a window that is briefly its default size on the way up, which is what the
+Windows runner's SW_MAXIMIZE-at-show has always done.

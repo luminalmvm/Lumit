@@ -15,9 +15,56 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Pin the renderer to Skia, as the Windows runner does with its typed
+// `set_impeller_switch` (K-748, extending K-732 to the other two platforms).
+//
+// In plain terms: Flutter has two renderers, and the newer one — Impeller — is
+// measurably slower for the way Lumit draws (docs/impl/ui-performance.md
+// 2.4/4.1/7.2). Windows has a C++ API for choosing; the GTK embedder has none,
+// so the choice is made the way `flutter run --no-enable-impeller` makes it on
+// every desktop platform: an engine switch read out of the environment before
+// the engine starts.
+//
+// **Appended, never overwritten.** `flutter run` fills these same variables
+// with the switches a debug session needs — the VM service port among them —
+// so replacing the count would leave the tool unable to attach. This reads what
+// is already there and adds one more.
+static void pin_skia(void) {
+  const gchar* set = g_getenv("FLUTTER_ENGINE_SWITCHES");
+  gint64 count = 0;
+  if (set != nullptr) {
+    count = g_ascii_strtoll(set, nullptr, 10);
+    if (count < 0) {
+      count = 0;
+    }
+  }
+  count += 1;
+  g_autofree gchar* key =
+      g_strdup_printf("FLUTTER_ENGINE_SWITCH_%" G_GINT64_FORMAT, count);
+  g_setenv(key, "enable-impeller=false", TRUE);
+  g_autofree gchar* total = g_strdup_printf("%" G_GINT64_FORMAT, count);
+  g_setenv("FLUTTER_ENGINE_SWITCHES", total, TRUE);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
-  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(view));
+  gtk_widget_show(window);
+  // **Maximise here, not before the view exists** (K-749).
+  //
+  // Lumit opens maximised on all three platforms, but asking for it during
+  // `activate` asked an unrealised window with no surface behind it. What the
+  // window manager then did with the request and what the engine had been told
+  // to render did not have to agree, and on at least one compositor they did
+  // not: a 0.3.0 Flatpak log shows the renderer waiting for a 1920x1080 frame
+  // against a 958x1078 surface — a half-tiled window — and timing out.
+  //
+  // By here the view is realised and the window is on screen, so the maximise
+  // is an ordinary resize: the window manager grants a size, the engine is told
+  // that size, and there is only one answer in play. The cost is that the
+  // window is briefly its default size on the way up, which is what the Windows
+  // runner's own SW_MAXIMIZE-at-show does too.
+  gtk_window_maximize(GTK_WINDOW(window));
 }
 
 // Implements GApplication::activate.
@@ -56,11 +103,15 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_default_size(window, 1280, 720);
 
   // Lumit opens maximised, as it does on Windows (windows/runner/
-  // win32_window.cpp) and macOS. Only the default, though: GTK has nothing like
-  // AppKit's frame autosave, so remembering the size and position between runs
-  // would mean following configure-events and writing a file by hand here.
+  // win32_window.cpp) and macOS — but the asking happens in `first_frame_cb`,
+  // once there is a window on screen to maximise (K-749). Only the default,
+  // though: GTK has nothing like AppKit's frame autosave, so remembering the
+  // size and position between runs would mean following configure-events and
+  // writing a file by hand here.
   // ponytail: default only, add the remembering when a Linux user asks.
-  gtk_window_maximize(window);
+
+  // Before the engine exists, which is what `fl_view_new` below creates.
+  pin_skia();
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

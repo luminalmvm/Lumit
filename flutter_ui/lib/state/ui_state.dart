@@ -28,7 +28,8 @@ import 'package:lumit_flutter/src/rust/api/graph.dart'
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/shell.dart' show setAutosave;
+import 'package:lumit_flutter/src/rust/api/shell.dart'
+    show setAutosave, setFullResDragPreviews;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
@@ -1345,6 +1346,10 @@ class LumitUiState extends ChangeNotifier {
     if (vramBudget != null) setVramCacheBudget(bytes: BigInt.from(vramBudget));
     final diskBudget = perf.diskBudgetBytes;
     if (diskBudget != null) setDiskCacheBudget(bytes: BigInt.from(diskBudget));
+    // Whether a drag renders at full resolution (K-744). Handed over
+    // unconditionally rather than only when on: it is the engine's live state
+    // with no store behind it, so "off" has to be said as plainly as "on".
+    setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
