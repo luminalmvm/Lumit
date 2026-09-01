@@ -226,6 +226,22 @@ impl DiskIo {
         self.pending.try_lock().map(|p| p.len()).unwrap_or(0)
     }
 
+    /// [`Self::pending_parks`] without its "contended reads as empty" answer,
+    /// for a caller that is *waiting* for the queue to drain.
+    ///
+    /// The ordinary reader is the worker thread, which must never block on this
+    /// bookkeeping, so a contended read there answers 0. A waiting caller cannot
+    /// afford that answer: a loop spinning on `while pending_parks() > 0` leaves
+    /// the first time the lock happens to be held by the IO thread — which is
+    /// exactly while it is draining — and whatever asserted afterwards then won
+    /// the lock and saw the queue the loop had just skipped past. Odds that rise
+    /// with how busy the machine is, which is why it failed on the macOS runner
+    /// and on no other.
+    #[cfg(test)]
+    pub(crate) fn pending_parks_settled(&self) -> usize {
+        self.pending.lock().map(|p| p.len()).unwrap_or(0)
+    }
+
     /// How many frames are parked, and how many bytes they take.
     #[must_use]
     pub fn stats(&self) -> (u64, u64) {
@@ -472,10 +488,14 @@ mod tests {
         }
         assert!(io.contains(7), "the frame reached the disk");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        while io.pending_parks() > 0 && std::time::Instant::now() < deadline {
+        while io.pending_parks_settled() > 0 && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        assert_eq!(io.pending_parks(), 0, "the queue emptied as it wrote");
+        assert_eq!(
+            io.pending_parks_settled(),
+            0,
+            "the queue emptied as it wrote"
+        );
         assert!(!io.is_pending(7));
     }
 
@@ -492,11 +512,11 @@ mod tests {
             let _ = io.park(hash, 4, 4, false, bytes.clone(), 1, 1000);
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while io.pending_parks() > 0 && std::time::Instant::now() < deadline {
+        while io.pending_parks_settled() > 0 && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
         assert_eq!(
-            io.pending_parks(),
+            io.pending_parks_settled(),
             0,
             "every dropped store hands its place back"
         );
