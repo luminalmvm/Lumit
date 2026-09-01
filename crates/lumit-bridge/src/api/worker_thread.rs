@@ -5019,7 +5019,13 @@ mod tests {
                 .renderer
                 .frame_key(&document, comp, frame, quality)
                 .expect("a solid is nameable");
-            if state.renderer.has_frame_texture(key, bgra) {
+            // Either byte order counts as held. What this asserts is that the
+            // fill kept the frame, not which order the platform's zero-copy
+            // path asked for it in - and the shown frame is stored by whichever
+            // road drew it, which is not the same road on every desktop.
+            if state.renderer.has_frame_texture(key, bgra)
+                || state.renderer.has_frame_texture(key, !bgra)
+            {
                 on_card += 1;
             } else if !crate::framecache::contains(key) {
                 missing.push(frame);

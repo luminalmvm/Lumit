@@ -109,7 +109,15 @@ jobs:
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --exclude lumit-gpu
+      # lumit-render is excluded here and run on its own below, for the reason
+      # the GPU oracles are: its headless tests each open the compositor, and a
+      # runner with no graphics card renders them on WARP. A dozen at once takes
+      # the whole test process down with `exit code: 2173` and no failing test
+      # named - which is what it did the first time the suite ran green enough
+      # to reach them (2026-09-01).
+      - run: cargo test --workspace --exclude lumit-gpu --exclude lumit-render
+      - name: The headless renderer, single-threaded (WARP has one of it)
+        run: cargo test -p lumit-render -- --test-threads=1
       # The GPU oracles single-threaded, exactly as the Linux job runs them and
       # for the same reason: this runner has no graphics card, so the pinned
       # DX12 backend enumerates WARP — a software rasteriser — and a dozen

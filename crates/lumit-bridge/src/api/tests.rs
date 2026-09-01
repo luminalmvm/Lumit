@@ -2414,6 +2414,14 @@ fn a_precomp_layer_over_footage_that_sings_says_it_has_audio() {
 /// the same levels, and the original goes quiet — so the mixer's own job list,
 /// which is what decides every sample, comes out the same as it was but for
 /// which row the sound is filed under. One undo puts the pair back.
+///
+/// **Needs the decoder.** The row it ends on is a sound-only footage layer, and
+/// what makes one sound-only is the probe reading the container and finding no
+/// picture in it. With the media feature off nothing can say that, so the
+/// layer is an ordinary one and the refusal under test never arrives. The
+/// early return below covers a build that has a decoder but cannot read this
+/// fixture; this covers a build that has none at all.
+#[cfg(feature = "media")]
 #[test]
 fn detaching_audio_leaves_the_comp_sounding_exactly_as_it_did() {
     let dir = tempfile::tempdir().expect("temp dir");
