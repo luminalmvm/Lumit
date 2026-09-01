@@ -23898,5 +23898,15 @@ driver, not the fill; one that tolerates a missing frame only when a refusal was
 testing exactly the promise the fill makes. On real hardware the count is zero and the
 assertion is as strict as it ever was.
 
+**And an eviction that never starts a read-back is counted too** (the fourth run, with the
+refusal count in place: `missing [7]`, zero refused, zero in flight). `start_demotions`
+reads an evicted texture back only while fewer than the in-flight ceiling are on their way
+down and the frame is not already held below; past the ceiling an eviction is dropped on
+the spot, by design, and on a software device whose read-backs are slow the ceiling fills
+while the fill is still evicting. The oldest texture on the card is the shown frame. So
+the renderer counts dropped evictions beside refused read-backs, and the test subtracts
+both: a frame in neither tier is a fault only when the engine never let it go. On real
+hardware both counts are zero.
+
 **K-752 stands** as hygiene — the overlap it serialises is real — but it was not this
 failure, and its entry now says so.

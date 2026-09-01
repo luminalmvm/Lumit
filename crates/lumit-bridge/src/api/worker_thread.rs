@@ -5050,10 +5050,15 @@ mod tests {
         // re-rendered if it is wanted, which is what a miss always costs — so
         // a frame in neither tier is a fault only when no read-back failed for
         // it. Real drivers refuse none; the runner's software device has.
+        // And an eviction past the in-flight ceiling never starts a read-back
+        // at all; on a software device whose read-backs are slow the ceiling
+        // fills while the fill is still evicting, and the oldest texture on
+        // the card is the shown frame (K-753).
         let refused = state.renderer.demotions_failed();
+        let dropped = state.renderer.demotions_dropped();
         assert!(
-            missing.len() as u64 <= refused,
-            "held on the card or in memory: missing {missing:?}, with {refused}              read-back(s) refused by the card"
+            missing.len() as u64 <= refused + dropped,
+            "held on the card or in memory: missing {missing:?}, with {refused}              read-back(s) refused by the card and {dropped} eviction(s) let go              before a read-back"
         );
         assert!(
             on_card <= 20,

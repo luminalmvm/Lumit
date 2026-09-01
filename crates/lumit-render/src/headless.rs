@@ -143,6 +143,11 @@ pub struct HeadlessRenderer {
     /// asserts every evicted frame is held somewhere has to be able to tell a
     /// dropped demotion from a leak (K-753).
     demotions_failed: u64,
+    /// Evictions that never became a read-back: already held below, the
+    /// in-flight ceiling reached, or no engines to encode with. Dropped by
+    /// design — a miss costs a render — and counted for the same reason as
+    /// the refusals above (K-753).
+    demotions_dropped: u64,
     /// Display textures that left the cache and can hold the next promoted
     /// frame — see [`Self::upload_frame_texture`]. Bounded by
     /// [`MAX_POOLED_TEXTURES`].
@@ -562,6 +567,7 @@ impl HeadlessRenderer {
             },
             demotions: Vec::new(),
             demotions_failed: 0,
+            demotions_dropped: 0,
             upload_pool: Vec::new(),
             frame_texture_version: 0,
             frame_texture_hits: 0,
@@ -1737,6 +1743,11 @@ impl HeadlessRenderer {
                         backup: false,
                     });
                 }
+            } else {
+                // Held below already, the ceiling reached, or no engines: the
+                // frame is let go here and nowhere else, so it is counted here
+                // (K-753).
+                self.demotions_dropped += 1;
             }
             // The texture itself can serve the next promoted frame, whether or
             // not its pixels went downstairs. Only a texture that a promotion
@@ -1894,6 +1905,13 @@ impl HeadlessRenderer {
     #[must_use]
     pub fn demotions_failed(&self) -> u64 {
         self.demotions_failed
+    }
+
+    /// How many evictions never started a read-back — see the field. A test
+    /// counting held frames subtracts these as well as the refusals.
+    #[must_use]
+    pub fn demotions_dropped(&self) -> u64 {
+        self.demotions_dropped
     }
 
     /// Put a frame held as bytes back on the graphics card — the way UP the
