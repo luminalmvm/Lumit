@@ -11223,6 +11223,24 @@ never gains that section. And because the picture's path is always the list — 
 drive a *value*, but the image itself always flows straight down the stack — there is no
 arrangement of boxes the plain list view would have to lie about.
 
+**Pulling a wire out switches the box off.** The wires between the effect boxes are not
+stored anywhere — they *are* the list, drawn. So "unplug this effect" has to mean
+something the list can hold, and what it means is the switch that was already there: an
+effect you disconnect in the graph is **bypassed**, exactly as if you had clicked the
+tick on its heading in Effect controls. It keeps its place in the list, it stops
+changing the picture, and the wire in the canvas visibly steps over it — from the box
+before it straight to the box after. Plug a wire back into it and it comes back on.
+This works in both directions, which is the point: switch a box off in Effect controls
+and you will see it come unplugged in the graph, because the tick and the wire are one
+switch drawn in two places rather than two switches that have to be kept in step.
+
+The one box with no effect behind it is **Layer out** — the box that stands for the
+layer itself. Unplugging that is not bypassing anything; it means the layer draws
+nothing at all, which is a perfectly reasonable thing to want while you are working.
+That is the single piece of state the graph keeps for itself, and it is deliberately
+*not* the eye in the Timeline: hiding a layer there and unplugging it here are two
+different thoughts, and neither should quietly do the other.
+
 **The colours are the types.** Every socket and every wire is coloured by what flows
 through it: one colour for pictures and mattes, one for numbers, one for colours, one for
 shapes and points, one for sound. You can read a graph's plumbing without clicking

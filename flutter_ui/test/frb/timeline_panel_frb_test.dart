@@ -3210,6 +3210,7 @@ void main() {
           layout: const [],
           exposed: const [],
           groups: const [],
+          outUnwired: false,
         ),
       );
       await mount(tester, p);

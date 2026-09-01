@@ -84,6 +84,7 @@ void main() {
           ],
           exposed: const [],
           groups: const [],
+          outUnwired: false,
         ),
       );
 
@@ -134,6 +135,7 @@ void main() {
             layout: const [],
             exposed: const [],
             groups: const [],
+            outUnwired: false,
           ),
         ),
         throwsA(anything),

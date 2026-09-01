@@ -4161,6 +4161,7 @@ mod tests {
         let node = remap.id;
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
             c.layers[0].graph = LayerGraph {
+                out_unwired: false,
                 edges: vec![Edge {
                     from: OutputRef::Driver {
                         node,
@@ -5398,6 +5399,7 @@ surfaces:
             },
         };
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![level, remap],
             edges: vec![
                 Edge {
@@ -5556,6 +5558,57 @@ surfaces:
 
         assert_eq!((w, h), (w2, h2));
         assert_eq!(without, with, "a Null layer must contribute no pixels");
+    }
+
+    /// **A layer whose Layer out is unplugged draws nothing** (K-738).
+    ///
+    /// The owner's own words for it: "having a layer display nothing because
+    /// it's not wired up is completely okay". It is the same nothing a hidden
+    /// layer draws, and this proves it pixel for pixel rather than by reading
+    /// the two lines that say so.
+    #[test]
+    fn a_layer_with_its_out_unplugged_draws_nothing() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        // A blue layer over a red one, so the top layer's absence is the
+        // difference between a blue frame and a red one - not a subtlety.
+        let build = |unwired: bool, visible: bool| {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let comp = doc.comp_mut(comp_id).expect("comp");
+            let l = comp.layers.iter_mut().find(|l| l.id == top).expect("top");
+            l.graph.out_unwired = unwired;
+            l.switches.visible = visible;
+            (doc, comp_id)
+        };
+        let render = |r: &mut HeadlessRenderer, unwired: bool, visible: bool| {
+            let (doc, comp_id) = build(unwired, visible);
+            r.render_rgba(&std::sync::Arc::new(doc), comp_id, 0, 1.0)
+                .expect("the comp renders")
+                .0
+        };
+
+        let drawn = render(&mut r, false, true);
+        let unplugged = render(&mut r, true, true);
+        let hidden = render(&mut r, false, false);
+
+        assert_ne!(
+            drawn, unplugged,
+            "a layer that is not wired up must stop drawing"
+        );
+        assert_eq!(
+            hidden, unplugged,
+            "and it is the same nothing the visibility switch draws"
+        );
     }
 
     /// **Layers under a full-frame opaque solid are not rendered** (K-423), and
@@ -5916,6 +5969,7 @@ surfaces:
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
+                    out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
                     edges: vec![Edge {
@@ -6070,6 +6124,7 @@ surfaces:
             if let Some(enabled) = graph {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
+                    out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
                     edges: vec![Edge {
@@ -6473,6 +6528,7 @@ surfaces:
         let sampler_id = sampler.id;
 
         let graph = LayerGraph {
+            out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],
             edges: vec![
@@ -6640,6 +6696,7 @@ surfaces:
         let consumer_id = consumer.id;
 
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::EffectData {
                     effect: producer_id,
@@ -6775,6 +6832,7 @@ surfaces:
             let consumer_id = consumer.id;
 
             let graph = LayerGraph {
+                out_unwired: false,
                 edges: if wired {
                     vec![Edge {
                         from: OutputRef::EffectData {
@@ -6887,6 +6945,7 @@ surfaces:
             let consumer_id = consumer.id;
 
             let graph = LayerGraph {
+                out_unwired: false,
                 edges: if wired {
                     vec![Edge {
                         from: OutputRef::EffectData {
@@ -7007,6 +7066,7 @@ surfaces:
             let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
             l.effects = vec![consumer];
             l.graph = LayerGraph {
+                out_unwired: false,
                 nodes: vec![node],
                 edges: vec![Edge {
                     from: OutputRef::Driver {

@@ -61,6 +61,7 @@ void main() {
           layout: graph.wiring.layout,
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
+          outUnwired: false,
         ),
       );
       return id;
@@ -269,6 +270,7 @@ void main() {
           layout: graph.wiring.layout,
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
+          outUnwired: false,
         ),
       );
       return id;
@@ -350,6 +352,7 @@ void main() {
           layout: now.wiring.layout,
           exposed: now.wiring.exposed,
           groups: now.wiring.groups,
+          outUnwired: false,
         ),
       );
       p.uiState.model.refresh();

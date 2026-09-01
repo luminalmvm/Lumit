@@ -175,6 +175,24 @@ pub struct LayerGraph {
     /// because it changes no pixel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<NodeGroup>,
+    /// **The Layer out box's image socket is unplugged** (K-738): the layer
+    /// makes no picture at all.
+    ///
+    /// The one piece of this graph that is not presentation. Every other
+    /// disconnection in the panel lowers to a flag that already existed - an
+    /// effect pulled out of the chain is the `enabled` flag its own tick sets -
+    /// but the layer's own output had nothing to lower to, and "a layer that
+    /// draws nothing because it is not wired up" is a state the owner asked
+    /// for by name. It is deliberately *not* the visibility switch: the eye is
+    /// the timeline's control and a user who hid a layer there should not find
+    /// the graph rewired behind their back, nor the reverse.
+    ///
+    /// It changes the picture, so unlike its neighbours here it reaches the
+    /// frame key - by the same road `switches.visible` does, which is that a
+    /// layer skipped for it is fed to the key not at all
+    /// (`lumit-eval`'s `feed_comp`, `lumit-render`'s `build`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub out_unwired: bool,
 }
 
 /// A named set of boxes drawn on one tinted wash (K-651).
@@ -657,6 +675,7 @@ mod tests {
         let edge = param_edge(&wiggle, "value", NodeRef::Effect(blur.id), "radius");
         (
             LayerGraph {
+                out_unwired: false,
                 nodes: vec![wiggle],
                 edges: vec![edge],
                 layout: vec![(NodeRef::Source, [0.0, 0.0])],
@@ -738,6 +757,7 @@ mod tests {
         let cycle = inst("colour_cycle");
 
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle.clone()],
             edges: vec![param_edge(
                 &wiggle,
@@ -754,6 +774,7 @@ mod tests {
 
         let blur = inst("blur");
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![cycle.clone()],
             edges: vec![param_edge(
                 &cycle,
@@ -771,6 +792,7 @@ mod tests {
         // And the accepted pair, so the refusals above are about the types and
         // not about the wiring.
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![cycle.clone()],
             edges: vec![param_edge(
                 &cycle,
@@ -792,6 +814,7 @@ mod tests {
         let remap = inst("remap");
         let wiggle = inst("wiggle");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![param_edge(
                 &wiggle,
                 "value",
@@ -824,6 +847,7 @@ mod tests {
     fn a_loop_among_drivers_is_refused() {
         let a = inst("smooth");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![param_edge(&a, "value", NodeRef::Driver(a.id), "value")],
             nodes: vec![a],
             ..LayerGraph::default()
@@ -833,6 +857,7 @@ mod tests {
         let a = inst("smooth");
         let b = inst("remap");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![
                 param_edge(&a, "value", NodeRef::Driver(b.id), "value"),
                 param_edge(&b, "value", NodeRef::Driver(a.id), "value"),
@@ -852,6 +877,7 @@ mod tests {
         let b = inst("remap");
         let c = inst("smooth");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![
                 param_edge(&a, "value", NodeRef::Driver(b.id), "value"),
                 param_edge(&b, "value", NodeRef::Driver(c.id), "value"),
@@ -868,6 +894,7 @@ mod tests {
     fn the_source_matte_feeds_an_effects_matte_input() {
         let blur = inst("blur");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::SourceMatte,
                 to: InputRef::Matte { effect: blur.id },
@@ -883,6 +910,7 @@ mod tests {
         // An effect that carries no matte row at all has no socket to wire.
         let set_matte = inst("set_matte");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::SourceMatte,
                 to: InputRef::Matte {
@@ -904,6 +932,7 @@ mod tests {
         let wiggle = inst("wiggle");
         for node in [NodeRef::Source, NodeRef::Out] {
             let graph = LayerGraph {
+                out_unwired: false,
                 edges: vec![param_edge(&wiggle, "value", node, "anything")],
                 nodes: vec![wiggle.clone()],
                 ..LayerGraph::default()
@@ -920,6 +949,7 @@ mod tests {
     fn a_number_wire_may_land_on_the_layer_outs_volume() {
         let wiggle = inst("wiggle");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![param_edge(
                 &wiggle,
                 "value",
@@ -937,6 +967,7 @@ mod tests {
     #[test]
     fn only_a_number_may_drive_the_volume_socket() {
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::SourceMatte,
                 to: InputRef::Param {
@@ -998,6 +1029,7 @@ mod tests {
         let particulate = inst("particulate");
         let blur = inst("blur");
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&particulate, onto(&blur, "radius"))],
             layout: vec![(NodeRef::Effect(particulate.id), [8.0, 16.0])],
             ..LayerGraph::default()
@@ -1028,6 +1060,7 @@ mod tests {
         // The real port, into a driver socket of the wrong type: found, and
         // refused for the type rather than for the name.
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![points_edge(
                 &particulate,
@@ -1055,6 +1088,7 @@ mod tests {
         // An effect that declares no data output has none to tap.
         let blur = inst("blur");
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![points_edge(
                 &blur,
@@ -1072,6 +1106,7 @@ mod tests {
 
         // And an effect the stack does not carry at all.
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth],
             edges: vec![points_edge(
                 &particulate,
@@ -1094,6 +1129,7 @@ mod tests {
         let blur = inst("blur");
         let wire = |effects: Vec<EffectInstance>, to: &EffectInstance| {
             let graph = LayerGraph {
+                out_unwired: false,
                 edges: vec![points_edge(&particulate, onto(to, "points_in"))],
                 ..LayerGraph::default()
             };
@@ -1135,6 +1171,7 @@ mod tests {
         let blur = inst("blur");
         let smooth = inst("smooth");
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![points_edge(
                 &particulate,
@@ -1190,6 +1227,7 @@ mod tests {
 
         // One leg only: the stream feeds a driver, and nothing returns.
         let open = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![stream_into(&smooth)],
             ..LayerGraph::default()
@@ -1199,6 +1237,7 @@ mod tests {
         // Both legs: the stream depends on the parameters and the parameters on
         // the stream.
         let closed = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![stream_into(&smooth), back_into_producer(&smooth)],
             ..LayerGraph::default()
@@ -1209,6 +1248,7 @@ mod tests {
         // the refusal above is about the round trip and not about an effect
         // merely being in the walk.
         let driven = LayerGraph {
+            out_unwired: false,
             nodes: vec![smooth.clone()],
             edges: vec![back_into_producer(&smooth)],
             ..LayerGraph::default()
@@ -1242,6 +1282,7 @@ mod tests {
 
         // p1 → d1 → p2 → d2 → p1: four hops, no two of them adjacent.
         let closed = LayerGraph {
+            out_unwired: false,
             nodes: vec![d1.clone(), d2.clone()],
             edges: vec![
                 stream(&p1, &d1),
@@ -1257,6 +1298,7 @@ mod tests {
         // instead: a line, however long.
         let blur = inst("blur");
         let open = LayerGraph {
+            out_unwired: false,
             nodes: vec![d1.clone(), d2.clone()],
             edges: vec![
                 stream(&p1, &d1),
@@ -1272,6 +1314,7 @@ mod tests {
         // Declared in reverse of evaluation order, so the walk cannot be
         // relying on the order the boxes happen to sit in.
         let reversed = LayerGraph {
+            out_unwired: false,
             nodes: vec![d2, d1],
             edges: closed.edges.into_iter().rev().collect(),
             ..LayerGraph::default()
@@ -1292,6 +1335,7 @@ mod tests {
         let particulate = inst("particulate");
         let blur = inst("blur");
         let mut graph = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
             layout: vec![(NodeRef::Effect(particulate.id), [0.0, 0.0])],
             ..LayerGraph::default()
@@ -1304,6 +1348,7 @@ mod tests {
 
         // And the whole stack still there prunes nothing.
         let mut graph = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
             ..LayerGraph::default()
         };
@@ -1323,6 +1368,7 @@ mod tests {
         let down = vec![particulate.clone(), blur.clone()];
         let up = vec![blur.clone(), particulate.clone()];
         let wired = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
             ..LayerGraph::default()
         };
@@ -1359,6 +1405,7 @@ mod tests {
         let consumer = inst("clone_to_points");
         let down = vec![producer.clone(), consumer.clone()];
         let graph = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&producer, onto(&consumer, "points"))],
             ..LayerGraph::default()
         };
@@ -1376,6 +1423,7 @@ mod tests {
         // socket rather than about the source.
         let trail = inst("trail");
         let both = LayerGraph {
+            out_unwired: false,
             edges: vec![
                 points_edge(&producer, onto(&consumer, "points")),
                 points_edge(&producer, onto(&trail, "points")),
@@ -1389,6 +1437,7 @@ mod tests {
         // producer it came from, which is the whole point of one port type.
         let grid = inst("grid");
         let from_grid = LayerGraph {
+            out_unwired: false,
             edges: vec![points_edge(&grid, onto(&consumer, "points"))],
             ..LayerGraph::default()
         };
@@ -1399,6 +1448,7 @@ mod tests {
         // And a number is not a stream, on this end as on the driver's.
         let wiggle = inst("wiggle");
         let mistyped = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle.clone()],
             edges: vec![Edge {
                 from: OutputRef::Driver {
@@ -1445,6 +1495,7 @@ mod tests {
             },
         ] {
             let graph = LayerGraph {
+                out_unwired: false,
                 nodes: vec![tap.clone(), sample.clone()],
                 edges: vec![from_tap(to)],
                 ..LayerGraph::default()
@@ -1457,6 +1508,7 @@ mod tests {
         // A stream is not a number, on this end as on the producer's.
         let blur = inst("blur");
         let mistyped = LayerGraph {
+            out_unwired: false,
             nodes: vec![tap.clone()],
             edges: vec![from_tap(onto(&blur, "radius"))],
             ..LayerGraph::default()
@@ -1470,6 +1522,7 @@ mod tests {
         // is naming a port that does not exist.
         let wiggle = inst("wiggle");
         let backwards = LayerGraph {
+            out_unwired: false,
             nodes: vec![tap.clone(), wiggle.clone()],
             edges: vec![Edge {
                 from: OutputRef::Driver {
@@ -1489,6 +1542,7 @@ mod tests {
         // every other driver does — `prune_to` is the stack's business, so a
         // graph without the node is simply a graph with a missing node.
         let orphaned = LayerGraph {
+            out_unwired: false,
             nodes: Vec::new(),
             edges: vec![from_tap(onto(&consumer, "points"))],
             ..LayerGraph::default()

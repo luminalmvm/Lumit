@@ -14648,11 +14648,13 @@ impl SseDecode for crate::api::graph::BridgeGraphWiring {
         let mut var_layout = <Vec<crate::api::graph::BridgeNodePosition>>::sse_decode(deserializer);
         let mut var_exposed = <Vec<crate::api::graph::BridgeNodeRef>>::sse_decode(deserializer);
         let mut var_groups = <Vec<crate::api::graph::BridgeNodeGroup>>::sse_decode(deserializer);
+        let mut var_outUnwired = <bool>::sse_decode(deserializer);
         return crate::api::graph::BridgeGraphWiring {
             edges: var_edges,
             layout: var_layout,
             exposed: var_exposed,
             groups: var_groups,
+            out_unwired: var_outUnwired,
         };
     }
 }
@@ -20173,6 +20175,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeGraphWiring {
             self.layout.into_into_dart().into_dart(),
             self.exposed.into_into_dart().into_dart(),
             self.groups.into_into_dart().into_dart(),
+            self.out_unwired.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -23997,6 +24000,7 @@ impl SseEncode for crate::api::graph::BridgeGraphWiring {
         <Vec<crate::api::graph::BridgeNodePosition>>::sse_encode(self.layout, serializer);
         <Vec<crate::api::graph::BridgeNodeRef>>::sse_encode(self.exposed, serializer);
         <Vec<crate::api::graph::BridgeNodeGroup>>::sse_encode(self.groups, serializer);
+        <bool>::sse_encode(self.out_unwired, serializer);
     }
 }
 

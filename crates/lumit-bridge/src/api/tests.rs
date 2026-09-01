@@ -9013,6 +9013,7 @@ fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
         .set_graph(
             vec![wiggle],
             BridgeGraphWiring {
+                out_unwired: false,
                 edges: vec![BridgeGraphEdge {
                     from: BridgeOutputRef::Driver {
                         node: wiggle_id,
@@ -9138,6 +9139,82 @@ fn a_layer_nobody_has_wired_reports_the_bare_chain() {
     );
 }
 
+/// **Wired means in the chain** (K-738).
+///
+/// A bypassed effect is not in it: the picture goes past it, so its own image
+/// sockets report unwired and the panel draws them hollow. The Source's and
+/// the Layer out's stay wired through it - the wire genuinely still lands on
+/// them - until the Layer out is itself unplugged, which is the layer drawing
+/// nothing at all.
+#[test]
+fn a_bypassed_effect_reports_its_image_sockets_unwired() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("blur".into()).expect("a blur");
+    let stack = layer.get_effects().expect("stack");
+    let blur = &stack[0];
+
+    let ports = |layer: &LayerReference| {
+        let graph = layer.get_graph().expect("graph");
+        let effect = graph
+            .nodes
+            .iter()
+            .find(|n| matches!(n.node, BridgeNodeRef::Effect(_)))
+            .expect("the blur has a box");
+        let wired = |ports: &[crate::api::graph::BridgePort], id: &str| {
+            ports
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.wired)
+                .expect("the port is drawn")
+        };
+        let source = &graph.nodes[0];
+        let out = graph
+            .nodes
+            .iter()
+            .find(|n| matches!(n.node, BridgeNodeRef::Out))
+            .expect("the Layer out has a box");
+        (
+            wired(&effect.inputs, "input"),
+            wired(&effect.outputs, "output"),
+            wired(&source.outputs, "image"),
+            wired(&out.inputs, "image"),
+        )
+    };
+
+    assert_eq!(ports(&layer), (true, true, true, true), "the plain chain");
+
+    layer
+        .set_effect_enabled(blur, false)
+        .expect("the blur bypasses");
+    assert_eq!(
+        ports(&layer),
+        (false, false, true, true),
+        "a bypassed effect is out of the chain; its neighbours are not"
+    );
+
+    layer
+        .set_effect_enabled(blur, true)
+        .expect("the blur comes back");
+    assert_eq!(ports(&layer), (true, true, true, true), "and back in again");
+
+    // The layer's own output, which is the one disconnection with no effect
+    // flag to lower to.
+    let mut wiring = layer.get_graph().expect("graph").wiring;
+    wiring.out_unwired = true;
+    layer
+        .set_graph(layer.get_graph_drivers().expect("drivers"), wiring)
+        .expect("the layer unplugs");
+    assert_eq!(
+        ports(&layer),
+        (true, true, true, false),
+        "nothing is plugged into the Layer out"
+    );
+    assert!(
+        layer.get_graph().expect("graph").wiring.out_unwired,
+        "and it survived the round trip through the document"
+    );
+}
+
 /// Adding a driver, wiring it, placing it and growing a box are **one** write
 /// and therefore one undo step (§3).
 #[test]
@@ -9227,6 +9304,7 @@ fn a_broken_graph_is_refused_with_the_engines_own_words() {
         layout: Vec::new(),
         exposed: Vec::new(),
         groups: Vec::new(),
+        out_unwired: false,
     };
 
     let id = drivers(&layer)[0].id();
@@ -9307,6 +9385,7 @@ fn a_colour_and_a_number_refuse_each_other() {
     let cycle_id = cycle.id();
 
     let wire = |port: &str| BridgeGraphWiring {
+        out_unwired: false,
         edges: vec![BridgeGraphEdge {
             from: BridgeOutputRef::Driver {
                 node: cycle_id,
@@ -9464,6 +9543,7 @@ fn a_points_stream_into_a_number_socket_is_refused() {
             .set_graph(
                 vec![smooth],
                 BridgeGraphWiring {
+                    out_unwired: false,
                     edges: vec![BridgeGraphEdge {
                         from: BridgeOutputRef::EffectData {
                             effect: particulate,
@@ -9501,6 +9581,7 @@ fn a_points_wire_drawn_up_the_stack_is_refused() {
             .set_graph(
                 Vec::new(),
                 BridgeGraphWiring {
+                    out_unwired: false,
                     edges: vec![BridgeGraphEdge {
                         from: BridgeOutputRef::EffectData {
                             effect: particulate,
@@ -9567,6 +9648,7 @@ fn an_effect_box_draws_the_data_inputs_its_signature_declares() {
         .set_graph(
             Vec::new(),
             BridgeGraphWiring {
+                out_unwired: false,
                 edges: vec![BridgeGraphEdge {
                     from: BridgeOutputRef::EffectData {
                         effect: particulate,
@@ -9601,6 +9683,7 @@ fn the_source_matte_is_a_wire_like_any_other() {
         .set_graph(
             Vec::new(),
             BridgeGraphWiring {
+                out_unwired: false,
                 edges: vec![BridgeGraphEdge {
                     from: BridgeOutputRef::SourceMatte,
                     to: BridgeInputRef::Matte { effect: blur },

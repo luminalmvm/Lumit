@@ -13629,13 +13629,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeGraphWiring dco_decode_bridge_graph_wiring(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeGraphWiring(
       edges: dco_decode_list_bridge_graph_edge(arr[0]),
       layout: dco_decode_list_bridge_node_position(arr[1]),
       exposed: dco_decode_list_bridge_node_ref(arr[2]),
       groups: dco_decode_list_bridge_node_group(arr[3]),
+      outUnwired: dco_decode_bool(arr[4]),
     );
   }
 
@@ -17351,11 +17352,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_layout = sse_decode_list_bridge_node_position(deserializer);
     var var_exposed = sse_decode_list_bridge_node_ref(deserializer);
     var var_groups = sse_decode_list_bridge_node_group(deserializer);
+    var var_outUnwired = sse_decode_bool(deserializer);
     return BridgeGraphWiring(
         edges: var_edges,
         layout: var_layout,
         exposed: var_exposed,
-        groups: var_groups);
+        groups: var_groups,
+        outUnwired: var_outUnwired);
   }
 
   @protected
@@ -21542,6 +21545,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_list_bridge_node_position(self.layout, serializer);
     sse_encode_list_bridge_node_ref(self.exposed, serializer);
     sse_encode_list_bridge_node_group(self.groups, serializer);
+    sse_encode_bool(self.outUnwired, serializer);
   }
 
   @protected

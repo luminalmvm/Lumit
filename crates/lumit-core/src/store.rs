@@ -2674,6 +2674,7 @@ mod tests {
         let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![Edge {
                 from: OutputRef::Driver {
@@ -2743,6 +2744,7 @@ mod tests {
         let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![Edge {
                 from: OutputRef::Driver {
@@ -2846,6 +2848,7 @@ mod tests {
         let (producer, consumer) = (particulate.id, blur.id);
 
         let wired = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::EffectData {
                     effect: producer,
@@ -2967,6 +2970,7 @@ mod tests {
 
         // A wire whose source is a node this graph does not carry.
         let broken = LayerGraph {
+            out_unwired: false,
             edges: vec![Edge {
                 from: OutputRef::Driver {
                     node: Uuid::now_v7(),

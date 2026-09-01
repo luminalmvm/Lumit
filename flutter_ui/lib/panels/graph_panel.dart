@@ -829,6 +829,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     List<BridgeGraphEdge>? edges,
     List<BridgeNodeRef>? exposed,
     List<BridgeNodeGroup>? groups,
+    bool? outUnwired,
   }) {
     final w = _graph!.wiring;
     return BridgeGraphWiring(
@@ -840,6 +841,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       ],
       exposed: exposed ?? w.exposed,
       groups: groups ?? w.groups,
+      outUnwired: outUnwired ?? w.outUnwired,
     );
   }
 
@@ -933,39 +935,96 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
     if (landed == null) {
       // A wire drawn out of an output and let go of on the ground is a
-      // change of mind. Only a wire pulled off an input is a removal.
+      // change of mind. Only a wire pulled off an input disconnects.
       if (drawn) return;
-      final victim =
-          _effectIdOf(chain[held].node.node) ?? upstream;
-      if (victim == null) return; // Source → Out: no effect to take out.
-      try {
-        for (final instance in layer.getEffects()) {
-          if (instance.id() == victim) {
-            layer.removeEffect(effect: instance);
-            break;
-          }
-        }
-      } catch (_) {
-        // Refused, or the stack moved under us; re-reading is the recovery.
-      }
-      _ui?.model.refresh();
-      _reload();
+      // **Disconnecting is bypassing** (K-738). The effect keeps its slot in
+      // the stack and stops drawing - which is the state its own enable tick
+      // sets, reached from the other side. The Layer out has no effect to
+      // bypass: unplugging *it* is the layer itself drawing nothing, which is
+      // the one disconnection the graph has to carry a flag for.
+      _disconnect(layer, chain[held]);
       return;
     }
 
     if (!_isChainType(landed.port.portType) || !landed.isInput) return;
     final j = chain.indexWhere(
         (b) => graphNodeKey(b.node.node) == graphNodeKey(landed.node));
-    if (j < 0 || j == held) return;
+    if (j < 0) return;
+    // **The box the wire lands on comes back on** (owner's rule, K-738), and
+    // if the wire also says it belongs somewhere else, it moves. A drop back
+    // onto the socket the wire came off (`j == held`) is the plain reconnect:
+    // no reorder, but the box goes back in the chain.
+    final reconnect = _reconnectOf(chain[j]);
     final moved = _effectIdOf(chain[j].node.node);
-    if (moved == null) {
-      // Dropped on the Layer out: the wire's source becomes the last effect.
-      if (upstream != null) _reorderToEnd(layer, upstream);
+    final reorders = j != held && (moved != null || upstream != null);
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = project != null && reconnect != null && reorders;
+    if (group) project.beginUndoGroup();
+    if (reconnect != null) reconnect();
+    if (reorders) {
+      if (moved == null) {
+        // Dropped on the Layer out: the wire's source becomes the last effect.
+        if (upstream != null) _reorderToEnd(layer, upstream);
+      } else {
+        _reorderAfter(layer, moved, upstream);
+      }
+    }
+    if (group) project.endUndoGroup();
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  /// Take [box] out of the image chain: an effect is bypassed, the Layer out
+  /// is unplugged. One commit either way, so one undo step (K-738).
+  void _disconnect(LayerReference layer, _Box box) {
+    if (_effectIdOf(box.node.node) case final victim?) {
+      // Already bypassed: a second drop is not a second undo step.
+      if (!box.node.enabled) return;
+      try {
+        for (final instance in layer.getEffects()) {
+          if (instance.id() == victim) {
+            layer.setEffectEnabled(effect: instance, enabled: false);
+            break;
+          }
+        }
+      } catch (_) {
+        // Refused, or the stack moved under us; re-reading is the recovery.
+      }
+    } else if (box.node.node is BridgeNodeRef_Out) {
+      if (_graph!.wiring.outUnwired) return;
+      _commit(_wiringNow(outUnwired: true));
     } else {
-      _reorderAfter(layer, moved, upstream);
+      return; // The Source makes the picture; it has nothing to unplug.
     }
     _ui?.model.refresh();
     _reload();
+  }
+
+  /// What putting [box] back in the chain costs, or null when it is already
+  /// in it. Returned as a closure so the caller can decide whether it and a
+  /// reorder need one undo group between them.
+  void Function()? _reconnectOf(_Box box) {
+    final layer = _layer;
+    if (layer == null) return null;
+    if (_effectIdOf(box.node.node) case final id?) {
+      if (box.node.enabled) return null;
+      return () {
+        try {
+          for (final instance in layer.getEffects()) {
+            if (instance.id() == id) {
+              layer.setEffectEnabled(effect: instance, enabled: true);
+              break;
+            }
+          }
+        } catch (_) {
+          // Refused, or the stack moved under us; re-reading is the recovery.
+        }
+      };
+    }
+    if (box.node.node is BridgeNodeRef_Out && _graph!.wiring.outUnwired) {
+      return () => _commit(_wiringNow(outUnwired: false));
+    }
+    return null;
   }
 
   /// Move [moved] to sit immediately after [after] in the stack — null puts
@@ -1519,6 +1578,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           ],
           exposed: _graph!.wiring.exposed,
           groups: _graph!.wiring.groups,
+          outUnwired: _graph!.wiring.outUnwired,
         ),
       );
     } catch (_) {
@@ -2125,6 +2185,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           zoom: _zoom,
                           theme: t,
                           dragged: t.textPrimary,
+                          outUnwired: _graph!.wiring.outUnwired,
                         ),
                       ),
                     ),
@@ -2733,6 +2794,10 @@ class _GraphPainter extends CustomPainter {
   final Color dragged;
   final LumitTheme theme;
 
+  /// Nothing is plugged into the Layer out, so the layer draws nothing
+  /// (K-738) and the last wire is not drawn either.
+  final bool outUnwired;
+
   const _GraphPainter({
     required this.layout,
     required this.edges,
@@ -2742,6 +2807,7 @@ class _GraphPainter extends CustomPainter {
     required this.zoom,
     required this.dragged,
     required this.theme,
+    required this.outUnwired,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
@@ -2751,14 +2817,39 @@ class _GraphPainter extends CustomPainter {
     // The image chain's wires are not stored anywhere: they *are* the effect
     // list, read left to right. Drawing them from the box order is what makes
     // the stack view impossible to contradict.
+    //
+    // **A bypassed effect is not in the chain** (K-738), so the wire steps
+    // over it: from the last box still in to the next one, leaving the
+    // bypassed box floating with hollow sockets. That is the same picture the
+    // engine renders - the effect is skipped - and it is why switching a box
+    // off in Effect controls visibly unplugs it here.
+    //
+    // The Source and the Layer out always count as in: the picture starts and
+    // ends at them whatever the stack does, so an all-bypassed stack still
+    // draws exactly one wire, Source to Layer out. Unplugging the Layer out
+    // itself (`outUnwired`) takes that last segment away too - nothing feeds
+    // the layer, and the layer draws nothing.
+    //
+    // The indices are the FULL chain's throughout: `_InFlight.chain` and every
+    // gesture in `_down` count boxes the same way, and a painter that renumbered
+    // them would put the dashed wire on the wrong socket.
     final chain = layout.chain;
-    for (var i = 0; i + 1 < chain.length; i++) {
-      // The chain wire in the hand (K-674) is the dashed flight, not a drawn
-      // segment: the wire has visibly left its input.
-      if (flight?.chain == i + 1) continue;
+    final inChain = [
+      for (var i = 0; i < chain.length; i++)
+        if (i == 0 || i == chain.length - 1 || chain[i].node.enabled) i,
+    ];
+    for (var k = 0; k + 1 < inChain.length; k++) {
+      final i = inChain[k];
+      final j = inChain[k + 1];
+      // The wire in the hand (K-674) is the dashed flight, not a drawn
+      // segment: it has visibly left its input. The flight names the box it
+      // feeds, which after a skip is anywhere in (i, j].
+      if (flight?.chain case final held? when held > i && held <= j) continue;
+      // Nothing is plugged into the Layer out at all.
+      if (outUnwired && j == chain.length - 1) continue;
       final from = chain[i].socket(i == 0 ? 'image' : 'output', false);
-      final to = chain[i + 1]
-          .socket(i + 1 == chain.length - 1 ? 'image' : 'input', true);
+      final to =
+          chain[j].socket(j == chain.length - 1 ? 'image' : 'input', true);
       if (from != null && to != null) {
         _wire(canvas, from, to, theme.port.image, dashes: false);
       }

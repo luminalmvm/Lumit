@@ -65,6 +65,7 @@ void main() {
           ],
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
+          outUnwired: false,
         ),
       );
       return id;
@@ -601,6 +602,7 @@ void main() {
           ],
           exposed: moved.wiring.exposed,
           groups: moved.wiring.groups,
+          outUnwired: false,
         ),
       );
 
@@ -1246,19 +1248,25 @@ void main() {
           reason: 'two picked is no single point to stop at');
     });
 
-    // --- The image chain's own wires (K-674, owner item 10) ----------------
+    // --- The image chain's own wires (K-674, K-738) ------------------------
     //
     // The chain is the effect list (§1.1), so every gesture on its wires
-    // lowers to the stack's own ops: re-route = reorder, discard = the fed
-    // box leaves the list, neighbours joining by construction.
+    // lowers to something the stack already had: re-route = reorder, and
+    // **disconnect = bypass** (K-738) - the effect keeps its slot and stops
+    // drawing, which is the state its own enable tick sets. The Layer out is
+    // the one box with no effect to bypass: unplugging it is the layer
+    // drawing nothing.
 
     List<String> chainNames(LayerReference layer) =>
         [for (final e in layer.getEffects()) e.getInfo().name];
 
+    List<bool> chainEnabled(LayerReference layer) =>
+        [for (final e in layer.getEffects()) e.enabled()];
+
     Finder chainInput(LayerReference layer, int i) => find.byKey(ValueKey<String>(
         'graph-socket-effect:${stackIds(layer)[i]}-input'));
 
-    testWidgets('a chain wire dropped on empty takes the fed effect out',
+    testWidgets('a chain wire dropped on empty bypasses the fed effect',
         (tester) async {
       final p = withTwoEffects();
       await mount(tester, p);
@@ -1269,20 +1277,67 @@ void main() {
       await tester.dragFrom(at, const Offset(40, 220));
       await tester.pump();
 
-      expect(chainNames(p.layer), ['blur'],
-          reason: 'the connection went, and with it the box it fed — the '
-              'honest inverse of dropping a box into a wire');
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'the effect keeps its slot in the stack (K-738)');
+      expect(chainEnabled(p.layer), [true, false],
+          reason: 'and stops drawing - the state its own tick sets');
       expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing,
           reason: 'a wire being taken off is not a wire looking for a node');
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(chainNames(p.layer), ['blur', 'exposure'],
+      expect(chainEnabled(p.layer), [true, true],
           reason: 'one gesture, one undo step');
     });
 
-    testWidgets('unplugging the Layer out takes the last effect',
+    /// The gesture back. Nothing covered this before, because before there
+    /// was nothing to come back from.
+    testWidgets('re-wiring a bypassed box switches it back on',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      final at = tester.getCenter(chainInput(p.layer, 1));
+      await tester.dragFrom(at, const Offset(40, 220));
+      await tester.pump();
+      expect(chainEnabled(p.layer), [true, false]);
+
+      // The blur's output back onto the exposure's input: the box the wire
+      // lands on is the box that comes back on (owner's rule).
+      final from = tester.getCenter(find.byKey(
+          ValueKey<String>('graph-socket-effect:${stackIds(p.layer)[0]}-output')));
+      final to = tester.getCenter(chainInput(p.layer, 1));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(chainEnabled(p.layer), [true, true],
+          reason: 'the wire put it back in the chain');
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'and left the order alone - it was already there');
+    });
+
+    /// The equivalence the whole change is for: the wire and the tick are two
+    /// views of one flag, so the two gestures must land in the same state.
+    testWidgets('disconnecting leaves exactly what the enable tick leaves',
+        (tester) async {
+      final byWire = withTwoEffects();
+      await mount(tester, byWire);
+      await tester.dragFrom(
+          tester.getCenter(chainInput(byWire.layer, 1)), const Offset(40, 220));
+      await tester.pump();
+
+      final byTick = withTwoEffects();
+      await mount(tester, byTick);
+      await tester.tap(find.byKey(ValueKey<String>(
+          'graph-enable-effect:${stackIds(byTick.layer)[1]}')));
+      await tester.pump();
+
+      expect(chainEnabled(byWire.layer), chainEnabled(byTick.layer));
+      expect(chainNames(byWire.layer), chainNames(byTick.layer));
+    });
+
+    testWidgets('unplugging the Layer out leaves the layer drawing nothing',
         (tester) async {
       final p = withTwoEffects();
       await mount(tester, p);
@@ -1292,8 +1347,19 @@ void main() {
       await tester.dragFrom(at, const Offset(40, 220));
       await tester.pump();
 
-      expect(chainNames(p.layer), ['blur'],
-          reason: 'the wire into Layer out is the last effect\'s place');
+      expect(p.layer.getGraph().wiring.outUnwired, isTrue,
+          reason: 'the layer itself is what came unplugged (K-738)');
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'and it cost the stack nothing');
+      expect(chainEnabled(p.layer), [true, true],
+          reason: 'no effect was bypassed by it either');
+
+      // Back in: the wire lands on the Layer out and the layer draws again.
+      final from = tester.getCenter(find.byKey(
+          ValueKey<String>('graph-socket-effect:${stackIds(p.layer)[1]}-output')));
+      await tester.dragFrom(from, at - from);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.outUnwired, isFalse);
     });
 
     testWidgets('a chain wire dropped on another chain input reorders',
@@ -1361,7 +1427,7 @@ void main() {
       await tester.pump();
 
       expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'a drawn wire dropped on nothing deletes nothing');
+          reason: 'a drawn wire dropped on nothing bypasses nothing');
     });
 
     testWidgets('a chain wire dropped on the Layer out moves its source last',
@@ -1478,6 +1544,7 @@ void main() {
           layout: graph.wiring.layout,
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
+          outUnwired: false,
         ),
       );
       final path = '${library().path}/Audio rig.lumgrp';

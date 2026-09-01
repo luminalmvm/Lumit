@@ -278,6 +278,11 @@ pub struct BridgeGraphWiring {
     pub exposed: Vec<BridgeNodeRef>,
     /// The named regions (K-651).
     pub groups: Vec<BridgeNodeGroup>,
+    /// The Layer out box's image socket is unplugged, so the layer draws
+    /// nothing (K-738). It rides here rather than as a call of its own so
+    /// that unplugging it is the same one commit, and the same one undo step,
+    /// as every other wiring gesture.
+    pub out_unwired: bool,
 }
 
 impl BridgeGraphWiring {
@@ -309,6 +314,7 @@ impl BridgeGraphWiring {
                         .collect(),
                 })
                 .collect(),
+            out_unwired: g.out_unwired,
         }
     }
 }
@@ -362,7 +368,12 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     for effect in &layer.effects {
         let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name);
         let schema = def.map(|d| d.schema());
-        let mut inputs = vec![BridgePort::of(graph::INPUT_PORT, true)];
+        // **Wired means "in the chain"** (K-738). A bypassed effect is not:
+        // the picture goes past it, and the panel draws that by leaving its
+        // image sockets hollow and running the wire to the next box that is
+        // still in. The Source's and the Layer out's own image sockets stay
+        // wired through it - the wire genuinely still lands on them.
+        let mut inputs = vec![BridgePort::of(graph::INPUT_PORT, effect.enabled)];
         // The matte socket exists only where the effect declares a matte row
         // (K-395) — the same question `LayerGraph::validate` asks before it
         // accepts a wire onto one.
@@ -412,7 +423,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             // Particulate's teal Points socket reaches the canvas with no
             // Particulate-specific code at the seam: it declares the port, and
             // every effect that declares none is untouched.
-            outputs: std::iter::once(BridgePort::of(graph::OUTPUT_PORT, true))
+            outputs: std::iter::once(BridgePort::of(graph::OUTPUT_PORT, effect.enabled))
                 .chain(
                     def.map(|d| d.signature().outputs())
                         .unwrap_or_default()
@@ -432,7 +443,10 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         custom_name: None,
         enabled: true,
         inputs: vec![
-            BridgePort::of(graph::IMAGE_PORT, true),
+            // Unplugged, the layer draws nothing (K-738) - the one
+            // disconnection with no flag of its own to lower to, so the graph
+            // carries it.
+            BridgePort::of(graph::IMAGE_PORT, !g.out_unwired),
             // Drawn, unfilled, honest: audio comes only from a footage layer's
             // own stream (K-435), so nothing may be wired here in this phase.
             BridgePort::of(graph::AUDIO_PORT, false),
@@ -586,5 +600,6 @@ pub(crate) fn wiring_into(
                 members: group.members.into_iter().map(BridgeNodeRef::core).collect(),
             })
             .collect(),
+        out_unwired: wiring.out_unwired,
     }
 }

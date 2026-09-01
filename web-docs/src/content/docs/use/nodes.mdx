@@ -25,6 +25,9 @@ Every graph starts with **Source**, one box per effect in order, and **Layer out
 | Drop a node onto a wire | Inserts it at that point in the stack. |
 | Drag a box's body | Moves it. A drag that starts inside the selection moves the whole selection. |
 | Drag from a socket | Pulls out a wire; drop it on a socket that takes the same kind of value. |
+| Drag a wire off an effect's input | Bypasses that effect. The picture goes past it and it keeps its place in the stack. |
+| Drop a wire back on it | Switches it back on, and moves it to where the wire says. |
+| Drag the wire off **Layer out** | The layer draws nothing until something is plugged back in. |
 | `Delete` | Removes the picked boxes. |
 
 Two switches sit in the panel's toolbar. **Auto-wire** joins a dropped node to the wire in
@@ -41,6 +44,11 @@ hand as it lands. **Heal** reconnects the neighbours of a deleted box.
 
 Each box carries two small badges. the checkbox enables or disables a specific node and the 
 picture passes through untouched. Twirl exposes the node, displaying all parameters sockets.
+
+The checkbox and the wires say the same thing. A bypassed effect is drawn unwired — hollow
+sockets, and the chain running from the box before it to the box after — so switching one
+off in [Effect controls](/panels/effect-controls/) unplugs it here, and unplugging it here
+switches it off there.
 
 ## Drivers
 

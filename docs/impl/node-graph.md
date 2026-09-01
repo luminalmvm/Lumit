@@ -42,15 +42,28 @@ existing whole-stack `SetLayerEffects` commit:
 
 - dropping a node onto a wire = insert at that index (auto-wire is this, automated);
 - deleting a node with Heal on = remove at that index — the list heals by construction;
-- rewiring the chain = reorder.
+- rewiring the chain = reorder;
+- **disconnecting a box = bypassing it** (K-738) — the `enabled` flag its own tick sets,
+  so the effect keeps its slot and the picture goes past it. The Layer out is the
+  exception: it has no effect to bypass, so unplugging it sets `LayerGraph::out_unwired`
+  and the layer draws nothing at all.
 
 **Built 2026-08-30 (K-674).** A chain input's wire is picked up by its far end exactly as
 a stored wire is: dropped on another chain input it re-routes (the fed box moves to sit
 right after the wire's source — one `reorder` op; dropped on the Layer out, the source
-moves to the end), and dropped on empty canvas the connection goes the only honest way a
-derived wire can — the box it fed leaves the list (`remove`), neighbours joining by
-construction. Each answer is one op and one undo step, and a press that never travelled
-does nothing: a chain discard costs an effect, so a slip must never be one.
+moves to the end), and dropped on empty canvas the box it fed **is bypassed** (K-738,
+superseding this paragraph's first answer): the effect keeps its slot and stops drawing,
+which is the state its own tick in Effect controls sets. Each answer is one op and one
+undo step, and a press that never travelled does nothing.
+
+**Built 2026-09-01 (K-738).** The output end has a gesture too — an image output draws a
+wire, and dropping it on a later box's input reorders exactly as the input grab does —
+and a wire dropped on a box switches that box back on. A bypassed effect reports its
+image sockets **unwired** across the bridge, so the panel draws them hollow and the chain
+wire steps over the box: the tick and the wire are one flag seen twice, in both
+directions. The Layer out's own socket carries `LayerGraph::out_unwired`, which is the
+one piece of the layer's graph that changes a pixel and therefore the one that reaches
+the frame key.
 
 An effect's main **Input** port accepts exactly one wire and it is, by construction, the
 previous stack entry's Output. The panel never offers a gesture that would branch or skip
@@ -592,7 +605,9 @@ console (Ctrl+Space over the canvas, or a wire dragged onto empty ground — K-6
 type-filtered results while a wire is in hand,
 drag-to-wire and disconnect, `E` exposure, dashed bypass, the selected border in
 `animated` (K-473). Image-chain gestures lower to `set_effects`; everything else to
-`set_layer_graph`; one gesture, one undo step. The Effect-controls rows gain the *driven*
+`set_layer_graph` — except a disconnect, which lowers to `set_effect_enabled`, and the
+Layer out's own socket, which lowers to `set_layer_graph` like the wires (K-738); one
+gesture, one undo step. The Effect-controls rows gain the *driven*
 state (hollow type-coloured ring, driver's name in the well — the Nodes-workspace
 drawing's Node panel rows are the reference).
 **Files**: `flutter_ui/lib/panels/graph_panel.dart` (+ parts), `theme.dart`'s

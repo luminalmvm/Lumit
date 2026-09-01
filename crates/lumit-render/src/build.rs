@@ -1760,7 +1760,13 @@ pub fn build_comp_draws_at(
         if layer.audio_only {
             continue;
         }
-        if !layer.switches.visible || !in_span(layer) || (any_solo && !layer.switches.solo) {
+        // A layer whose Layer out is unplugged draws nothing (K-738), which is
+        // the same nothing a hidden layer draws and is skipped in the same place.
+        if !layer.switches.visible
+            || layer.graph.out_unwired
+            || !in_span(layer)
+            || (any_solo && !layer.switches.solo)
+        {
             continue;
         }
         // Under a full-frame opaque layer: never seen, so never built.

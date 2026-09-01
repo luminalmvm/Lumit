@@ -2246,6 +2246,7 @@ void main() {
           layout: const [],
           exposed: const [],
           groups: const [],
+          outUnwired: false,
         ),
       );
       await mount(tester, p);
@@ -2275,6 +2276,7 @@ void main() {
       p.layer.setGraph(
         drivers: p.layer.getGraphDrivers(),
         wiring: const BridgeGraphWiring(
+        outUnwired: false,
             edges: [], layout: [], exposed: [], groups: []),
       );
       p.uiState.model.refresh();

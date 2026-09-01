@@ -2847,6 +2847,7 @@ mod tests {
         wiggle.custom_name = Some("The wobble".into());
         let wiggle_id = wiggle.id;
         layer.graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![
                 Edge {

@@ -23417,3 +23417,57 @@ for the same reason: the numbers on it are in the manual and in projects.
 
 One method changes — `Contrast::packed` — and both render paths read it, so the CPU
 reference and the WGSL kernel cannot disagree about the new curve.
+
+## K-738 — Disconnecting a box is switching it off, and the Layer out has a socket of its own
+
+**Date:** 2026-09-01 · **Status:** DECIDED · **Scope:** docs/impl/node-graph.md, lumit-core, lumit-eval, lumit-render, lumit-bridge, the Graph panel
+
+Supersedes **K-674**'s third answer only — "dropped on empty canvas the connection goes
+the only honest way a derived wire can: the box it fed leaves the list". Everything else
+K-674 decided stands, and its entry is not edited.
+
+A tester (Airyz) reported that dragging sockets did not work. Two things were true. The
+image chain had a gesture on its input end and none on its output, so the drag everybody
+tries first did nothing at all — fixed the same day, and not the interesting half. The
+interesting half is what a disconnection *meant*: the chain is the effect list, so the
+only thing "no wire" could lower to was removal, and a wire pulled off an input deleted
+an effect. The owner's ruling: **"I never wanted the effect to be forced to remain the
+spine. If the user has it in the effect stack, but then disconnects it in the graph view,
+that is effectively just disabling the effect."**
+
+So disconnecting is **bypassing**, and it is not a new state: it is the `enabled` flag the
+effect's own tick in Effect controls sets, reached from the other side. The effect keeps
+its slot in the stack, the picture goes past it, and one undo step puts it back. The two
+controls are now one control drawn twice, which is why the panel had to change as well as
+the gesture — see below.
+
+**Wired means "in the chain".** The bridge reports an effect's image sockets as wired only
+while it is enabled, so a bypassed box draws hollow sockets and the wire visibly steps
+over it, from the last box still in to the next one. Switch a box off in Effect controls
+and the graph unplugs it in front of you; pull its wire and the tick goes off. A picture
+that could disagree with the render was the thing worth spending code on here: the engine
+has always skipped a bypassed effect, and only the drawing lied.
+
+**The Layer out is the one box with nothing to bypass**, and the owner asked for the
+state by name: "having a layer display nothing because it's not wired up is completely
+okay". It gets a flag of its own, `LayerGraph::out_unwired` — the only piece of that
+struct that is not presentation. It was offered the visibility switch instead, and
+refused it: the eye is the Timeline's control, and a user who hides a layer there should
+not find their graph rewired behind their back, nor the reverse. The flag defaults false,
+is skipped when serialising, and so leaves every existing project byte-identical.
+
+It changes the picture, so unlike its neighbours in `LayerGraph` it reaches the frame key —
+by the road `switches.visible` already takes, which is that a layer skipped for it is fed
+to the key not at all. `lumit-eval`'s `feed_comp` and `lumit-render`'s `build` skip on it
+in the same line as the visibility switch, and a test asserts the two produce the same
+key and the same pixels, because "the same nothing" is the claim.
+
+**Re-wiring puts it back**, and the box that comes back on is **the one the wire lands
+on** — the owner's choice between the two readings. A drop that also says the box belongs
+somewhere else reorders as well, and the two writes ride one undo group.
+
+What did not change: Delete still deletes (it is now the only removal gesture in the
+panel, which the owner accepted); a wire *drawn* from an output and let go of on the
+ground is a change of mind and does nothing; K-674's rule that a stationary press is no
+gesture stands, though its stated reason — "a chain discard costs an effect" — is now
+worth a tick rather than an effect.

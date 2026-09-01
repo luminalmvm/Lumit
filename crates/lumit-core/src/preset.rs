@@ -778,6 +778,7 @@ mod tests {
         let outside = crate::fx::instantiate("wiggle").unwrap();
         let (a, b, c) = (wiggle.id, smooth.id, outside.id);
         let graph = LayerGraph {
+            out_unwired: false,
             nodes: vec![wiggle, smooth, outside],
             edges: vec![
                 // Inside the pair.

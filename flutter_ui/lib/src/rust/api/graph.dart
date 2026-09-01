@@ -112,16 +112,27 @@ class BridgeGraphWiring {
   /// The named regions (K-651).
   final List<BridgeNodeGroup> groups;
 
+  /// The Layer out box's image socket is unplugged, so the layer draws
+  /// nothing (K-738). It rides here rather than as a call of its own so
+  /// that unplugging it is the same one commit, and the same one undo step,
+  /// as every other wiring gesture.
+  final bool outUnwired;
+
   const BridgeGraphWiring({
     required this.edges,
     required this.layout,
     required this.exposed,
     required this.groups,
+    required this.outUnwired,
   });
 
   @override
   int get hashCode =>
-      edges.hashCode ^ layout.hashCode ^ exposed.hashCode ^ groups.hashCode;
+      edges.hashCode ^
+      layout.hashCode ^
+      exposed.hashCode ^
+      groups.hashCode ^
+      outUnwired.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -131,7 +142,8 @@ class BridgeGraphWiring {
           edges == other.edges &&
           layout == other.layout &&
           exposed == other.exposed &&
-          groups == other.groups;
+          groups == other.groups &&
+          outUnwired == other.outUnwired;
 }
 
 @freezed

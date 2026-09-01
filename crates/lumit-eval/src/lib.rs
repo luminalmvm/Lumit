@@ -263,7 +263,15 @@ fn feed_comp(
             continue;
         }
         let in_span = t >= layer.in_point.0.to_f64() && t < layer.out_point.0.to_f64();
-        if !layer.switches.visible || !in_span || (any_solo && !layer.switches.solo) {
+        // `out_unwired` sits with the visibility switch on purpose (K-738): a
+        // layer whose Layer out is unplugged draws nothing, so like a hidden one
+        // it is fed to this key not at all - which is what makes unplugging it
+        // retire the frames it used to be in.
+        if !layer.switches.visible
+            || layer.graph.out_unwired
+            || !in_span
+            || (any_solo && !layer.switches.solo)
+        {
             continue;
         }
         if matches!(layer.kind, LayerKind::Camera { .. }) {
@@ -1743,6 +1751,38 @@ mod tests {
         .unwrap()
     }
 
+    /// **An unplugged Layer out reaches the frame key** (K-738).
+    ///
+    /// A layer whose output is unwired draws nothing, so every frame it used
+    /// to be in is a different picture now and must have a different name.
+    /// It travels by the road `switches.visible` takes - the layer is fed to
+    /// the key not at all - which is why this holds without a line of its own
+    /// in the hasher, and why it must be tested rather than assumed.
+    #[test]
+    fn an_unplugged_layer_out_renames_every_frame_it_drew() {
+        let doc = Document::new();
+        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
+        let base = key(&doc, &plain, 1.0);
+
+        let mut unwired = plain.clone();
+        unwired.layers[0].graph.out_unwired = true;
+        assert_ne!(
+            base,
+            key(&doc, &unwired, 1.0),
+            "a layer that has stopped drawing cannot keep its frames' names"
+        );
+
+        // And it is the same nothing a hidden layer draws, which is the whole
+        // claim: two ways of saying it, one picture.
+        let mut hidden = plain.clone();
+        hidden.layers[0].switches.visible = false;
+        assert_eq!(
+            key(&doc, &hidden, 1.0),
+            key(&doc, &unwired, 1.0),
+            "unplugged and hidden are the same absent layer"
+        );
+    }
+
     /// **The driver graph reaches the frame key** (K-471 §2.3).
     ///
     /// A wire substitutes a value where a keyframe would have been read, so a
@@ -1778,6 +1818,7 @@ mod tests {
         let wiggle_id = wiggle.id;
 
         let wired = LayerGraph {
+            out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
             edges: vec![Edge {
@@ -1890,6 +1931,7 @@ mod tests {
         let (producer_id, blur_id, sampler_id) = (producer.id, blur.id, sampler.id);
 
         let wired = LayerGraph {
+            out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler.clone()],
             edges: vec![
@@ -2016,6 +2058,7 @@ mod tests {
             let mut l = text_layer("reader", 0.0, 5.0, 0.0);
             l.effects = vec![consumer.clone()];
             l.graph = LayerGraph {
+                out_unwired: false,
                 groups: Vec::new(),
                 nodes: vec![node],
                 edges: vec![Edge {
@@ -2092,6 +2135,7 @@ mod tests {
             let mut node = smooth.clone();
             set(&mut node, "time", time);
             LayerGraph {
+                out_unwired: false,
                 groups: Vec::new(),
                 nodes: vec![node],
                 edges: vec![Edge {

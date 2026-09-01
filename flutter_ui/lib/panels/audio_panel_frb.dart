@@ -1052,6 +1052,9 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
           layout: graph.wiring.layout,
           exposed: graph.wiring.exposed,
           groups: graph.wiring.groups,
+          // Ducking wires a driver in; it does not touch whether the
+          // layer's own output is plugged in (K-738).
+          outUnwired: graph.wiring.outUnwired,
         ),
       );
     } catch (_) {
