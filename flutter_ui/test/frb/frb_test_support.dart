@@ -209,6 +209,10 @@ class _StopsPreviewProgressState extends State<_StopsPreviewProgress> {
   // reads the developer's own settings file, so a test would assert against
   // whatever colour scheme the machine happened to be set to.
   final uiState = LumitUiState(state, workspace: Workspace());
+  // Known to [settleFrb], which ends every settle with this state's preview
+  // tracker idle — see [_settleProgress] for the failure that needs it.
+  _liveUis.add(uiState);
+  addTearDown(() => _liveUis.remove(uiState));
   // Every one of these listens to the engine's response stream and holds the
   // preview-progress timer. Dropped on the floor at the end of a test they do
   // not stop listening, so by the end of a file a dozen dead UI states are
@@ -290,7 +294,39 @@ Future<void> settleFrb(
     // Back in fake async: flush the continuations those messages queued, and
     // draw the frame their `setState`s asked for.
     await tester.pump(Duration.zero);
-    if (round + 1 >= minRounds && (until == null || until())) return;
+    if (round + 1 >= minRounds && (until == null || until())) break;
+  }
+  await _settleProgress(tester, slice);
+}
+
+/// The UI states [freshProject] has made and not yet torn down.
+final List<LumitUiState> _liveUis = [];
+
+/// End a settle with no preview-progress timer pending.
+///
+/// **The failure this exists for.** The engine reports how far a waited-on
+/// frame has got, and the tracker arms a 150 ms timer on the first report to
+/// decide whether a bar is worth drawing. That report is delivered inside the
+/// fake-async pump above, so the timer is a *fake* timer — and `testWidgets`
+/// fails a body that returns with one pending, checking **before** the
+/// teardown that would have disposed it. So any test whose last settle
+/// coincides with a slow frame's first report failed on a timer it never
+/// created: `cache_bar_frb_test` on main, then `group_effects_frb_test` on
+/// the Linux runner, whose software renderer is exactly what makes a frame
+/// slow enough to report. A round count cannot fix that; the tracker's own
+/// `idle` can.
+///
+/// A few more real turns for the frame to finish, then — if it has not — the
+/// tracker is stopped, which cancels the timer. Stopping forgets a bar nobody
+/// in a test was drawing; the render itself carries on and lands as it would.
+Future<void> _settleProgress(WidgetTester tester, Duration slice) async {
+  for (var round = 0; round < 25; round++) {
+    if (_liveUis.every((ui) => ui.previewProgress.idle)) return;
+    await tester.runAsync(() => Future<void>.delayed(slice));
+    await tester.pump(Duration.zero);
+  }
+  for (final ui in _liveUis) {
+    if (!ui.previewProgress.idle) ui.previewProgress.stop();
   }
 }
 
