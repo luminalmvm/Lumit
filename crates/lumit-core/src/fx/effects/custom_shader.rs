@@ -34,6 +34,42 @@ use lumit_fx_macros::Effect;
 /// The `extra` key the shader block lives under (§1.2).
 pub const EXTRA_KEY: &str = "shader";
 
+/// What a fresh Custom shader opens with (owner, 2026-09-01, relaying a
+/// tester: "a basic shader in it to provide an example to help show the
+/// format the shader node wants").
+///
+/// **In plain terms.** A shader here is one function - a pixel's place goes
+/// in, its colour comes out - plus an optional `Params` struct whose fields
+/// become the rows in Effect controls. Nobody can guess that from an empty
+/// box, and the wrapper the host puts round the text (§2.1) makes several of
+/// the obvious guesses refusals: a `@group` of one's own, a name beginning
+/// `lumit_`, anything at module scope that is not a struct.
+///
+/// It is deliberately **neutral** - gain 1 and a white tint pass the picture
+/// through untouched. docs/08 §1.2 says an effect whose default state is a
+/// no-op is a bug, and this is K-111's stated exception: the thing the effect
+/// does is the thing the user has to write. A starter that visibly changed
+/// the picture the moment it landed would be the worse surprise.
+///
+/// Every line is checked against the host's own refusals in
+/// `crate::fx::shader`: the two rows parse, `shade` exists, `lumit_sample`
+/// and `p` come from the prologue.
+pub const STARTER_SOURCE: &str = r"// One function: a pixel's place in, its colour out.
+// uv runs 0 to 1 across the frame; lumit_sample reads the layer below.
+// Fields of Params become rows in Effect controls.
+
+struct Params {
+    /// @slider(0, 2) @default(1) Gain
+    gain: f32,
+    /// @colour @default(1, 1, 1, 1) Tint
+    tint: vec4<f32>,
+}
+
+fn shade(uv: vec2<f32>) -> vec4<f32> {
+    return lumit_sample(uv) * p.gain * p.tint;
+}
+";
+
 /// The top half of this instance's source hash, pushed into the bag at resolve
 /// time — how the render side finds the assembled text (see
 /// [`crate::fx::shader::program_by_hash`]).

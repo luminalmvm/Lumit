@@ -528,3 +528,34 @@ fn removing_a_shader_uniform_leaves_its_parameter_and_its_expression_alive() {
     // K-258 rule: a missing parameter is a default, never a fault.
     assert_eq!(resolved_radius(&inst, 1.0, 1.0), None);
 }
+
+/// **A fresh Custom shader opens with an example that compiles** (owner,
+/// 2026-09-01). The starter exists to show the format, so a starter the host
+/// refuses would teach the wrong one — and it is neutral on purpose, which is
+/// the second half of what it promises.
+#[test]
+fn the_starter_shader_compiles_and_changes_nothing() {
+    let inst = crate::fx::instantiate_for_raster("custom_shader", 1920.0, 1080.0)
+        .expect("the catalogue knows it");
+    let source =
+        crate::fx::effects::custom_shader::source_of(&inst).expect("a fresh instance has one");
+    assert!(
+        crate::fx::shader::program_for(source).is_ok(),
+        "the starter must pass every refusal the host makes"
+    );
+
+    // Its two rows are the point of the example: a slider and a colour, read
+    // off the text exactly as a user's own fields are (K-650).
+    let program = crate::fx::shader::program_for(source).expect("compiled");
+    let ids: Vec<String> = program.params.iter().map(|p| p.id.to_string()).collect();
+    assert_eq!(ids, vec!["gain", "tint"], "the example declares both kinds");
+
+    // Neutral: gain 1, white tint, so dropping the effect on changes no pixel
+    // until the user writes something. K-111's exception, stated in the source.
+    assert_eq!(
+        crate::fx::instantiate("custom_shader")
+            .map(|plain| crate::fx::effects::custom_shader::source_of(&plain).is_none()),
+        Some(true),
+        "the pure schema default is still empty - presets and tests keep it"
+    );
+}

@@ -377,6 +377,22 @@ class _HouseTextFieldState extends State<HouseTextField>
                         ? TextInputType.multiline
                         : TextInputType.text,
                     scrollController: widget.scrollController,
+                    // **No clearance around the caret in a page of text.**
+                    // EditableText's default `scrollPadding` is 20 on every
+                    // side, and it reveals the caret by that inflated rect on
+                    // every selection change - so dragging a selection within
+                    // twenty pixels of an edge scrolls the view although
+                    // nothing is off screen, and the anchor the drag recomputes
+                    // each move then lands mid-animation and fires a second,
+                    // synchronous jump to the base. Two scrolls a tick, two
+                    // targets: the ping a tester reported selecting shader code.
+                    // At zero the reveal only fires when the caret genuinely
+                    // leaves the viewport, which is when scrolling is the point.
+                    // A single line has no room to scroll vertically and keeps
+                    // the framework's default.
+                    scrollPadding: widget.multiline
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.all(20.0),
                     cursorColor: t.accent,
                     backgroundCursorColor: t.surface2,
                     selectionColor: t.accent.withValues(alpha: 0.5),

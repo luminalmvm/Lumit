@@ -68,6 +68,14 @@ void main() {
       await tester.pump();
     }
 
+    /// The example a fresh Custom shader opens with (owner, 2026-09-01). Read
+    /// off the instance rather than repeated here: what these two assert is
+    /// that a gesture left the source *as it was*, and pinning the example's
+    /// text is `the_starter_shader_compiles_and_changes_nothing`'s job.
+    String? started(
+            ({LumitState state, LumitUiState uiState, LayerReference layer}) p) =>
+        p.layer.getEffects().single.shaderSource();
+
     /// Open the editor the way a person does: the effect's own Action row.
     Future<void> openEditor(
       WidgetTester tester,
@@ -89,6 +97,7 @@ void main() {
         (tester) async {
       final p = withShader();
       await mount(tester, p);
+      final opened = started(p);
       await openEditor(tester, p);
 
       expect(find.byKey(const ValueKey<String>('shader-editor-code')),
@@ -111,11 +120,13 @@ void main() {
       expect(find.text('Ripple radius'), findsOneWidget,
           reason: "the shader's own row is now a row in the panel");
 
-      // One `SetLayerEffects`, so one undo puts the effect back the way it was.
+      // One `SetLayerEffects`, so one undo puts the effect back the way it was
+      // - which is the starter example a fresh Custom shader opens with, not
+      // nothing (owner, 2026-09-01).
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
-      expect(p.layer.getEffects().single.shaderSource(), isNull);
+      expect(p.layer.getEffects().single.shaderSource(), opened);
       expect(find.text('Ripple radius'), findsNothing);
     });
 
@@ -147,6 +158,7 @@ void main() {
         (tester) async {
       final p = withShader();
       await mount(tester, p);
+      final before = started(p);
 
       // Cancel first: type a whole shader and throw it away.
       await openEditor(tester, p);
@@ -154,7 +166,7 @@ void main() {
       await tester.tap(
           find.byKey(const ValueKey<String>('shader-editor-cancel')));
       await tester.pumpAndSettle();
-      expect(p.layer.getEffects().single.shaderSource(), isNull,
+      expect(p.layer.getEffects().single.shaderSource(), before,
           reason: 'Cancel is a way out, not a quiet commit');
 
       await openEditor(tester, p);

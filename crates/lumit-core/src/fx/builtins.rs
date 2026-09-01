@@ -174,6 +174,20 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             p.value = EffectValue::Float(Property::fixed(v));
         }
     }
+    // **A fresh Custom shader opens with an example** (owner, 2026-09-01). Here
+    // rather than in `instantiate` for the reason the arms above are here: this
+    // is the UI's apply path, and the pure schema default is what a preset, a
+    // saved project and every test should still get - `a_custom_shader_with_no_
+    // source_is_a_passthrough` says so and stays true.
+    if match_name == "custom_shader" {
+        inst.extra.insert(
+            crate::fx::effects::custom_shader::EXTRA_KEY.to_owned(),
+            serde_json::json!({
+                "language": "wgsl",
+                "source": crate::fx::effects::custom_shader::STARTER_SOURCE,
+            }),
+        );
+    }
     // Wave 2's Distort I batch (docs/08 §3.48, §3.51, §3.52) has the same shape
     // of default again: a Corner pin's four points and a Twirl's or a Spherize's
     // centre are all px@comp (K-260), and a schema constant that says "960, 540"
