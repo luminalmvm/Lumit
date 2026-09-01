@@ -4,6 +4,24 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+namespace {
+
+// The window is invisible until Flutter's first frame arrives, which is what
+// keeps a half-drawn editor off the screen. The cost of that is a start-up
+// which never gets that far — an engine that cannot make a surface, an error
+// before `runApp` — showing nothing whatever: Lumit sits in Task Manager with
+// no window to close and nothing to report (reported against 0.3.0).
+//
+// So the first frame is given this long, and then the window is shown anyway.
+// A window that has not painted yet can be looked at, moved and closed, and
+// the Dart side puts its own failure screen in it when it has one. Ten seconds
+// rather than one or two: a genuinely slow first start must not be interrupted
+// by its own safety net.
+constexpr UINT_PTR kShowAnywayTimer = 1;
+constexpr UINT kShowAnywayAfterMs = 10000;
+
+}  // namespace
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -46,6 +64,8 @@ bool FlutterWindow::OnCreate() {
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
+  ::SetTimer(GetHandle(), kShowAnywayTimer, kShowAnywayAfterMs, nullptr);
+
   return true;
 }
 
@@ -76,6 +96,18 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_TIMER:
+      if (wparam == kShowAnywayTimer) {
+        ::KillTimer(hwnd, kShowAnywayTimer);
+        // Already up is the ordinary case: the first frame arrived and showed
+        // it. Only a window nobody has seen is shown from here, so one the
+        // user has since minimised is left where they put it.
+        if (!::IsWindowVisible(hwnd)) {
+          this->Show();
+        }
+        return 0;
+      }
+      break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

@@ -1333,7 +1333,9 @@ class Workspace extends ChangeNotifier {
   }
 
   Map<String, dynamic> toJson() => {
-        'version': 1,
+        // 2: the playback mode is taken back to the shipped default once, for
+        // stores written before it changed — see [applyJson].
+        'version': 2,
         'dock': dock.toJson(),
         'color_scheme': colorScheme.name,
         'theme_shape': themeShape.name,
@@ -1395,6 +1397,17 @@ class Workspace extends ChangeNotifier {
         AnimationLevel.all;
     if (j['performance'] is Map<String, dynamic>) {
       performance = PerformanceSettings.fromJson(j['performance']);
+    }
+    // **The one-time playback reset** (K-742). Making Every frame the shipped
+    // default (K-670) changed what a machine with *no* settings file gets, and
+    // nothing else: a store written before it says `adaptive` — the old default,
+    // written out whether or not anybody chose it — and keeps saying so for
+    // ever, which is why an upgraded install still opened on Adaptive res.
+    // Version 2 takes the mode back to the default once. A store already at 2
+    // is left alone, so a choice made since is a choice.
+    final version = j['version'];
+    if ((version is int ? version : 1) < 2) {
+      performance.playback = PerformanceSettings().playback;
     }
     if (j['interface'] is Map<String, dynamic>) {
       interface = InterfaceSettings.fromJson(j['interface']);
