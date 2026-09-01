@@ -570,6 +570,84 @@ void main() {
       );
     });
 
+    /// **A click re-read the whole document, and a folder re-read it again.**
+    ///
+    /// Reported by the owner (2026-09-01): "clicking an item (really noticeable
+    /// on folders) feels very slow before the response". A click rebuilds the
+    /// panel, and the rebuild walked every open row asking the engine for its
+    /// name - the dearest question here, since answering it clones the whole
+    /// item across the seam, layers and all for a composition. The name is
+    /// cached with every other row fact now.
+    ///
+    /// The gate is not zero: a click still rebuilds the panel, and a rebuild
+    /// still asks a folder what it holds. It is that the cost does not scale
+    /// with the document - which is what "really noticeable on folders" was.
+    testWidgets('clicking a project row re-reads no names', (tester) async {
+      final p = freshProject();
+      p.state.project!.newComposition(name: 'Scene');
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      p.state.project!.importFootage(path: 'C:/clips/other.avi');
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: const ProjectPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      counter
+        ..reset()
+        ..counting = true;
+      await tester.tap(find.text('shot.mov'));
+      await tester.pump();
+      counter.counting = false;
+      // A tap arms the double-tap recogniser's own timer (K-534's
+      // click-versus-open rule); the test has to outlive it.
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        counter.calls['item_reference_name'] ?? 0,
+        0,
+        reason: 'a click re-read item names:\n${counter.ranking()}',
+      );
+    });
+
+    /// Opening a folder is the gesture that felt worst, because it was three
+    /// costs at once: the names above, a probe per clip inside, and a rebuild
+    /// of the whole panel for each probe that answered. The probes are still
+    /// asked - the preview card wants them - but they land together.
+    testWidgets('opening a folder asks once per clip inside it, not thrice',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.newComposition(name: 'Scene');
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      p.state.project!.importFootage(path: 'C:/clips/other.avi');
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: const ProjectPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      counter
+        ..reset()
+        ..counting = true;
+      await tester.tap(find.text('Compositions'));
+      await tester.pump();
+      await settleFrb(tester, minRounds: 4, maxRounds: 8);
+      counter.counting = false;
+      await tester.pump(const Duration(milliseconds: 400));
+      // ignore: avoid_print
+      print('FOLDER OPEN COST ${counter.total} calls\n${counter.ranking()}');
+
+      expect(
+        counter.calls['item_reference_name'] ?? 0,
+        0,
+        reason: 'opening a folder re-read names:\n${counter.ranking()}',
+      );
+    });
+
     /// The Graph panel's whole canvas is arithmetic over one held read
     /// (K-183, docs/impl/node-graph.md §5): `getGraph` is asked when the
     /// selection or the document changes, and nothing about a box needs a

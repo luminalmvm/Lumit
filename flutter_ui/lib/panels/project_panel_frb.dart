@@ -44,6 +44,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -324,6 +325,25 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   final Map<String, bool> _used = {};
   final Map<String, int> _labels = {};
 
+  /// Each item's name, remembered until the document changes. Reading one is
+  /// the dearest question this panel asks - the engine clones the whole item to
+  /// answer it - and it can only change when the document does.
+  final Map<String, String> _names = {};
+
+  /// A rebuild is already booked for the end of this frame.
+  ///
+  /// The three probes this panel fires - the poster frame, the container's
+  /// facts, and whether the file is still on disc - each answer whenever they
+  /// answer, and each answer used to call `setState` on its own. Opening a
+  /// folder of twenty clips therefore booked up to sixty full rebuilds of the
+  /// panel, which is exactly the gesture that felt slowest and exactly the
+  /// frames a scroll wants for itself.
+  ///
+  /// They write into their caches and ask for **one** rebuild instead. Nothing
+  /// is lost: every one of them is read during the next build, so the answers
+  /// arrive together rather than one frame apart.
+  bool _rebuildBooked = false;
+
   /// Each footage item's proxy (K-501), or null where it has none — for the
   /// `proxy` badge and for the row menu's four commands. A document read like
   /// every other entry here, so it is asked once per document change and never
@@ -533,7 +553,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final id = projectItemId(item);
       _itemById[id] = item;
       itemCount++;
-      final name = _nameOf(item);
+      // Cached like every other row fact beside it (K-676: nothing asks the
+      // engine twice for an answer that only a document change can alter).
+      // The name was the one that was not, and it is the dearest of them:
+      // `ProjectItem::name` clones the whole item across the seam to read one
+      // string, so a composition's every layer was copied per row per build.
+      final name = _names[id] ??= _nameOf(item);
       final ownMatch = _search.isEmpty || name.toLowerCase().contains(_search);
       final selfMatched = ancestorMatched || ownMatch;
       final isMissingFootage =
@@ -617,8 +642,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         _footageById[id] = field0;
         // Decoded ahead of selection and held in RAM, so the preview card
         // shows the picture and the facts the instant a row is clicked.
-        _refreshThumb(field0);
-        _refreshMediaInfo(field0);
+        //
+        // For rows that are actually drawn, though: a filter hiding a folder's
+        // contents used to decode a poster frame for every clip inside it, and
+        // each answer landed as its own rebuild of the whole panel.
+        if (show) {
+          _refreshThumb(field0);
+          _refreshMediaInfo(field0);
+        }
       }
       // A closed folder keeps its children to itself — unless a filter is
       // running, which has to be able to find what is inside one. A colour
@@ -714,7 +745,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return projectPreviewCard(
       t,
       item: item,
-      name: item == null ? '' : _nameOf(item),
+      name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
       missing: item is ItemReference_Footage && (_missing[id] ?? false),
       thumb: id == null ? null : _thumbs[id],
       info: id == null ? null : _mediaInfo[id],
@@ -726,7 +757,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   bool _subtreeMatches(ItemReference_Folder folder) {
     if (_search.isEmpty) return true;
     for (final child in folder.field0.getChildren()) {
-      if (_nameOf(child).toLowerCase().contains(_search)) return true;
+      if ((_names[projectItemId(child)] ??= _nameOf(child))
+          .toLowerCase()
+          .contains(_search)) {
+        return true;
+      }
       if (child is ItemReference_Folder && _subtreeMatches(child)) return true;
     }
     return false;
@@ -804,7 +839,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _mediaInfo[id] = null;
     footage.mediaInfo().then((info) {
       if (!mounted || info == null) return;
-      setState(() => _mediaInfo[id] = info);
+      _mediaInfo[id] = info;
+      _bookRebuild();
+    });
+  }
+
+  /// Ask for one rebuild at the end of this frame, however many probes have
+  /// answered during it. Safe to call from a probe's `then`: it takes no
+  /// account of what changed, because every cache it serves is read afresh by
+  /// the next build.
+  void _bookRebuild() {
+    if (_rebuildBooked || !mounted) return;
+    _rebuildBooked = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _rebuildBooked = false;
+      if (mounted) setState(() {});
     });
   }
 
@@ -978,6 +1027,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _paths.clear();
       _used.clear();
       _labels.clear();
+      _names.clear();
       _proxies.clear();
       _useProxies = null;
       _dropThumbs();
@@ -1011,7 +1061,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             image.dispose();
             return;
           }
-          setState(() => _thumbs[id] = image);
+          _thumbs[id] = image;
+          _bookRebuild();
         },
       );
     });
@@ -1034,7 +1085,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             if (!mounted) return;
             final isMissing = status == LumitMediaStatus.missing;
             if (_missing[id] != isMissing) {
-              setState(() => _missing[id] = isMissing);
+              _missing[id] = isMissing;
+              _bookRebuild();
             }
             // A probe can outlive its document: opening a project clears the
             // engine's registry and every reference held from the outgoing one

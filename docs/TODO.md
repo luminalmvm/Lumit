@@ -38,6 +38,17 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
+- **The Project panel is not virtualised**, which docs/13-PERFORMANCE-RULES.md §5 names
+    it in: `ListView(children: rows)` builds every row of the open tree whatever the
+    viewport holds, with no `itemExtent` on a fixed-height list. The click and the probe
+    storm behind the owner's "clicking a folder feels very slow" are fixed (the name
+    cache and the coalesced rebuild, 2026-09-01); this is what is left, and it is the
+    scroll half. `LazyBlocks` in timeline_metrics_frb.dart is the machinery to reuse.
+    Note `_visibleIds` must keep the whole filtered tree - Ctrl+A reads it.
+- **A click still rebuilds the whole Project panel.** Selection is `setState` on the
+    panel, where the Timeline publishes it as row state instead (f137662f). Two rows
+    change; every row rebuilds. Cheap now that the names are cached, and the next thing
+    to do if the panel still feels heavy on a large project.
 - **An undecodable file imports silently.** The dialogue no longer hides formats
     (the filter lists what the engine reads, with All files beside it), so what is left
     is the answer: a file FFmpeg cannot open becomes a footage item with no picture and
