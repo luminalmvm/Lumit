@@ -23471,3 +23471,37 @@ panel, which the owner accepted); a wire *drawn* from an output and let go of on
 ground is a change of mind and does nothing; K-674's rule that a stationary press is no
 gesture stands, though its stated reason — "a chain discard costs an effect" — is now
 worth a tick rather than an effect.
+
+## K-739 — The shipped workspaces are measured off the owner's own screen
+
+**Date:** 2026-09-01 · **Status:** DECIDED · **Scope:** docs/07-UI-SPEC.md §1.6, flutter_ui `dock.dart`
+
+Supersedes the *shares and inventories* of Edit, Effects, Nodes and Colour only. K-322's
+reason for the right-hand Effects & presets column stands, K-445/K-471 still own the Nodes
+arrangement's shape, K-614 still keeps Hierarchy out, and Audio and Retiming are untouched.
+
+The four arrangements were set the way arrangements should be: the owner opened each one
+in the real window, moved the seams and tabs until it was right, and the values were read
+back off `%APPDATA%\lumit\flutter-workspace.json` rather than argued about. Three rulings
+came out of it.
+
+**Debug leaves every shipped arrangement.** It was a tab behind Effects & presets in Edit,
+Effects and Colour. It is a developer's readout, and a workspace should not open on one;
+it keeps its own row in the Window menu, exactly as Hierarchy does.
+
+**One Timeline height across Edit, Effects, Nodes and Colour** — 0.32, and in Nodes 0.32 of
+the graph column, which is the same band of screen. The owner asked for it directly, twice:
+changing workspace must not move the lanes out from under the pointer. It costs Nodes its
+"short strip", which the approved Nodes drawing showed, and the drawing loses (the owner
+overruled it in person, which is the only thing that does). Audio and Retiming keep their
+taller bands, that being what those two are for.
+
+**The Viewer is not made exactly 16:9 by squeezing the sidebar.** The Effects arrangement
+was measured: at a 2560×1369 window the Viewer's picture box was 1212×806, so a 16:9
+composition filled the width and left 122 px of dead space above and below. Closing that
+gap by width alone needs the right-hand column down to about 161 px, under the 180 px floor
+`panelMinWidth` gives Effects & presets, and even the floor exactly would leave the panel
+with nowhere to be dragged. The owner chose the panel: the column stays at 0.1312 (330 px
+there) and the Viewer keeps its slack. Worth recording because the arithmetic will be
+redone by anyone who reads "the viewer should fit the comp" and reaches for the seam —
+and because a share is a fraction, so any such fit is exact at one window size only.

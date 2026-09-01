@@ -115,22 +115,35 @@ one preset. The parenting tree is a thing you go and look at, not a thing you wo
 and a tab nobody opens is a tab in the way of the ones they do. It is one tick away in the
 Window menu, exactly as Easing, Graph and Node are.
 
+**Nor the Debug panel** (K-739). It fronted the right column once and sat behind
+Effects & presets after K-322; a developer's readout is not what a workspace opens on. It
+keeps its own row in the Window menu.
+
+**Edit, Effects, Nodes and Colour give the Timeline the same height** (K-739) — 0.32 of
+the dock, and in Nodes 0.32 of the graph column, which is the same band of screen.
+Changing workspace must not move the lanes out from under the pointer. Audio and Retiming
+keep their taller bands, which is the point of those two.
+
 - **Edit** (default): Project panel left, fronted, with Effect Controls tabbed
   behind it; Viewer centre; **right column Effects & Presets, fronted**, with Scopes and the
-  Debug view tabbed behind (K-322 — the panel used to be a fourth tab on the *left*, buried
-  behind Project, with Debug fronting the right column instead); Timeline across the full
-  bottom at roughly one-third window height. Shares: 0.68/0.32 vertically, 0.22/0.58/0.20
+  Scopes tabbed behind (K-322 — the panel used to be a fourth tab on the *left*, buried
+  behind Project, with Debug fronting the right column instead; Debug left the arrangement
+  altogether with K-739); Timeline across the full bottom at roughly one-third window
+  height. Shares: 0.68/0.32 vertically, 0.22/0.58/0.20
   across the upper band.
 - **Effects**: Effect Controls promoted to its own left column beside the Project panel;
-  Effects & Presets expanded on the right with Scopes and the Debug view tabbed behind;
-  Timeline slightly shorter than Edit. Seeing the picture *at* one effect rather than at
+  Effects & Presets on the right with Scopes tabbed behind; Timeline at Edit's height.
+  Shares: 0.68/0.32 vertically, 0.16/0.20/0.5088/0.1312 across the upper band — the right
+  column is deliberately wider than an exactly 16:9 Viewer would leave it, that fit costing
+  more of the column than the panel can spare (K-739). Seeing the picture *at* one effect rather than at
   the end of the stack is not a panel of this preset or any other: it is the Viewer's own
   **"at effect" chip** (K-528, §2.2), which appears over the picture whenever an effect is
   selected — in the Effect controls stack or as a box on the graph — and shows the
   composition with that layer's effects stopping there.
-- **Colour**: Scopes given a wide right-hand column showing waveform and vectorscope
-  simultaneously (two panels stacked); Effect Controls left; Effects & Presets tabbed away;
-  Viewer centre-dominant.
+- **Colour**: Scopes given a wide right-hand column outright — a bare pane, showing
+  waveform and vectorscope simultaneously (two panels stacked); the left group Project,
+  Effect Controls (fronted) and Effects & Presets; Viewer centre-dominant. Shares:
+  0.68/0.32 vertically, 0.18/0.52/0.30 across the upper band.
 - **Audio** (the approved AudioWorkspace board): the **Mixer** panel fronting the left
   column over Project and Effect controls; the **Audio** panel taking the right column
   with Effects & presets tabbed behind; the Viewer reduced between them; the Timeline
@@ -152,8 +165,9 @@ Window menu, exactly as Easing, Graph and Node are.
   the small Viewer's own chip (K-528), so this preset needs no second viewport for it. It
   is also the one preset whose root splits
   **across** rather than down, because the Timeline runs under the graph column only:
-  shares 0.76/0.24 across, the graph column 0.82 Graph to 0.18 Timeline, the right column
-  0.80 Viewer to 0.20 Node. It carries no Project panel, which is the drawing's own
+  shares 0.76/0.24 across, the graph column 0.68 Graph to 0.32 Timeline, the right column
+  0.3169 Viewer to 0.6831 Node — the parameter rows being what this workspace is for.
+  These supersede the drawing's own proportions (K-739). It carries no Project panel, which is the drawing's own
   inventory — wiring a layer is work you arrive at with the layer already chosen.
 
 ### 1.7 The toolbar (K-216)

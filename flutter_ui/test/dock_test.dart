@@ -31,11 +31,12 @@ void main() {
 
     expect((upper.children[1] as DockPane).panel, Panel.viewer);
     // The right column carries Effects & presets fronted (docs/07 §1.6's
-    // Edit workspace), with Scopes and Debug tabbed behind it.
+    // Edit workspace), with Scopes tabbed behind it. Debug left every shipped
+    // arrangement with K-739.
     final right = upper.children[2] as DockTabs;
     expect(
       [for (final c in right.children) c.panel],
-      [Panel.effectsAndPresets, Panel.scopes, Panel.debug],
+      [Panel.effectsAndPresets, Panel.scopes],
     );
     expect(right.active, 0,
         reason: 'the right group opens on Effects & presets');
@@ -48,13 +49,14 @@ void main() {
   /// named one by one on purpose: a fifth wanting the same exemption must be
   /// added here rather than this loosening to "some panels are missing".
   ///
-  /// Six panels are deliberately not in the default arrangement, and all for
-  /// the same reason (docs/07 §1.6): a panel nobody asked for should not
+  /// Seven panels are deliberately not in the default arrangement, and all
+  /// for the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
   /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
   /// K-471); the **Mixer** and **Audio** panels to the Audio workspace (the
-  /// AudioWorkspace board); and **Hierarchy** belongs to no shipped
-  /// arrangement at all (K-614). All six are one tick away in the Window menu.
+  /// AudioWorkspace board); and **Hierarchy** (K-614) and **Debug** (K-739)
+  /// belong to no shipped arrangement at all. All seven are one tick away in
+  /// the Window menu.
   test(
       'no panel appears twice in the default workspace, and only the '
       'specialist panels are absent', () {
@@ -70,6 +72,7 @@ void main() {
             Panel.hierarchy,
             Panel.mixer,
             Panel.audio,
+            Panel.debug,
           ]));
   });
 
@@ -85,20 +88,46 @@ void main() {
     }
   });
 
+  /// **Nor the Debug panel** (K-739). It fronted the right column once and was
+  /// a tab behind Effects & presets until the owner measured the arrangements
+  /// off their own screen; a developer's readout is not what a workspace opens
+  /// on. The Window menu keeps its own row for it.
+  test('Debug is in none of the shipped workspaces', () {
+    expect(panelsIn(defaultLayout()), isNot(contains(Panel.debug)));
+    for (final preset in WorkspacePreset.values) {
+      expect(panelsIn(presetLayout(preset)), isNot(contains(Panel.debug)),
+          reason: '${preset.name} must not open with Debug in it');
+    }
+  });
+
   /// The Effects workspace's right-hand column, now that the Node preview is
-  /// the Viewer's own chip (K-528): Effects & presets fronted, Scopes and the
-  /// Debug panel behind it. Nothing took the folded panel's slot, because
-  /// nothing was waiting for one.
-  test('the Effects workspace sidebar is Effects, Scopes and Debug', () {
+  /// the Viewer's own chip (K-528) and Debug is in no arrangement (K-739):
+  /// Effects & presets fronted with Scopes behind it. Nothing took either
+  /// folded panel's slot, because nothing was waiting for one.
+  test('the Effects workspace sidebar is Effects and Scopes', () {
     final root = presetLayout(WorkspacePreset.effects);
     final upper = root.children[0] as DockSplit;
     final sidebar = upper.children[3] as DockTabs;
     expect(
       [for (final c in sidebar.children) c.panel],
-      [Panel.effectsAndPresets, Panel.scopes, Panel.debug],
+      [Panel.effectsAndPresets, Panel.scopes],
     );
     expect(sidebar.active, 0,
         reason: 'the sidebar still opens on Effects & presets');
+  });
+
+  /// **One Timeline height** (K-739). Edit, Effects and Colour all split down
+  /// the middle of the window, and the owner asked for the same band in each
+  /// so that changing workspace leaves the lanes where the pointer left them.
+  /// Nodes agrees by its graph column (tested with that preset); Audio and
+  /// Retiming keep their own taller bands on purpose.
+  test('Edit, Effects and Colour give the Timeline the same height', () {
+    final edit = presetLayout(WorkspacePreset.edit).shares;
+    for (final preset in [WorkspacePreset.effects, WorkspacePreset.colour]) {
+      expect(presetLayout(preset).shares, edit,
+          reason: '${preset.name} must open on the same band as Edit');
+    }
+    expect(defaultLayout().shares, edit);
   });
 
   /// **A panel that has been folded away must not cost anyone their
@@ -204,8 +233,10 @@ void main() {
     test('asking for what is already so changes nothing', () {
       final root = defaultLayout();
       final before = root.toJson();
+      // One bare pane and one tabbed panel, both already there. (Debug used
+      // to stand for the tabbed case; it is in no arrangement now — K-739.)
       setPanelVisible(root, Panel.viewer, true);
-      setPanelVisible(root, Panel.debug, true);
+      setPanelVisible(root, Panel.scopes, true);
       expect(root.toJson(), before);
     });
 
@@ -268,11 +299,11 @@ void main() {
     });
   });
 
-  /// The Nodes preset (K-445, K-471) to the approved Nodes-workspace drawing:
-  /// the Graph panel large with a short Timeline under it, a small Viewer
-  /// upper right and the Node panel beneath that. The shares are the drawing's
-  /// own proportions, pinned here because "roughly like the picture" is not a
-  /// test.
+  /// The Nodes preset (K-445, K-471): the Graph panel large with the Timeline
+  /// under it, a small Viewer upper right and the Node panel beneath that.
+  /// The shares are the owner's own, measured off their screen and
+  /// superseding the drawing's (K-739), pinned here because "roughly like the
+  /// picture" is not a test.
   group('the Nodes preset', () {
     test('splits across, not down: the Timeline is under the graph only', () {
       final root = presetLayout(WorkspacePreset.nodes);
@@ -285,27 +316,30 @@ void main() {
       expect(graphColumn.axis, DockAxis.vertical);
       expect([for (final c in graphColumn.children) (c as DockPane).panel],
           [Panel.graph, Panel.timeline]);
-      expect(graphColumn.shares, [0.82, 0.18],
-          reason: 'the drawing shows a short Timeline strip, not a tall one');
+      expect(graphColumn.shares, [0.68, 0.32],
+          reason: "the Timeline stands at Edit's height here too (K-739)");
 
       final rightColumn = root.children[1] as DockSplit;
       expect(rightColumn.axis, DockAxis.vertical);
       expect([for (final c in rightColumn.children) (c as DockPane).panel],
           [Panel.viewer, Panel.node]);
-      expect(rightColumn.shares, [0.80, 0.20]);
+      expect(rightColumn.shares, [0.3169, 0.6831],
+          reason: 'the Node panel is what this workspace is for, so it takes '
+              'the greater part of the column');
     });
 
-    test('the Timeline is the ordinary one, simply given less room', () {
+    test('the Timeline is the ordinary one, at the one height', () {
       // A pane, not a tab group and not some second widget: the panel is
-      // shared with every other arrangement, and only its share differs.
+      // shared with every other arrangement, and now so is its height.
       final nodes = presetLayout(WorkspacePreset.nodes);
-      final short = (nodes.children[0] as DockSplit).children[1];
-      expect(short, isA<DockPane>());
-      expect((short as DockPane).panel, Panel.timeline);
+      final strip = (nodes.children[0] as DockSplit).children[1];
+      expect(strip, isA<DockPane>());
+      expect((strip as DockPane).panel, Panel.timeline);
       expect(
         (nodes.children[0] as DockSplit).shares[1],
-        lessThan(presetLayout(WorkspacePreset.edit).shares[1]),
-        reason: "shorter than Edit's, which is what 'short' means here",
+        presetLayout(WorkspacePreset.edit).shares[1],
+        reason: 'K-739: Edit, Effects, Nodes and Colour give the Timeline the '
+            'same height, so changing workspace does not move the lanes',
       );
     });
 
