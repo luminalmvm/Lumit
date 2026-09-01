@@ -11247,7 +11247,10 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
     both(
         &effects::contrast::ContrastDef,
         &[(effects::contrast::Contrast::CONTRAST, Value::Float(160.0))],
-        &|p| cpu::contrast(p, 1.6, 1.0),
+        // 1.36, not 1.6: K-737 made the factor quadratic in the distance from
+        // neutral. The kernel this transcribes is untouched - only what the
+        // effect resolves to before it moved.
+        &|p| cpu::contrast(p, 1.36, 1.0),
     );
     both(
         &effects::gamma::GammaDef,

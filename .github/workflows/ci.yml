@@ -233,7 +233,7 @@ jobs:
   # are asserted only where LUMIT_REFERENCE_HW=1 is set, which no runner sets.
   #
   # Setup is the `linux` job's, minus the pieces a headless engine benchmark does
-  # not touch (no GTK, no Flutter): FFmpeg 7.1 for lumit-media *and* for the `ffmpeg`
+  # not touch (no GTK, no Flutter): FFmpeg 8.1 for lumit-media *and* for the `ffmpeg`
   # CLI the harness generates its clips with, libclang 18 for bindgen, and
   # mesa-vulkan-drivers for the Vulkan adapter.
   performance:
@@ -247,7 +247,7 @@ jobs:
     # fraction, and the harness refuses a mismatch outright.
     timeout-minutes: 60
     env:
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
       BENCH_SPAN_FRACTION: "10"
       # A missing adapter is a broken runner here, exactly as in the `linux` job:
       # a benchmark that measured nothing must not report green.
@@ -265,9 +265,9 @@ jobs:
             libwayland-dev mesa-vulkan-drivers libclang-18-dev
       # Identical to the `linux` job's — see there for why the .pc prefixes are
       # rewritten and why this exports PKG_CONFIG_PATH rather than the override.
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
@@ -674,7 +674,7 @@ jobs:
     name: OFX conformance bench (openfx-misc, ntsc-rs)
     runs-on: ubuntu-latest
     env:
-      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
       LUMIT_OFX_BENCH: ${{ github.workspace }}/target/ofx-bench
     steps:
       - uses: actions/checkout@v5
@@ -683,9 +683,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends             pkg-config libasound2-dev libgl-dev libegl-dev             libxkbcommon-dev libxkbcommon-x11-dev             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev             libwayland-dev libclang-18-dev cmake
-      - name: Install FFmpeg 7.1 (BtbN shared build)
+      - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
-          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
           curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
           mkdir -p "$RUNNER_TEMP/ffmpeg"
           tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1

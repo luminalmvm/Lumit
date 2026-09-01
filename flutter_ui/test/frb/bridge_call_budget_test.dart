@@ -256,12 +256,24 @@ void main() {
       counter.counting = false;
       // ignore: avoid_print
       print('MARKER ADD COST ${counter.total} calls\n${counter.ranking()}');
+      // One write, and no more than one read per change wave - which is the
+      // whole of what the markers cache promises (comp_time.dart: the list is
+      // remembered until the document changes). Counted against the revision
+      // reads rather than against a number, because how many waves a settle
+      // takes is a property of the machine: two here, three on a CI runner,
+      // and neither is a regression.
       expect(
-        (counter.calls['composition_reference_get_markers'] ?? 0) +
-            (counter.calls['composition_reference_set_markers'] ?? 0),
-        lessThan(4),
-        reason: 'adding a marker read or wrote the list more than once:\n'
+        counter.calls['composition_reference_set_markers'] ?? 0,
+        1,
+        reason: 'adding a marker writes the list exactly once:\n'
             '${counter.ranking()}',
+      );
+      expect(
+        counter.calls['composition_reference_get_markers'] ?? 0,
+        lessThanOrEqualTo(
+            counter.calls['composition_reference_document_revision'] ?? 0),
+        reason: 'the marker list is re-read more than once per change wave, '
+            'so the cache is not holding:\n${counter.ranking()}',
       );
     });
 

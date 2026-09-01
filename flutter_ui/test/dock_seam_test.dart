@@ -80,8 +80,13 @@ Color _at(ByteData bytes, int rowStride, int x, int y) {
 void main() {
   final theme = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
 
-  Future<void> mount(WidgetTester tester, DockSplit root) async {
-    tester.view.physicalSize = const Size(800, 600);
+  // Wide enough that every pane in these arrangements clears its own minimum:
+  // the Graph's floor rose to 480 with the snap magnet (K-689), and two panes
+  // that do not fit are drawn at their minimums and slid sideways (§12A.6's
+  // ladder, step 5) - which overlaps them, and leaves no seam to photograph.
+  Future<void> mount(WidgetTester tester, DockSplit root,
+      {Size size = const Size(1400, 600)}) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(_harness(root, theme));
