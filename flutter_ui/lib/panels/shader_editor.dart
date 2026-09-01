@@ -107,6 +107,12 @@ Future<bool> showShaderEditor({
   required BuildContext context,
   required LayerReference layer,
   required UuidValue effect,
+  /// Draw the frame as this text would draw it, without committing
+  /// anything - the live preview (Airyz, 2026-09-01: "having to click apply
+  /// is kind of annoying while editing the shader"). Null where the caller
+  /// has no composition to draw into, which is every test that only asks
+  /// what the window does with the text.
+  void Function(String source)? preview,
 }) async {
   String? held;
   var hasGraph = false;
@@ -160,6 +166,7 @@ Future<bool> showShaderEditor({
       source: source,
       status: (text) =>
           shaderStatusFor(layer: layer, effect: effect, source: text),
+      preview: preview,
       onApply: close,
       onCancel: () => close(null),
     ),
@@ -218,12 +225,14 @@ class _DetachOffer extends StatelessWidget {
 class _ShaderEditor extends StatefulWidget {
   final String source;
   final BridgeShaderStatus? Function(String) status;
+  final void Function(String source)? preview;
   final ValueChanged<String> onApply;
   final VoidCallback onCancel;
 
   const _ShaderEditor({
     required this.source,
     required this.status,
+    required this.preview,
     required this.onApply,
     required this.onCancel,
   });
@@ -243,6 +252,10 @@ class _ShaderEditorState extends State<_ShaderEditor> {
   /// The pause in the typing that asks for the next one. A keystroke is not a
   /// question: ten of them in a second ask once, when the tenth has settled.
   Timer? _settle;
+
+  /// The text the last question was asked about, so a selection change - which
+  /// notifies exactly as a keystroke does - does not ask it again.
+  late String _asked = widget.source;
 
   @override
   void initState() {
@@ -266,13 +279,29 @@ class _ShaderEditorState extends State<_ShaderEditor> {
   /// §3.2 specifies is a felt stutter *while typing* in this window; nothing
   /// else in the app waits on it.
   void _typed() {
+    // A controller notifies on **selection** as well as on text, and a mouse
+    // drag across a page of code is a great many of those. Only a change to
+    // the words is a new question.
+    if (_text.text == _asked) return;
+    _asked = _text.text;
     // The line numbers follow the text as it is typed; the compiler's opinion
     // waits for a pause.
     setState(() {});
     _settle?.cancel();
     _settle = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      setState(() => _status = widget.status(_text.text));
+      final status = widget.status(_text.text);
+      setState(() => _status = status);
+      // **Live preview, but only of text that compiles** (Airyz). The same
+      // settle that asks the compiler draws the answer, so ten keystrokes
+      // are one compile and one frame. Half-typed text is left showing the
+      // last picture rather than flashing to an unstyled one: a broken
+      // shader renders as a passthrough, and a layer blinking on every
+      // other keystroke is the punishment UI docs/15 forbids. The message
+      // line is what says the compiler is unhappy, which is its job.
+      if (status != null && status.error == null) {
+        widget.preview?.call(_text.text);
+      }
     });
   }
 

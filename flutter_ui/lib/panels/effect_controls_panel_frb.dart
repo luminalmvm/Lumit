@@ -187,8 +187,30 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// either way of getting text onto a shader is one `SetLayerEffects` and one
   /// undo step.
   Future<void> _editShaderOn(LayerReference layer, UuidValue effect) async {
+    // The live preview rides the drag path exactly as a parameter does
+    // (K-650, and `render_frame_with_preview`'s own words: "the live drag
+    // path, which never touches the document"). The editor calls this when
+    // the text it has settled on compiles; nothing here commits.
+    final ui = context.read<LumitUiState>();
+    final comp = ui.selectedComp;
+    void preview(String source) {
+      if (comp == null) return;
+      final staged = layer.getEffects();
+      for (final instance in staged) {
+        if (instance.id() != effect) continue;
+        instance.setShaderSource(source: source, origin: null);
+        comp.renderFrameWithPreview(
+          frame: BigInt.from(ui.playheadFrame.value),
+          scale: ui.viewerScale,
+          layer: layer,
+          effects: staged,
+        );
+        return;
+      }
+    }
+
     final applied = await showShaderEditor(
-        context: context, layer: layer, effect: effect);
+        context: context, layer: layer, effect: effect, preview: preview);
     if (applied && mounted) context.read<LumitUiState>().model.refresh();
   }
 

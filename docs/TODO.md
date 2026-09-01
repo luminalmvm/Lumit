@@ -53,6 +53,20 @@ surfaced and deliberately left open, so it is not re-derived:
     carry a value each frame, the shape Split already has. All four labels are in
     fx-labels.txt already. The text belongs in `extra["expression"]["source"]`, as Custom
     shader's does.
+- **Syntax highlighting in the shader editor** (Airyz, 2026-09-01: "u can reuse the
+    syntax highlighting logic from the expression editor"). Held back from 0.4.0, and not
+    for the reason it looks like. `ExpressionTextEditingController` is forty lines over the
+    `syntax_highlight` package and takes a language in one string, so pointing it at Rust
+    (the nearest grammar shipped; there is no WGSL one) is three edits. What stops it is
+    what the package paints unconditionally: six hardcoded bracket colours and a
+    `Color(0xFFff0000)` for an unmatched one, with no API to turn them off - hex in the
+    frontend is a defect by K-004, and the token colours are VS Code's two default themes,
+    so six of Lumit's eight schemes would get somebody else's palette. The honest road is
+    `Highlighter.addLanguage`, which takes a TextMate grammar as a plain string (no asset,
+    no `pub get` - which matters, since pub-cache writes from this machine land in the MSIX
+    overlay), plus a theme-driven palette. Also required either way: the controller's
+    `buildTextSpan` discards the style it is handed, which would drop the shader well's
+    `height: 1.4` and drift the line numbers out of step with the code.
 - **A shader could be a project item** (Airyz, 2026-09-01): "i'd like if i could load a
     file in the project view and reference that instead, as it would give the same options
     for 'find missing footage' and stuff to swap the file to something else. It would also

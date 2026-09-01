@@ -8,11 +8,14 @@
 // user's own text, and the badge over the effect afterwards), and undo (one
 // step, and the text that was there before comes back).
 
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/shader_editor.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
@@ -152,6 +155,59 @@ void main() {
       expect(find.text('This shader did not compile'), findsOneWidget);
       expect(find.textContaining('wgsl:3:'), findsOneWidget,
           reason: 'the badge carries the compiler\'s words too');
+    });
+
+    /// **Ten keystrokes are one compile and one preview** (custom-shader.md §8
+    /// item 21, specified and never written until the feature it was meant to
+    /// land with).
+    ///
+    /// The preview is Airyz's: "having to click apply is kind of annoying while
+    /// editing the shader". It rides the same settle the compiler's opinion
+    /// does, so typing costs one of each rather than one per letter - and it
+    /// only draws text that compiles, because a broken shader renders as a
+    /// passthrough and a layer blinking mid-word is worse than a still one.
+    testWidgets('typing asks once, and only draws what compiles',
+        (tester) async {
+      final p = withShader();
+      await mount(tester, p);
+
+      var compiles = 0;
+      final drawn = <String>[];
+      await tester.tap(find.byKey(ValueKey<String>(
+          'fx-action-${p.layer.getEffects().single.id()}-edit')));
+      await tester.pumpAndSettle();
+      // The window is already open from the panel's own road; drive the one
+      // under test directly so the two callbacks can be counted.
+      await tester.tap(find.byKey(const ValueKey<String>('shader-editor-cancel')));
+      await tester.pumpAndSettle();
+      unawaited(showShaderEditor(
+        context: tester.element(find.byType(EffectControlsPanelFrb)),
+        layer: p.layer,
+        effect: p.layer.getEffects().single.id(),
+        preview: drawn.add,
+      ));
+      await tester.pumpAndSettle();
+
+      final well = find.byKey(const ValueKey<String>('shader-editor-code'));
+      for (var i = 0; i < 10; i++) {
+        await tester.enterText(well, '$_good\n// $i');
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      compiles = drawn.length;
+      expect(compiles, 0, reason: 'nothing is asked while the typing runs');
+
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(drawn.length, 1, reason: 'the settle asks once, for the last text');
+      expect(drawn.single.endsWith('// 9'), isTrue);
+
+      // Broken text compiles to nothing, so nothing is drawn with it.
+      await tester.enterText(well, 'fn shade( {');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(drawn.length, 1,
+          reason: 'a shader that does not compile is not a picture');
+
+      await tester.tap(find.byKey(const ValueKey<String>('shader-editor-cancel')));
+      await tester.pumpAndSettle();
     });
 
     /// **A long line runs off to the right rather than wrapping** (Airyz).
