@@ -11848,12 +11848,37 @@ fn a_custom_shaders_rows_are_the_ones_its_own_source_declares() {
         .add_effect("custom_shader".into())
         .expect("the Custom shader is in the catalogue");
 
-    // Before there is a source there is nothing derived: a fresh instance is a
-    // passthrough with the four declared rows and no badge (K-111).
+    // A fresh instance carries the starter example (owner, 2026-09-01), so its
+    // derived rows are the example's own - which is the same claim this test
+    // makes about a source the user writes, made one step earlier. It is still
+    // a passthrough and still unbadged: the example changes no pixel.
     let fresh = only_effect(&layer);
-    assert!(fresh.get_info().derived_params.is_empty());
+    assert_eq!(
+        fresh
+            .get_info()
+            .derived_params
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect::<Vec<_>>(),
+        ["gain", "tint"],
+        "the example's own rows, in declaration order"
+    );
     assert_eq!(fresh.get_info().badge_reason, None);
-    let declared: Vec<String> = fresh.list_parameters().into_iter().map(|p| p.id).collect();
+    // The effect's *own* rows: its list less whatever its source derived. The
+    // starter example means a fresh instance already has two of those, and what
+    // this list is for is the half that comes from the schema.
+    let from_source: Vec<String> = fresh
+        .get_info()
+        .derived_params
+        .iter()
+        .map(|p| p.id.clone())
+        .collect();
+    let declared: Vec<String> = fresh
+        .list_parameters()
+        .into_iter()
+        .map(|p| p.id)
+        .filter(|id| !from_source.contains(id))
+        .collect();
     assert!(
         declared.iter().any(|id| id == "mix") && declared.iter().any(|id| id == "edit"),
         "the declared rows are the schema's: {declared:?}"
@@ -12001,6 +12026,10 @@ fn a_shaders_status_answers_both_states() {
 fn setting_a_shader_source_is_one_undo_step() {
     let (project, layer) = project_with_layer();
     layer.add_effect("custom_shader".into()).expect("added");
+    // What a fresh instance opens with - the starter example since
+    // 2026-09-01 - is what one undo has to put back.
+    let before = lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0])
+        .map(str::to_owned);
 
     set_shader(&layer, TWO_ROWS, None);
     assert_eq!(
@@ -12010,8 +12039,9 @@ fn setting_a_shader_source_is_one_undo_step() {
 
     undo_once(&project);
     assert_eq!(
-        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0]),
-        None,
+        lumit_core::fx::effects::custom_shader::source_of(&stack_of(&layer)[0])
+            .map(str::to_owned),
+        before,
         "one undo takes the whole edit back"
     );
     assert_eq!(
