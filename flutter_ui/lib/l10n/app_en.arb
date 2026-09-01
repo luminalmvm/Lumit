@@ -224,6 +224,19 @@
   "@deletePuppetPin": {
     "description": "Context-menu item on a puppet pin's Timeline row: remove that pin."
   },
+  "faultPanelTitle": "This panel could not be drawn",
+  "@faultPanelTitle": {
+    "description": "Heading of the box that replaces a panel whose contents failed to draw. The line under it is the fault's own words, which are not translated."
+  },
+  "faultPanelWhere": "Recorded in {file}",
+  "@faultPanelWhere": {
+    "description": "Under the fault heading: where the full report was written, so it can be sent on. {file} is a path to a file on this machine.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
   "foldPuppet": "Puppet",
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."

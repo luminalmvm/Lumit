@@ -23529,3 +23529,36 @@ straight into it. Nothing below the root survived the swap, so broad is the hone
 
 A cache that wants telling should be told by the stream. Reaching into one from `_adopt` is
 how this happened once already, and the next cache to be added would not have known to.
+
+## K-741 — A panel that cannot be drawn says so, on screen and on disk
+
+**Date:** 2026-09-01 · **Status:** DECIDED · **Scope:** flutter_ui `state/faults.dart`, `main.dart`
+
+Flutter answers a widget whose build throws by replacing that widget and carrying on, which
+is the right trade — one broken panel beats a dead editor. What it replaces it *with* is the
+problem. In a debug build it is the red screen with the exception across it; in a release
+build the message is stripped and what is left is a flat grey rectangle. Lumit set no handler
+of its own, so a faulting panel and an empty one looked identical, and the exception went to
+a standard error that a windowed Windows build does not have. K-740's bug was invisible for
+exactly this reason, and it was diagnosed from a screenshot's *colour* — `0xF0C0C0C0` is
+Flutter's `RenderErrorBox`, not any Lumit token — which is not a way to run a project.
+
+So the shell installs two things in `main`, before anything that could fault:
+
+**A fault box** that names the failure. It reads nothing from the widget tree — not the
+theme, not `Directionality`, not a `DefaultTextStyle` — because a missing inherited widget is
+among the ways a build fails, and an error widget that errors costs the whole frame. Its
+colours are therefore a fixed set in `theme.dart` (`FaultColours`) rather than theme tokens,
+which is the same exception `ScopeColours` and `PortColours` already hold. It is dark in a
+theme that may be light: it is a fault report, not chrome.
+
+**The engine's diagnostics file, not a second one.** `crates/lumit-bridge/src/faults.rs`
+already owns `lumit-diagnostics.log` in the temporary directory — capped, appended a whole
+record at a time, printed at start-up so a bug report can say where to look. The Flutter side
+writes to the same path rather than opening a log of its own: one file to ask a user for, and
+a Dart fault and the engine fault that caused it on adjacent lines. It is reached by path and
+not through the bridge, deliberately — a diagnostic must work when the engine is what broke.
+
+Neither may be the reason anything fails. Every write is guarded and silent on failure, for
+the reason `faults.rs` gives in its own words: a diagnostic that can break the thing it is
+diagnosing is worse than none.

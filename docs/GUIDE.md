@@ -5898,6 +5898,28 @@ lays itself out at. Ask for the right size up front and the window simply
 appears, correct. Ask for the wrong one and fix it afterwards, and you watch the
 whole interface re-flow the moment it comes up.
 
+That wait is also the one thing between Lumit and being invisible. The window
+does not exist to look at until Flutter has painted, so a start that never gets
+that far — a graphics driver that cannot make a surface, something thrown on the
+way up before the interface is built — leaves a process in Task Manager and
+nothing on screen: no window to close, no message, nothing to report. So the
+wait has an end. Ten seconds after the window is made, the runner shows it
+whether a frame has arrived or not, because a window that has not painted can at
+least be looked at, moved and closed. Ten rather than one or two: a genuinely
+slow first start on a cold machine must not be interrupted by its own safety
+net.
+
+The Dart side does the other half. Everything that has to happen before the
+shell can go on screen — loading the engine library, reading the settings,
+making the empty project — is wrapped, and a failure puts a plain screen in that
+window instead of leaving it blank: what went wrong, and the name of the
+diagnostics file the same line was written to — the shell's fault recorder
+(`state/faults.dart`) does the writing, so a start that failed and a panel that
+faulted land in the same file. `flutter_ui/lib/shell/startup_failure.dart` is
+the whole of the screen. It is the
+difference between a bug report that says it does not start and one that says
+which library would not load.
+
 What is remembered is one Windows structure called a *window placement*: a
 maximised flag plus the rectangle the window goes back to when you un-maximise
 it. That is why the two questions are answered by one thing rather than two
@@ -14791,3 +14813,54 @@ saying what is happening, and the **base frame** — the frame the propagation w
 line refreshes twice a second, and the moment it stops, so does the refreshing: a button press
 changes nothing in the project, so there is no edit for the panel to notice, and asking twice a
 second forever would be asking a question whose answer had stopped changing.
+
+## 57. When a panel cannot draw itself, in plain terms
+
+Section 38 is about what happens when the *engine* gives up: the line it writes, and the file
+that line goes to. This is the same story on the other side of the boundary, where the panels
+are.
+
+A Flutter panel draws itself by running a piece of code. If that code hits something it
+cannot handle — a value that is not there, a list index past the end, a handle to a project
+that has since been closed — it gives up. Flutter's answer is a good one: it does not take
+the window down, it replaces that one panel and carries on drawing everything around it. You
+lose a panel, not an editor.
+
+The trouble was what it replaced it *with*. In a development build that is a red screen with
+the fault written across it, which is exactly what you want. In the build people actually
+install, the message is stripped out and what is left is **a plain grey rectangle**. No
+words, no colour, nothing to search the internet for. And the fault itself was printed to a
+console that a double-clicked Windows application does not have, so it went nowhere at all.
+
+Put those two together and a panel that had failed looked precisely like a panel that had
+drawn itself empty. That is not a small difference — it is the difference between "there is
+nothing in your project yet" and "something is broken". A bug reported as "the Viewer is
+grey" could only be told apart from an ordinary empty Viewer by noticing that the particular
+grey was not one of Lumit's colours at all, but Flutter's. That is not a way to run a
+project, so both halves are now fixed.
+
+**The box says what happened.** Where the grey rectangle used to be there is now a small
+report: a line saying the panel could not be drawn, the fault's own first sentence, and the
+path of the file the whole thing was written to. It can be photographed and sent, and it
+names itself.
+
+There is one unusual rule about that box, and it is worth knowing because it looks like a
+mistake otherwise: **it is not allowed to ask the tree for anything** — not the current
+theme, not the text direction, not a default text style. Everything it draws with is written
+into it. The reason is that this widget only ever appears when a build has just failed, and
+one of the ordinary ways a build fails is asking for something that is not there. A fault box
+that asked for the theme could be the *second* thing to fail, and Flutter's answer to an error
+widget that errors is to abandon the frame entirely. So it asks for nothing, and it cannot.
+Its colours live in the theme file with the scope traces and the graph wires, which are fixed
+sets for their own reasons.
+
+**And it goes in the file.** Not a new file: the same `lumit-diagnostics.log` from section 38
+that the engine already writes to. One file means one thing to ask for in a bug report, and
+it means a fault in a panel and the engine fault that caused it end up on adjacent lines
+rather than in two places that have to be lined up by hand. The Flutter side finds it by
+path rather than by asking the engine, on purpose — a diagnostic has to keep working when
+the engine is the thing that broke.
+
+Both are written the way section 38's file is written: guarded everywhere, silent when they
+fail, capped so a fault in a loop cannot fill a disk. A diagnostic that can break the thing
+it is diagnosing is worse than no diagnostic at all.

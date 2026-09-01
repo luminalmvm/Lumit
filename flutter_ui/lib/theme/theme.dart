@@ -300,6 +300,34 @@ class ScopeColours {
   );
 }
 
+/// What the fault box is painted in when a panel's build throws (K-741).
+///
+/// One fixed set, and it **cannot** come off the theme struct even though every
+/// other colour does. The widget wearing these replaces one that has just
+/// failed to build, and reading an inherited widget is among the ways a build
+/// fails — so a fault box that asked for the theme could be the second thing to
+/// throw, and Flutter's answer to an error widget that errors is to give up on
+/// the frame. It asks for nothing, so it cannot.
+///
+/// Dark, in a theme that may be light: the box is a fault report rather than
+/// chrome, it is legible either way, and dark-first is the house adaptation
+/// (K-004). [detail] carries the exception's own words, which are the engineer's
+/// half of the box and are deliberately quieter than the line above them.
+class FaultColours {
+  final Color background, heading, detail;
+  const FaultColours({
+    required this.background,
+    required this.heading,
+    required this.detail,
+  });
+
+  static const standard = FaultColours(
+    background: Color(0xff1b1416),
+    heading: Color(0xffd1729c),
+    detail: Color(0xff9a9094),
+  );
+}
+
 /// What a wire and its sockets are painted in on the Graph panel's canvas
 /// (K-472, 15-DESIGN §4.1/§12A.7). Seven port types wear **five** colours,
 /// grouped as the approved NodeGraph drawing's legend groups them:
