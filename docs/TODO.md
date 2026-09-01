@@ -38,7 +38,7 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
-- **The Expression driver, deferred from 0.4.0** (owner, 2026-09-01). A driver box whose
+- **The Expression driver, deferred from 0.3.0** (owner, 2026-09-01). A driver box whose
     output is what an expression returns. The groundwork landed with the decision to defer
     it, because both halves stand on their own: `expression::evaluate_value` hands back a
     number, a point or a colour - or Rhai's own sentence about why not, where `evaluate`
@@ -54,7 +54,7 @@ surfaced and deliberately left open, so it is not re-derived:
     fx-labels.txt already. The text belongs in `extra["expression"]["source"]`, as Custom
     shader's does.
 - **Syntax highlighting in the shader editor** (Airyz, 2026-09-01: "u can reuse the
-    syntax highlighting logic from the expression editor"). Held back from 0.4.0, and not
+    syntax highlighting logic from the expression editor"). Held back from 0.3.0, and not
     for the reason it looks like. `ExpressionTextEditingController` is forty lines over the
     `syntax_highlight` package and takes a language in one string, so pointing it at Rust
     (the nearest grammar shipped; there is no WGSL one) is three edits. What stops it is
