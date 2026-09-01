@@ -23505,3 +23505,27 @@ with nowhere to be dragged. The owner chose the panel: the column stays at 0.131
 there) and the Viewer keeps its slack. Worth recording because the arithmetic will be
 redone by anyone who reads "the viewer should fit the comp" and reaches for the seam —
 and because a share is a fraction, so any such fit is exact at one window size only.
+
+## K-740 — Adopting another project is published, not just performed
+
+**Date:** 2026-09-01 · **Status:** DECIDED · **Scope:** flutter_ui `state/app_state.dart`
+
+`LumitState._adopt` closes the project being replaced and swaps the new one in. It told one
+cache: `_compsCache`, by hand, with a comment explaining that a different tree is not a
+change to the old one. Every other per-document cache in the shell learns of a change only
+from the scoped-change stream, and the swap put nothing on it — so the Project panel's item,
+name and probe caches, the comp read model and the comp-time cache all carried on answering
+from the document that had just been closed. Reading a closed project's handle throws, a
+build that throws is replaced by an error widget, and in a release build that error widget
+is a blank grey rectangle. "Open a project while one is open and the panel goes grey" was
+this, and so was a share of the 0.3.0 reports.
+
+The ruling is the general one, not the third hand-invalidation: **a swap is an `items`
+change and is published like any other.** It goes last in `_adopt`, after the render worker
+is running, because a subscriber rebuilds on it and should rebuild against a project whose
+worker can answer. It carries no `item` and no `layer`: those would be references into the
+document being replaced, and the two subscribers that compare against one would call
+straight into it. Nothing below the root survived the swap, so broad is the honest scope.
+
+A cache that wants telling should be told by the stream. Reaching into one from `_adopt` is
+how this happened once already, and the next cache to be added would not have known to.

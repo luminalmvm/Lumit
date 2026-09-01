@@ -290,7 +290,18 @@ class LumitState extends ChangeNotifier {
     }
 
     refreshWindowTitle();
-    notifyListeners();
+    // **The swap is published, not just performed** (K-740). `_compsCache`
+    // above is one of many per-document caches, and it was the only one told:
+    // the Project panel's item and name caches, the comp read model and the
+    // comp-time cache all drop themselves on an `items` change and nothing
+    // else, so a swap that says nothing leaves every one of them answering
+    // from the project this method has just closed. Reading a closed project's
+    // handle throws, and a build that throws is a blank panel.
+    //
+    // Last, after the worker is up: a subscriber rebuilds on this, and it
+    // should rebuild against a project whose worker is answering. `handleChange`
+    // notifies as well, which is what this replaces.
+    handleChange(ScopedChange(project: opened, items: true));
     unawaited(_backfillThumbnail());
   }
 
