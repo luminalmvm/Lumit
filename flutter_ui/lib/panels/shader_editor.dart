@@ -37,6 +37,11 @@ import '../widgets/controls.dart';
 const double shaderEditorWidth = 640;
 const double shaderEditorWellHeight = 320;
 
+/// The window's own height when it first opens: the well above, plus the
+/// title bar, the message line and the footer. It is a starting size rather
+/// than a measure - the grip changes it and the workspace remembers it.
+const double shaderEditorHeight = 460;
+
 /// Put [source] on one effect of [layer]'s stack and commit the stack.
 ///
 /// The one write both ways of getting text onto a Custom shader go through —
@@ -144,6 +149,13 @@ Future<bool> showShaderEditor({
   final applied = await showLumitModal<String>(
     context: context,
     id: 'shader-editor',
+    // **Resizable** (Airyz, 2026-09-01: "writing the shader in this tiny view
+    // is pretty annoying"). The window carries the size, the grip changes it,
+    // and the placement is remembered per id - all of which showLumitModal
+    // already does; this window simply never asked. The floor is a well worth
+    // typing in, not the modal's own 320x240.
+    initialSize: const Size(shaderEditorWidth, shaderEditorHeight),
+    minSize: const Size(360, 280),
     builder: (close) => _ShaderEditor(
       source: source,
       status: (text) =>
@@ -284,7 +296,8 @@ class _ShaderEditorState extends State<_ShaderEditor> {
         return KeyEventResult.handled;
       },
       child: DialogFrame(
-        width: shaderEditorWidth,
+        // No width of its own: the window has the size, so the grip can
+        // change it (K-242).
         children: [
           dialogTitleBar(
             t,
@@ -292,19 +305,19 @@ class _ShaderEditorState extends State<_ShaderEditor> {
             onClose: widget.onCancel,
             keyPrefix: 'shader-editor',
           ),
-          Padding(
-            padding: const EdgeInsets.all(dialogPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: shaderEditorWellHeight,
-                  child: _CodeWell(text: _text, scroll: _scroll),
-                ),
-                const SizedBox(height: 8),
-                _message(t),
-              ],
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(dialogPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // The well takes the height the window has left, so dragging
+                  // the grip down is more code on screen rather than more air.
+                  Expanded(child: _CodeWell(text: _text, scroll: _scroll)),
+                  const SizedBox(height: 8),
+                  _message(t),
+                ],
+              ),
             ),
           ),
           dialogFooter(

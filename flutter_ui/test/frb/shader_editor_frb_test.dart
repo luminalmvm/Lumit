@@ -154,6 +154,30 @@ void main() {
           reason: 'the badge carries the compiler\'s words too');
     });
 
+    /// **The window resizes, and the well is what grows** (Airyz: "writing the
+    /// shader in this tiny view is pretty annoying"). A grip that moved the
+    /// frame's edge while the code well stayed its old height would be the
+    /// failure to watch for, so this measures the well.
+    testWidgets('the corner grip gives the code well the room', (tester) async {
+      final p = withShader();
+      await mount(tester, p);
+      await openEditor(tester, p);
+
+      final well = find.byKey(const ValueKey<String>('shader-editor-code'));
+      final before = tester.getSize(well);
+
+      final grip = find.byKey(const ValueKey('window-resize-grip'));
+      expect(grip, findsOneWidget, reason: 'a resizable window has one');
+      await tester.drag(grip, const Offset(120, 80));
+      await tester.pumpAndSettle();
+
+      final after = tester.getSize(well);
+      expect(after.height, greaterThan(before.height + 60),
+          reason: 'the well took the height the window gained');
+      expect(after.width, greaterThan(before.width + 100),
+          reason: 'and the width');
+    });
+
     testWidgets('Ctrl+Enter applies, and Cancel writes nothing',
         (tester) async {
       final p = withShader();

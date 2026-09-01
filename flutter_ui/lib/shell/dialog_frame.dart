@@ -70,10 +70,16 @@ const double dialogMonoSize = 10;
 /// pixel rather than insetting everything by one — the drawing's 640 is the
 /// room inside the frame, not the room inside the frame less its border.
 class DialogFrame extends StatelessWidget {
-  final double width;
+  /// The frame's own width, or null to take the width it is given.
+  ///
+  /// Every dialog but one states a width, because a dialog is drawn to a
+  /// measure. A **resizable** window is the exception: the window around it
+  /// has the size, and a frame that fixed its own would win against the
+  /// corner grip (K-242, the shape settings_window_frb.dart already uses).
+  final double? width;
   final List<Widget> children;
 
-  const DialogFrame({super.key, required this.width, required this.children});
+  const DialogFrame({super.key, this.width, required this.children});
 
   @override
   Widget build(BuildContext context) {
