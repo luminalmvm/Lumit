@@ -2618,6 +2618,10 @@ fn precompose_arrives_soloed_only_when_a_solo_stays_behind() {
 /// The comp's audio jobs with the mixer *strip* blanked: the strip is the row
 /// the sound is filed under, which is exactly what detaching changes, and
 /// everything else on the job is what decides the samples.
+///
+/// Gated as its callers are: every test that reads jobs is a media test, and
+/// a build with the feature off otherwise fails `-D dead_code` on this alone.
+#[cfg(feature = "media")]
 fn audible_jobs(
     project: &ProjectReference,
     comp: &CompositionReference,
