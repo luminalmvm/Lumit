@@ -38,6 +38,29 @@ surfaced and deliberately left open, so it is not re-derived:
 - Crowdin at the next push owes: the pre-programme ~360 keys, 53 safe-lane keys, every
     FP key (listed per commit), 63 changed tooltip values, tipBrushPressure, and the
     unused settingsHelpChromeLabels to cull.
+- **The Expression driver, deferred from 0.4.0** (owner, 2026-09-01). A driver box whose
+    output is what an expression returns. The groundwork landed with the decision to defer
+    it, because both halves stand on their own: `expression::evaluate_value` hands back a
+    number, a point or a colour - or Rhai's own sentence about why not, where `evaluate`
+    turns every refusal into -1 - and `DriverCx` now carries the expression context, as
+    `ResolveCx` always has.
+    What is left is the box itself, and one decision the owner has not made: its output
+    type cannot follow the expression's result, because a port is a fact about the
+    catalogue entry rather than the node (one shared `WiggleDef` serves every Wiggle) and
+    nothing revalidates a wire when `extra` changes, so editing the text after wiring would
+    strand a mismatched one. The recommendation put to the owner and not yet answered:
+    four static outputs - Value, Colour, Point x, Point y - with the result deciding which
+    carry a value each frame, the shape Split already has. All four labels are in
+    fx-labels.txt already. The text belongs in `extra["expression"]["source"]`, as Custom
+    shader's does.
+- **A shader could be a project item** (Airyz, 2026-09-01): "i'd like if i could load a
+    file in the project view and reference that instead, as it would give the same options
+    for 'find missing footage' and stuff to swap the file to something else. It would also
+    follow the same settings for relative/absolute file paths". Today Load from file copies
+    the text into the instance (`extra["shader"]["source"]`, K-650) and the path is a
+    memory rather than a link. Making it an item means a project-item kind that is not
+    footage, the relink road reaching it, and a decision about what a missing shader
+    renders - which is a decision-sized change, not an editor one.
 - **The Project panel is not virtualised**, which docs/13-PERFORMANCE-RULES.md §5 names
     it in: `ListView(children: rows)` builds every row of the open tree whatever the
     viewport holds, with no `itemExtent` on a fixed-height list. The click and the probe
