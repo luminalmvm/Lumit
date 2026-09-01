@@ -257,6 +257,76 @@ pub fn evaluate_range(
     })
 }
 
+/// What an expression answered with, when it answered with something a wire
+/// can carry.
+///
+/// **In plain terms.** A property expression is asked for one number and gets
+/// one number - anything else, including the error, becomes `-1`. A driver
+/// wants more than that: the same expression that returns `50` could return a
+/// pair for a position or four numbers for a colour, and a driver that turned
+/// a mistake into `-1` would drive whatever it is wired to with a plausible
+/// wrong answer rather than saying it could not.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ExprValue {
+    /// One number: a float, a whole number, or a boolean read as 1 and 0.
+    Number(f64),
+    /// Two numbers - a position, a scale, an anchor.
+    Point(f64, f64),
+    /// Three or four - a colour, alpha defaulting to opaque.
+    Colour([f32; 4]),
+}
+
+/// Run `expression` and read what it answered as a value, or say why not.
+///
+/// The failing sibling of [`evaluate`]: every refusal comes back as a sentence
+/// rather than as a number that looks like an answer. Rhai's own message is
+/// kept whole - it names the line and the thing it could not find, which is
+/// what an editor needs to show.
+pub fn evaluate_value(
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+) -> Result<ExprValue, String> {
+    let value = eval_dynamic(expression, context).map_err(|e| e.to_string())?;
+    if let Some(n) = as_f64(value.clone()) {
+        return Ok(ExprValue::Number(n));
+    }
+    // An array is how both of the other two arrive: `[x, y]` for a point,
+    // `[r, g, b]` or `[r, g, b, a]` for a colour. Read element by element so a
+    // list of the right length holding something that is not a number is a
+    // refusal rather than a zero.
+    if let Some(items) = value.clone().try_cast::<rhai::Array>() {
+        let mut numbers = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(n) = as_f64(item) else {
+                return Err("an array holding something that is not a number".into());
+            };
+            numbers.push(n);
+        }
+        return match numbers.len() {
+            2 => Ok(ExprValue::Point(numbers[0], numbers[1])),
+            3 => Ok(ExprValue::Colour([
+                numbers[0] as f32,
+                numbers[1] as f32,
+                numbers[2] as f32,
+                1.0,
+            ])),
+            4 => Ok(ExprValue::Colour([
+                numbers[0] as f32,
+                numbers[1] as f32,
+                numbers[2] as f32,
+                numbers[3] as f32,
+            ])),
+            n => Err(format!(
+                "an array of {n} numbers: two make a point, three or four a colour"
+            )),
+        };
+    }
+    Err(format!(
+        "a {} - not a number, a point or a colour",
+        value.type_name()
+    ))
+}
+
 fn convert_result(result: Result<Dynamic, Box<rhai::EvalAltResult>>) -> f64 {
     let Ok(val) = result else { return -1.0 };
     as_f64(val).unwrap_or(-1.0)
@@ -528,5 +598,44 @@ mod tests {
     fn an_uncompilable_expression_samples_to_nothing() {
         assert!(evaluate_range("this is not (", None, 0.0, 1.0, 8).is_empty());
         assert_eq!(evaluate_range("time", None, 0.0, 4.0, 4).len(), 4);
+    }
+
+    /// **A value expression says what it answered with, or why it did not.**
+    ///
+    /// [`evaluate`] turns every refusal into `-1`, which is the right bargain
+    /// for a property that must produce a number for every frame and the wrong
+    /// one for anything that has to report. Each arm here was a plausible wrong
+    /// answer under the old road.
+    #[test]
+    fn a_value_expression_answers_with_its_type_or_with_a_reason() {
+        let value = |src: &str| evaluate_value(src, None);
+
+        // Rhai keeps whole numbers and fractions apart, and a boolean is a
+        // number here as it is everywhere else in this file.
+        assert_eq!(value("2.5"), Ok(ExprValue::Number(2.5)));
+        assert_eq!(value("2"), Ok(ExprValue::Number(2.0)));
+        assert_eq!(value("true"), Ok(ExprValue::Number(1.0)));
+
+        assert_eq!(value("[100, 200.5]"), Ok(ExprValue::Point(100.0, 200.5)));
+
+        // Three numbers is a colour at full alpha; four states its own.
+        assert_eq!(
+            value("[1.0, 0.5, 0.0]"),
+            Ok(ExprValue::Colour([1.0, 0.5, 0.0, 1.0]))
+        );
+        assert_eq!(
+            value("[1.0, 0.5, 0.0, 0.25]"),
+            Ok(ExprValue::Colour([1.0, 0.5, 0.0, 0.25]))
+        );
+
+        // The refusals, each of which `evaluate` would have called -1.
+        assert!(value("this is not (").is_err(), "it does not parse");
+        assert!(value("nonesuch()").is_err(), "the name does not exist");
+        assert!(value("\"words\"").is_err(), "a string is not a value");
+        assert!(
+            value("[1, 2, 3, 4, 5]").is_err(),
+            "five of anything is nothing"
+        );
+        assert!(value("[1, \"two\"]").is_err(), "a pair holding a word");
     }
 }

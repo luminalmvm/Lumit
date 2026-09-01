@@ -486,6 +486,7 @@ impl Eval<'_> {
             node,
             inst,
             lt: t,
+            context: &self.context,
             params: fx.params,
             audio: self.audio,
             sample_input: &sample,

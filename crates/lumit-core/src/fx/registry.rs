@@ -161,6 +161,12 @@ pub struct DriverCx<'a> {
     pub inst: &'a EffectInstance,
     /// Layer time, seconds.
     pub lt: f64,
+    /// What this frame's expressions run against - the document, the comp, the
+    /// layer and the time. `ResolveCx` carries the same thing for the same
+    /// reason: a driver that evaluates an expression needs the surroundings the
+    /// expression can name, and it must be the *host's* context so preview and
+    /// export reach the same number (K-031).
+    pub context: &'a std::sync::Arc<crate::expression::ExpressionContext>,
     /// This driver's own parameters, already evaluated at `lt` and with any
     /// incoming wires substituted in.
     pub params: super::params::Params<'a>,
