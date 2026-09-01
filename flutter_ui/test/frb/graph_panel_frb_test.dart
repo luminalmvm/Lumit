@@ -1318,6 +1318,52 @@ void main() {
           reason: 'one reorder op, one undo step');
     });
 
+    /// The gesture everybody tries first, and the one that used to do nothing:
+    /// press an output, drag to an input. It lowers to the same reorder the
+    /// input grab does - the box whose output was pulled ends up feeding the
+    /// box it was dropped on.
+    testWidgets('a chain output dragged onto a later input reorders',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      expect(chainNames(p.layer), ['blur', 'exposure']);
+
+      // exposure's output, dropped on... there is nothing after it, so take
+      // the other direction: the Source's output onto exposure's input, which
+      // says the Source feeds exposure and moves it to the head.
+      final from = tester
+          .getCenter(find.byKey(const ValueKey<String>('graph-socket-source-image')));
+      final to = tester.getCenter(chainInput(p.layer, 1));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['exposure', 'blur'],
+          reason: 'an output drag reorders exactly as an input drag does');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'one reorder op, one undo step');
+    });
+
+    /// A wire *drawn* from an output and let go of on the ground is a change
+    /// of mind. Only a wire *pulled off* an input is a removal - which is why
+    /// the two gestures cannot share one drop.
+    testWidgets('an output wire dropped on empty canvas changes nothing',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      final from = tester
+          .getCenter(find.byKey(const ValueKey<String>('graph-socket-source-image')));
+      await tester.dragFrom(from, const Offset(0, 260));
+      await tester.pump();
+
+      expect(chainNames(p.layer), ['blur', 'exposure'],
+          reason: 'a drawn wire dropped on nothing deletes nothing');
+    });
+
     testWidgets('a chain wire dropped on the Layer out moves its source last',
         (tester) async {
       final p = withTwoEffects();

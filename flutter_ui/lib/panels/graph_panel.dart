@@ -502,8 +502,17 @@ class _InFlight {
   /// the drop lowers to the stack's own ops. Null for every stored wire.
   final int? chain;
 
+  /// Whether a chain wire was drawn **from an output** rather than picked
+  /// up by the input it feeds. The two gestures differ in one place only:
+  /// letting go of nothing. A wire picked off an input is being taken away,
+  /// so the drop takes its effect out of the stack; a wire drawn out of an
+  /// output is being offered somewhere, and dropping it on the ground is a
+  /// change of mind, not an instruction to delete the box it came from.
+  final bool fromOutput;
+
   Offset to;
-  _InFlight(this.from, this.to, {this.detached, this.chain});
+  _InFlight(this.from, this.to,
+      {this.detached, this.chain, this.fromOutput = false});
 }
 
 /// Boxes being dragged: where the pointer took hold, and where each box being
@@ -915,13 +924,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   ///
   /// A drop on anything else — a driver socket, a parameter — is declined
   /// without a bridge call: the picture's path cannot leave the chain.
-  void _chainDrop(int held, _Socket? landed, _Layout layout) {
+  void _chainDrop(int held, _Socket? landed, _Layout layout,
+      {bool drawn = false}) {
     final layer = _layer;
     final chain = layout.chain;
     if (layer == null || held < 1 || held >= chain.length) return;
     final upstream = _effectIdOf(chain[held - 1].node.node);
 
     if (landed == null) {
+      // A wire drawn out of an output and let go of on the ground is a
+      // change of mind. Only a wire pulled off an input is a removal.
+      if (drawn) return;
       final victim =
           _effectIdOf(chain[held].node.node) ?? upstream;
       if (victim == null) return; // Source → Out: no effect to take out.
@@ -1648,7 +1661,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           }
         }
       }
-      // Fall through: a press on a chain output lands on the box beneath.
+      // **A chain output draws a wire too** (owner, 2026-09-01: "you should
+      // be able to drag wires from one output"). Pressing an image output
+      // takes a wire in hand from the box that makes the picture; dropping it
+      // on another box's image input puts this box immediately before that
+      // one, which is the same stack reorder the input grab already lowers to.
+      // Without this the gesture everybody tries first - output to input - did
+      // nothing at all, and the press moved the box instead.
+      final chain = layout.chain;
+      final i = chain.indexWhere(
+          (b) => graphNodeKey(b.node.node) == graphNodeKey(socket.node));
+      if (i >= 0 && i < chain.length - 1) {
+        setState(() => _flight =
+            _InFlight(socket, at, chain: i + 1, fromOutput: true));
+        return;
+      }
+      // Fall through: the Layer out has no output, so its press is a box press.
     } else if (socket != null) {
       // **A wire that is already there is grabbed by its far end** (owner, desk
       // test: "connections that already exist can't be un-done"). Pressing a
@@ -1791,7 +1819,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         // A press that never travelled is no gesture at all here: a stored
         // wire unplugs on a stationary click, but a chain wire's discard
         // costs an effect, and that must never be the price of a slip.
-        if (moved) _chainDrop(held, landed, layout);
+        if (moved) {
+          _chainDrop(held, landed, layout, drawn: flight.fromOutput);
+        }
         return;
       }
       if (flight.detached case final held?) {
