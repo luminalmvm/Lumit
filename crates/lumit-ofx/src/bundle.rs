@@ -352,38 +352,64 @@ pub fn search_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// The bundle binaries in one directory: `*.ofx.bundle/Contents/<arch>/*.ofx`.
+/// How far below a search path a bundle is looked for.
+///
+/// **Not nought, which is what this used to be.** The OFX plugin path is
+/// searched *recursively*, and vendors rely on it: Red Giant Universe installs
+/// into `OFX/Plugins/Red Giant Universe/`, Magic Bullet into
+/// `OFX/Plugins/Magic Bullet Suite/`, and Boris and Sapphire do the same. A
+/// scan that read only the top of the folder found none of them — a machine
+/// with a hundred plugins on it offered nothing at all.
+///
+/// Four levels is more than any installer uses and is also the floor under a
+/// folder that contains itself: this walk follows directories, and a symbolic
+/// link back up one would otherwise never end.
+const MAX_BUNDLE_DEPTH: usize = 4;
+
+/// The bundle binaries at or below one directory:
+/// `**/*.ofx.bundle/Contents/<arch>/*.ofx`.
 ///
 /// Sorted, so two runs discover plugins in the same order — which is what
 /// makes an effect list stable between sessions.
 #[must_use]
 pub fn scan_dir(dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
     let mut found = Vec::new();
+    collect_bundles(dir, 0, &mut found);
+    found.sort();
+    found
+}
+
+/// One directory's worth of the walk: the bundles in it, then the folders
+/// under it, until [`MAX_BUNDLE_DEPTH`].
+fn collect_bundles(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let bundle = entry.path();
-        if !bundle
+        if bundle
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.ends_with(".ofx.bundle"))
         {
+            let binaries = bundle.join("Contents").join(BUNDLE_ARCH_DIR);
+            let Ok(binaries) = std::fs::read_dir(binaries) else {
+                continue;
+            };
+            for binary in binaries.flatten() {
+                let path = binary.path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("ofx") {
+                    found.push(path);
+                }
+            }
+            // A bundle is not looked inside for another bundle: what is in
+            // there is one plugin's own business.
             continue;
         }
-        let binaries = bundle.join("Contents").join(BUNDLE_ARCH_DIR);
-        let Ok(binaries) = std::fs::read_dir(binaries) else {
-            continue;
-        };
-        for binary in binaries.flatten() {
-            let path = binary.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("ofx") {
-                found.push(path);
-            }
+        if depth < MAX_BUNDLE_DEPTH && bundle.is_dir() {
+            collect_bundles(&bundle, depth + 1, found);
         }
     }
-    found.sort();
-    found
 }
 
 /// Every bundle binary in every search path.

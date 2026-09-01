@@ -315,6 +315,29 @@ pub struct OfxImageEffectSuiteV1 {
     pub image_memory_unlock: unsafe extern "C" fn(memory_handle: OfxImageMemoryHandle) -> OfxStatus,
 }
 
+/// One trailing argument of `paramSetValue`, as the machine word it arrives in.
+///
+/// **Why a word and not a type.** Writing a value is variadic in the header and
+/// the argument is an `int`, a `double` or a `char *` depending on what the
+/// parameter was defined as — so unlike `paramGetValue`, where every trailing
+/// argument is a pointer and one fixed declaration serves all of them, there is
+/// no single Rust type that reads the register correctly for all three.
+///
+/// The Microsoft x64 ABI is what makes one possible anyway: in a **variadic**
+/// call it requires the caller to put a floating-point argument in the
+/// general-purpose register *as well as* the vector one, precisely so a callee
+/// that does not know the type can still find it. So the word is read, and the
+/// parameter's own declared type says how to read it —
+/// [`crate::suites::parameter`] does the reinterpreting.
+///
+/// The ceiling is the one K-591 already recorded for `paramGetValue`, and it is
+/// the same ceiling for the same reason: on System V the duplication does not
+/// happen, and on Apple silicon variadic arguments do not use registers at all.
+/// Lumit is Windows-first; the test plugin shares these declarations, so both
+/// sides agree on every platform; and the real fix is the out-of-process broker
+/// unpacking the call from a message (docs/impl/ofx-host.md §4).
+pub type OfxParamSlot = u64;
+
 /// `OfxParameterSuiteV1` — eighteen entry points, in header order.
 ///
 /// Eight of them are **C-variadic** in the header (`paramGetValue` and its
@@ -379,9 +402,24 @@ pub struct OfxParameterSuiteV1 {
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
     pub param_get_integral:
         unsafe extern "C" fn(param: OfxParamHandle, time1: OfxTime, time2: OfxTime) -> OfxStatus,
-    pub param_set_value: unsafe extern "C" fn(param: OfxParamHandle) -> OfxStatus,
-    pub param_set_value_at_time:
-        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    /// The trailing values arrive as raw machine words rather than as their
+    /// own types; [`OfxParamSlot`] says why, and the parameter suite turns
+    /// them back into numbers using the type the parameter was defined with.
+    pub param_set_value: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        v0: OfxParamSlot,
+        v1: OfxParamSlot,
+        v2: OfxParamSlot,
+        v3: OfxParamSlot,
+    ) -> OfxStatus,
+    pub param_set_value_at_time: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        time: OfxTime,
+        v0: OfxParamSlot,
+        v1: OfxParamSlot,
+        v2: OfxParamSlot,
+        v3: OfxParamSlot,
+    ) -> OfxStatus,
     pub param_get_num_keys:
         unsafe extern "C" fn(param: OfxParamHandle, number_of_keys: *mut c_uint) -> OfxStatus,
     pub param_get_key_time: unsafe extern "C" fn(

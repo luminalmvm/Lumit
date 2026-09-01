@@ -719,6 +719,20 @@ fn a_bundle_tree_is_scanned_for_its_binaries() {
     assert!(std::fs::create_dir_all(ignored.join("Contents").join(BUNDLE_ARCH_DIR)).is_ok());
     assert_eq!(scan_dir(root.path()).len(), 1);
     assert!(scan_dir(&root.path().join("nowhere")).is_empty());
+
+    // **And a bundle in a folder of its own is found too.** Every suite that
+    // ships more than one plugin installs that way — `OFX/Plugins/Red Giant
+    // Universe/`, `OFX/Plugins/Magic Bullet Suite/` — and a scan that read only
+    // the top of the search path offered a machine full of plugins nothing at
+    // all.
+    let vendor = root.path().join("A Vendor Suite").join("deeper");
+    assert!(std::fs::create_dir_all(&vendor).is_ok());
+    let Some(nested) = a_bundle_in(&vendor) else {
+        return;
+    };
+    let found = scan_dir(root.path());
+    assert_eq!(found.len(), 2, "the nested bundle was missed: {found:?}");
+    assert!(found.contains(&nested));
 }
 
 #[test]
@@ -1195,8 +1209,11 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
             (params.param_get_num_keys)(handle, &raw mut keys),
             Status::ErrUnsupported.code()
         );
+        // A *descriptor's* parameter has no value to write, exactly as it has
+        // none to read. On an instance this is a real write; see
+        // `a_plugin_writes_its_own_control_while_it_is_being_built`.
         assert_eq!(
-            (params.param_set_value)(handle),
+            (params.param_set_value)(handle, 0, 0, 0, 0),
             Status::ErrUnsupported.code()
         );
         assert_eq!(
@@ -1220,11 +1237,11 @@ fn an_unbuilt_parameter_entry_point_still_tells_a_bad_handle_apart() {
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value)(forged),
+            (params.param_set_value)(forged, 0, 0, 0, 0),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
-            (params.param_set_value_at_time)(forged, 0.0),
+            (params.param_set_value_at_time)(forged, 0.0, 0, 0, 0, 0),
             Status::ErrBadHandle.code()
         );
         assert_eq!(
@@ -1677,6 +1694,148 @@ fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
     assert_eq!(after.get_double(keys::PROJECT_SIZE, 0), Ok(9.0));
     assert_eq!(after.get_double(keys::PROJECT_SIZE, 1), Ok(4.0));
     assert_eq!(after.get_double(keys::PROJECT_EXTENT, 0), Ok(9.0));
+
+    instance.destroy(plugin).expect("destroyed");
+}
+
+/// **A plugin writes its own controls, and the host must let it.** The OFX
+/// support library every commercial vendor is built on settles a plugin's
+/// parameters with `paramSetValue` while `kOfxActionCreateInstance` is still
+/// running; a host that answers `kOfxStatErrUnsupported` there has the library
+/// throw, the action fail, and the instance never exist. From a layer that is
+/// every plugin refusing to apply, each with a different status — whichever one
+/// the vendor's own handler turned the exception into (K-595,
+/// docs/impl/ofx-host.md §5).
+///
+/// So the write is accepted, into the instance's snapshot, and reads back. The
+/// three shapes are here together because they are three different registers:
+/// an integer, a double whose bits arrive in a general-purpose register beside
+/// the vector one, and a pointer to a string
+/// ([`crate::ffi::OfxParamSlot`]).
+#[test]
+fn a_plugin_writes_its_own_control_while_it_is_being_built() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("a_plugin_writes_its_own") else {
+        return;
+    };
+    let plugin = plugin_of(&bundle, "com.lumitlab.testplug");
+    let descriptor = &described(&report, "com.lumitlab.testplug").descriptor;
+    let instance = Instance::create(plugin, descriptor, Context::Filter, &ParamSnapshot::new())
+        .expect("an instance");
+
+    let params = &crate::suites::parameter::SUITE;
+    let suite = &crate::suites::image_effect::SUITE;
+    let mut param_set: *mut c_void = std::ptr::null_mut();
+
+    let handle_of = |param_set: *mut c_void, name: &CStr| -> *mut c_void {
+        let mut handle: *mut c_void = std::ptr::null_mut();
+        let mut props: *mut c_void = std::ptr::null_mut();
+        // SAFETY: a live param set and valid out-parameters.
+        assert_eq!(
+            unsafe {
+                (params.param_get_handle)(param_set, name.as_ptr(), &raw mut handle, &raw mut props)
+            },
+            Status::Ok.code()
+        );
+        handle
+    };
+
+    // SAFETY: a live instance handle and valid out-parameters throughout.
+    unsafe {
+        assert_eq!(
+            (suite.get_param_set)(instance.handle().as_ptr(), &raw mut param_set),
+            Status::Ok.code()
+        );
+
+        // A double. The bits are what a variadic caller leaves in the
+        // general-purpose register on Windows, which is what the suite reads.
+        let amount = handle_of(param_set, c"gain");
+        assert_eq!(
+            (params.param_set_value)(amount, 0.75_f64.to_bits(), 0, 0, 0),
+            Status::Ok.code()
+        );
+        let mut read = 0.0_f64;
+        assert_eq!(
+            (params.param_get_value)(
+                amount,
+                std::ptr::from_mut(&mut read).cast(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
+            Status::Ok.code()
+        );
+        assert!(
+            (read - 0.75).abs() < f64::EPSILON,
+            "the double came back {read}"
+        );
+
+        // An integer, in the low half of its word.
+        let count = handle_of(param_set, c"count");
+        assert_eq!(
+            (params.param_set_value)(count, 7_u64, 0, 0, 0),
+            Status::Ok.code()
+        );
+        let mut read: c_int = 0;
+        assert_eq!(
+            (params.param_get_value)(
+                count,
+                std::ptr::from_mut(&mut read).cast(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
+            Status::Ok.code()
+        );
+        assert_eq!(read, 7);
+
+        // Two doubles, which proves the second slot is read and not assumed.
+        let centre = handle_of(param_set, c"centre");
+        assert_eq!(
+            (params.param_set_value)(centre, 3.0_f64.to_bits(), 4.0_f64.to_bits(), 0, 0),
+            Status::Ok.code()
+        );
+        let (mut x, mut y) = (0.0_f64, 0.0_f64);
+        assert_eq!(
+            (params.param_get_value)(
+                centre,
+                std::ptr::from_mut(&mut x).cast(),
+                std::ptr::from_mut(&mut y).cast(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
+            Status::Ok.code()
+        );
+        assert_eq!((x, y), (3.0, 4.0));
+
+        // A string, as the pointer OFX passes.
+        let label = handle_of(param_set, c"caption");
+        let text = c"written";
+        assert_eq!(
+            (params.param_set_value)(label, text.as_ptr() as usize as u64, 0, 0, 0),
+            Status::Ok.code()
+        );
+        let mut read: *const c_char = std::ptr::null();
+        assert_eq!(
+            (params.param_get_value)(
+                label,
+                std::ptr::from_mut(&mut read).cast(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
+            Status::Ok.code()
+        );
+        assert_eq!(CStr::from_ptr(read), c"written");
+
+        // A push button has no value, so writing one is still the honest no —
+        // and it is `kOfxStatErrUnsupported`, not a bad handle.
+        let button = handle_of(param_set, c"trigger");
+        assert_eq!(
+            (params.param_set_value)(button, 0, 0, 0, 0),
+            Status::ErrUnsupported.code()
+        );
+    }
 
     instance.destroy(plugin).expect("destroyed");
 }

@@ -236,19 +236,46 @@ registered into the same catalogue the built-ins live in — the seam
      nothing wrong in.
    - The parameter suite's wrong no to a forged handle (item 2).
 
-   **What is left is one gap and a short tail.** 53 of the 64 remaining failures are the
+   **The gap that was left is closed** (K-743). 53 of the 64 remaining failures were the
    same thing: openfx-misc writes a parameter value during `kOfxActionCreateInstance`, this
-   host answers `kOfxStatErrUnsupported`, the support library throws, and the instance never
-   exists. Accepting the write means *reading* the value, and reading it needs a
-   **C-variadic** entry point — unstable in Rust to this day (`rustc 1.97`,
-   [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)), which is the ceiling
-   K-591 already recorded for `paramGetValue`. The fixed four-pointer trick works for reads
-   because pointers all pass alike; it cannot work for writes, where an `int` and a `double`
-   arrive in different registers. So the fix is a small C shim, and it belongs with the
-   package that makes a plugin's writes reach the document (docs/12 §2.2). The tail is ten
-   plugins whose own render or region-of-definition answers `kOfxStatErrUnsupported` for
-   reasons of their own, and one `createInstance` that answers `kOfxStatErrUnknown`; each is
-   a row in the table with its action and its status.
+   host answered `kOfxStatErrUnsupported`, the support library threw, and the instance never
+   existed — which from a layer is every plugin refusing to apply, each with whichever
+   status the vendor's own handler turned the exception into. Accepting the write means
+   *reading* the value, and the note said that needed a **C-variadic** entry point —
+   unstable in Rust to this day (`rustc 1.97`,
+   [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)) — and therefore a
+   small C shim.
+
+   It needs neither. The Microsoft x64 ABI requires a **variadic** caller to put a
+   floating-point argument in the general-purpose register as well as the vector one,
+   exactly so a callee that does not know the argument's type can still find it. So the
+   trailing arguments are declared as four machine words, and the parameter's own declared
+   type says how to read each of them: the low half for an `int`, the bits for a `double`,
+   the address for a string. The ceiling is the one K-591 already recorded for
+   `paramGetValue` and it is the same ceiling for the same reason — System V does not
+   duplicate, Apple silicon puts variadic arguments on the stack — and the real fix for
+   both is the broker unpacking the call from a message rather than from a register (§4).
+   The write lands in the instance's snapshot and no further; making it reach the document
+   is still the package docs/12 §2.2 describes.
+
+   The tail is ten plugins whose own render or region-of-definition answers
+   `kOfxStatErrUnsupported` for reasons of their own, and one `createInstance` that answers
+   `kOfxStatErrUnknown`; each is a row in the table with its action and its status.
+
+   **A separate finding from the same run, on a machine with a commercial suite installed:
+   the search path is searched *recursively*, and this host read only the top of it.** Every
+   vendor who ships more than one plugin installs into a folder of their own —
+   `OFX/Plugins/Red Giant Universe/`, `OFX/Plugins/Magic Bullet Suite/` — so a machine with
+   a hundred plugins on it offered none of them. `bundle::scan_dir` now walks four levels
+   down and does not look inside a bundle for another bundle.
+
+   **And a rejection that is not a host bug, worth writing down so it is not chased again.**
+   Some plugins are locked to named hosts. HitFilm's Vegas bundle reads `kOfxPropName` twice
+   during `kOfxActionDescribe` and answers `kOfxStatErrMissingHostFeature`; Red Giant
+   Universe does the same in `describeInContext`. Neither reads another property first, and
+   putting another host's name in that field gets them past it — and then straight into an
+   access violation, because they expect that host's GPU environment too. There is nothing
+   here to fix, and claiming to be somebody else is not a fix.
 
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI). **Landed** as

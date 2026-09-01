@@ -16,10 +16,18 @@
 //! plugin has no store of its own to be asked for, which is exactly why a
 //! render is reproducible from the document.
 //!
-//! Writing a value, keyframing, and the derivative and integral of an animated
-//! control are still `kOfxStatErrUnsupported`: they need the property system
-//! the host has not been wired to yet, and answering them with a guess would
-//! be worse than answering them with the truth.
+//! **Writing a value is accepted, and lands in that same snapshot.** It has to
+//! be: the OFX support library every commercial vendor builds on writes
+//! parameter values while `kOfxActionCreateInstance` is still running, and a
+//! host that refuses there has the library throw before the instance exists —
+//! which from a layer looks like every plugin failing to apply, for a different
+//! reason each time (K-595). What the write does not do is reach the document;
+//! see [`write_param`].
+//!
+//! Keyframing, and the derivative and integral of an animated control, are
+//! still `kOfxStatErrUnsupported`: they need the animation to be the plugin's
+//! to see, and answering them with a guess would be worse than answering them
+//! with the truth.
 //!
 //! **A parameter's type is fixed at definition and never afterwards.** The bag
 //! it hands back is seeded with the type, the standard defaults for that type,
@@ -31,13 +39,13 @@ use std::ffi::{c_char, c_int, c_uint, c_void};
 use crate::describe::{ParamRecord, ParamRef};
 use crate::ffi::{
     double_types, param_types, prop_keys as keys, prop_values as values, string_modes,
-    OfxParamHandle, OfxParamSetHandle, OfxParameterSuiteV1, OfxPropertySetHandle, OfxRangeD,
-    OfxTime,
+    OfxParamHandle, OfxParamSetHandle, OfxParamSlot, OfxParameterSuiteV1, OfxPropertySetHandle,
+    OfxRangeD, OfxTime,
 };
 use crate::handles::{Handle, HandleKind};
 use crate::host::state;
 use crate::props::{PropValue, PropertySet};
-use crate::status::Status;
+use crate::status::{Status, StatusResult};
 use crate::suites::{cstr, guard, out_handle};
 
 /// The table handed out by `fetchSuite`.
@@ -457,19 +465,142 @@ unsafe extern "C" fn param_get_integral(
     })
 }
 
-unsafe extern "C" fn param_set_value(param: OfxParamHandle) -> c_int {
-    guard(|| {
-        live_param(param)?;
-        Err(Status::ErrUnsupported)
+// ---------------------------------------------------------- writing values --
+
+/// Which of the three shapes a trailing word is.
+#[derive(Clone, Copy)]
+enum Reading {
+    Int,
+    Double,
+    Text,
+}
+
+/// How many trailing arguments a parameter of this type carries, and how to
+/// read them. `None` for the types that have no value to write at all.
+fn slots_of(param_type: &str) -> Option<(usize, Reading)> {
+    match param_type {
+        param_types::INTEGER | param_types::BOOLEAN | param_types::CHOICE => {
+            Some((1, Reading::Int))
+        }
+        param_types::INTEGER_2D => Some((2, Reading::Int)),
+        param_types::INTEGER_3D => Some((3, Reading::Int)),
+        param_types::DOUBLE => Some((1, Reading::Double)),
+        param_types::DOUBLE_2D => Some((2, Reading::Double)),
+        param_types::DOUBLE_3D | param_types::RGB => Some((3, Reading::Double)),
+        param_types::RGBA => Some((4, Reading::Double)),
+        param_types::STRING | param_types::CUSTOM => Some((1, Reading::Text)),
+        // A push button has no value, a group and a page are furniture, and a
+        // parametric parameter is a curve written through its own suite.
+        _ => None,
+    }
+}
+
+/// Turn the words a caller left in the argument registers back into the value
+/// the parameter holds (see [`crate::ffi::OfxParamSlot`] for why they arrive as
+/// words at all).
+///
+/// # Safety
+///
+/// For a string parameter the first word must be a pointer to a NUL-terminated
+/// string alive for the duration of the call, which is what OFX promises for
+/// `paramSetValue` on a string.
+unsafe fn value_from_slots(
+    reading: Reading,
+    count: usize,
+    slots: [OfxParamSlot; 4],
+) -> Result<PropValue, Status> {
+    let taken = slots.into_iter().take(count);
+    Ok(match reading {
+        // An `int` argument occupies the low half of its word; the top half is
+        // whatever the caller happened to leave there.
+        Reading::Int => PropValue::Int(taken.map(|word| word as u32 as i32).collect()),
+        Reading::Double => PropValue::Double(taken.map(f64::from_bits).collect()),
+        Reading::Text => {
+            let pointer = slots[0] as usize as *const c_char;
+            // SAFETY: the caller's contract, plus the null check inside `cstr`.
+            let text = unsafe { cstr(pointer) }?;
+            PropValue::string(text)?
+        }
     })
 }
 
-unsafe extern "C" fn param_set_value_at_time(param: OfxParamHandle, time: OfxTime) -> c_int {
+/// Write one parameter's value into the instance it belongs to.
+///
+/// **Accepting the write is what makes a plugin exist at all.** The OFX support
+/// library every commercial vendor is built on writes parameter values inside
+/// `kOfxActionCreateInstance`; a host that answers `kOfxStatErrUnsupported`
+/// there has the library throw, the action fail, and the instance never appear
+/// — which from a layer looks like every plugin refusing to apply, with a
+/// different status each time depending on what the vendor's own handler did
+/// with the exception (K-595, docs/impl/ofx-host.md §5).
+///
+/// What the write does **not** do is reach the document. Lumit owns parameter
+/// storage (docs/12 §2.2), so the next render replaces the snapshot with the
+/// host's own rows and a plugin's write stands only until then. That is enough
+/// for the writes plugins actually make — settling their own controls as they
+/// are built — and giving one an undo step and a row in Effect Controls is the
+/// package docs/12 §2.2 describes.
+///
+/// # Safety
+///
+/// As [`value_from_slots`].
+// ponytail: the write reaches the snapshot and not the document, so a control a
+// plugin sets does not appear in Effect Controls or in undo. The upgrade is the
+// bridge seam docs/12 §2.2 names, not a different shape here.
+unsafe fn write_param(param: OfxParamHandle, slots: [OfxParamSlot; 4]) -> StatusResult {
+    let handle = Handle::from_ptr(param);
+    let mut state = state();
+    let record = state.params.get(handle)?;
+    let (effect, name) = (record.effect, record.name.clone());
+    let param_type = state
+        .props
+        .get(record.props)?
+        .get_string(keys::PARAM_TYPE, 0)?
+        .to_string_lossy()
+        .into_owned();
+    let (count, reading) = slots_of(&param_type).ok_or(Status::ErrUnsupported)?;
+    // SAFETY: the caller's contract.
+    let value = unsafe { value_from_slots(reading, count, slots) }?;
+
+    state
+        .effects
+        .get_mut(effect)?
+        .instance
+        .as_mut()
+        // A descriptor's parameters have no values to write, exactly as they
+        // have none to read.
+        .ok_or(Status::ErrUnsupported)?
+        .params
+        .set(&name, value);
+    Ok(())
+}
+
+unsafe extern "C" fn param_set_value(
+    param: OfxParamHandle,
+    v0: OfxParamSlot,
+    v1: OfxParamSlot,
+    v2: OfxParamSlot,
+    v3: OfxParamSlot,
+) -> c_int {
+    // SAFETY: the trailing arguments the plugin passed, as OFX declares them.
+    guard(|| unsafe { write_param(param, [v0, v1, v2, v3]) })
+}
+
+unsafe extern "C" fn param_set_value_at_time(
+    param: OfxParamHandle,
+    time: OfxTime,
+    v0: OfxParamSlot,
+    v1: OfxParamSlot,
+    v2: OfxParamSlot,
+    v3: OfxParamSlot,
+) -> c_int {
+    // The snapshot is one moment, so a value written at a time is just the
+    // value. Keyframing a plugin's control from inside the plugin is the same
+    // later package as making the write reach the document, and refusing here
+    // would fail an action the plugin did nothing wrong in.
     let _ = time;
-    guard(|| {
-        live_param(param)?;
-        Err(Status::ErrUnsupported)
-    })
+    // SAFETY: as `param_set_value`.
+    guard(|| unsafe { write_param(param, [v0, v1, v2, v3]) })
 }
 
 unsafe extern "C" fn param_get_num_keys(
