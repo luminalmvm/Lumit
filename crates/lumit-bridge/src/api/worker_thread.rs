@@ -4956,6 +4956,10 @@ mod tests {
     /// below ends with thirty frames in neither.
     #[test]
     fn the_fill_keeps_going_into_memory_once_the_card_is_full() {
+        // "Held in memory" is a claim about the process-wide cache, and a test
+        // clearing it two threads over made frame 7 vanish between the fill
+        // and the assertion (K-752).
+        let _cache = crate::framecache::test_guard();
         let (project, comp) = project_with_solid_of(50);
         // A still solid names every frame the same (content keying), so the
         // solid turns: fifty frames, fifty names.

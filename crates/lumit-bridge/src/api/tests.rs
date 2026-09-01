@@ -3809,6 +3809,9 @@ fn the_process_reports_its_own_size() {
 #[test]
 fn the_cache_readout_answers_and_the_budget_takes_effect() {
     use crate::api::cache::{cache_stats, clear_cache, set_cache_budget};
+    // The cache is one per process, and `clear` below empties it for every
+    // test running alongside (K-752).
+    let _cache = crate::framecache::test_guard();
 
     let before = cache_stats();
     assert!(before.budget_bytes > 0, "there is a budget by default");

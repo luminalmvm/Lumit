@@ -217,6 +217,25 @@ impl Cache {
 /// controls. One Flutter window, one cache.
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
+/// **Tests that clear, resize or assert on this global take this first**
+/// (K-752). Cargo runs a binary's tests on parallel threads, and there is one
+/// cache in the process: a test that clears it while another is asserting a
+/// frame is held in it fails the other — which is what
+/// `the_fill_keeps_going_into_memory_once_the_card_is_full` did twice running
+/// on the macOS runner, two seconds after
+/// `the_cache_readout_answers_and_the_budget_takes_effect` had called `clear`.
+/// The same price the keymap tests pay for their global, in the same shape.
+#[cfg(test)]
+static TESTS: Mutex<()> = Mutex::new(());
+
+/// Hold the cache for the length of a test that touches or reads it as a
+/// whole. Poison is not a reason to stop: a test that panicked while holding
+/// this has already failed for its own reason.
+#[cfg(test)]
+pub(crate) fn test_guard() -> std::sync::MutexGuard<'static, ()> {
+    TESTS.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 fn with_cache<R>(f: impl FnOnce(&mut Cache) -> R) -> R {
     let mutex = CACHE.get_or_init(|| Mutex::new(Cache::new(DEFAULT_BUDGET_BYTES)));
     let mut guard = mutex.lock().unwrap_or_else(|p| p.into_inner());

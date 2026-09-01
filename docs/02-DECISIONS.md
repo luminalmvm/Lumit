@@ -23847,3 +23847,28 @@ already sized for a program starting.
 **Not a test change.** Raising the test's own floor would have hidden the same miss in a
 session, where a user's first plugin scan on a slow disk is exactly this load under exactly
 this deadline.
+
+
+## K-752 — Tests that touch the process-wide frame cache take a lock first
+
+**DECIDED** (2026-09-01). `framecache::test_guard()` is a test-only mutex beside the
+global `CACHE`, and the two tests that clear, resize or assert on that global hold it for
+their whole run: `the_cache_readout_answers_and_the_budget_takes_effect`, which calls
+`clear`, and `the_fill_keeps_going_into_memory_once_the_card_is_full`, which asserts a
+frame the card pushed out is *held in memory*. The keymap tests already pay the same price
+for their global, in the same shape (`KEYMAP_TESTS`).
+
+**What it was.** Two macOS runs in a row failed the fill test with `missing [7]` — the shown
+frame in neither tier — and both logs show the cache test finishing two seconds before,
+while the fill test had been running for over a minute. One cache per process, one test
+emptying it while another checks it: the order of a parallel test binary, which the macOS
+runner's scheduling had simply not produced before. The wgpu validation errors in the same
+minute belong to `a_lost_device_is_rebuilt_and_the_worker_draws_again` destroying its own
+device on purpose, and were a red herring worth naming so the next reader does not chase
+them.
+
+**Why a lock and not a per-test cache.** The cache is global because the render path and
+the FFI controls share one (K-184's reason); threading a handle through both for the sake
+of two tests is more machinery than two guards. A test that panics while holding the guard
+poisons it, and the guard treats poison as "already failed for its own reason" rather than
+as a second failure.
