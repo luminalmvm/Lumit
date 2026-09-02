@@ -113,15 +113,17 @@ pub struct RenderRequest {
     pub time: f64,
     /// The rectangle to render, in pixels.
     pub bounds: RectI,
-    /// Which way up the pictures are handed over. Both are legal and a plugin
-    /// must cope with either; the tests render the same frame through both.
+    /// Which way up the pictures are handed over. Both are legal and the tests
+    /// render the same frame through both, but what a plugin is actually sent
+    /// is bottom-up with positive row bytes: a shipped plugin (ntsc-rs) applies
+    /// a negative stride in the wrong units and writes past the block (K-756).
     pub order: RowOrder,
     /// One picture per input clip, by the name the plugin gave the clip.
     pub inputs: BTreeMap<String, Frame16>,
 }
 
 impl RenderRequest {
-    /// The common case: one source, one output, top-down (so negative row
+    /// The common case: one source, one output, bottom-up (so positive row
     /// bytes), at the source's own size.
     #[must_use]
     pub fn filter(time: f64, source: Frame16) -> Self {
@@ -134,7 +136,7 @@ impl RenderRequest {
         Self {
             time,
             bounds,
-            order: RowOrder::TopDown,
+            order: RowOrder::BottomUp,
             inputs,
         }
     }
@@ -651,7 +653,30 @@ fn sequence_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::RENDER_SCALE, PropValue::Double(vec![1.0, 1.0]));
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
+    gpu_render_off(&mut args);
     args
+}
+
+/// The OFX 1.3 to 1.5 GPU render arguments, all saying no (K-757): the flags
+/// are nought and the queues and streams are null, which is what the spec
+/// says a CPU render carries. The stock support library reads every one of
+/// them on the begin, the render and the end.
+fn gpu_render_off(args: &mut PropertySet) {
+    for key in [
+        keys::OPENGL_ENABLED,
+        keys::CUDA_ENABLED,
+        keys::METAL_ENABLED,
+        keys::OPENCL_ENABLED,
+    ] {
+        args.seed(key, PropValue::int(0));
+    }
+    for key in [
+        keys::CUDA_STREAM,
+        keys::METAL_COMMAND_QUEUE,
+        keys::OPENCL_COMMAND_QUEUE,
+    ] {
+        args.seed(key, PropValue::Pointer(vec![0]));
+    }
 }
 
 /// The `inArgs` of the render itself.
@@ -669,6 +694,7 @@ fn render_args(request: &RenderRequest) -> PropertySet {
     args.seed(keys::SEQUENTIAL_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::INTERACTIVE_RENDER_STATUS, PropValue::int(0));
     args.seed(keys::RENDER_QUALITY_DRAFT, PropValue::int(0));
+    gpu_render_off(&mut args);
     args
 }
 

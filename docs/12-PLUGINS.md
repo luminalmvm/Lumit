@@ -152,6 +152,16 @@ Vendor relations: the OpenFX TSC includes the vendors that matter most to Lumit'
 audience; engage early so "Lumit" appears in vendors' supported-host lists and licence
 activation works. This is outreach, not engineering, but it gates real-world usability.
 
+**Some vendors gate on the host's name** (K-757). A plugin reads `kOfxPropName` and
+answers `kOfxStatErrMissingHostFeature` to any host it was not tested against, however
+complete that host is: Red Giant Universe accepts DaVinci Resolve and Vegas and refuses
+Lumit, Natron and Nuke; HitFilm's Vegas-bundled edition accepts Vegas alone. The quirks
+table carries a `present_as` field for exactly this — the name that plugin family is
+shown, applied before its `setHost` — and the shipped table presents Lumit to Universe as
+Resolve, on which every Universe filter describes and renders on the CPU path. Whether
+to do the same for a product licensed to another host is a decision, not a quirk, and is
+not taken here.
+
 ### 2.6 Discovery
 
 Standard OFX directories scanned at start-up and on demand (`C:\Program Files\Common

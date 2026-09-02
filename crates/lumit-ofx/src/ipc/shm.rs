@@ -24,9 +24,9 @@
 //! frame's pixels — and the hash is what turns that into a noticed fault.
 //!
 //! **Row bytes here describe the ring, not the plugin.** The block is tightly
-//! packed, top-down, four floats per pixel. OFX's bottom-up convention and its
-//! negative row bytes are applied at the plugin boundary, inside the broker,
-//! where [`crate::image::Image`] already knows how (docs/impl/ofx-host.md §2).
+//! packed, top-down, four floats per pixel. The flip to OFX's bottom-up
+//! convention happens at the plugin boundary, inside the broker, where
+//! [`crate::image::Image`] already knows how (docs/impl/ofx-host.md §2).
 
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};

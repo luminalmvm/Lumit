@@ -263,6 +263,40 @@ pub struct OfxMessageSuiteV1 {
 /// belongs to an instance, and no instance exists yet, so each of those answers
 /// `kOfxStatErrUnsupported` — a code the spec already requires plugins to cope
 /// with, and an honest one, because the feature genuinely is not here.
+/// `OfxInteractSuiteV1` — the suite an overlay would draw through. This
+/// host offers no overlays (`kOfxImageEffectPropSupportsOverlays` is nought),
+/// so no interact is ever made; the suite exists because the stock support
+/// library treats fetching it as mandatory and refuses to describe without
+/// it (K-757).
+#[repr(C)]
+pub struct OfxInteractSuiteV1 {
+    pub interact_swap_buffers: unsafe extern "C" fn(interact: *mut c_void) -> OfxStatus,
+    pub interact_redraw: unsafe extern "C" fn(interact: *mut c_void) -> OfxStatus,
+    pub interact_get_property_set: unsafe extern "C" fn(
+        interact: *mut c_void,
+        property: *mut OfxPropertySetHandle,
+    ) -> OfxStatus,
+}
+
+/// `OfxMessageSuiteV2` — V1's `message` plus a message that stays up until
+/// the plugin clears it. HitFilm refuses to load a host without it (K-757).
+#[repr(C)]
+pub struct OfxMessageSuiteV2 {
+    pub message: unsafe extern "C" fn(
+        handle: *mut c_void,
+        message_type: *const c_char,
+        message_id: *const c_char,
+        format: *const c_char,
+    ) -> OfxStatus,
+    pub set_persistent_message: unsafe extern "C" fn(
+        handle: *mut c_void,
+        message_type: *const c_char,
+        message_id: *const c_char,
+        format: *const c_char,
+    ) -> OfxStatus,
+    pub clear_persistent_message: unsafe extern "C" fn(handle: *mut c_void) -> OfxStatus,
+}
+
 #[repr(C)]
 pub struct OfxImageEffectSuiteV1 {
     pub get_property_set: unsafe extern "C" fn(
@@ -543,6 +577,37 @@ pub mod prop_keys {
 
     pub const HOST_IS_BACKGROUND: &str = "OfxImageEffectHostPropIsBackground";
     pub const SUPPORTS_OVERLAYS: &str = "OfxImageEffectPropSupportsOverlays";
+    /// `kOfxImageEffectHostPropNativeOrigin` (OFX 1.4)
+    pub const HOST_NATIVE_ORIGIN: &str = "OfxImageEffectHostPropNativeOrigin";
+    /// `kOfxPropHostOSHandle`
+    pub const HOST_OS_HANDLE: &str = "OfxPropHostOSHandle";
+    /// `kOfxParamHostPropSupportsStrChoiceAnimation` (OFX 1.5)
+    pub const PARAM_SUPPORTS_STR_CHOICE_ANIMATION: &str =
+        "OfxParamHostPropSupportsStrChoiceAnimation";
+    /// `kOfxImageEffectPropOpenGLRenderSupported` (OFX 1.3)
+    pub const OPENGL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenGLRenderSupported";
+    /// `kOfxImageEffectPropCudaRenderSupported` (OFX 1.5)
+    pub const CUDA_RENDER_SUPPORTED: &str = "OfxImageEffectPropCudaRenderSupported";
+    /// `kOfxImageEffectPropCudaStreamSupported` (OFX 1.5)
+    pub const CUDA_STREAM_SUPPORTED: &str = "OfxImageEffectPropCudaStreamSupported";
+    /// `kOfxImageEffectPropMetalRenderSupported` (OFX 1.5)
+    pub const METAL_RENDER_SUPPORTED: &str = "OfxImageEffectPropMetalRenderSupported";
+    /// `kOfxImageEffectPropOpenCLRenderSupported` (OFX 1.5)
+    pub const OPENCL_RENDER_SUPPORTED: &str = "OfxImageEffectPropOpenCLRenderSupported";
+    /// `kOfxImageEffectPropOpenGLEnabled` — a render `inArgs` flag (OFX 1.3)
+    pub const OPENGL_ENABLED: &str = "OfxImageEffectPropOpenGLEnabled";
+    /// `kOfxImageEffectPropCudaEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const CUDA_ENABLED: &str = "OfxImageEffectPropCudaEnabled";
+    /// `kOfxImageEffectPropCudaStream` — a render `inArgs` pointer (OFX 1.5)
+    pub const CUDA_STREAM: &str = "OfxImageEffectPropCudaStream";
+    /// `kOfxImageEffectPropMetalEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const METAL_ENABLED: &str = "OfxImageEffectPropMetalEnabled";
+    /// `kOfxImageEffectPropMetalCommandQueue` — a render `inArgs` pointer (OFX 1.5)
+    pub const METAL_COMMAND_QUEUE: &str = "OfxImageEffectPropMetalCommandQueue";
+    /// `kOfxImageEffectPropOpenCLEnabled` — a render `inArgs` flag (OFX 1.5)
+    pub const OPENCL_ENABLED: &str = "OfxImageEffectPropOpenCLEnabled";
+    /// `kOfxImageEffectPropOpenCLCommandQueue` — a render `inArgs` pointer (OFX 1.5)
+    pub const OPENCL_COMMAND_QUEUE: &str = "OfxImageEffectPropOpenCLCommandQueue";
     pub const SUPPORTS_MULTI_RESOLUTION: &str = "OfxImageEffectPropSupportsMultiResolution";
     pub const SUPPORTS_TILES: &str = "OfxImageEffectPropSupportsTiles";
     pub const TEMPORAL_CLIP_ACCESS: &str = "OfxImageEffectPropTemporalClipAccess";
@@ -635,6 +700,8 @@ pub mod prop_keys {
     /// library reads (K-595).
     pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageEffectPropUnmappedFrameRange";
     pub const CLIP_UNMAPPED_COMPONENTS: &str = "OfxImageClipPropUnmappedComponents";
+    /// `kOfxImageClipPropUnmappedPixelDepth`
+    pub const CLIP_UNMAPPED_PIXEL_DEPTH: &str = "OfxImageClipPropUnmappedPixelDepth";
     pub const CLIP_FIELD_ORDER: &str = "OfxImageClipPropFieldOrder";
 
     pub const IMAGE_DATA: &str = "OfxImagePropData";
@@ -740,6 +807,11 @@ pub mod prop_values {
     pub const TYPE_IMAGE_EFFECT_HOST: &str = "OfxTypeImageEffectHost";
     pub const COMPONENT_RGBA: &str = "OfxImageComponentRGBA";
     pub const BIT_DEPTH_FLOAT: &str = "OfxBitDepthFloat";
+    /// `kOfxImageEffectHostPropNativeOriginBottomLeft` — the way up the host
+    /// hands its pictures over (K-756).
+    pub const NATIVE_ORIGIN_BOTTOM_LEFT: &str = "OfxImageEffectHostPropNativeOriginBottomLeft";
+    /// The string OFX 1.5 spells a GPU render capability with when there is none.
+    pub const FALSE: &str = "false";
     pub const CONTEXT_FILTER: &str = "OfxImageEffectContextFilter";
     pub const CONTEXT_GENERAL: &str = "OfxImageEffectContextGeneral";
     pub const CONTEXT_GENERATOR: &str = "OfxImageEffectContextGenerator";

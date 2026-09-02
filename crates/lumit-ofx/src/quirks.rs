@@ -62,6 +62,9 @@ pub struct PluginQuirks {
     /// so a diagnostic can say why a plugin is being treated specially.
     #[serde(default)]
     note: Option<String>,
+    /// The `kOfxPropName` this plugin is shown instead of Lumit's own (K-757).
+    #[serde(default)]
+    present_as: Option<String>,
 }
 
 /// The answers for one plugin, defaults filled in.
@@ -76,6 +79,9 @@ pub struct Quirks {
     /// Why this plugin has an entry, for the diagnostics panel and for the
     /// next person to read the table.
     pub note: Option<String>,
+    /// The host name this plugin is shown, when it is not Lumit's own
+    /// (K-757). Applied by [`crate::bundle::Bundle::load`].
+    pub present_as: Option<String>,
 }
 
 impl Default for Quirks {
@@ -85,6 +91,7 @@ impl Default for Quirks {
             control_timeout: DEFAULT_CONTROL_TIMEOUT,
             suite_versions: BTreeMap::new(),
             note: None,
+            present_as: None,
         }
     }
 }
@@ -116,7 +123,15 @@ impl QuirksTable {
     pub fn for_plugin(&self, identifier: &str, version_major: u32) -> Quirks {
         let mut quirks = Quirks::default();
         let Some(entry) = self.plugins.iter().find(|entry| {
-            entry.identifier == identifier
+            // A trailing `*` matches a family: Red Giant Universe is ninety
+            // identifiers under one prefix, and one entry is the honest size
+            // of what is known about them.
+            entry
+                .identifier
+                .strip_suffix('*')
+                .map_or(entry.identifier == identifier, |prefix| {
+                    identifier.starts_with(prefix)
+                })
                 && entry
                     .version_major
                     .is_none_or(|major| major == version_major)
@@ -131,6 +146,7 @@ impl QuirksTable {
         }
         quirks.suite_versions = entry.suite_versions.clone();
         quirks.note = entry.note.clone();
+        quirks.present_as = entry.present_as.clone();
         quirks
     }
 }

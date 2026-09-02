@@ -23993,3 +23993,72 @@ diagnostics file with one line per frame is a file nobody reads.
 fix is always at the cause — the renderer, the driver, the descriptor, the runner. What the
 frontend owes is that the failure names itself in the file we ask users for, so the next one
 takes an afternoon instead of a week.
+
+## K-756 — A plugin is handed a bottom-up block with positive row bytes
+
+**DECIDED** (2026-09-02). K-591 chose to hand plugins Lumit's top-down frames as they are,
+with a **negative** `kOfxImagePropRowBytes` and a data pointer into the last row, to save a
+flip. The spec allows it; a shipped plugin does not survive it. ntsc-rs 0.9.4 computes the
+first-row offset for a negative stride in pixel units and applies it in bytes, so an fp32
+frame has it read and write three quarters of a frame past the end of the block. In the
+broker that is a heap corruption; what reaches the viewer is a block whose first three
+quarters were never written — a mostly transparent picture, with no error to badge, which is
+the 0.3.0 and 0.3.1 report "any OFX plugin goes blank". The conformance bench passed it: it
+asserts a finite picture of the right size, and zeros are that.
+
+**The host now always sends the bottom-up layout.** `RenderRequest::filter` and the bench
+build `RowOrder::BottomUp`; `Image` keeps both orders, the round-trip tests keep proving
+both, and a test pins that the filter request's row bytes are positive. The flip is one
+row-by-row copy the fp16-to-fp32 boundary conversion was already making, so nothing is
+paid for it. Every major host hands out positive strides, which is why the negative branch
+of a plugin is the one nobody has run. K-591's other three parts stand.
+
+Regression test: `lumit-ofx`, `a_filter_request_hands_the_plugin_positive_row_bytes`.
+
+## K-757 — What commercial OFX bundles needed beyond the spec, and a host that may give another name
+
+**DECIDED** (2026-09-02). The owner asked for HitFilm and Red Giant Universe to work. On this
+machine every one of them was rejected at describe with `kOfxStatErrMissingHostFeature`, and
+tracing what each bundle read and fetched found four things, three of them host gaps:
+
+- **`OfxInteractSuiteV1` must exist.** The stock OpenFX support library fetches it as
+  mandatory and throws "host inadequate" without it, whatever the host says about overlays.
+  It is now served; there is never an interact for it to act on, so every call answers
+  `kOfxStatErrUnsupported` — not `kOfxStatErrBadHandle`, which the conformance tally counts
+  as a refused call, and Universe calls in here during describe regardless.
+- **`OfxMessageSuiteV2`.** HitFilm refuses to load without it. The persistent message is
+  filed like any other message (the badge reads one log); clearing it is a no-op.
+- **The OFX 1.3 to 1.5 host properties are answered rather than unknown**: native origin
+  bottom-left (K-756), every GPU render flavour `"false"`, a null OS handle, string-choice
+  animation nought, draft quality nought; the render, begin and end `inArgs` carry the
+  matching `*Enabled` noughts and null command queues and streams. The support library reads
+  each one and turns "unknown property" into "missing host feature". And a clip instance
+  now carries `kOfxImageClipPropUnmappedPixelDepth`, which Universe reads and dereferences
+  unchecked: an access violation in the broker when it was absent.
+- **A guest list.** With all of that in place both vendors read `kOfxPropName` and refuse
+  the name. Universe accepts `DaVinciResolve`, `com.sonycreativesoftware.vegas` and
+  `com.magix.vegas` and rejects Lumit, Natron and Nuke; HitFilm Vegas Basic accepts
+  `com.sonycreativesoftware.vegas` alone. Nothing the host does changes that answer.
+
+**The quirks table gains `present_as`**: the `kOfxPropName` a plugin family is shown,
+applied in `Bundle::load` before that bundle's `setHost` and put back to Lumit's own name
+otherwise; the label and everything else the host says about itself stay true. An entry's
+identifier may end in `*` to name a family, because Universe is ninety identifiers under
+one prefix. The name is process-wide, which is fine in the shipping arrangement of one
+bundle per broker process and is marked as the ceiling for in-process hosting.
+
+**What the shipped table says.** Universe is presented as DaVinci Resolve: on this machine 43
+of its 88 plugins describe and render on the CPU path (Glow at 1080p through the broker in
+about 0.6 s); the rest are transition-only or generator-only contexts this host does not
+drive (docs/12 §2.1), and its text and logo generators draw over transparency at their
+defaults, which the bench reports and a strict run would call a failure. **HitFilm Vegas
+Basic is not given Vegas's name**: it is the edition bundled with and licensed to Vegas, and
+presenting as Vegas to it is a licensing question for the owner rather than a compatibility
+shim; the mechanism is one line in `quirks.json` away if that is decided. Magic Bullet takes
+Lumit's own name and always did.
+
+Regression tests: `lumit-ofx`, `a_quirks_entry_may_name_a_family_and_who_the_host_says_it_is`,
+`the_shipped_quirks_file_presents_the_host_to_universe_as_resolve`,
+`the_host_presents_itself_under_a_quirks_name_and_takes_it_back`,
+`a_bundle_loads_under_the_name_its_quirks_entry_says`; the host golden
+`the_host_property_table_says_only_true_things` carries the new answers.

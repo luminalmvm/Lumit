@@ -548,6 +548,7 @@ fn seed_clip_instance_properties(props: &mut PropertySet) {
     seed_string(keys::PIXEL_DEPTH, values::BIT_DEPTH_FLOAT);
     seed_string(keys::COMPONENTS, values::COMPONENT_RGBA);
     seed_string(keys::CLIP_UNMAPPED_COMPONENTS, values::COMPONENT_RGBA);
+    seed_string(keys::CLIP_UNMAPPED_PIXEL_DEPTH, values::BIT_DEPTH_FLOAT);
     seed_string(keys::PRE_MULTIPLICATION, values::IMAGE_PRE_MULTIPLIED);
     seed_string(keys::CLIP_FIELD_ORDER, values::IMAGE_FIELD_NONE);
 

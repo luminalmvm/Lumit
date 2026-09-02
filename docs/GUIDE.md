@@ -14049,8 +14049,19 @@ Every plugin standard is implemented slightly differently by every host, and eve
 commercial plugin ships a list of workarounds for the hosts it knows. Lumit needs the
 mirror of that list, and it needs it to be data — a file keyed by the plugin's own
 identifier — rather than a growing thicket of "if this is that plugin, do this" scattered
-through the code. Today it is empty, which is exactly right: no plugin has yet earned an
-entry, and an empty file that parses is the shipping default.
+through the code. It stayed empty for a long while, which was exactly right: an empty
+file that parses is the shipping default, and a plugin has to earn its entry.
+
+The first entry it earned is not a workaround for a bug but for a **guest list**. Some
+plugin vendors have their plugins ask the host "who are you?" and refuse to work for any
+name they have not tested against, however well the host behaves — Red Giant Universe
+will work inside DaVinci Resolve or Vegas and simply says no to anyone else. There is no
+feature Lumit could add to change that answer; only the name. So the quirks file can say,
+per plugin family, the name that family is shown (`present_as`), and Lumit introduces
+itself that way to that one bundle and to nothing else. Everything else it says about
+itself stays true. Which products Lumit should do this for is a judgement about vendors
+and licences rather than about code, which is why it is a line in a data file and not a
+rule in the host.
 
 ## 45. Ducking the music with a wire, in plain terms
 

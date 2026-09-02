@@ -268,10 +268,30 @@ impl Bundle {
     /// records its status in [`PluginRef::load_status`] and is skipped from
     /// then on; the rest of the bundle carries on.
     pub fn load(&mut self) {
+        self.load_with(&crate::quirks::QuirksTable::shipped());
+    }
+
+    /// [`Bundle::load`] with a quirks table of the caller's choosing: the
+    /// shipped one in the app, a made-up one in a test.
+    pub fn load_with(&mut self, quirks: &crate::quirks::QuirksTable) {
         if self.loaded {
             return;
         }
         self.loaded = true;
+        // Who the host says it is, for this bundle (K-757). The name is on
+        // one property set the whole process shares, so it is set before the
+        // bundle's first `setHost` and left for the bundle's lifetime.
+        // ponytail: a process-wide name, so two bundles hosted in one process
+        // with different quirks would see the last one set; the shipping
+        // arrangement is one bundle per broker process, where it cannot
+        // happen. A per-host-struct name is the upgrade if in-process hosting
+        // ever ships third-party bundles.
+        let presented = self.plugins.iter().find_map(|plugin| {
+            quirks
+                .for_plugin(&plugin.identifier, plugin.version.0)
+                .present_as
+        });
+        let _ = crate::host::present_as(presented.as_deref());
         let host = host();
         for plugin in &mut self.plugins {
             if !plugin.is_supported_image_effect() {

@@ -21,6 +21,20 @@ Implement, minimum for real plugins (Twixtor/RSMB/Sapphire CPU): `OfxPropertySui
 `OfxMultiThreadSuiteV1`, `OfxMessageSuiteV1` (+V2), `OfxInteractSuiteV1` can stub-fail
 gracefully at first (overlays degrade to no overlay).
 
+What "minimum" turned out to mean against commercial bundles (K-757): **the stock OpenFX
+support library fetches `OfxInteractSuite` as mandatory** and refuses to describe without
+it, so the suite exists and every call answers `kOfxStatErrUnsupported` (not `BadHandle`,
+which the conformance tally counts as a refusal); **HitFilm requires `OfxMessageSuite` v2**,
+whose persistent message is filed like any other; **the OFX 1.3–1.5 host properties are
+seeded honestly** (`NativeOrigin` bottom-left, every GPU render flavour `"false"`, a null
+`HostOSHandle`, draft quality nought) because the support library reads each one during
+describe and an "unknown property" answer is thrown as "missing host feature"; the render
+`inArgs` carry the matching `*Enabled` noughts and null queues; and a clip instance carries
+`kOfxImageClipPropUnmappedPixelDepth`, which Red Giant reads and dereferences without
+checking — an access violation in the broker when it was absent. Beyond all of that, a
+plugin may still refuse the host **by name** (docs/12 §2.5); `quirks.json`'s `present_as`
+is the answer, applied in `Bundle::load` before `setHost`.
+
 **Handles are the whole game.** Every `OfxImageEffectHandle`, `OfxPropertySetHandle`,
 `OfxParamHandle` etc. is an opaque pointer *we* mint. Do it safely:
 
@@ -68,7 +82,12 @@ Param changed actions (`kOfxActionInstanceChanged`) must fire between renders, w
 `kOfxActionBeginInstanceChanged/End...` — Sapphire relies on it.
 
 Images: `clipGetImage(clip, time)` returns a property set with data pointer, bounds, row
-bytes (**can be negative** — bottom-up; honour it), pixel depth, premultiplication state.
+bytes, pixel depth, premultiplication state. **Row bytes are always positive: the host hands
+every plugin a bottom-up block** (K-756). The spec allows a negative stride and `image::Image`
+still builds one, but a shipped plugin (ntsc-rs 0.9.4) applies a negative stride's first-row
+offset in the wrong units and writes most of a frame past the block — a heap corruption in
+the broker that reaches the viewer as a mostly transparent picture with no error. The flip
+costs one row-by-row copy the boundary conversion was already paying.
 We hand out fp32 RGBA premultiplied ([12-PLUGINS.md](../12-PLUGINS.md)); convert at the
 boundary from fp16. Pin the buffer until `clipReleaseImage`.
 
@@ -117,8 +136,8 @@ What the built transport pins, beyond the sketch above (K-592):
   that is fifteen slots; at 4K it is the floor of three, so a `t ± 5` prefetch at that
   size does not fit and is refused — a bigger budget, not a different design.
 - Frames cross the ring as fp32 RGBA, tightly packed top-down. The header's row bytes
-  describe *the ring*; OFX's negative row bytes are applied at the plugin boundary inside
-  the broker.
+  describe *the ring*; the flip to OFX's bottom-up layout happens at the plugin boundary
+  inside the broker (K-756).
 - The prefetch hook sits between `getFramesNeeded` and `isIdentity` — the only point in
   §3's order where a frame at another time may be asked for.
 

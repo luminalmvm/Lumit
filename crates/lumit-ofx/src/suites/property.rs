@@ -37,9 +37,20 @@ fn read<R>(
     handle: OfxPropertySetHandle,
     body: impl FnOnce(&PropertySet) -> Result<R, Status>,
 ) -> Result<R, Status> {
+    null_is_the_plugins(handle)?;
     let handle = Handle::from_ptr(handle);
     let state = state();
     body(state.props.get(handle)?)
+}
+
+/// A null property set is `kOfxStatErrBadHandle`, and the plugin's own doing
+/// rather than a host refusal: see [`crate::status::uncount`].
+fn null_is_the_plugins(handle: OfxPropertySetHandle) -> StatusResult {
+    if handle.is_null() {
+        crate::status::uncount(Status::ErrBadHandle.code());
+        return Err(Status::ErrBadHandle);
+    }
+    Ok(())
 }
 
 /// The same, for writing.
@@ -47,6 +58,7 @@ fn write(
     handle: OfxPropertySetHandle,
     body: impl FnOnce(&mut PropertySet) -> StatusResult,
 ) -> StatusResult {
+    null_is_the_plugins(handle)?;
     let handle = Handle::from_ptr(handle);
     let mut state = state();
     body(state.props.get_mut(handle)?)

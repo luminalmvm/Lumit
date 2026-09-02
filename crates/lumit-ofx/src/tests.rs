@@ -340,6 +340,7 @@ fn the_property_suite_reads_and_writes_through_c() {
 
 #[test]
 fn the_host_property_table_says_only_true_things() {
+    let _name = host_name_lock();
     let handle = host_props_handle().expect("the host has its own property set");
     let state = state();
     let set = state.props.get(handle).expect("the host set is live");
@@ -347,8 +348,15 @@ fn the_host_property_table_says_only_true_things() {
     let expected = format!(
         "\
 OfxImageEffectHostPropIsBackground = 0
+OfxImageEffectHostPropNativeOrigin = \"OfxImageEffectHostPropNativeOriginBottomLeft\"
 OfxImageEffectInstancePropSequentialRender = 0
+OfxImageEffectPropCudaRenderSupported = \"false\"
+OfxImageEffectPropCudaStreamSupported = \"false\"
+OfxImageEffectPropMetalRenderSupported = \"false\"
 OfxImageEffectPropMultipleClipDepths = 0
+OfxImageEffectPropOpenCLRenderSupported = \"false\"
+OfxImageEffectPropOpenGLRenderSupported = \"false\"
+OfxImageEffectPropRenderQualityDraft = 0
 OfxImageEffectPropSetableFielding = 0
 OfxImageEffectPropSetableFrameRate = 0
 OfxImageEffectPropSupportedComponents = \"OfxImageComponentRGBA\"
@@ -369,8 +377,10 @@ OfxParamHostPropSupportsChoiceAnimation = 0
 OfxParamHostPropSupportsCustomAnimation = 0
 OfxParamHostPropSupportsCustomInteract = 0
 OfxParamHostPropSupportsParametricAnimation = 0
+OfxParamHostPropSupportsStrChoiceAnimation = 0
 OfxParamHostPropSupportsStringAnimation = 0
 OfxPropAPIVersion = 1, 4
+OfxPropHostOSHandle = 0x0
 OfxPropLabel = \"Lumit\"
 OfxPropName = \"com.lumitlab.Lumit\"
 OfxPropType = \"OfxTypeImageEffectHost\"
@@ -463,9 +473,11 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
     assert!(!ask(c"OfxParameterSuite", 1).is_null());
     assert!(!ask(c"OfxMultiThreadSuite", 1).is_null());
 
-    // Not built yet, and an honest null is the whole point: overlays degrade
-    // to no overlay rather than to a crash.
-    assert!(ask(c"OfxInteractSuite", 1).is_null());
+    // Served so the stock support library will describe at all; there is
+    // never an interact for it to act on (K-757). And the message suite's
+    // second version, which HitFilm will not load without.
+    assert!(!ask(c"OfxInteractSuite", 1).is_null());
+    assert!(!ask(c"OfxMessageSuite", 2).is_null());
 
     // A version we do not have is a null, not the version we do have.
     assert!(ask(c"OfxPropertySuite", 2).is_null());
@@ -575,6 +587,110 @@ fn the_shipped_quirks_file_parses_and_promises_nothing() {
     assert_eq!(quirks.render_timeout.as_secs(), 10);
     assert_eq!(quirks.control_timeout.as_secs(), 2);
     assert!(quirks.suite_versions.is_empty());
+}
+
+/// A family of plugins under one prefix is one entry, and the host name it is
+/// shown is that entry's `present_as` (K-757).
+#[test]
+fn a_quirks_entry_may_name_a_family_and_who_the_host_says_it_is() {
+    let table = QuirksTable::parse(
+        r#"{ "plugins": [ {
+            "identifier": "com.example.suite.*",
+            "present_as": "SomeOtherHost",
+            "note": "refuses every host it has not heard of"
+        } ] }"#,
+    )
+    .map_err(|error| error.to_string())
+    .expect("a well-formed table parses");
+
+    let matched = table.for_plugin("com.example.suite.Glow", 3);
+    assert_eq!(matched.present_as.as_deref(), Some("SomeOtherHost"));
+    assert_eq!(matched.render_timeout.as_secs(), 10, "nothing else changed");
+
+    assert_eq!(
+        table.for_plugin("com.example.suitecase", 3).present_as,
+        None,
+        "a prefix is a prefix, not a substring"
+    );
+    assert_eq!(
+        table.for_plugin("com.example.suite", 3).present_as,
+        None,
+        "the family, not the name the star hangs off"
+    );
+}
+
+/// The shipped table presents Lumit to Red Giant Universe as DaVinci Resolve,
+/// because Universe reads `kOfxPropName` in `describeInContext` and answers
+/// `kOfxStatErrMissingHostFeature` to every host but a handful (K-757).
+#[test]
+fn the_shipped_quirks_file_presents_the_host_to_universe_as_resolve() {
+    let table = QuirksTable::shipped();
+    assert_eq!(
+        table
+            .for_plugin("com.redgiantsoftware.Universe_Glow_Glow_OFX", 3)
+            .present_as
+            .as_deref(),
+        Some("DaVinciResolve")
+    );
+    assert_eq!(
+        table.for_plugin("com.redgiant.MBFilm.ofx", 5).present_as,
+        None,
+        "Magic Bullet takes Lumit's own name"
+    );
+}
+
+/// What the host's property set says its name and label are, right now.
+fn host_name_and_label() -> (String, String) {
+    let handle = host_props_handle().expect("the host has its own property set");
+    let state = state();
+    let set = state.props.get(handle).expect("the host set is live");
+    let read = |key: &str| {
+        set.get_string(key, 0)
+            .expect("a string")
+            .to_string_lossy()
+            .into_owned()
+    };
+    (read(keys::NAME), read(keys::LABEL))
+}
+
+/// Presenting the host under another name changes `kOfxPropName` and nothing
+/// else, and `None` puts Lumit's own name back (K-757).
+#[test]
+fn the_host_presents_itself_under_a_quirks_name_and_takes_it_back() {
+    let _name = host_name_lock();
+    crate::host::present_as(Some("SomeOtherHost")).expect("the host exists");
+    assert_eq!(
+        host_name_and_label(),
+        ("SomeOtherHost".to_owned(), "Lumit".to_owned()),
+        "the name changes and the label stays Lumit's own"
+    );
+    crate::host::present_as(None).expect("the host exists");
+    assert_eq!(host_name_and_label().0, crate::host::HOST_NAME);
+}
+
+/// Loading a bundle applies its quirks entry: the name the plugin reads from
+/// the host during load is the entry's (K-757).
+#[test]
+fn a_bundle_loads_under_the_name_its_quirks_entry_says() {
+    let _name = host_name_lock();
+    let root = tempfile::tempdir().expect("a temp dir");
+    let Some(binary) = a_bundle_in(root.path()) else {
+        skipped("a_bundle_loads_under_the_name_its_quirks_entry_says");
+        return;
+    };
+    let table = QuirksTable::parse(
+        r#"{ "plugins": [ {
+            "identifier": "com.lumitlab.testplug",
+            "present_as": "SomeOtherHost"
+        } ] }"#,
+    )
+    .expect("a well-formed table parses");
+    let mut bundle = Bundle::open(&binary).expect("the bundle opens");
+    bundle.load_with(&table);
+    assert_eq!(host_name_and_label().0, "SomeOtherHost");
+
+    bundle.unload();
+    crate::host::present_as(None).expect("the host exists");
 }
 
 #[test]
@@ -795,14 +911,15 @@ fn the_host_is_given_to_a_plugin_once_before_it_is_loaded() {
         lumit_ofx_testplug::PLUGIN_COUNT
     );
 
-    // The plugin got the five suites this host has and not the one it has not,
+    // The plugin got the six suites this host has and nothing it has not,
     // which is the whole of `fetchSuite` proved from the plugin's side.
     let mask = read(b"LumitTestPlugSuiteMask\0");
     let expected = lumit_ofx_testplug::SUITE_PROPERTY
         | lumit_ofx_testplug::SUITE_MEMORY
         | lumit_ofx_testplug::SUITE_MESSAGE
         | lumit_ofx_testplug::SUITE_IMAGE_EFFECT
-        | lumit_ofx_testplug::SUITE_PARAMETER;
+        | lumit_ofx_testplug::SUITE_PARAMETER
+        | lumit_ofx_testplug::SUITE_INTERACT;
     assert_eq!(u32::try_from(mask), Ok(expected));
 
     // And its load message came back through the message suite.
@@ -1530,6 +1647,14 @@ fn a_probe(bundle: &Bundle) -> Option<libloading::Library> {
 /// plugin takes this first. It is the only lock in the suite, it is held for
 /// the length of one test, and a test that fails while holding it poisons
 /// nothing worth keeping.
+/// The host's name is one process-wide property (K-757): a test that changes
+/// it, and the golden that reads it, take this so neither sees the other's.
+fn host_name_lock() -> std::sync::MutexGuard<'static, ()> {
+    static NAME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    NAME.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn image_ledger() -> std::sync::MutexGuard<'static, ()> {
     static LEDGER: std::sync::Mutex<()> = std::sync::Mutex::new(());
     LEDGER
@@ -1942,6 +2067,27 @@ fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
     // is testing what it says it is.
     let image = Image::from_frame(&source, RowOrder::TopDown).expect("an image");
     assert!(image.row_bytes() < 0, "top-down means negative row bytes");
+}
+
+/// What the host actually hands a plugin is the bottom-up layout, with
+/// **positive** row bytes. Both layouts are legal and the test above proves
+/// both work through a plugin that honours the sign; this one pins that the
+/// negative sign is never sent, because a shipped plugin gets it wrong.
+/// ntsc-rs 0.9.4 computes its first-row offset for a negative stride in pixel
+/// units and applies it in bytes, so a top-down fp32 frame has it write three
+/// quarters of a frame past the end of the block: a heap corruption in the
+/// broker, and a mostly transparent picture in the viewer with no error to
+/// show for it (K-756).
+#[test]
+fn a_filter_request_hands_the_plugin_positive_row_bytes() {
+    let source = a_test_frame(6, 7);
+    let request = RenderRequest::filter(0.0, source.clone());
+    assert_eq!(request.order, RowOrder::BottomUp);
+    let image = Image::from_frame(&source, request.order).expect("an image");
+    assert!(
+        image.row_bytes() > 0,
+        "the layout a plugin is handed has positive row bytes"
+    );
 }
 
 /// The action order, verbatim: the sequence the plugin observed against the
