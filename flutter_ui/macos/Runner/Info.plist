@@ -107,6 +107,14 @@
 			</dict>
 		</dict>
 	</array>
+	<!-- Lumit ships on Skia (K-754, superseding K-748's mechanism). Flutter's
+	     newer renderer, Impeller, is measurably slower for the way Lumit draws
+	     (docs/impl/ui-performance.md 2.4/4.1/7.2). This is the key the macOS
+	     embedder reads for the choice (FlutterDartProject.enableImpeller); the
+	     FLUTTER_ENGINE_SWITCHES route K-748 used is compiled out of release
+	     engines, so it pinned nothing in a shipped build. -->
+	<key>FLTEnableImpeller</key>
+	<false/>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>

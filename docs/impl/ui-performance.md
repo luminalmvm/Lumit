@@ -372,7 +372,11 @@ fit it.
 **Reversed on the shipping question, 2026-08-31 (K-732): the runner now pins Skia.**
 `flutter_ui/windows/runner/main.cpp` sets `ImpellerSwitch::Disabled` on the `DartProject`
 before the engine is created, so the pin holds in the shipped binary rather than in a
-launch flag. Everything below stays the record of what Impeller was measured to cost and
+launch flag. All three runners carry the pin since K-748, and since K-754 each carries it
+as a property the *release* engine reads — `fl_dart_project_set_enable_impeller` on Linux,
+`FLTEnableImpeller` in the macOS Info.plist. Not `FLUTTER_ENGINE_SWITCHES`: those are read
+only under `#ifndef FLUTTER_RELEASE`, so a pin set that way measures fine under
+`flutter run` and is absent from the build users install. Everything below stays the record of what Impeller was measured to cost and
 why the cost is the backend's — that reading is what the reversal rests on — but the two
 sentences saying the shipped runner carries no pin are superseded. §7.2 has the ruling.
 

@@ -8,10 +8,13 @@
 // runner implements),
 // gets back a `textureId` the `Texture` widget shows, and tells the runner each
 // time a new frame has been drawn. It re-registers when the handle or size
-// changes (a comp resize), and — crucially — degrades quietly: if the runner
-// does not implement the channel (an old build, or the C++ was not wired), it
-// marks itself unavailable so the Viewer falls back to the read-back path. No
-// pixels ever pass through this object.
+// changes (a comp resize). No pixels ever pass through this object.
+//
+// **There is nothing behind it.** Zero-copy is the Viewer's only transport
+// (K-183, reaffirmed at K-755): a texture path that does not reach the screen is
+// a defect to be found and fixed, not routed around by a slower copy that
+// vaguely works. So nothing here switches to an alternative — what it does
+// instead is refuse to fail *silently*, which is what made issue #104 a hunt.
 //
 // The platform-channel shape (method names, the shared-handle surface type, the
 // register/frame-available dance) follows the MIT-licensed `flutter_wgpu_texture`
@@ -19,6 +22,8 @@
 // the code.
 
 import 'package:flutter/services.dart';
+
+import '../state/faults.dart';
 
 /// Owns the `lumit/viewer_texture` platform-channel registration for one Viewer.
 /// A fake [MethodChannel] can be injected so tests drive it without the runner.
@@ -40,8 +45,9 @@ class ViewerTextureController {
   int? _fd;
 
   /// False once a channel call reports the runner has no handler (an unwired or
-  /// old build). Sticky for the session: the Viewer then stays on the read-back
-  /// path rather than retrying a channel that will never answer.
+  /// old build). Sticky for the session, because that answer cannot change: a
+  /// channel with no handler on the other side will not grow one, and asking it
+  /// again every frame buys nothing.
   bool _available = true;
 
   ViewerTextureController({MethodChannel? channel})
@@ -61,8 +67,8 @@ class ViewerTextureController {
   /// payload instead of the handle one (the "platform-conditional argument pack";
   /// the channel name and lifecycle are identical). A no-op returning the existing
   /// id when the identity (handle-or-fd + size) is unchanged. Returns null — and
-  /// latches [available] to false — when the runner has no handler for the channel
-  /// (so the Viewer falls back to the read-back path for the session).
+  /// latches [available] to false — when the runner has no handler for the
+  /// channel.
   Future<int?> ensureRegistered(
     int handle,
     int width,
@@ -162,9 +168,18 @@ class ViewerTextureController {
     } on MissingPluginException {
       _available = false;
       return null;
-    } catch (_) {
-      // Any other registration failure also drops us to the read-back path.
+    } catch (err) {
+      // The runner has a handler and it refused: a bad descriptor, a driver
+      // that will not import it, a size it cannot make. There is nowhere to go
+      // (K-755) and no point announcing frames into a texture that does not
+      // exist, so the path latches off — but it says so on the way, because a
+      // Viewer that goes blank without a word is what issue #104 cost a week.
       _available = false;
+      if (!_reported) {
+        _reported = true;
+        recordFault('the Viewer texture could not be registered: $err',
+            StackTrace.current);
+      }
       return null;
     }
   }
@@ -176,19 +191,28 @@ class ViewerTextureController {
   /// How many frames we have announced since registering, and how many times
   /// Flutter has actually drawn the texture in reply.
   ///
-  /// **The failure this exists to catch.** If the embedder cannot open or
+  /// **The failure these exist to catch.** If the embedder cannot open or
   /// composite the shared handle it does not fail — it draws nothing, says
   /// nothing, and the Viewer shows an empty panel for the whole session while
   /// the playhead runs and every other panel updates. Registration succeeding
   /// tells you nothing, because that is exactly what it does when it is about to
-  /// silently ignore the texture.
+  /// silently ignore the texture. That is the shape of issue #104: Flutter 3.47
+  /// started Linux on Impeller, Impeller's GLES surface never came back for the
+  /// descriptor, and every log line said the frames were rendering.
   ///
   /// So: announce a few frames, then check whether any of them were drawn. If
-  /// none were, this path does not work on this machine or this Flutter
-  /// renderer, and the Viewer goes back to copying pixels — which is slower, but
-  /// is a picture.
+  /// none were, **write it to the diagnostics file** — the one a bug report is
+  /// asked for — and carry on announcing. Carrying on is deliberate: with no
+  /// second transport to move to (K-755), switching this one off can only
+  /// guarantee a dead Viewer where a recovering one was still possible.
   int _announced = 0;
   int _drawn = 0;
+
+  /// Whether this path has already written its record — either the never-drawn
+  /// one below or a refused registration above. Once a session: the never-drawn
+  /// condition holds on every frame after the twelfth, and a diagnostics file
+  /// filled with one line per frame is a file nobody reads.
+  bool _reported = false;
 
   /// Frames to allow before deciding. Enough that a slow first composite or a
   /// window that has not been painted yet is not mistaken for a broken path.
@@ -210,10 +234,13 @@ class ViewerTextureController {
           await _channel.invokeMethod<int>('frameReady', {'textureId': id});
       _announced++;
       _drawn = drawn ?? _drawn;
-      if (neverDrawn) {
-        // Registered, announced, never drawn: the texture is not reaching the
-        // screen. Give up on it rather than showing nothing indefinitely.
-        _available = false;
+      if (neverDrawn && !_reported) {
+        _reported = true;
+        recordFault(
+            'the Viewer texture was registered and announced $_announced times '
+            'and drawn none — the runner has it and the embedder is not '
+            'compositing it',
+            StackTrace.current);
       }
     } on MissingPluginException {
       _available = false;

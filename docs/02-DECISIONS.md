@@ -23910,3 +23910,86 @@ hardware both counts are zero.
 
 **K-752 stands** as hygiene — the overlap it serialises is real — but it was not this
 failure, and its entry now says so.
+
+
+## K-754 — The Skia pin is a platform property, not an environment variable
+
+**DECIDED** (2026-09-02). K-748's mechanism is superseded on Linux and macOS. The ruling it
+carried — Lumit ships on Skia on all three platforms — is unchanged; how each runner says so
+is not.
+
+**Why the K-748 mechanism could never have worked.** It set
+`FLUTTER_ENGINE_SWITCHES` / `FLUTTER_ENGINE_SWITCH_<N>` to `enable-impeller=false`, which is
+how `flutter run --no-enable-impeller` does it. The engine reads those variables in
+`flutter::GetSwitchesFromEnvironment` (`shell/platform/common/engine_switches.cc`), and that
+function's whole body sits inside `#ifndef FLUTTER_RELEASE`: *"Read engine switches from the
+environment in debug/profile. If release mode support is needed in the future, it should
+likely use a whitelist."* A release engine returns an empty list without looking. So the pin
+held under `flutter run` — which is where it was tried — and did nothing at all in the
+Flatpak, the .dmg and any other shipped build. Windows was never affected: its
+`DartProject::set_impeller_switch` is a project property carried in
+`FlutterDesktopEngineProperties`, read unconditionally.
+
+**What each platform uses instead.** Linux calls
+`fl_dart_project_set_enable_impeller(project, FALSE)` — the GTK embedder does have the typed
+setter K-748 said it did not (`fl_dart_project.h`), and `fl_engine_start` reads it whatever
+the build mode: with it false and no environment switch present, `--enable-impeller` is
+simply never added to the engine's command line, and the engine's own default is Skia. macOS
+sets `FLTEnableImpeller` to `<false/>` in `Runner/Info.plist`, which is the key
+`FlutterDartProject.enableImpeller` reads off the bundle. Neither runner touches the
+environment now, and `flutter_ui/test/skia_pin_test.dart` reads all three runner sources and
+fails if one reaches for the numbered switch variable again.
+
+**This *is* the fix for issue #104**, and K-748's closing paragraph — which said the pin was
+not that fix, on the strength of a run where the switch appeared not to take — is corrected
+rather than contradicted: the switch genuinely did not take, and this says why. A 0.3.0
+Flatpak user's log carries `Using the Impeller rendering backend (OpenGLESSDF)` and a Viewer
+that shows nothing while the log reports frames rendering; 0.2.0, on Flutter 3.44.7 and so on
+Skia, was the same Linux zero-copy code and worked. Impeller's GLES embedder surface does not
+composite the external texture the Viewer's DMA-BUF frames arrive as, and the Viewer has no
+other transport (K-183), so the picture is blank for the session. The Linux zero-copy path is
+byte-for-byte unchanged between the two releases, which is what makes the renderer the only
+candidate left.
+
+**What the silence cost is dealt with at K-755**, which rules out the fallback this entry
+first proposed.
+
+
+
+## K-755 — No read-back fallback: a texture that does not draw is a bug, not a branch
+
+**DECIDED** (2026-09-02, owner). K-183 stands and is reaffirmed: **zero-copy is the Viewer's
+only transport, on every platform, with nothing behind it.** When the picture does not reach
+the screen the answer is to find out why and fix that, not to add a slower path that vaguely
+works. In the owner's words: *"we don't want the read-back transport. If this failure is
+happening then we need to fix the error not create a bad slow alternative that vaguely
+works."*
+
+**This supersedes the paragraph K-754 shipped with**, which proposed a read-back fallback
+behind `ViewerTextureController.neverDrawn` as the general answer to issue #104's class of
+failure. It is not the answer. A fallback would have hidden #104 rather than found it: the
+Viewer would have limped along on four trips per frame, nobody would have filed the bug, and
+Linux would have quietly shipped at a fraction of its speed for as long as it took somebody
+to notice. The blank panel is what made the fault reportable.
+
+**What the detector does now.** `_announced` and `_drawn` stay — they are the only way to
+tell a transport that is working from one that is silently ignoring the texture — but they no
+longer switch anything off:
+
+- **Never drawn (twelve announced, none drawn):** one record to the diagnostics file
+  (`state/faults.dart`, the same file the engine's faults go to and the file a bug report is
+  asked for), then the path carries on announcing. Latching it off was the fallback's
+  trigger, and with nothing to hand over to it could only turn a Viewer that might recover
+  into one that certainly will not.
+- **A registration the runner refuses:** still latches off — there is no texture to announce
+  frames into — but it now writes the refusal down first rather than going blank without a
+  word.
+- **A channel with no handler:** unchanged, and still sticky. That answer cannot change.
+
+Once a session, both of them: the condition holds on every subsequent frame, and a
+diagnostics file with one line per frame is a file nobody reads.
+
+**The standing rule this sets.** A silent blank Viewer is a release-blocking defect, and the
+fix is always at the cause — the renderer, the driver, the descriptor, the runner. What the
+frontend owes is that the failure names itself in the file we ask users for, so the next one
+takes an afternoon instead of a week.

@@ -15,37 +15,6 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-// Pin the renderer to Skia, as the Windows runner does with its typed
-// `set_impeller_switch` (K-748, extending K-732 to the other two platforms).
-//
-// In plain terms: Flutter has two renderers, and the newer one — Impeller — is
-// measurably slower for the way Lumit draws (docs/impl/ui-performance.md
-// 2.4/4.1/7.2). Windows has a C++ API for choosing; the GTK embedder has none,
-// so the choice is made the way `flutter run --no-enable-impeller` makes it on
-// every desktop platform: an engine switch read out of the environment before
-// the engine starts.
-//
-// **Appended, never overwritten.** `flutter run` fills these same variables
-// with the switches a debug session needs — the VM service port among them —
-// so replacing the count would leave the tool unable to attach. This reads what
-// is already there and adds one more.
-static void pin_skia(void) {
-  const gchar* set = g_getenv("FLUTTER_ENGINE_SWITCHES");
-  gint64 count = 0;
-  if (set != nullptr) {
-    count = g_ascii_strtoll(set, nullptr, 10);
-    if (count < 0) {
-      count = 0;
-    }
-  }
-  count += 1;
-  g_autofree gchar* key =
-      g_strdup_printf("FLUTTER_ENGINE_SWITCH_%" G_GINT64_FORMAT, count);
-  g_setenv(key, "enable-impeller=false", TRUE);
-  g_autofree gchar* total = g_strdup_printf("%" G_GINT64_FORMAT, count);
-  g_setenv("FLUTTER_ENGINE_SWITCHES", total, TRUE);
-}
-
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(view));
@@ -110,10 +79,24 @@ static void my_application_activate(GApplication* application) {
   // writing a file by hand here.
   // ponytail: default only, add the remembering when a Linux user asks.
 
-  // Before the engine exists, which is what `fl_view_new` below creates.
-  pin_skia();
-
   g_autoptr(FlDartProject) project = fl_dart_project_new();
+  // Pin the renderer to Skia, as the Windows runner does with its typed
+  // `set_impeller_switch` (K-754, superseding K-748's mechanism).
+  //
+  // In plain terms: Flutter has two renderers, and the newer one — Impeller —
+  // is measurably slower for the way Lumit draws (docs/impl/ui-performance.md
+  // 2.4/4.1/7.2), and on Linux it never draws the Viewer's external texture at
+  // all (issue #104). This says so on the project, which is a property the
+  // embedder reads unconditionally.
+  //
+  // **Not the environment variables `flutter run` uses.** K-748 pinned Skia by
+  // appending to FLUTTER_ENGINE_SWITCHES, which is how the tool does it — and
+  // the engine reads those only under `#ifndef FLUTTER_RELEASE`
+  // (shell/platform/common/engine_switches.cc). A release build ignores them
+  // entirely, so that pin held in `flutter run` and did nothing in the
+  // shipped Flatpak. Flip this to TRUE the day a Flutter upgrade's re-run of
+  // ui-performance 2.4's A/B shows Impeller clearing the mandate.
+  fl_dart_project_set_enable_impeller(project, FALSE);
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
 

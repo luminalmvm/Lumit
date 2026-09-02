@@ -4,9 +4,16 @@
 // texture, accepts every frameReady, and never actually draws it. The
 // controller detects that by counting the draws the runner reports back — so a
 // runner whose frameReady answers null (as the Linux one did before K-204's
-// branch) can never be told apart from one that is drawing, and the fallback
-// never fires. These tests pin both halves: null answers must give up after the
-// grace window, and a rising count must keep the path alive.
+// branch) can never be told apart from one that is drawing.
+//
+// **What it does about it changed at K-755.** It used to latch the texture path
+// off, which only made sense while there was a read-back transport to fall back
+// to; there is not, and the owner's ruling is that there will not be. So the
+// detector's whole job is now to make the failure *loud* — a line in the
+// diagnostics file — while the path keeps announcing, because switching off the
+// only transport there is can only turn a recoverable Viewer into a dead one.
+// These tests pin that: never-drawn must not disable the path, and a rising
+// count must leave everything alone.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,22 +43,28 @@ MethodChannel fakeRunner(Object? Function(int call) drawn) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('a runner that never reports a draw drops the texture path', () async {
+  test('a runner that never reports a draw is flagged, not switched off',
+      () async {
     final controller =
         ViewerTextureController(channel: fakeRunner((_) => null));
     expect(await controller.ensureRegistered(0, 640, 360, fd: 3), 7);
     expect(controller.available, isTrue);
 
-    for (var i = 0; i < 12; i++) {
+    // Past the grace window, so the never-drawn condition has held for a while.
+    for (var i = 0; i < 20; i++) {
       await controller.frameReady();
     }
 
-    expect(controller.debugAnnounced, 12);
+    expect(controller.debugAnnounced, 20,
+        reason: 'the path keeps announcing; there is nothing else to move to');
     expect(controller.debugDrawn, 0);
     expect(controller.neverDrawn, isTrue);
-    expect(controller.available, isFalse,
-        reason: 'twelve announced frames and no draw means the runner is not '
-            'showing the texture; the Viewer must stop waiting on it');
+    expect(controller.available, isTrue,
+        reason: 'K-755: the only transport is not switched off for being '
+            'broken — the failure is recorded and then fixed at its cause');
+    // The record itself goes to the shared diagnostics file, so this test
+    // appends one line to it. That is what the file is for, and giving the
+    // controller a seam to write somewhere else would be a seam for one test.
   });
 
   test('a runner that counts its draws keeps the texture path', () async {

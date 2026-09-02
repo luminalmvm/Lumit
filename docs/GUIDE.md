@@ -5966,12 +5966,27 @@ The same build on Skia does the same work in about 5 milliseconds and runs at
 100 to 145. None of that difference is Lumit's painting: it was measured with a
 single painter on screen and with 57 rows of widgets, and both cost the same.
 
-So the runner tells the engine which to use, in one line of
-`flutter_ui/windows/runner/main.cpp`. It is a **pin**, not a preference — a
+So the runner tells the engine which to use, in one line each of
+`flutter_ui/windows/runner/main.cpp`, `linux/runner/my_application.cc` and
+`macos/Runner/Info.plist`. It is a **pin**, not a preference — a
 deliberate hold on a choice that would otherwise drift with whatever Flutter
 version we upgrade to, put in the runner rather than in a command-line flag so
 it holds in the copy of Lumit you install, not just in the one a developer
-launches. The comment beside it names the condition for taking it out: when a
+launches.
+
+**The trap that caught us, which is worth knowing generally.** A program can be
+built two ways: a *debug* build, for whoever is working on it, and a *release*
+build, which is what you download. They are not the same program — the release
+one has whole sections of code compiled out of it, for speed and for safety.
+Flutter's engine will read the drawing-engine choice out of an environment
+variable, and that reading is one of the sections release builds do not contain.
+We pinned Skia through that variable, watched it work in a developer run, and
+shipped a release where it silently did nothing: on Linux that left Impeller in
+place, and Impeller does not draw the Viewer's picture at all, so the preview
+was blank for everyone who installed 0.3.0 (K-754). The lesson is the general
+one — **a setting proved in a developer run is not proved** — and the fix is to
+prefer a setting the program carries in itself, like a property or a bundled
+file, over one it reads from its surroundings. The comment beside it names the condition for taking it out: when a
 Flutter upgrade makes Impeller fast enough on Windows, the line changes back and
 Lumit follows the default again. `docs/impl/ui-performance.md` keeps the
 measurements, and re-running them after each upgrade is a standing job in
