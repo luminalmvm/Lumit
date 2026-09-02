@@ -50,6 +50,10 @@ serde_json = "1"
 uuid = { version = "1", features = ["v7"] }
 
 [features]
+# The shared test renderer over lumit-gpu's shared device and engines
+# (headless.rs, `test_support`). Test-only: enabled by this crate's own
+# dev-dependency on itself, never by a shipped build.
+test-fixtures = ["lumit-gpu/test-fixtures"]
 # The Windows zero-copy Viewer path (K-177). Off by default; forwarded from
 # whichever frontend builds it (the bridge's shipped `.dll`).
 shared-texture = ["lumit-gpu/shared-texture"]
@@ -59,6 +63,7 @@ shared-texture-linux = ["lumit-gpu/shared-texture-linux"]
 shared-texture-macos = ["lumit-gpu/shared-texture-macos"]
 
 [dev-dependencies]
+lumit-render = { path = ".", features = ["test-fixtures"] }
 lumit-media = { path = "../lumit-media", features = ["test-fixtures"] }
 tempfile = "3"
 # The colour parity tests write fp16 texels and read them back, which is what

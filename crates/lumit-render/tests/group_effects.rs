@@ -234,7 +234,7 @@ fn a_header_with_no_live_effects_changes_nothing_at_all() {
         "a wholly bypassed header keeps the key"
     );
 
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -264,7 +264,7 @@ fn a_header_blur_reaches_the_members_and_nothing_else() {
         doc.items.push(ProjectItem::Composition(comp));
         (Arc::new(doc), id)
     };
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -347,7 +347,7 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
     doc_p.items.push(ProjectItem::Composition(comp_p));
     let doc_p = Arc::new(doc_p);
 
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -389,7 +389,7 @@ fn a_live_group_is_the_precompose_it_claims_to_be() {
 /// layer and an outside source can gate a member while the header is live.
 #[test]
 fn mattes_cross_a_live_groups_boundary_intact() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -466,7 +466,7 @@ fn mattes_cross_a_live_groups_boundary_intact() {
 /// paints not one pixel.
 #[test]
 fn an_empty_run_draws_nothing_however_loud_the_header() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -520,7 +520,7 @@ fn an_empty_run_draws_nothing_however_loud_the_header() {
 /// into (§3).
 #[test]
 fn an_adjustment_inside_a_live_group_stops_at_the_groups_floor() {
-    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::new() else {
+    let Ok(mut r) = lumit_render::headless::HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

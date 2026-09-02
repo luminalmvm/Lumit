@@ -4834,10 +4834,10 @@ mod tests {
         shape: u32,
         projection: Option<lumit_core::fx::points::Projection>,
     ) {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
         let (mut inst, sched, carriage) = particulate_fixture_3d(0, 20_000, projection);
         inst.shape = shape;
@@ -4972,10 +4972,10 @@ mod tests {
     }
 
     fn draw_matches_the_cpu_reference(projection: Option<lumit_core::fx::points::Projection>) {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
         // A flat sprite, so the comparison is of *placement* rather than of two
         // bilinear filters: a solid square samples identically either side.
@@ -5108,10 +5108,10 @@ mod tests {
     }
 
     fn grid_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
         let inst = grid_fixture(if projection.is_some() { 3 } else { 1 });
         let style = inst.draw_style();
@@ -5169,10 +5169,10 @@ mod tests {
     /// made, and the picture is the input untouched.
     #[test]
     fn a_grid_at_no_mix_leaves_the_picture_alone() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (64u32, 48u32);
         let mut inst = grid_fixture(1);
         inst.mix = 0.0;
@@ -5218,10 +5218,10 @@ mod tests {
     #[test]
     fn a_scatters_rejection_agrees_with_the_cpu_reference() {
         for invert in [false, true] {
-            let Ok(ctx) = GpuContext::headless() else {
+            let Some(ctx) = lumit_gpu::test_support::lease() else {
                 return;
             };
-            let fx = FxEngine::new(&ctx);
+            let fx = ctx.fx();
             let (w, h) = (128u32, 96u32);
             let inst = lumit_core::fx::effects::scatter::Scatter {
                 density: 40.0,
@@ -5296,10 +5296,10 @@ mod tests {
     /// the rule rather than the last bit of an fp16 texture.
     #[test]
     fn an_emit_from_images_rejection_agrees_with_the_cpu_reference() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
         let inst = lumit_core::fx::effects::emit_from_image::EmitFromImage {
             source: true,
@@ -5396,10 +5396,10 @@ mod tests {
     }
 
     fn clone_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
         // A flat sprite, so what is compared is *placement* rather than two
         // bilinear filters: a solid square samples identically either side.
@@ -5500,10 +5500,10 @@ mod tests {
     /// distance to a line rather than to a point.
     #[test]
     fn a_trails_draw_matches_the_cpu_reference() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
 
         // Four samples of a moving lattice — a Grid does not move, so the
@@ -5603,10 +5603,10 @@ mod tests {
     /// segments, so a disagreement here is the rasteriser's alone.
     #[test]
     fn a_connect_points_draw_matches_the_cpu_reference() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
 
         let stream = lumit_core::fx::effects::grid::Grid {
@@ -5988,10 +5988,10 @@ mod tests {
     /// twin test cannot see.
     #[test]
     fn the_particulate_gpu_stream_matches_the_goldens() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (GOLDEN_W, GOLDEN_H);
         let (packed, style, _, carriage) = particulate_golden_fixture(0);
         let frames = particulate_frames(&carriage);
@@ -6069,10 +6069,10 @@ mod tests {
     #[test]
     #[ignore = "a measurement, not a gate — PS7 owns the harness"]
     fn particulate_budget_numbers() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (1920u32, 1080u32);
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let dt = 1.0 / 60.0;
@@ -6163,10 +6163,10 @@ mod tests {
     /// rewritten to say "except under pressure, and never on export".
     #[test]
     fn particulate_renders_through_run_ops_at_its_declared_cap() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (96u32, 96u32);
         let mut inst =
             lumit_core::fx::instantiate("particulate").expect("particulate is a built-in");
@@ -6204,7 +6204,7 @@ mod tests {
         let source = vec![0.0f32; (w * h * 4) as usize];
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -6260,10 +6260,10 @@ mod tests {
     /// rule applied twice rather than a second rule.
     #[test]
     fn particulate_keeps_the_newest_cap_and_halves_deterministically() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (64u32, 64u32);
         let (inst, sched, carriage) = particulate_fixture(0, 20_000);
         let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
@@ -6475,10 +6475,10 @@ mod tests {
     /// right numbers reached the right kernel.
     #[test]
     fn a_migrated_effect_renders_through_run_ops() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (8u32, 8u32);
         let source: Vec<f32> = (0..(w * h * 4))
             .map(|i| match i % 4 {
@@ -6507,7 +6507,7 @@ mod tests {
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -6619,7 +6619,7 @@ mod tests {
     /// would happen if the arena had put it anywhere but second.
     #[test]
     fn a_run_time_effect_renders_between_two_builtins() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
         let def = a_run_time_def("ofx:test.render.stack");
@@ -6632,7 +6632,7 @@ mod tests {
             "a second registration is a rescan, not a second effect"
         );
 
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (4u32, 4u32);
         let source: Vec<f32> = (0..(w * h * 4))
             .map(|i| match i % 4 {
@@ -6662,7 +6662,7 @@ mod tests {
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -6702,14 +6702,14 @@ mod tests {
     /// frontend can mark exactly that row.
     #[test]
     fn a_failed_run_time_effect_renders_identity_and_reports_it() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
         let def = a_run_time_def("ofx:test.render.errored");
         assert!(crate::gpufx::ofx::register(def));
         def.fails.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (4u32, 4u32);
         let source: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 5) as f32 / 5.0).collect();
         let inst = a_run_time_instance("ofx:test.render.errored");
@@ -6724,7 +6724,7 @@ mod tests {
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -6777,10 +6777,10 @@ mod tests {
     /// against the CPU reference, and the two must differ from each other.
     #[test]
     fn shake_renders_through_run_ops_in_both_modes() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
         let source: Vec<f32> = (0..(w * h * 4))
             .map(|i| match i % 4 {
@@ -6822,7 +6822,7 @@ mod tests {
         let rendered = |ops: &lumit_core::fx::ResolvedStack| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -6884,11 +6884,11 @@ mod tests {
     /// slot and renders no grade at all.
     #[test]
     fn the_kth_lut_op_binds_the_kth_slot() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (4u32, 4u32);
         // Opaque yellow: full red and green, no blue. Every channel sits on a
         // corner of the two-entry cube below, so the answer is the cube's own
@@ -6921,7 +6921,7 @@ mod tests {
 
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -6971,11 +6971,11 @@ mod tests {
     /// still counted, the wrap reads past the end and draws nothing at all.
     #[test]
     fn a_background_plate_and_a_matte_do_not_share_a_counter() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (32u32, 24u32);
 
         // A dim opaque square in an empty frame: a real matte edge for the wrap
@@ -7018,7 +7018,7 @@ mod tests {
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &fg, w, h);
         let plate_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &plate, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -7075,11 +7075,11 @@ mod tests {
     /// it must come out brighter than it went in.
     #[test]
     fn echo_receives_the_decoded_neighbours() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (4u32, 4u32);
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [0.2f32, 0.2, 0.2, 1.0]).collect();
         let previous: Vec<f32> = (0..(w * h)).flat_map(|_| [0.8f32, 0.8, 0.8, 1.0]).collect();
@@ -7097,7 +7097,7 @@ mod tests {
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let neighbours = [(-1, lumit_gpu::fx::upload_linear_f32(&ctx, &previous, w, h))];
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,
@@ -7141,11 +7141,11 @@ mod tests {
     /// effect and quantises the result through another fp16 store.
     #[test]
     fn an_unbound_matte_is_byte_identical() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
         let source: Vec<f32> = (0..(w * h * 4))
             .map(|i| match i % 4 {
@@ -7194,7 +7194,7 @@ mod tests {
                         mattes: &[crate::fxops::LayerInput]| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7248,11 +7248,11 @@ mod tests {
     /// effect takes no matte.
     #[test]
     fn set_matte_reads_the_layer_input_carriage_and_no_matte() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
         // Opaque white, so any change in the picture is the coverage changing.
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
@@ -7290,7 +7290,7 @@ mod tests {
                         mattes: &[crate::fxops::LayerInput]| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7349,11 +7349,11 @@ mod tests {
     /// still declares the universal `Strength` matte.
     #[test]
     fn set_channels_reads_a_source_layer_and_keeps_its_matte_row() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
         // Opaque white, so a change in the picture is the channels moving.
         let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
@@ -7398,7 +7398,7 @@ mod tests {
                         mattes: &[crate::fxops::LayerInput]| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7454,11 +7454,11 @@ mod tests {
     /// passthrough.
     #[test]
     fn fast_motion_blur_takes_a_vectors_layer_beside_its_flow_field() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (32u32, 16u32);
         // A hard vertical edge, so a sideways smear is unmistakable.
         let source: Vec<f32> = (0..(w * h))
@@ -7495,7 +7495,7 @@ mod tests {
         let rendered = |layers: &[crate::fxops::LayerInput]| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7555,11 +7555,11 @@ mod tests {
     /// whichever way round it was asked.
     #[test]
     fn both_flow_consumers_on_one_layer_read_their_own_measurement() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (32u32, 16u32);
         let n = (w * h) as usize;
         // A hard vertical edge: a sideways smear or a melt is unmistakable.
@@ -7609,7 +7609,7 @@ mod tests {
         let rendered = |fields: &[(i32, wgpu::Texture)]| {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7668,11 +7668,11 @@ mod tests {
     /// dissolve by one — shows up immediately.
     #[test]
     fn an_override_is_not_also_dissolved() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (16u32, 16u32);
         // A hard edge, so a blur has something to do and a dissolve of one would
         // be visible in the numbers.
@@ -7707,7 +7707,7 @@ mod tests {
         let through_run_ops = {
             let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
             let out = crate::fxops::run_ops(
-                &fx,
+                fx,
                 &ctx,
                 tex,
                 w,
@@ -7769,11 +7769,11 @@ mod tests {
     /// so the picture must be "the first effect applied, the second not".
     #[test]
     fn the_kth_matte_op_binds_the_kth_slot() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let (w, h) = (4u32, 4u32);
         // Opaque mid grey, so both an exposure up and an exposure down are
         // visible and neither clips.
@@ -7807,7 +7807,7 @@ mod tests {
             crate::fxops::LayerInput::Texture(lumit_gpu::fx::upload_linear_f32(&ctx, &black, w, h));
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
         let out = crate::fxops::run_ops(
-            &fx,
+            fx,
             &ctx,
             tex,
             w,

@@ -1898,14 +1898,14 @@ mod tests {
     /// averaging by ~19 code values on the red channel.
     #[test]
     fn blending_happens_in_linear_light() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
 
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 4, 4);
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 4, 4);
         let layer = CompositeLayer {
             texture: &red,
             size: (4.0, 4.0),
@@ -1927,8 +1927,8 @@ mod tests {
         let g_lin = srgb_decode(1.0);
         let shown = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             4,
             4,
             [0.0, g_lin, 0.0, 1.0],
@@ -1952,16 +1952,16 @@ mod tests {
     /// inverted flips it — verified per pixel.
     #[test]
     fn matte_gates_a_layer_per_pixel() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
 
         // The matte: a quad covering the LEFT half of the 8×8 comp,
         // rendered alone into comp space (transparent background).
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 4, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 4, 8);
         let matte_tex = compositor.composite(
             &ctx,
             8,
@@ -1987,7 +1987,7 @@ mod tests {
         );
 
         // The consumer: full-comp red, gated by the matte's alpha.
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 8, 8);
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let consumer = |inverted: bool| CompositeLayer {
             texture: &red,
             size: (8.0, 8.0),
@@ -2012,8 +2012,8 @@ mod tests {
 
         let shown = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             8,
             8,
             [0.0, 0.0, 0.0, 1.0],
@@ -2026,8 +2026,8 @@ mod tests {
 
         let shown_inv = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             8,
             8,
             [0.0, 0.0, 0.0, 1.0],
@@ -2049,14 +2049,14 @@ mod tests {
     /// perceptual luma ~0.735, not 0.5 — the two are far enough apart to tell.
     #[test]
     fn luma_matte_uses_perceptual_encoded_luminance() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         // sRGB 188 ≈ linear 0.5; a solid, fully-opaque grey fills the comp.
-        let grey = solid_linear(&ctx, &colour, [188, 188, 188, 255], 8, 8);
+        let grey = solid_linear(&ctx, colour, [188, 188, 188, 255], 8, 8);
         let matte_tex = compositor.composite(
             &ctx,
             8,
@@ -2080,7 +2080,7 @@ mod tests {
                 pre: None,
             }],
         );
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 8, 8);
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let out = compositor.composite(
             &ctx,
             8,
@@ -2125,13 +2125,13 @@ mod tests {
     /// pushing a 3D layer back in z shrinks it by zoom/(z+zoom).
     #[test]
     fn camera_perspective_scales_by_depth() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, 0.0), (0.0, 0.0, 0.0));
         let layer = |z: f32| CompositeLayer {
             texture: &white,
@@ -2177,18 +2177,18 @@ mod tests {
     /// encoded-space screen result (~192), not the linear one.
     #[test]
     fn screen_blend_matches_the_perceptual_formula() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let grey = solid_linear(&ctx, &colour, [128, 128, 128, 255], 4, 4);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 4, 4);
         let g_lin = srgb_decode(128.0 / 255.0);
         let shown = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             4,
             4,
             [g_lin, g_lin, g_lin, 1.0],
@@ -2228,12 +2228,12 @@ mod tests {
     /// GPU is the thing under test, this is the oracle.
     #[test]
     fn perceptual_blend_modes_match_the_reference_formula() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
 
         // --- Rust reference, encoded domain [0,1] (== composite.wgsl). ---
         type C = [f64; 3];
@@ -2378,8 +2378,8 @@ mod tests {
             f64::from(d_b[1]) / 255.0,
             f64::from(d_b[2]) / 255.0,
         ];
-        let src = solid_linear(&ctx, &colour, [s_b[0], s_b[1], s_b[2], 255], 4, 4);
-        let dst = solid_linear(&ctx, &colour, [d_b[0], d_b[1], d_b[2], 255], 4, 4);
+        let src = solid_linear(&ctx, colour, [s_b[0], s_b[1], s_b[2], 255], 4, 4);
+        let dst = solid_linear(&ctx, colour, [d_b[0], d_b[1], d_b[2], 255], 4, 4);
 
         fn plain(texture: &wgpu::Texture, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
@@ -2426,8 +2426,8 @@ mod tests {
             // dst solid as the bottom (Normal), src on top with the mode.
             let shown = render_for_display(
                 &ctx,
-                &colour,
-                &compositor,
+                colour,
+                compositor,
                 4,
                 4,
                 [0.0, 0.0, 0.0, 1.0],
@@ -2451,13 +2451,13 @@ mod tests {
     /// Precomp layers, whose pixels never exist CPU-side).
     #[test]
     fn layer_mask_texture_gates_alpha() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         // White RGBA whose alpha is the coverage: left half on, right off.
         let mask_rgba: Vec<u8> = (0..8u32 * 8)
             .flat_map(|i| [255, 255, 255, if i % 8 < 4 { 255 } else { 0 }])
@@ -2498,21 +2498,21 @@ mod tests {
     /// linear — the domain table of docs/06 §blend, pinned per mode.
     #[test]
     fn snapshot_blends_match_their_formulas() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         // src byte 200 over dst byte 64: exercises both formula branches.
         let (s8, d8) = (200u8, 64u8);
-        let src_tex = solid_linear(&ctx, &colour, [s8, s8, s8, 255], 4, 4);
+        let src_tex = solid_linear(&ctx, colour, [s8, s8, s8, 255], 4, 4);
         let d_lin = srgb_decode(f64::from(d8) / 255.0);
         let read = |blend: Blend| {
             let shown = render_for_display(
                 &ctx,
-                &colour,
-                &compositor,
+                colour,
+                compositor,
                 4,
                 4,
                 [d_lin, d_lin, d_lin, 1.0],
@@ -2583,13 +2583,13 @@ mod tests {
     /// linear value where Normal-over would darken toward the top layer.
     #[test]
     fn add_blend_adds_light_linearly() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let grey = solid_linear(&ctx, &colour, [128, 128, 128, 255], 4, 4);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 4, 4);
         let layer = |blend: Blend| CompositeLayer {
             texture: &grey,
             size: (4.0, 4.0),
@@ -2610,7 +2610,7 @@ mod tests {
         let g_lin = srgb_decode(128.0 / 255.0);
         let bg = [g_lin, g_lin, g_lin, 1.0];
         let read = |blend: Blend| {
-            let shown = render_for_display(&ctx, &colour, &compositor, 4, 4, bg, &[layer(blend)]);
+            let shown = render_for_display(&ctx, colour, compositor, 4, 4, bg, &[layer(blend)]);
             colour.readback8(&ctx, &shown).unwrap()[0]
         };
         let normal = read(Blend::Normal);
@@ -2631,22 +2631,22 @@ mod tests {
     /// mixes by coverage, so full-opacity opaque solids read the raw formula.
     #[test]
     fn subtract_blend_removes_light_linearly() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         // Layer sRGB 64 over background sRGB 200: dst − src is a real, positive
         // remainder in linear light.
         let (s8, d8) = (64u8, 200u8);
-        let src = solid_linear(&ctx, &colour, [s8, s8, s8, 255], 4, 4);
+        let src = solid_linear(&ctx, colour, [s8, s8, s8, 255], 4, 4);
         let d_lin = srgb_decode(f64::from(d8) / 255.0);
         let s_lin = srgb_decode(f64::from(s8) / 255.0);
         let shown = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             4,
             4,
             [d_lin, d_lin, d_lin, 1.0],
@@ -2689,14 +2689,14 @@ mod tests {
     /// exercised too.
     #[test]
     fn a_seeded_composite_continues_the_accumulation() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 8, 8);
-        let grey = solid_linear(&ctx, &colour, [128, 128, 128, 255], 8, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
+        let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 8, 8);
         fn layer(tex: &wgpu::Texture, x: f32, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
                 texture: tex,
@@ -2753,13 +2753,13 @@ mod tests {
     /// dims (which would shrink the picture into a corner instead).
     #[test]
     fn a_render_scale_shrinks_the_target_but_not_the_geometry() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 8, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let out = compositor.composite_seeded(
             &ctx,
             16,
@@ -2810,15 +2810,15 @@ mod tests {
     /// the Add blend mode (over-alpha) would not.
     #[test]
     fn motion_blur_average_widens_coverage_and_preserves_static_alpha() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         // A small opaque white quad, its anchor at the top-left so `position`
         // is the quad's left edge in comp pixels.
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 4, 4);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 4, 4);
         let (w, h) = (40u32, 16u32);
         let sample_at = |x: f32| MbSample {
             position: (x, 6.0),
@@ -2899,13 +2899,13 @@ mod tests {
     /// two positions) spreads coverage across both.
     #[test]
     fn accumulate_averages_premultiplied_frames() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 4, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 4, 8);
         // A genuinely premultiplied comp: a red quad over the LEFT half of an
         // 8×8 frame on a transparent background (the right half is alpha 0).
         let frame = |x: f32| {
@@ -2981,13 +2981,13 @@ mod tests {
     /// exactly either way, so this uses a part-opacity quad to bite.
     #[test]
     fn accumulate_is_bit_exact_at_fractional_coverage() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let red = solid_linear(&ctx, &colour, [255, 0, 0, 255], 4, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 4, 8);
         // A genuinely fractional premultiplied comp: red at 37% opacity over a
         // transparent frame, so every covered texel carries non-power-of-two
         // colour AND alpha — the values whose quarter-weighted sum an fp16
@@ -3039,13 +3039,13 @@ mod tests {
     /// frame keeps the background).
     #[test]
     fn transforms_place_layers_in_comp_pixels() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let layer = CompositeLayer {
             texture: &white,
             size: (8.0, 8.0),
@@ -3065,8 +3065,8 @@ mod tests {
         };
         let shown = render_for_display(
             &ctx,
-            &colour,
-            &compositor,
+            colour,
+            compositor,
             16,
             16,
             [0.0, 0.0, 0.0, 1.0],
@@ -3121,7 +3121,7 @@ mod tests {
     /// tolerance argument can blur.
     #[test]
     fn a_rotated_edge_gains_partial_coverage_when_anti_aliased() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
@@ -3129,10 +3129,10 @@ mod tests {
             eprintln!("skipping: this adapter will not multisample the working format at 4");
             return;
         }
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (64u32, 64u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let render = |samples: u32| {
             let tex = compositor.composite_seeded(
                 &ctx,
@@ -3166,7 +3166,7 @@ mod tests {
     /// whole pixels — if it does, something is drawing at half-pixel offsets.
     #[test]
     fn an_axis_aligned_edge_is_bit_identical_anti_aliased_or_not() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
@@ -3174,10 +3174,10 @@ mod tests {
             eprintln!("skipping: this adapter will not multisample the working format at 4");
             return;
         }
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (32u32, 32u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         // Unrotated, unscaled, at whole-pixel coordinates: the quad covers
         // x 8..24 and y 8..24 exactly, so every edge lies ON a pixel boundary
         // and no sample position can disagree with any other.
@@ -3228,7 +3228,7 @@ mod tests {
     /// picture at all.
     #[test]
     fn a_snapshot_blend_composites_across_the_resolve() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
@@ -3236,11 +3236,11 @@ mod tests {
             eprintln!("skipping: this adapter will not multisample the working format at 4");
             return;
         }
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (64u32, 64u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
-        let grey = solid_linear(&ctx, &colour, [128, 128, 128, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
+        let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 8, 8);
         let render = |samples: u32| {
             let mut over = rotated_quad(&grey, w as f32, 33.0);
             over.blend = Blend::Overlay;
@@ -3276,7 +3276,7 @@ mod tests {
     /// aliased smear would show the seam on every blurring layer (trap 4).
     #[test]
     fn the_motion_blur_smear_is_anti_aliased_with_the_composite() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
@@ -3284,10 +3284,10 @@ mod tests {
             eprintln!("skipping: this adapter will not multisample the working format at 4");
             return;
         }
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (64u32, 64u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         // A single STILL placement: the smear is then the placement itself, so
         // any partial alpha down its edge is coverage, never the blur.
         let still = [MbSample {
@@ -3328,14 +3328,14 @@ mod tests {
     /// (docs/14-ENGINEERING-RULES.md).
     #[test]
     fn an_unsupported_sample_count_falls_back_and_still_renders() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (32u32, 32u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         // Whatever this adapter says, the resolved count is one it offers and
         // is never above what was asked for.
         for asked in [1u32, 2, 4, 8, 16] {
@@ -3370,7 +3370,7 @@ mod tests {
     /// composite of nothing must reproduce the seed exactly.
     #[test]
     fn a_multisampled_seed_reproduces_the_seed_exactly() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
@@ -3378,10 +3378,10 @@ mod tests {
             eprintln!("skipping: this adapter will not multisample the working format at 4");
             return;
         }
-        let colour = ColourEngine::new(&ctx);
-        let compositor = Compositor::new(&ctx);
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
         let (w, h) = (32u32, 32u32);
-        let white = solid_linear(&ctx, &colour, [255, 255, 255, 255], 8, 8);
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let seed = compositor.composite_seeded(
             &ctx,
             w,

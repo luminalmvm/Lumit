@@ -60,11 +60,11 @@ fn worst_f16_ulp(a: &[f32], b: &[f32]) -> i32 {
 /// bit-stable against itself (§2.4 determinism).
 #[test]
 fn wgsl_blur_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Corpus (docs/08 §1.6): a diagonal gradient, a hard alpha edge down
     // the middle, and an HDR spike.
@@ -138,11 +138,11 @@ fn wgsl_blur_matches_the_cpu_oracle() {
 /// everywhere, never its width.
 #[test]
 fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 16u32);
 
     // A left-to-right ramp of matte over an opaque picture with an HDR spike, so
@@ -258,11 +258,11 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
 /// tracks it.
 #[test]
 fn an_unmatted_blur_is_the_pre_matte_blur() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (24u32, 16u32);
     let img: Vec<f32> = (0..(w * h * 4))
         .map(|i| match i % 4 {
@@ -303,11 +303,11 @@ fn an_unmatted_blur_is_the_pre_matte_blur() {
 /// half exactly as it came in.
 #[test]
 fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 16u32);
 
     // Two bright squares on black: one just inside the matte's right edge, one
@@ -391,11 +391,11 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
 /// on NVIDIA: 2.9e-3).
 #[test]
 fn wgsl_sharpen_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (amount, radius, threshold, luma_only, mix) in [
@@ -444,11 +444,11 @@ fn wgsl_sharpen_matches_the_cpu_oracle() {
 /// round trip is load-bearing.
 #[test]
 fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus_with_partials(w, h);
     for (name, amount, radius, mix) in [
@@ -488,11 +488,11 @@ fn wgsl_sharpen_simple_matches_the_cpu_oracle() {
 /// and GPU must agree to ≤ 2 fp16 ULP, and the GPU is bit-stable (§2.4).
 #[test]
 fn wgsl_rgb_split_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // Classic red / green / blue tints and one cross-tint case (T17), plus the
@@ -544,11 +544,11 @@ fn wgsl_rgb_split_matches_the_cpu_oracle() {
 /// untouched — separate kernel, separate maths.
 #[test]
 fn wgsl_spectral_split_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // Sweeps the sample count too (FX-9/K-144): 9 (the historical density), a
@@ -609,11 +609,11 @@ fn wgsl_spectral_split_matches_the_cpu_oracle() {
 /// own un-guarded style (asserted here as it is for RGB split above).
 #[test]
 fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // Default red / green / blue tints (the classic split), plus a custom set
@@ -664,11 +664,11 @@ fn wgsl_chromatic_aberration_matches_the_cpu_oracle() {
 /// and GPU must agree to ≤ 2 fp16 ULP, and the GPU is bit-stable (§2.4).
 #[test]
 fn wgsl_flash_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (strength, colour, mix) in [
@@ -708,11 +708,11 @@ fn wgsl_flash_matches_the_cpu_oracle() {
 /// bit-exact identity on both paths.
 #[test]
 fn wgsl_colour_balance_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let neutral = ColourBalanceOp {
@@ -763,11 +763,11 @@ fn wgsl_colour_balance_matches_the_cpu_oracle() {
 /// and saturation 1 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_saturation_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, op) in [
@@ -837,11 +837,11 @@ fn wgsl_saturation_matches_the_cpu_oracle() {
 /// amount 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_vibrancy_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, op) in [
@@ -907,11 +907,11 @@ fn wgsl_vibrancy_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_matte_key_matches_the_cpu_oracle() {
     use lumit_core::fx::MatteKeyParams;
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Corpus (§1.6): a green field on the left sliding to red/magenta on
     // the right, brightness rising down the frame, alpha in bands 0.25..1
@@ -1066,11 +1066,11 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
 #[test]
 fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
     use lumit_core::fx::MatteKeyParams;
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Corpus (§1.6): a green field sliding to red, brightness rising down the
     // frame, alpha in bands — plus two single-pixel specks, one black hole in
@@ -1314,11 +1314,11 @@ fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
 /// Amount 0 (or Mix 0) is the bit-exact identity on both paths.
 #[test]
 fn wgsl_vignette_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, op) in [
@@ -1427,11 +1427,11 @@ fn wgsl_vignette_matches_the_cpu_oracle() {
 /// (`factor` 1.0) or Mix 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_exposure_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, op) in [
@@ -1507,11 +1507,11 @@ fn wgsl_exposure_matches_the_cpu_oracle() {
 /// this pins that: a fractional-alpha pixel comes out identical on both.
 #[test]
 fn wgsl_temperature_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Start from the shared corpus (gradient + alpha edge + HDR spike),
     // then inject partial-alpha pixels: straight colour stored
@@ -1607,11 +1607,11 @@ fn corpus_with_partials(w: u32, h: u32) -> Vec<f32> {
 /// clipped). There is no neutral value, so the only identity case is Mix 0.
 #[test]
 fn wgsl_invert_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus_with_partials(w, h);
     for (name, op) in [
@@ -1648,11 +1648,11 @@ fn wgsl_invert_matches_the_cpu_oracle() {
 /// `black + (white − black)·luma` form on both paths so they reduce alike.
 #[test]
 fn wgsl_tint_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus_with_partials(w, h);
     for (name, op) in [
@@ -1719,11 +1719,11 @@ fn wgsl_tint_matches_the_cpu_oracle() {
 /// diverge exactly there.
 #[test]
 fn wgsl_contrast_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Start from the shared corpus (gradient + alpha edge + HDR spike),
     // then inject partial-alpha pixels: straight colour graded, stored
@@ -1779,11 +1779,11 @@ fn wgsl_contrast_matches_the_cpu_oracle() {
 /// load-bearing — a naive curve on premultiplied colour would diverge there.
 #[test]
 fn wgsl_gamma_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     // Start from the shared corpus (gradient + alpha edge + HDR spike),
     // then inject partial-alpha pixels: straight colour curved, stored
@@ -1866,11 +1866,11 @@ fn wgsl_gamma_matches_the_cpu_oracle() {
 /// 0° (the identity matrix) or Mix 0 is the bit-exact identity on both.
 #[test]
 fn wgsl_hue_shift_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // K-136: both matrix branches — the constant-luminance rotation
@@ -1925,11 +1925,11 @@ fn wgsl_hue_shift_matches_the_cpu_oracle() {
 /// the input bit-exactly.
 #[test]
 fn wgsl_transform_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let centre = [w as f32 * 0.5, h as f32 * 0.5];
@@ -2123,11 +2123,11 @@ fn shake_bag(
 /// handling is covered on both paths.
 #[test]
 fn wgsl_shake_matches_the_cpu_oracle_through_the_transform_kernel() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, offset, rot, zoom, edge, mix) in [
@@ -2221,11 +2221,11 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     // the two — and the WGSL `array<Tap, 9>` literal — in agreement here.
     assert_eq!(SHAKE_MB_SAMPLES, lumit_core::fx::SHAKE_MB_SAMPLES);
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
 
@@ -2383,11 +2383,11 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
 /// hard-knee case where the bright stage passes the most energy).
 #[test]
 fn wgsl_glow_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for (name, radius, threshold, knee, intensity, tint, mix) in [
@@ -2468,11 +2468,11 @@ fn wgsl_glow_matches_the_cpu_oracle() {
 /// reference's early return.
 #[test]
 fn wgsl_block_glitch_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
 
@@ -2580,11 +2580,11 @@ fn wgsl_block_glitch_matches_the_cpu_oracle() {
 /// matching the CPU reference's early return.
 #[test]
 fn wgsl_scanlines_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
 
@@ -2668,11 +2668,11 @@ fn wgsl_scanlines_matches_the_cpu_oracle() {
 /// above (same kernel, byte-identical maths).
 #[test]
 fn wgsl_dir_blur_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for edge in [0u32, 1, 2] {
@@ -2719,11 +2719,11 @@ fn wgsl_dir_blur_matches_the_cpu_oracle() {
 /// untouched (separate kernels, separate maths, same version).
 #[test]
 fn wgsl_radial_blur_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for edge in [0u32, 1, 2] {
@@ -2779,11 +2779,11 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
 /// `processed` untouched.
 #[test]
 fn adjust_blend_lerps_by_coverage_times_opacity() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let below = corpus(w, h);
     // A visibly different "effected" copy (any distinct image works).
@@ -2871,11 +2871,11 @@ fn adjust_blend_lerps_by_coverage_times_opacity() {
 /// - **Bit stability** (§2.4).
 #[test]
 fn wgsl_matte_mix_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let input = corpus(w, h);
     // A visibly different "effected" copy: any distinct image serves.
@@ -2960,11 +2960,11 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
 /// row without learning anything.
 #[test]
 fn wgsl_matte_prepare_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (40u32, 24u32);
     // A matte with four distinct channels, partial alpha and an HDR band.
     let mut matte = vec![0.0f32; (w * h * 4) as usize];
@@ -3019,11 +3019,11 @@ fn wgsl_matte_prepare_matches_the_cpu_oracle() {
 /// the dot would not spread at all.
 #[test]
 fn the_seam_inverts_the_matte_once_and_the_kernel_not_again() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 16u32);
     let mut dot = vec![0.0f32; (w * h * 4) as usize];
     let c = ((8 * w + 24) * 4) as usize;
@@ -3077,11 +3077,11 @@ fn the_seam_inverts_the_matte_once_and_the_kernel_not_again() {
 #[test]
 fn wgsl_blend_mix_matches_the_cpu_oracle_on_every_mode() {
     use lumit_core::model::BlendMode;
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (24u32, 16u32);
     let input = corpus(w, h);
     // A distinct "effected" picture: the corpus shifted and recoloured.
@@ -3156,11 +3156,11 @@ fn wgsl_blend_mix_matches_the_cpu_oracle_on_every_mode() {
 /// bit-stable (§2.4); no taps with Mix 1 is a bit-exact passthrough.
 #[test]
 fn wgsl_echo_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let current = corpus(w, h);
     // Two distinct neighbour frames, at offsets -1 and -2.
@@ -3296,11 +3296,11 @@ fn wgsl_echo_matches_the_cpu_oracle() {
 /// bit-exact passthroughs.
 #[test]
 fn wgsl_motion_blur_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let src = upload_linear_f32(&ctx, &img, w, h);
@@ -3513,11 +3513,11 @@ fn wgsl_motion_blur_matches_the_cpu_oracle() {
 /// (§2.4); Intensity 0 is a bit-exact passthrough.
 #[test]
 fn wgsl_datamosh_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let current = corpus(w, h);
     // A distinct -1 neighbour: the alpha channel carried through (as Echo's
@@ -3673,11 +3673,11 @@ fn build_lut_over(
 /// are all right — if it did not, one of those three is wrong).
 #[test]
 fn wgsl_lut_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
 
     // A premultiplied corpus built from a known *straight* colour and an
@@ -3971,11 +3971,11 @@ fn dof_defaults() -> lumit_core::fx::cpu::DofParams {
 /// sits everywhere inside the sharp band are all bit-exact passthroughs.
 #[test]
 fn wgsl_dof_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let src = upload_linear_f32(&ctx, &img, w, h);
@@ -4768,11 +4768,11 @@ fn lens_flare_dump_frame() {
         eprintln!("LUMIT_FLARE_DUMP unset; skipping");
         return;
     };
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (1152u32, 648u32);
     let quality: u32 = std::env::var("LUMIT_FLARE_QUALITY")
@@ -4859,11 +4859,11 @@ fn lens_flare_dump_frame() {
 #[test]
 #[ignore = "a measurement, not a gate: prints a time, asserts nothing"]
 fn lens_flare_frame_cost() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (960u32, 540u32);
     let img = corpus(w, h);
@@ -4905,11 +4905,11 @@ fn lens_flare_frame_cost() {
 /// either lines up with the direct loop's clamped reads or does not.
 #[test]
 fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     // Big enough that the flare buffer is many tiles wide and the blur radius
     // is a real one; few enough ghosts that it stays a quick test.
@@ -5057,11 +5057,11 @@ fn lens_flare_splits_a_heavy_frame_into_several_submissions() {
 /// a frame is given, and when.
 #[test]
 fn lens_flare_deferred_bakes_answer_with_the_previous_lens_then_the_new_one() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (64u32, 36u32);
 
@@ -5245,11 +5245,11 @@ fn lens_flare_bake_cache_evicts_the_oldest_not_everything() {
 /// transcendentals are not correctly rounded (the note's stated reason).
 #[test]
 fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (192u32, 108u32);
     // Lens 17 (the Zeiss Biotar) carries the FOUR-BOUNCE phases (K-368):
@@ -5497,11 +5497,11 @@ fn wgsl_lens_flare_trace_matches_the_cpu_reference() {
 /// with no threshold to pop across.
 #[test]
 fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (64u32, 48u32);
     let img = corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -5600,11 +5600,11 @@ fn wgsl_sprite_flare_matches_the_cpu_oracle_and_never_pops() {
 /// wrap lands where it should — inside the foreground's edge, nowhere else.
 #[test]
 fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
 
     // A foreground: an opaque square in the middle of an empty frame, so it
@@ -5717,11 +5717,11 @@ fn wgsl_light_wrap_matches_the_cpu_oracle_and_stays_inside_the_edge() {
 /// the energy bound below catches.
 #[test]
 fn an_area_source_spreads_its_flare_without_gaining_energy() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (128u32, 72u32);
     let img = corpus(w, h);
@@ -5791,11 +5791,11 @@ fn an_area_source_spreads_its_flare_without_gaining_energy() {
 /// the first attempt at this measurement fooled itself.
 #[test]
 fn the_flare_renders_the_same_frame_every_time() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (128u32, 72u32);
     let img = corpus(w, h);
@@ -5907,11 +5907,11 @@ fn the_flare_renders_the_same_frame_every_time() {
 /// bit-stable across two runs (§2.4).
 #[test]
 fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (128u32, 72u32);
     let img = corpus(w, h);
@@ -6064,11 +6064,11 @@ fn wgsl_lens_flare_matches_the_cpu_frame_reference_and_neutrals() {
 /// exactly zero on the GPU, and the edge-energy floor below trips.
 #[test]
 fn wgsl_lens_flare_padded_anamorphic_matches_and_fills_the_edge() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (128u32, 72u32);
     let img = vec![0.0f32; (w * h * 4) as usize];
@@ -6221,11 +6221,11 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         lumit_core::fx::lens_flare::BLEND_OPTIONS.len()
     );
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let (w, h) = (128u32, 72u32);
     // A dark scene as the layer input, fp16-quantised AFTER the scale so the
@@ -6414,10 +6414,10 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
 #[test]
 #[ignore = "a diagnostic image dump, not a gate"]
 fn lens_flare_montage() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     use lumit_core::fx::lens_flare as lf;
     let picks: [u32; 20] = [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -6479,11 +6479,11 @@ fn lens_flare_montage() {
 fn wgsl_lighting_matches_the_cpu_oracle() {
     use lumit_core::lighting::{ShadingLight, ShadingSurface};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
 
@@ -6629,11 +6629,11 @@ fn wgsl_curves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::curves::Curves;
     use lumit_core::fx::{CurvePoints, EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -6713,11 +6713,11 @@ fn wgsl_levels_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::levels::Levels;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -6781,11 +6781,11 @@ fn wgsl_levels_matches_the_cpu_oracle() {
 /// Mix 0 is the bit-exact identity on both paths.
 #[test]
 fn wgsl_brightness_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -6877,11 +6877,11 @@ fn wgsl_hue_saturation_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::hue_saturation::HueSaturation;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -6951,11 +6951,11 @@ fn wgsl_fill_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::fill::Fill;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -7019,11 +7019,11 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::gradient::Gradient;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -7125,11 +7125,11 @@ fn wgsl_noise_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::noise::Noise;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -7220,11 +7220,11 @@ fn wgsl_fractal_noise_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::fractal_noise::FractalNoise;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
 
@@ -7433,11 +7433,11 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::turbulent_displace::TurbulentDisplace;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
 
@@ -7569,11 +7569,11 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
     use lumit_core::fx::effects::turbulent_displace::TurbulentDisplace;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -7700,11 +7700,11 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::tile::Tile;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -7873,11 +7873,11 @@ fn wgsl_tile_matches_the_cpu_oracle() {
 /// a zero shift must be the bit-exact identity.
 #[test]
 fn wgsl_offset_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -7931,11 +7931,11 @@ fn wgsl_mirror_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mirror::Mirror;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8012,11 +8012,11 @@ fn wgsl_lens_distort_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::lens_distort::LensDistort;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8131,11 +8131,11 @@ fn wgsl_lens_distort_matches_the_cpu_oracle() {
 /// four radii are actually read per channel rather than shared.
 #[test]
 fn wgsl_channel_blur_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8227,11 +8227,11 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::drop_shadow::DropShadow;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8342,11 +8342,11 @@ fn wgsl_drop_shadow_matches_the_cpu_oracle() {
 /// the labelled no-op every layer-input effect follows (K-258).
 #[test]
 fn wgsl_set_matte_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8454,11 +8454,11 @@ fn wgsl_set_matte_matches_the_cpu_oracle() {
 /// the bit-exact identity**.
 #[test]
 fn wgsl_set_channels_matches_the_cpu_oracle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8586,11 +8586,11 @@ fn wgsl_linear_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::linear_wipe::LinearWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8698,11 +8698,11 @@ fn wgsl_radial_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::radial_wipe::RadialWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8818,11 +8818,11 @@ fn wgsl_venetian_blinds_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::venetian_blinds::VenetianBlinds;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -8931,11 +8931,11 @@ fn wgsl_iris_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::iris_wipe::IrisWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9056,11 +9056,11 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::card_wipe::CardWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9220,11 +9220,11 @@ fn wgsl_corner_pin_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::corner_pin::CornerPin;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9340,11 +9340,11 @@ fn wgsl_displacement_map_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::displacement_map::DisplacementMap;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9515,11 +9515,11 @@ fn wgsl_polar_coordinates_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::polar_coordinates::PolarCoordinates;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9617,11 +9617,11 @@ fn wgsl_twirl_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::twirl::Twirl;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9745,11 +9745,11 @@ fn wgsl_spherize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::spherize::Spherize;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9865,11 +9865,11 @@ fn wgsl_ripple_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::ripple::Ripple;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -9981,11 +9981,11 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::wave_warp::WaveWarp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10097,11 +10097,11 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::bezier_warp::BezierWarp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10231,11 +10231,11 @@ fn wgsl_warp_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::warp::Warp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10356,11 +10356,11 @@ fn wgsl_roughen_edges_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::roughen_edges::RoughenEdges;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = disc_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10487,11 +10487,11 @@ fn wgsl_posterize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::posterize::Posterize;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10553,11 +10553,11 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::threshold::Threshold;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10620,11 +10620,11 @@ fn wgsl_tritone_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::tritone::Tritone;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10692,11 +10692,11 @@ fn wgsl_photo_filter_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::photo_filter::PhotoFilter;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10778,11 +10778,11 @@ fn wgsl_black_and_white_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::black_and_white::BlackAndWhite;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -10876,11 +10876,11 @@ fn wgsl_shadow_highlight_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::shadow_highlight::ShadowHighlight;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11039,11 +11039,11 @@ fn wgsl_median_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::median::Median;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = speckled_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11163,11 +11163,11 @@ fn wgsl_mosaic_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::mosaic::Mosaic;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11277,11 +11277,11 @@ fn wgsl_find_edges_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::find_edges::FindEdges;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = disc_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11359,11 +11359,11 @@ fn wgsl_emboss_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::emboss::Emboss;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11476,11 +11476,11 @@ fn wgsl_texturize_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::texturize::Texturize;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11645,11 +11645,11 @@ fn wgsl_broadcast_safe_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::broadcast_safe::BroadcastSafe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11786,11 +11786,11 @@ fn wgsl_beam_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::beam::Beam;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -11915,11 +11915,11 @@ fn wgsl_lightning_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::lightning::Lightning;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -12054,11 +12054,11 @@ fn wgsl_radio_waves_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::radio_waves::RadioWaves;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 48u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -12203,11 +12203,11 @@ fn wgsl_vegas_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::vegas::Vegas;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -12315,11 +12315,11 @@ fn wgsl_add_grain_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::add_grain::AddGrain;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -12528,11 +12528,11 @@ fn wgsl_path_draw_matches_the_cpu_oracle() {
     use lumit_core::fx::effects::{scribble::Scribble, stroke::Stroke, vegas::Vegas};
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -12879,11 +12879,11 @@ fn claim_corpus(w: u32, h: u32) -> Vec<f32> {
 
 #[test]
 fn the_matte_scales_the_directional_blur_length() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let (length, angle, edge, mix) = (9.5f32, 33.0f32, 1u32, 0.8f32);
@@ -12915,11 +12915,11 @@ fn the_matte_scales_the_directional_blur_length() {
 
 #[test]
 fn the_matte_scales_the_radial_blur_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for spin in [false, true] {
@@ -12962,11 +12962,11 @@ fn the_matte_scales_the_radial_blur_amount() {
 
 #[test]
 fn the_matte_scales_the_unsharp_mask_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // An Amount big enough to undershoot past zero at the spike: that clip is
@@ -13018,11 +13018,11 @@ fn the_matte_scales_the_unsharp_mask_amount() {
 
 #[test]
 fn the_matte_scales_the_sharpen_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let op = SharpenSimpleOp {
@@ -13053,11 +13053,11 @@ fn the_matte_scales_the_sharpen_amount() {
 
 #[test]
 fn the_matte_scales_all_four_channel_blur_radii() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let op = ChannelBlurOp {
@@ -13084,11 +13084,11 @@ fn the_matte_scales_all_four_channel_blur_radii() {
 
 #[test]
 fn the_matte_scales_exposure_stops_toward_zero() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let stops = 2.0f32;
@@ -13123,11 +13123,11 @@ fn the_matte_scales_exposure_stops_toward_zero() {
 
 #[test]
 fn the_matte_pulls_saturation_toward_neutral() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     // 300 %: the near-primaries in row 1 clip to zero in full, which a fade
@@ -13153,11 +13153,11 @@ fn the_matte_pulls_saturation_toward_neutral() {
 
 #[test]
 fn the_matte_pulls_gamma_toward_one() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let op = GammaOp {
@@ -13197,11 +13197,11 @@ fn the_matte_pulls_gamma_toward_one() {
 
 #[test]
 fn the_matte_scales_temperature_toward_zero() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     // 150: past the blue gain's floor, where rebuilding the gains from a
@@ -13233,11 +13233,11 @@ fn the_matte_scales_temperature_toward_zero() {
 
 #[test]
 fn the_matte_scales_vibrancy_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let op = VibrancyOp {
@@ -13261,11 +13261,11 @@ fn the_matte_scales_vibrancy_amount() {
 
 #[test]
 fn the_matte_scales_the_hue_shift_angle() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     for preserve in [true, false] {
@@ -13329,11 +13329,11 @@ fn the_matte_scales_the_hue_shift_angle() {
 
 #[test]
 fn the_matte_pulls_brightness_and_contrast_toward_neutral() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     // Both set: scaling the pair is `b·k` through `(1 + (c − 1)·k)`, which a
@@ -13360,11 +13360,11 @@ fn the_matte_pulls_brightness_and_contrast_toward_neutral() {
 
 #[test]
 fn the_matte_pulls_colour_balance_toward_neutral() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let op = ColourBalanceOp {
@@ -13396,11 +13396,11 @@ fn the_matte_pulls_colour_balance_toward_neutral() {
 
 #[test]
 fn the_matte_scales_every_hue_and_saturation_range_toward_zero() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let mut bands = [[0.0f32; 4]; 7];
@@ -13425,11 +13425,11 @@ fn the_matte_scales_every_hue_and_saturation_range_toward_zero() {
 
 #[test]
 fn the_matte_scales_photo_filter_density() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     // Preserve luminosity on: the luma put back depends on how dark the glass
@@ -13466,11 +13466,11 @@ fn the_matte_scales_shadow_and_highlight_amounts() {
     use lumit_core::fx::effects::shadow_highlight::ShadowHighlight;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let mut s = ShadowHighlight::read(Params::EMPTY);
@@ -13506,11 +13506,11 @@ fn the_matte_scales_shadow_and_highlight_amounts() {
 
 #[test]
 fn the_matte_pulls_posterize_levels_toward_256() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     let op = PosterizeOp { n: 3.0, mix: 1.0 };
@@ -13543,11 +13543,11 @@ fn the_matte_pulls_posterize_levels_toward_256() {
 
 #[test]
 fn the_matte_scales_the_threshold_level() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = claim_corpus(w, h);
     // Softness 10, so the crossing is a ramp rather than a step: a hard cut
@@ -13604,11 +13604,11 @@ fn the_matte_scales_the_threshold_level() {
 
 #[test]
 fn the_matte_scales_the_rgb_split_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -13677,11 +13677,11 @@ fn the_matte_scales_the_rgb_split_amount() {
 
 #[test]
 fn the_matte_scales_the_chromatic_aberration_amount() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let tints = [[1.0f32, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -13744,11 +13744,11 @@ fn the_matte_scales_the_chromatic_aberration_amount() {
 
 #[test]
 fn the_matte_scales_the_shake_displacement() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     // A wobble with all three parts, so the displacement the matte scales is
@@ -13908,11 +13908,11 @@ fn the_matte_scales_the_shake_displacement() {
 
 #[test]
 fn the_matte_scales_the_block_glitch_intensity() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let op = BlockGlitchOp {
@@ -13974,11 +13974,11 @@ fn the_matte_scales_the_block_glitch_intensity() {
 
 #[test]
 fn the_matte_widens_the_scanline_period() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let op = ScanlinesOp {
@@ -14055,11 +14055,11 @@ fn the_matte_widens_the_scanline_period() {
 
 #[test]
 fn the_matte_scales_the_offset_shift() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     let (shift, mix) = ([7.0f32, -5.0f32], 1.0f32);
@@ -14083,11 +14083,11 @@ fn the_matte_scales_the_lens_distortion() {
     use lumit_core::fx::effects::lens_distort::LensDistort;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut l = LensDistort::read(Params::EMPTY);
@@ -14125,11 +14125,11 @@ fn the_matte_scales_the_corner_pin_pull() {
     use lumit_core::fx::effects::corner_pin::CornerPin;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut c = CornerPin::read(Params::EMPTY);
@@ -14179,11 +14179,11 @@ fn the_matte_scales_the_bezier_warp_bend() {
     use lumit_core::fx::effects::bezier_warp::BezierWarp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let (fw, fh) = (w as f32, h as f32);
@@ -14238,11 +14238,11 @@ fn the_matte_scales_the_twirl_angle() {
     use lumit_core::fx::effects::twirl::Twirl;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut t = Twirl::read(Params::EMPTY);
@@ -14293,11 +14293,11 @@ fn the_matte_scales_the_spherize_bulge() {
     use lumit_core::fx::effects::spherize::Spherize;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut s = Spherize::read(Params::EMPTY);
@@ -14333,11 +14333,11 @@ fn the_matte_scales_the_ripple_height() {
     use lumit_core::fx::effects::ripple::Ripple;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut r = Ripple::read(Params::EMPTY);
@@ -14377,11 +14377,11 @@ fn the_matte_scales_the_wave_warp_height() {
     use lumit_core::fx::effects::wave_warp::WaveWarp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut v = WaveWarp::read(Params::EMPTY);
@@ -14419,11 +14419,11 @@ fn the_matte_scales_the_warp_bend() {
     use lumit_core::fx::effects::warp::Warp;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     // Bulge with both perspective tapers, so all three scaled controls matter.
@@ -14486,11 +14486,11 @@ fn the_matte_scales_the_add_grain_intensity() {
     use lumit_core::fx::effects::add_grain::AddGrain;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let mut g = AddGrain::read(Params::EMPTY);
@@ -14527,11 +14527,11 @@ fn the_matte_scales_the_lightning_opacity() {
     use lumit_core::fx::effects::lightning::Lightning;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let mut l = Lightning::read(Params::EMPTY);
@@ -14576,11 +14576,11 @@ fn the_matte_scales_the_radio_waves_opacity() {
     use lumit_core::fx::effects::radio_waves::RadioWaves;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 48u32);
     let img = smooth_corpus(w, h);
     let mut r = RadioWaves::read(Params::EMPTY);
@@ -14632,11 +14632,11 @@ fn the_matte_scales_the_vegas_opacity() {
     use lumit_core::fx::effects::vegas::Vegas;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let mut v = Vegas::read(Params::EMPTY);
@@ -14690,11 +14690,11 @@ fn the_matte_scales_the_path_drawing_opacity() {
     use lumit_core::fx::effects::{scribble::Scribble, stroke::Stroke};
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (48u32, 32u32);
     let img = smooth_corpus(w, h);
     let ellipse = oracle_ellipse(w, h);
@@ -14754,11 +14754,11 @@ fn the_matte_scales_the_drop_shadow_opacity() {
     use lumit_core::fx::effects::drop_shadow::DropShadow;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = alpha_corpus(w, h);
     // Shadow only: the mode in which scaling the shadow's Opacity is not the
@@ -14800,11 +14800,11 @@ fn the_matte_scales_the_roughen_edges_border() {
     use lumit_core::fx::effects::roughen_edges::RoughenEdges;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = disc_corpus(w, h);
     let mut r = RoughenEdges::read(Params::EMPTY);
@@ -14851,11 +14851,11 @@ fn the_matte_scales_the_median_radius() {
     use lumit_core::fx::effects::median::Median;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = speckled_corpus(w, h);
     let of = |radius: f32| {
@@ -14903,11 +14903,11 @@ fn the_matte_scales_the_emboss_relief() {
     use lumit_core::fx::effects::emboss::Emboss;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let of = |relief: f32| {
@@ -14953,11 +14953,11 @@ fn the_matte_scales_the_texturize_relief() {
     use lumit_core::fx::effects::texturize::Texturize;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     // The same coarse weave the oracle test embosses.
@@ -15014,11 +15014,11 @@ fn the_matte_scales_the_linear_wipe_completion() {
     use lumit_core::fx::effects::linear_wipe::LinearWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let l = {
@@ -15056,11 +15056,11 @@ fn the_matte_scales_the_radial_wipe_completion() {
     use lumit_core::fx::effects::radial_wipe::RadialWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let r = {
@@ -15099,11 +15099,11 @@ fn the_matte_scales_the_venetian_blinds_completion() {
     use lumit_core::fx::effects::venetian_blinds::VenetianBlinds;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let v = {
@@ -15148,11 +15148,11 @@ fn the_matte_scales_the_iris_wipe_radius() {
     use lumit_core::fx::effects::iris_wipe::IrisWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let base = {
@@ -15222,11 +15222,11 @@ fn the_matte_scales_the_card_wipe_completion() {
     use lumit_core::fx::effects::card_wipe::CardWipe;
     use lumit_core::fx::{EffectMetadata, Params};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = smooth_corpus(w, h);
     let c = {
@@ -15271,11 +15271,11 @@ fn the_matte_scales_the_card_wipe_completion() {
 /// decay-0.3 trail — genuinely shorter ghosts, not a long trail faded back.
 #[test]
 fn the_matte_scales_the_echo_decay() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (24u32, 16u32);
     let q = |v: &[f32]| -> Vec<f32> { v.iter().map(|x| f16_to_f32(f16_bits(*x))).collect() };
     let current = q(&corpus(w, h));
@@ -15355,11 +15355,11 @@ fn the_matte_scales_the_echo_decay() {
 fn the_matte_scales_the_fast_motion_blur_shutter() {
     use lumit_core::fx::{MbQuality, MbView};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     let n = (w * h) as usize;
@@ -15467,11 +15467,11 @@ fn the_matte_scales_the_fast_motion_blur_shutter() {
 fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
     use lumit_core::fx::{MbQuality, MbView};
 
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (32u32, 24u32);
     let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };
     let img = q(&corpus(w, h));
@@ -15546,11 +15546,11 @@ fn a_motion_vectors_layer_stands_in_for_the_measured_flow() {
 /// neither, and is not the dissolve between them either.
 #[test]
 fn the_matte_scales_the_accumulation_shutter() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (16u32, 8u32);
     let n = (w * h) as usize;
     let q = |x: &[f32]| -> Vec<f32> { x.iter().map(|y| f16_to_f32(f16_bits(*y))).collect() };

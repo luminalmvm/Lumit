@@ -9,8 +9,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::fx::shader;
-use lumit_gpu::fx::{readback_linear_f32, upload_linear_f32, validate, FxEngine};
-use lumit_gpu::GpuContext;
+use lumit_gpu::fx::{readback_linear_f32, upload_linear_f32, validate};
 
 /// A shader with one of everything the host hands in, so a change to the
 /// prologue that broke any binding fails here rather than on somebody's machine.
@@ -150,11 +149,11 @@ fn an_error_in_the_hosts_own_wrapper_says_so() {
 
 #[test]
 fn a_golden_shader_renders_deterministically() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (16u32, 12u32);
     let img = picture(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -360,11 +359,11 @@ fn a_graph_of_every_node_assembles_and_validates() {
 /// written — identical arithmetic, identical pixels.
 #[test]
 fn a_graph_renders_its_hand_written_twin() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (16u32, 12u32);
     let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
     let compiled =
@@ -402,11 +401,11 @@ fn a_graph_renders_its_hand_written_twin() {
 
 #[test]
 fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (8u32, 8u32);
     let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
     // Nought over nought and one over nought, in the user's own arithmetic.
@@ -440,11 +439,11 @@ fn a_nan_returned_by_a_shader_never_leaves_the_effect() {
 
 #[test]
 fn one_pipeline_per_source_hash() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let a = program(INVERT);
     let b = program(EVERYTHING);
     // Two instances, one source: one compile.
@@ -461,11 +460,11 @@ fn one_pipeline_per_source_hash() {
 
 #[test]
 fn two_instances_of_one_source_keep_their_own_uniforms() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let (w, h) = (8u32, 8u32);
     let tex = upload_linear_f32(&ctx, &picture(w, h), w, h);
     let p = program(
@@ -506,11 +505,11 @@ fn two_instances_of_one_source_keep_their_own_uniforms() {
 
 #[test]
 fn a_broken_edit_keeps_the_last_good_pipeline_interactively_and_never_on_export() {
-    let Ok(ctx) = GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         lumit_gpu::no_adapter();
         return;
     };
-    let fx = FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let good = program(INVERT);
     // The export and headless answer, which is the default: no fallback at all.
     fx.shader_pipeline(&ctx, 30, good.source_hash, &good.assembled)

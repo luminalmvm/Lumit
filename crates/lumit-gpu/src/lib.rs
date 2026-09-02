@@ -349,9 +349,10 @@ pub const REQUIRE_ADAPTER_ENV: &str = "LUMIT_REQUIRE_GPU";
 /// panic — the CI jobs that should have one set it, and a developer's machine
 /// leaves it unset and keeps the friendly skip.
 ///
-/// Call it at the skip site and return:
+/// Call it at the skip site and return (the shared fixture answers `None`
+/// for the same reason):
 /// ```ignore
-/// let Ok(ctx) = GpuContext::headless() else {
+/// let Some(ctx) = lumit_gpu::test_support::lease() else {
 ///     lumit_gpu::no_adapter();
 ///     return;
 /// };
@@ -2121,7 +2122,7 @@ mod counter_tests {
     /// and useless. Making a texture and dropping it proves the tally is wired.
     #[test]
     fn the_live_texture_count_follows_what_is_alive() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             no_adapter();
             return;
         };
@@ -2166,7 +2167,7 @@ mod counter_tests {
     /// silently stops happening.
     #[test]
     fn a_destroyed_device_reports_itself_lost() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             no_adapter();
             return;
         };
@@ -2237,11 +2238,11 @@ mod tests {
     /// double-gamma bugs impossible to reintroduce silently (K-031).
     #[test]
     fn colour_round_trip_is_within_one_lsb() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let engine = ColourEngine::new(&ctx);
+        let engine = ctx.colour();
 
         // 16×16: every possible byte value in R, G and B (offset per channel).
         let (w, h) = (16u32, 16u32);
@@ -2274,11 +2275,11 @@ mod tests {
     /// or shift the dark end.
     #[test]
     fn dark_end_precision_survives_fp16() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let engine = ColourEngine::new(&ctx);
+        let engine = ctx.colour();
         // The 64 darkest values — where fp16-in-linear-light is tightest.
         let (w, h) = (8u32, 8u32);
         let mut rgba = Vec::new();
@@ -2304,11 +2305,11 @@ mod tests {
     /// eight-bit path — every value there is a multiple of 257.
     #[test]
     fn the_deep_display_keeps_more_than_eight_bits_of_a_gradient() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let engine = ColourEngine::new(&ctx);
+        let engine = ctx.colour();
         let (w, h) = (64u32, 64u32);
         let mut linear = Vec::with_capacity((w * h * 4) as usize);
         for i in 0..(w * h) {
@@ -2350,11 +2351,11 @@ mod tests {
     /// This is the guard on the one place a gamma curve is spelled twice.
     #[test]
     fn the_deep_display_agrees_with_the_eight_bit_one() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };
-        let engine = ColourEngine::new(&ctx);
+        let engine = ctx.colour();
         let (w, h) = (16u32, 16u32);
         // Every eight-bit sRGB value, decoded to linear light and back.
         let mut bytes = Vec::with_capacity((w * h * 4) as usize);
@@ -2403,6 +2404,10 @@ pub mod shared_linux;
 /// Metal interop at all.
 #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
 pub mod shared_metal;
+// The shared test device and engines. Reached by this crate's own tests and,
+// through the `test-fixtures` feature, by a downstream crate's.
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod test_support;
 pub use composite::{
     camera_matrix, concat_place, place_matrix, scaled_size, Blend, CompositeLayer, Compositor,
     MatteInput, MbSample, Region,

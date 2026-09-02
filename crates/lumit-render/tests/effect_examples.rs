@@ -820,7 +820,7 @@ fn render_every_effect_example() {
     assert!(clip.is_file(), "no clip at {}", clip.display());
     std::fs::create_dir_all(&out).expect("create the output directory");
 
-    let mut r = match HeadlessRenderer::new() {
+    let mut r = match HeadlessRenderer::shared() {
         Ok(r) => r,
         Err(e) => {
             lumit_gpu::no_adapter();

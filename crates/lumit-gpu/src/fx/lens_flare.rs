@@ -794,6 +794,17 @@ impl LazyFlare {
             lf.deferred.store(deferred, Ordering::Relaxed);
         }
     }
+
+    /// Forget every bake, count and policy a previous test left here, so a
+    /// shared engine (`crate::test_support`) starts each test the way a new
+    /// one would. An engine still building has nothing to forget.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        self.deferred.store(false, Ordering::Relaxed);
+        if let Some(lf) = self.ready.get() {
+            lf.reset_for_tests();
+        }
+    }
 }
 
 impl LensFlareFx {
@@ -1152,6 +1163,32 @@ impl LensFlareFx {
         } else if let Ok(mut flight) = self.in_flight.lock() {
             flight.remove(&key);
         }
+    }
+
+    /// See [`LazyFlare::reset_for_tests`]. A bake still on the thread is
+    /// waited for first, so it cannot surface in a later test as a lens
+    /// nobody there asked for.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while self.bake_pending() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = BakeCache::new(Self::CACHE_CAP);
+        }
+        if let Ok(mut landed) = self.landed.lock() {
+            landed.clear();
+        }
+        if let Ok(mut flight) = self.in_flight.lock() {
+            flight.clear();
+        }
+        if let Ok(mut last) = self.last_drawn.lock() {
+            *last = None;
+        }
+        self.generation.store(0, Ordering::Relaxed);
+        self.substitutions.store(0, Ordering::Relaxed);
+        self.deferred.store(false, Ordering::Relaxed);
     }
 
     /// Take everything the bake thread has finished off its channel: clear

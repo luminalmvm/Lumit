@@ -285,11 +285,11 @@ fn flow_and_blur_frame_cost() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no GPU adapter; nothing to measure");
         return;
     };
-    let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+    let fx = ctx.fx();
     let runs = 5u32;
 
     for clip in clips.split(';').filter(|s| !s.trim().is_empty()) {

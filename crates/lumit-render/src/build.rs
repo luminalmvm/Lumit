@@ -3230,19 +3230,19 @@ mod render_below_at_tests {
     fn a_light_layer_lights_the_comp_and_no_lights_changes_nothing() {
         use lumit_core::model::{LightDef, LightKind};
 
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3336,19 +3336,19 @@ mod render_below_at_tests {
     /// names rather than banking a duplicate set under new ones.
     #[test]
     fn a_region_of_interest_is_the_same_pixels_the_full_frame_has_there() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3451,19 +3451,19 @@ mod render_below_at_tests {
     // built on top of the helper.
     #[test]
     fn still_scene_rerender_at_same_time_is_bit_identical() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, exactly as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -3830,19 +3830,19 @@ mod render_below_at_tests {
     // differ, because the text has moved between 0.3 and 0.35.)
     #[test]
     fn posterised_frame_equals_a_plain_render_at_the_held_time() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -4017,19 +4017,19 @@ mod render_below_at_tests {
     // covers a wider horizontal extent. The same combine drives the export path.
     #[test]
     fn accumulation_still_scene_is_identity_and_moving_scene_smears() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             return; // no GPU here — skip, as the gpu crate's own tests do
         };
-        let engine = lumit_gpu::ColourEngine::new(&ctx);
-        let compositor = lumit_gpu::Compositor::new(&ctx);
-        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let engine = ctx.colour();
+        let compositor = ctx.compositor();
+        let fx = ctx.fx();
         let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
         let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
         let realiser = Realiser {
             ctx: ctx.clone_handle(),
-            engine: &engine,
-            compositor: &compositor,
-            fx: &fx,
+            engine,
+            compositor,
+            fx,
             lut_cache: &lut_cache,
             fx_cache: &fx_cache,
             render_scale: 1.0,
@@ -4207,10 +4207,7 @@ mod render_below_at_tests {
     // The two GPU engines plus the flow backend a composite measurement needs,
     // as the headless renderer's owner holds them.
     struct FlowRig {
-        ctx: lumit_gpu::GpuContext,
-        engine: lumit_gpu::ColourEngine,
-        compositor: lumit_gpu::Compositor,
-        fx: lumit_gpu::fx::FxEngine,
+        ctx: lumit_gpu::test_support::Lease,
         lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
         fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
         flow: std::cell::RefCell<crate::realise::CompositeFlow>,
@@ -4218,24 +4215,21 @@ mod render_below_at_tests {
 
     impl FlowRig {
         fn new() -> Option<Self> {
-            let ctx = lumit_gpu::GpuContext::headless().ok()?;
+            let ctx = lumit_gpu::test_support::lease()?;
             Some(FlowRig {
-                engine: lumit_gpu::ColourEngine::new(&ctx),
-                compositor: lumit_gpu::Compositor::new(&ctx),
-                fx: lumit_gpu::fx::FxEngine::new(&ctx),
+                ctx,
                 lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
                 fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
                 flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
-                ctx,
             })
         }
 
         fn realiser(&self) -> Realiser<'_> {
             Realiser {
                 ctx: self.ctx.clone_handle(),
-                engine: &self.engine,
-                compositor: &self.compositor,
-                fx: &self.fx,
+                engine: self.ctx.colour(),
+                compositor: self.ctx.compositor(),
+                fx: self.ctx.fx(),
                 lut_cache: &self.lut_cache,
                 fx_cache: &self.fx_cache,
                 render_scale: 1.0,
@@ -4258,11 +4252,13 @@ mod render_below_at_tests {
                 comp.background.0.map(f64::from),
                 &draws,
             );
-            self.engine
+            self.ctx
+                .colour()
                 .readback8(
                     &self.ctx,
                     &self
-                        .engine
+                        .ctx
+                        .colour()
                         .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
                 )
                 .unwrap()

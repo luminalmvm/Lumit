@@ -219,19 +219,14 @@ The engine, one crate at a time — this is the normal case while working:
 ```powershell
 cargo test -p lumit-core
 cargo test -p lumit-render
-cargo test -p lumit-gpu -- --test-threads=1
+cargo test -p lumit-gpu
 ```
 
-The GPU crate is always single-threaded. Its tests share one graphics device and
-tread on each other when run in parallel.
-
-**That is why a bare `check.ps1` is not a before-every-commit command.**
-Formatting, clippy and every crate but `lumit-gpu` take minutes. The
-single-threaded GPU run after them takes hours on this machine: close to a
-hundred WGSL kernels, each rendered and compared against a CPU oracle, one at a
-time, on top of everything else that crate tests.
-Use `-Crate` while you work, let CI do the whole pass, and run the bare version
-on a machine you are not otherwise using.
+The GPU tests need no special treatment. They share one graphics device and
+one set of compiled shaders per test process, taking turns on it, so the
+`lumit-gpu` crate runs in under a minute and `lumit-render` in a few
+([GUIDE.md](../GUIDE.md) §6 explains the arrangement). It used to be hours,
+because every test opened the card and compiled every shader for itself.
 
 Everything, the way CI does it:
 
@@ -243,8 +238,7 @@ Everything, the way CI does it:
 Raw:
 
 ```powershell
-cargo test --workspace --exclude lumit-gpu
-cargo test -p lumit-gpu -- --test-threads=1
+cargo test --workspace
 ```
 
 To run a single test by name, give cargo part of the name:

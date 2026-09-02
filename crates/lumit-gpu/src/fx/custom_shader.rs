@@ -121,6 +121,23 @@ impl CustomShaderPipelines {
             compiles: Mutex::new(0),
         }
     }
+
+    /// Forget every compiled shader and count, so a shared engine
+    /// (`crate::test_support`) starts each test the way a new one would.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub(super) fn reset_for_tests(&self) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut last_good) = self.last_good.lock() {
+            last_good.clear();
+        }
+        self.stale_ok
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut compiles) = self.compiles.lock() {
+            *compiles = 0;
+        }
+    }
 }
 
 /// Parse and validate an assembled module the way wgpu will, without a graphics

@@ -1063,7 +1063,7 @@ mod tests {
     /// say the file on disk and the picture had parted company.
     #[test]
     fn an_edited_cube_is_read_again() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
@@ -1102,7 +1102,7 @@ mod tests {
     /// still reads 0..1.
     #[test]
     fn the_declared_domain_travels_with_the_cube() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
@@ -1136,7 +1136,7 @@ mod tests {
     /// is what "least recently used" has to mean.
     #[test]
     fn the_cache_is_bounded_and_keeps_what_is_used() {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
@@ -1281,12 +1281,12 @@ mod tests {
     /// aux kind and nothing owned in the arena.
     #[test]
     fn a_custom_shader_in_a_stack_draws_what_its_text_says() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
-        let plain = run(&fx, &ctx, &shader_stack(""), &warm_cache(), 7);
+        let fx = ctx.fx();
+        let plain = run(fx, &ctx, &shader_stack(""), &warm_cache(), 7);
         let before = lumit_gpu::fx::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("read");
         assert_eq!(
             plain, before,
@@ -1295,7 +1295,7 @@ mod tests {
 
         // Half the colour, alpha untouched.
         let halved = run(
-            &fx,
+            fx,
             &ctx,
             &shader_stack(
                 "fn shade(uv: vec2<f32>) -> vec4<f32> {
@@ -1324,24 +1324,24 @@ mod tests {
     /// with nothing to say anything was wrong.
     #[test]
     fn editing_a_shaders_source_renames_its_output() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = warm_cache();
         let half = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                     return vec4<f32>(c.rgb * 0.5, c.a); }";
         let quarter = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                        return vec4<f32>(c.rgb * 0.25, c.a); }";
-        let first = run(&fx, &ctx, &shader_stack(half), &cache, 7);
+        let first = run(fx, &ctx, &shader_stack(half), &cache, 7);
         assert_eq!(cache.borrow().counts(), (1, 0), "a cold walk runs it");
-        let again = run(&fx, &ctx, &shader_stack(half), &cache, 7);
+        let again = run(fx, &ctx, &shader_stack(half), &cache, 7);
         assert_eq!(
             cache.borrow().counts().1,
             1,
             "the same source is the same picture, served from the cache"
         );
         assert_eq!(first, again);
-        let edited = run(&fx, &ctx, &shader_stack(quarter), &cache, 7);
+        let edited = run(fx, &ctx, &shader_stack(quarter), &cache, 7);
         assert_eq!(
             cache.borrow().counts().1,
             1,
@@ -1354,18 +1354,18 @@ mod tests {
     /// picture is the one a cold walk makes.
     #[test]
     fn editing_the_last_effect_reruns_only_that_one() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = warm_cache();
 
         let first = stack(&[
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 1.0),
         ]);
-        run(&fx, &ctx, &first, &cache, 7);
+        run(fx, &ctx, &first, &cache, 7);
         assert_eq!(cache.borrow().counts(), (2, 0), "a cold walk runs both");
         assert_eq!(cache.borrow().stats().2, 2, "and files both outputs");
 
@@ -1373,14 +1373,14 @@ mod tests {
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 2.0),
         ]);
-        let warm = run(&fx, &ctx, &edited, &cache, 7);
+        let warm = run(fx, &ctx, &edited, &cache, 7);
         assert_eq!(
             cache.borrow().counts(),
             (3, 1),
             "the saturation's output was held; only the exposure ran"
         );
 
-        let cold = run(&fx, &ctx, &edited, &warm_cache(), 7);
+        let cold = run(fx, &ctx, &edited, &warm_cache(), 7);
         assert_eq!(
             warm, cold,
             "a held prefix makes the same picture as a cold walk"
@@ -1390,14 +1390,14 @@ mod tests {
     /// An upstream edit renames everything after it: both ops run again.
     #[test]
     fn an_upstream_edit_misses() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = warm_cache();
         run(
-            &fx,
+            fx,
             &ctx,
             &stack(&[
                 ("saturation", "saturation", 20.0),
@@ -1407,7 +1407,7 @@ mod tests {
             7,
         );
         run(
-            &fx,
+            fx,
             &ctx,
             &stack(&[
                 ("saturation", "saturation", 50.0),
@@ -1419,7 +1419,7 @@ mod tests {
         assert_eq!(cache.borrow().counts(), (4, 0));
         // A different source under the same stack is a miss too.
         run(
-            &fx,
+            fx,
             &ctx,
             &stack(&[
                 ("saturation", "saturation", 50.0),
@@ -1441,11 +1441,11 @@ mod tests {
     #[test]
     fn the_ops_after_a_growing_one_run_on_the_wider_raster() {
         use lumit_core::fx::{effects, Value};
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
 
         let mut ops = lumit_core::fx::ResolvedStack::new();
         ops.begin(&effects::tile::TileDef, uuid::Uuid::now_v7());
@@ -1469,7 +1469,7 @@ mod tests {
         ops.push(effects::exposure::Exposure::MIX, Value::Float(100.0));
 
         let out = run_ops(
-            &fx,
+            fx,
             &ctx,
             source(&ctx),
             W,
@@ -1516,11 +1516,11 @@ mod tests {
     /// filed, and the same stack runs in full again.
     #[test]
     fn a_bound_picture_breaks_the_chain() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
 
         // A matte texture on the first op.
         let cache = warm_cache();
@@ -1530,7 +1530,7 @@ mod tests {
         ]);
         for _ in 0..2 {
             run_ops(
-                &fx,
+                fx,
                 &ctx,
                 source(&ctx),
                 W,
@@ -1559,7 +1559,7 @@ mod tests {
         let cache = warm_cache();
         for _ in 0..2 {
             run_ops(
-                &fx,
+                fx,
                 &ctx,
                 source(&ctx),
                 W,
@@ -1588,7 +1588,7 @@ mod tests {
         let ops = stack(&[("echo", "decay", 0.5), ("exposure", "stops", 1.0)]);
         for _ in 0..2 {
             run_ops(
-                &fx,
+                fx,
                 &ctx,
                 source(&ctx),
                 W,
@@ -1614,11 +1614,11 @@ mod tests {
     /// name (as it is in the LUT cache's, K-271).
     #[test]
     fn a_lut_edited_on_disk_misses() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = warm_cache();
         let lut = |mtime: u64| {
             let cube = vec![[1.0f32, 0.0, 0.0]; 8];
@@ -1634,7 +1634,7 @@ mod tests {
         let ops = stack(&[("lut", "mix", 100.0), ("exposure", "stops", 1.0)]);
         for mtime in [1, 1, 2] {
             run_ops(
-                &fx,
+                fx,
                 &ctx,
                 source(&ctx),
                 W,
@@ -1669,18 +1669,18 @@ mod tests {
     /// whether a flare actually stood other optics in, which is counted.
     #[test]
     fn a_bake_in_flight_does_not_rename_every_op() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = warm_cache();
         let ops = stack(&[
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 1.0),
         ]);
-        run(&fx, &ctx, &ops, &cache, 7);
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(cache.borrow().counts(), (2, 2));
 
         fx.set_deferred_flare_bakes(true);
@@ -1702,7 +1702,7 @@ mod tests {
         if !fx.warm_flare_bake(0xfeed_face, &bake) {
             return; // no bake thread on this machine
         }
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(
             cache.borrow().counts(),
             (2, 4),
@@ -1719,11 +1719,11 @@ mod tests {
     /// the last op's survives, and the next identical walk starts after it.
     #[test]
     fn the_budget_evicts_the_oldest_output() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let mut c = FxCache::new((W * H * 8) as usize);
         c.keep_outputs(true);
         let cache = std::cell::RefCell::new(c);
@@ -1731,14 +1731,14 @@ mod tests {
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 1.0),
         ]);
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(cache.borrow().stats().2, 1, "one output fits");
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(cache.borrow().counts(), (2, 2), "and it is the last one");
 
         cache.borrow_mut().set_budget(0);
         assert_eq!(cache.borrow().stats().2, 0);
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(cache.borrow().stats().2, 0, "nothing fits in no budget");
     }
 
@@ -1746,27 +1746,27 @@ mod tests {
     /// and never adds to it.
     #[test]
     fn an_uncommitted_render_reads_but_never_writes() {
-        let Ok(ctx) = GpuContext::headless() else {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
             lumit_gpu::no_adapter();
             return;
         };
-        let fx = FxEngine::new(&ctx);
+        let fx = ctx.fx();
         let cache = std::cell::RefCell::new(FxCache::default());
         let ops = stack(&[
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 1.0),
         ]);
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         assert_eq!(cache.borrow().stats().2, 0);
 
         cache.borrow_mut().keep_outputs(true);
-        run(&fx, &ctx, &ops, &cache, 7);
+        run(fx, &ctx, &ops, &cache, 7);
         cache.borrow_mut().keep_outputs(false);
         let dragged = stack(&[
             ("saturation", "saturation", 20.0),
             ("exposure", "stops", 3.0),
         ]);
-        run(&fx, &ctx, &dragged, &cache, 7);
+        run(fx, &ctx, &dragged, &cache, 7);
         assert_eq!(
             cache.borrow().counts(),
             (5, 1),

@@ -536,19 +536,35 @@ impl HeadlessRenderer {
     /// its "no adapter" state) or the device request fails.
     pub fn new() -> Result<Self, String> {
         let gpu = lumit_gpu::GpuContext::headless().map_err(|e| e.to_string())?;
+        let colour = lumit_gpu::ColourEngine::new(&gpu);
+        let compositor = lumit_gpu::Compositor::new(&gpu);
+        let fx = lumit_gpu::fx::FxEngine::new(&gpu);
+        let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
+        Ok(Self::from_engines(gpu, colour, compositor, fx, scope))
+    }
+
+    /// The renderer around a device and engines already built — what
+    /// [`Self::new`] does after the slow part, and what the shared test
+    /// renderer does with the process-wide set (`test_support`).
+    fn from_engines(
+        gpu: lumit_gpu::GpuContext,
+        colour: lumit_gpu::ColourEngine,
+        compositor: lumit_gpu::Compositor,
+        fx: lumit_gpu::fx::FxEngine,
+        scope: lumit_gpu::scope::ScopeEngine,
+    ) -> Self {
         let parts = Parts {
-            colour: lumit_gpu::ColourEngine::new(&gpu),
-            compositor: lumit_gpu::Compositor::new(&gpu),
-            fx: lumit_gpu::fx::FxEngine::new(&gpu),
+            colour,
+            compositor,
+            fx,
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
             fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
             flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
-        let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         // Flow runs on this same device rather than opening one of its own
         // (K-331); the handles are reference-counted, so this shares it.
         let pool = DecodePool::with_gpu(&gpu);
-        Ok(Self {
+        Self {
             gpu,
             parts: Some(parts),
             scope,
@@ -587,7 +603,7 @@ impl HeadlessRenderer {
             shared_dmabuf: Vec::new(),
             #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
             shared_iosurface: Vec::new(),
-        })
+        }
     }
 
     /// Install (or remove) the sink that hears how far each frame has got —
@@ -3105,7 +3121,7 @@ mod tests {
     /// because it is a naming rule and needs no graphics card to be true.
     #[test]
     fn the_colour_choices_reach_the_frames_name() {
-        let Ok(mut r) = super::HeadlessRenderer::new() else {
+        let Ok(mut r) = super::HeadlessRenderer::shared() else {
             eprintln!("no adapter here");
             return;
         };
@@ -3462,7 +3478,7 @@ mod tests {
     /// which is what this test fails on.
     #[test]
     fn a_tile_past_full_output_extends_the_layer_past_its_edges() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3594,7 +3610,7 @@ mod tests {
     /// lumit-gpu tests use).
     #[test]
     fn solid_comp_renders_its_colour_in_the_centre() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3632,7 +3648,7 @@ mod tests {
     /// renderer, and nothing ever calls `set_transparent_background` on it.
     #[test]
     fn the_transparent_background_flag_uncovers_the_grid() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3668,7 +3684,7 @@ mod tests {
     /// colour, proving the resize path is wired and does not corrupt the frame.
     #[test]
     fn scale_downsamples_the_output() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3693,7 +3709,7 @@ mod tests {
     /// size, with no second resize pass to disagree with.
     #[test]
     fn auto_resolution_composites_at_the_scaled_size() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3733,7 +3749,7 @@ mod tests {
     /// back. Needs no adapter — naming is a hash of the document, not a render.
     #[test]
     fn a_view_names_its_frames_apart_rather_than_leaving_them_nameless() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3825,7 +3841,7 @@ mod tests {
     /// cannot pass by the display transform being a no-op.
     #[test]
     fn an_export_renders_neutral_whatever_the_viewer_is_set_to() {
-        let mut viewer = match HeadlessRenderer::new() {
+        let mut viewer = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3877,7 +3893,7 @@ mod tests {
     /// so a regression collapsing `NoVideo` back onto `Slate` fails this test.
     #[test]
     fn audio_only_media_is_omitted_not_slated() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -3957,7 +3973,7 @@ mod tests {
     /// probe is a `stat` that answers [`Probe::Slate`].
     #[test]
     fn a_comp_probes_its_own_footage_and_nothing_else() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4031,7 +4047,7 @@ mod tests {
     #[cfg(all(windows, feature = "shared-texture"))]
     #[test]
     fn solid_comp_renders_to_a_stable_shared_handle() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4068,7 +4084,7 @@ mod tests {
     #[cfg(all(windows, feature = "shared-texture"))]
     #[test]
     fn unknown_comp_is_an_error_on_the_shared_path() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4544,7 +4560,7 @@ mod tests {
     /// half: a path that forgets to choose gets the safe behaviour.
     #[test]
     fn a_fresh_renderer_bakes_flares_inside_the_frame() {
-        let r = match HeadlessRenderer::new() {
+        let r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4575,7 +4591,7 @@ mod tests {
     /// rendered nothing at all.
     #[test]
     fn a_default_lens_flare_lights_the_frame() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4625,7 +4641,7 @@ mod tests {
     /// other optics than it names, which is counted rather than guessed at.
     #[test]
     fn a_baking_flare_does_not_unname_other_frames() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4668,7 +4684,7 @@ mod tests {
     /// — the aperture is part of the picture, so it is part of the name.
     #[test]
     fn a_keyframed_aperture_names_every_frame() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4716,7 +4732,7 @@ mod tests {
     /// name — a cached frame no edit or undo could ever clear.
     #[test]
     fn an_edited_lens_file_renames_frames() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4776,7 +4792,7 @@ surfaces:
     /// I switch frame."
     #[test]
     fn a_landed_bake_reads_as_landed_without_a_frame_render() {
-        let r = match HeadlessRenderer::new() {
+        let r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4813,7 +4829,7 @@ surfaces:
     /// An unknown comp id is a calm error, never a panic.
     #[test]
     fn unknown_comp_is_an_error() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4837,7 +4853,7 @@ surfaces:
     /// a regression that simply never decodes cannot pass it.
     #[test]
     fn a_value_drag_recomposites_without_decoding_again() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4897,7 +4913,7 @@ surfaces:
     /// `-D warnings` clippy gate on a dead field (K-033).
     #[test]
     fn a_prepared_frame_reports_the_scaled_size() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4948,7 +4964,7 @@ surfaces:
     /// hashes and an edit simply asks for different ones.
     #[test]
     fn a_cacheable_frame_is_served_from_vram_and_a_drag_never_is() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4998,7 +5014,7 @@ surfaces:
     /// and the bar went blank.
     #[test]
     fn a_picture_free_edit_still_hits_the_vram_cache() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5077,7 +5093,7 @@ surfaces:
     /// preview wait — this test polls until it lands.
     #[test]
     fn an_evicted_frame_comes_back_down_and_can_go_back_up() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5201,7 +5217,7 @@ surfaces:
     /// still come down.
     #[test]
     fn a_held_frame_is_copied_down_without_being_evicted() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5289,7 +5305,7 @@ surfaces:
     /// picture on the screen.
     #[test]
     fn a_free_texture_holds_the_next_promoted_frame() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5352,7 +5368,7 @@ surfaces:
     /// those are the parts the two walks each implement separately.
     #[test]
     fn the_preview_and_export_paths_agree_on_a_solid_comp() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5476,7 +5492,7 @@ surfaces:
     /// assertion passed on a picture that had ignored the music entirely.
     #[test]
     fn the_preview_and_export_paths_agree_on_an_audio_driven_comp() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5525,7 +5541,7 @@ surfaces:
     /// which is what says the mix was heard at all rather than read as silence.
     #[test]
     fn a_comp_mix_driven_parameter_renders_the_same_picture_twice() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5566,7 +5582,7 @@ surfaces:
     /// there is no other way for a user to notice it started drawing.
     #[test]
     fn a_null_layer_draws_nothing() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5607,7 +5623,7 @@ surfaces:
     /// the two lines that say so.
     #[test]
     fn a_layer_with_its_out_unplugged_draws_nothing() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5660,7 +5676,7 @@ surfaces:
     /// the interactive one (K-031).
     #[test]
     fn layers_under_a_full_frame_opaque_solid_are_culled_without_changing_a_pixel() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -5839,7 +5855,7 @@ surfaces:
     /// builds without a media file; the footage rows are the test below.
     #[test]
     fn the_preview_and_export_paths_agree_across_the_matrix() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6117,7 +6133,7 @@ surfaces:
     #[test]
     fn a_driven_radius_changes_the_picture_and_a_bypassed_driver_does_not() {
         use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6245,7 +6261,7 @@ surfaces:
     /// but a picture is.
     #[test]
     fn a_retimed_layer_under_forced_accumulation_mb_is_not_black() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6345,7 +6361,7 @@ surfaces:
     /// Skips (with a note) when no ffmpeg CLI is present to write the fixture.
     #[test]
     fn the_preview_and_export_paths_agree_on_footage() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6621,7 +6637,7 @@ surfaces:
     /// against.
     #[test]
     fn a_points_driven_exposure_changes_the_picture() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6768,7 +6784,7 @@ surfaces:
     /// picture rather than as a panel mark.
     #[test]
     fn a_cloned_layer_lands_at_every_point_of_a_wired_stream() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6821,7 +6837,7 @@ surfaces:
     /// assertion catches too.
     #[test]
     fn a_trail_is_drawn_from_a_cold_start_and_needs_no_frame_before_it() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -6934,7 +6950,7 @@ surfaces:
     /// one seam.
     #[test]
     fn a_points_wire_puts_a_web_of_lines_on_the_frame() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7038,7 +7054,7 @@ surfaces:
     /// both, so nothing else about the frame can move.
     #[test]
     fn a_layer_draws_the_points_of_another_layer_through_a_tap() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7157,7 +7173,7 @@ surfaces:
     /// emits nothing at all.
     #[test]
     fn an_emit_from_image_reads_the_layer_its_source_row_names() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7252,7 +7268,7 @@ surfaces:
     /// to be rewritten to say "except under pressure, and never on export".
     #[test]
     fn particulate_exports_its_whole_declared_field() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7371,7 +7387,7 @@ surfaces:
     /// whichever backend happened to run when it was written.
     #[test]
     fn what_the_engine_drops_the_driver_gets_back() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7497,7 +7513,7 @@ surfaces:
     /// overlap (docs/13 §7.0).
     #[test]
     fn a_frame_submits_once_however_many_layers_it_has() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7603,7 +7619,7 @@ surfaces:
     /// not disturb the pixels retained for a comp that *does* exist.
     #[test]
     fn an_unknown_comp_is_a_calm_error_on_the_preview_path() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7632,7 +7648,7 @@ surfaces:
     #[test]
     #[ignore = "timing, not correctness"]
     fn preview_cost() {
-        let Ok(mut renderer) = HeadlessRenderer::new() else {
+        let Ok(mut renderer) = HeadlessRenderer::shared() else {
             lumit_gpu::no_adapter();
             return;
         };
@@ -7666,7 +7682,7 @@ surfaces:
     /// presenting stage.
     #[test]
     fn a_watched_render_reports_its_progress_and_an_unwatched_one_says_nothing() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 eprintln!("skipping: no GPU adapter");
@@ -7725,7 +7741,7 @@ surfaces:
     /// makes of the same document — the export path is that cold renderer.
     #[test]
     fn editing_the_last_effect_serves_the_held_prefix_and_matches_a_cold_render() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 eprintln!("skipping: no GPU adapter");
@@ -7799,7 +7815,7 @@ surfaces:
     /// composite against the parent's stack; and Clear cache empties it.
     #[test]
     fn a_nested_comp_is_realised_once_and_served_by_its_own_name() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 eprintln!("skipping: no GPU adapter");
@@ -7896,7 +7912,7 @@ surfaces:
     /// write the fixture.
     #[test]
     fn a_parent_edit_does_not_decode_the_footage_inside_a_held_precomp() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -7978,7 +7994,7 @@ surfaces:
     /// wrong (or absent) attribution shows.
     #[test]
     fn a_measured_frame_names_the_layer_and_the_effect_it_timed() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 eprintln!("skipping: no GPU adapter");
@@ -8056,7 +8072,7 @@ surfaces:
     /// into a measure of how long Lumit takes to *describe* a layer.
     #[test]
     fn a_measured_frame_hands_its_work_over_layer_by_layer() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -8125,7 +8141,7 @@ surfaces:
     /// where the precomp has alpha and nowhere else.
     #[test]
     fn a_precomp_track_matte_gates_the_layer() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -8189,7 +8205,7 @@ surfaces:
     /// corner of the precomp is still white.
     #[test]
     fn a_paint_stroke_on_a_precomp_layer_reaches_the_picture() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -8250,7 +8266,7 @@ surfaces:
     /// filled at Full and at Half.
     #[test]
     fn an_effect_on_a_precomp_layer_keeps_its_pixels_under_half_preview() {
-        let mut r = match HeadlessRenderer::new() {
+        let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -8313,6 +8329,112 @@ surfaces:
                 "{label}: three eighths across is inside the shifted picture, got {}",
                 at(0.375)
             );
+        }
+    }
+}
+
+/// The renderer every test borrows, over the one device and set of compiled
+/// engines the process shares (`lumit_gpu::test_support`).
+///
+/// # In plain terms
+///
+/// Building a renderer means opening the card and compiling every shader,
+/// which is most of a second and several seconds respectively — and every one
+/// of a hundred-odd tests used to do it. Now the first test builds the slow
+/// parts once and the rest borrow them: [`HeadlessRenderer::shared`] hands
+/// out a renderer whose caches, probes and decoders are brand new (so tests
+/// that assert on cache behaviour see exactly what they always saw) around
+/// engines that are not. When the test drops it, the engines go back for the
+/// next test.
+///
+/// Test-only: `cfg(test)` here, or the `test-fixtures` feature the crate's
+/// own dev-dependency turns on. A test that needs a *second* renderer beside
+/// this one, or its own device to lose, still calls [`HeadlessRenderer::new`].
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod test_support {
+    use super::HeadlessRenderer;
+    use lumit_gpu::test_support::{lease, Lease, SharedGpu};
+    use std::ops::{Deref, DerefMut};
+
+    /// A [`HeadlessRenderer`] on borrowed engines. Derefs to the renderer;
+    /// returns the engines on drop.
+    pub struct TestRenderer {
+        /// `Some` for the whole of the test; taken in `drop`.
+        renderer: Option<HeadlessRenderer>,
+        lease: Lease,
+    }
+
+    impl HeadlessRenderer {
+        /// A renderer around the shared device and engines, or `Err` on a
+        /// machine with no adapter — the same shape as [`Self::new`], so a
+        /// test's skip site does not change.
+        pub fn shared() -> Result<TestRenderer, String> {
+            let mut lease = lease().ok_or_else(|| "no GPU adapter".to_string())?;
+            let shared = lease
+                .take()
+                .ok_or_else(|| "the shared GPU is out on loan".to_string())?;
+            let SharedGpu {
+                ctx,
+                colour,
+                compositor,
+                fx,
+                scope,
+            } = shared;
+            let renderer = HeadlessRenderer::from_engines(ctx, colour, compositor, fx, scope);
+            Ok(TestRenderer {
+                renderer: Some(renderer),
+                lease,
+            })
+        }
+
+        /// The device and engines back out of a renderer, for the pool.
+        /// `None` when a render unwound and left the engines behind (see
+        /// `parts`); the pool then builds a new set for the next test.
+        fn into_engines(self) -> Option<SharedGpu> {
+            let Self {
+                gpu, parts, scope, ..
+            } = self;
+            let parts = parts?;
+            Some(SharedGpu {
+                ctx: gpu,
+                colour: parts.colour,
+                compositor: parts.compositor,
+                fx: parts.fx,
+                scope,
+            })
+        }
+    }
+
+    impl Deref for TestRenderer {
+        type Target = HeadlessRenderer;
+
+        // Test-only code; the `Option` is `Some` until `drop` by construction.
+        #[allow(clippy::expect_used)]
+        fn deref(&self) -> &HeadlessRenderer {
+            self.renderer
+                .as_ref()
+                .expect("a test renderer outlives its drop")
+        }
+    }
+
+    impl DerefMut for TestRenderer {
+        #[allow(clippy::expect_used)]
+        fn deref_mut(&mut self) -> &mut HeadlessRenderer {
+            self.renderer
+                .as_mut()
+                .expect("a test renderer outlives its drop")
+        }
+    }
+
+    impl Drop for TestRenderer {
+        fn drop(&mut self) {
+            if let Some(shared) = self
+                .renderer
+                .take()
+                .and_then(HeadlessRenderer::into_engines)
+            {
+                self.lease.restore(shared);
+            }
         }
     }
 }

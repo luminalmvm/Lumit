@@ -109,34 +109,25 @@ jobs:
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      # lumit-render is excluded here and run on its own below, for the reason
-      # the GPU oracles are: its headless tests each open the compositor, and a
-      # runner with no graphics card renders them on WARP. A dozen at once takes
-      # the whole test process down with `exit code: 2173` and no failing test
-      # named - which is what it did the first time the suite ran green enough
-      # to reach them (2026-09-01).
-      - run: cargo test --workspace --exclude lumit-gpu --exclude lumit-render
-      - name: The headless renderer, single-threaded (WARP has one of it)
-        run: cargo test -p lumit-render -- --test-threads=1
-      # The GPU oracles single-threaded, exactly as the Linux job runs them and
-      # for the same reason: this runner has no graphics card, so the pinned
-      # DX12 backend enumerates WARP — a software rasteriser — and a dozen
-      # kernel tests hammering one at once thrashes it. That is not a
-      # hypothetical: it took the whole test process down (`exit code: 2173`,
-      # no output, no test reported as failed), which reads as a mystery
-      # crash rather than as the contention it is.
+      # One run, GPU crates included. Every GPU test borrows the process's one
+      # device and one set of compiled engines under a lock
+      # (crates/lumit-gpu/src/test_support.rs), so the GPU tests run one at a
+      # time by construction while the CPU tests around them run in parallel.
+      # That is what lets this runner — no graphics card, so the pinned DX12
+      # backend enumerates WARP, a software rasteriser — survive the suite: a
+      # dozen tests each opening a device of their own took the whole process
+      # down with `exit code: 2173` and no failing test named (2026-09-01),
+      # and the cure until the fixture existed was three separate
+      # single-threaded runs that cost fifty minutes.
       #
-      # `--nocapture` because the failure this job has actually had was the
-      # process dying rather than a test failing, and the harness throws
-      # captured output away when that happens — so the one thing that would
-      # have explained it never reached the log. Serial output is readable,
-      # and `LUMIT_GPU_DEBUG` names the adapter, which is the first question
-      # anyone asks about a GPU failure on a runner with no graphics card.
-      - name: GPU oracle tests (WARP software DX12)
+      # `LUMIT_GPU_DEBUG` names the adapter, which is the first question anyone
+      # asks about a GPU failure on a runner with no graphics card; the
+      # backtrace is for the failure this job has actually had, the process
+      # dying rather than a test failing.
+      - run: cargo test --workspace
         env:
           RUST_BACKTRACE: 1
           LUMIT_GPU_DEBUG: 1
-        run: cargo test -p lumit-gpu -- --test-threads=1 --nocapture
 
   linux:
     name: tests (Linux, with media)
@@ -205,14 +196,12 @@ jobs:
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --exclude lumit-gpu
-      # The GPU oracles single-threaded (the project convention), so a software
-      # rasteriser neither races nor thrashes. With LUMIT_REQUIRE_GPU set (see
-      # the job env) they can no longer skip themselves here: on this runner a
-      # missing lavapipe adapter fails the job instead of quietly proving
-      # nothing about the kernels.
-      - name: GPU oracle tests (lavapipe software Vulkan)
-        run: cargo test -p lumit-gpu -- --test-threads=1
+      # GPU crates included: the tests share one device under a lock (see the
+      # `windows` job), so a software rasteriser neither races nor thrashes.
+      # With LUMIT_REQUIRE_GPU set (the job env) the GPU tests cannot skip
+      # themselves here: a missing lavapipe adapter fails the job instead of
+      # quietly proving nothing about the kernels.
+      - run: cargo test --workspace
       # The `media` feature turned off (K-273): the bridge's own decode paths
       # compile out and its tests still pass. Deliberately NOT advertised as a
       # build without FFmpeg — `lumit-render` and `lumit-audio` depend on

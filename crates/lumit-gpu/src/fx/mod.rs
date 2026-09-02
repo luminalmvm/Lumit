@@ -380,6 +380,16 @@ impl FxEngine {
         self.lens_flare.set_deferred(deferred);
     }
 
+    /// Forget everything this engine remembers between frames — flare bakes,
+    /// compiled custom shaders, their counts — so one engine shared by every
+    /// test in a process (`crate::test_support`) hands each test what a new
+    /// engine would. Test-only: nothing shipped shares an engine this way.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    pub fn reset_for_tests(&self) {
+        self.lens_flare.reset_for_tests();
+        self.custom_shader.reset_for_tests();
+    }
+
     /// Whether a flare bake is being made right now.
     ///
     /// Answered without waiting for the flare's own pipelines to finish

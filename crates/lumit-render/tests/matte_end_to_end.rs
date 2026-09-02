@@ -183,7 +183,7 @@ fn px(rgba: &[u8], w: u32, x: u32) -> u8 {
 
 #[test]
 fn a_matte_bound_in_a_document_drives_the_effect_it_is_bound_to() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -244,7 +244,7 @@ fn a_matte_bound_in_a_document_drives_the_effect_it_is_bound_to() {
 /// itself rather than a resample.
 #[test]
 fn a_black_matte_suppresses_the_effect_entirely() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -302,7 +302,7 @@ fn a_black_matte_suppresses_the_effect_entirely() {
 /// comp background (the matte held it back).
 #[test]
 fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -356,7 +356,7 @@ fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
 /// left of the band and nowhere else.
 #[test]
 fn an_adjustment_layer_reads_a_hidden_matte() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -429,7 +429,7 @@ fn an_adjustment_layer_reads_a_hidden_matte() {
 /// under the band and leave the rest of it exactly as it found it.
 #[test]
 fn the_matte_dropdown_on_an_adjustment_layer_gates_its_stack() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -537,7 +537,7 @@ fn project_with(
 /// a pass: the kernels already read luma, and Normal is the kernel's own Mix.
 #[test]
 fn the_default_channel_and_blend_render_the_same_bytes_as_before_they_existed() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -561,7 +561,7 @@ fn the_default_channel_and_blend_render_the_same_bytes_as_before_they_existed() 
 /// applied nowhere, likewise. Either failure is this assertion.
 #[test]
 fn invert_swaps_the_two_halves_once() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -593,7 +593,7 @@ fn invert_swaps_the_two_halves_once() {
 /// proves the pick is wired through the seam and the kernel reads it.
 #[test]
 fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -633,7 +633,7 @@ fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
 /// which is what "the matte scales the amount" means beside a blend.
 #[test]
 fn a_multiply_blend_darkens_where_normal_lifts() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

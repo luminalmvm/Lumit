@@ -150,7 +150,7 @@ fn px(rgba: &[u8], w: u32, x: u32) -> [u8; 4] {
 
 #[test]
 fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_span() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

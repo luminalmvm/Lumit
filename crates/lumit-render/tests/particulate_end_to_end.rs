@@ -161,7 +161,7 @@ fn diff(a: &[u8], b: &[u8]) -> (usize, u8) {
 /// none of them, so the frame is unambiguously mid-field.
 #[test]
 fn a_default_particulate_on_a_solid_draws_particles() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -196,7 +196,7 @@ fn a_default_particulate_on_a_solid_draws_particles() {
 /// clock draws the same thing at every time, which this notices.
 #[test]
 fn particulate_draws_nothing_at_frame_zero_and_something_later() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -232,7 +232,7 @@ fn particulate_draws_nothing_at_frame_zero_and_something_later() {
 /// slider can steer into.
 #[test]
 fn particulate_survives_the_parameter_fiddling() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -312,7 +312,7 @@ fn particulate_survives_the_parameter_fiddling() {
 /// both a crash test and the property test for it.
 #[test]
 fn particulate_survives_a_scrub() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -359,7 +359,7 @@ fn particulate_survives_a_scrub() {
 /// draw and what comes back is black.
 #[test]
 fn a_huge_emit_rate_renders_instead_of_faulting_the_device() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -469,7 +469,7 @@ fn deep_particulate() -> lumit_core::model::EffectInstance {
 /// for depth renders byte for byte whatever the comp is looking with.
 #[test]
 fn a_three_d_particulate_is_seen_through_the_comps_camera() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -531,7 +531,7 @@ fn a_three_d_particulate_is_seen_through_the_comps_camera() {
 /// unit test can see.
 #[test]
 fn the_generators_draw_on_a_solid_through_the_document() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };

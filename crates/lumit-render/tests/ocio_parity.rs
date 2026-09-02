@@ -102,8 +102,8 @@ fn cube_chain() -> Chain {
 /// into the fp16 working format so nothing is clamped on the way out and the
 /// comparison is against the oracle rather than against a unorm write.
 fn on_the_card(artefact: &Artefact, colours: &[[f32; 3]]) -> Option<Vec<[f32; 3]>> {
-    let ctx = lumit_gpu::GpuContext::headless().ok()?;
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let ctx = lumit_gpu::test_support::lease()?;
+    let engine = ctx.colour();
     let uploaded = engine.upload_ocio(&ctx, &tables(artefact));
 
     // One row of fp16 texels carrying the probe colours, alpha 1 so the
@@ -296,11 +296,11 @@ fn a_cube_with_no_symmetry_agrees_wedge_for_wedge() {
 /// produce the same bytes as the built-in pass, which encodes in hardware.
 #[test]
 fn a_baked_srgb_view_matches_the_built_in_pass_rather_than_encoding_twice() {
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
 
     // Linear → sRGB, the transform the built-in display pass performs. As a
     // chain, so it bakes exactly as a config's view would.
@@ -376,11 +376,11 @@ fn a_baked_srgb_view_matches_the_built_in_pass_rather_than_encoding_twice() {
 /// bind the artefact this test binds.
 #[test]
 fn the_deep_display_carries_the_same_baked_view_as_the_eight_bit_one() {
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
     let artefact = bake(&cube_chain(), Shaper::DEFAULT).expect("bakes");
     let uploaded = engine.upload_ocio(&ctx, &tables(&artefact));
 
@@ -611,7 +611,7 @@ fn parity_row(
 
 #[test]
 fn preview_equals_export_in_every_colour_configuration() {
-    let mut r = match HeadlessRenderer::new() {
+    let mut r = match HeadlessRenderer::shared() {
         Ok(r) => r,
         Err(_) => {
             eprintln!("no adapter here, skipping the colour parity matrix");

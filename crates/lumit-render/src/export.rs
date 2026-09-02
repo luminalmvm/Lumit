@@ -4763,7 +4763,7 @@ mod tests {
     #[test]
     fn a_sixteen_bit_export_carries_more_than_eight_bits_of_a_gradient() {
         let (doc, comp_id) = gradient_doc(512, 512);
-        let mut renderer = match crate::headless::HeadlessRenderer::new() {
+        let mut renderer = match crate::headless::HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();

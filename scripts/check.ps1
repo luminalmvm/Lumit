@@ -29,11 +29,10 @@
 
 .EXAMPLE
     .\scripts\check.ps1
-    The full engine pass. Formatting, clippy and every crate but lumit-gpu take
-    minutes; the single-threaded lumit-gpu run after them is hours on this
-    machine, because close to a hundred WGSL kernels are each checked against a
-    CPU oracle one at a time. Use -Crate while working and leave the whole pass
-    to CI, or to a machine you are not using.
+    The full engine pass: formatting, clippy, then every crate's tests. The GPU
+    tests share one device and one set of compiled shaders per test process
+    (crates/lumit-gpu/src/test_support.rs), so the whole pass is minutes, not
+    hours. Use -Crate while working on one crate.
 #>
 [CmdletBinding()]
 param(
@@ -64,18 +63,13 @@ try {
     Run 'cargo clippy --workspace --all-targets -- -D warnings'
 
     if (-not $SkipTests) {
-        # The GPU oracles share one graphics device and tread on each other in
-        # parallel, so they are always a separate single-threaded run - which is
-        # exactly how .github/workflows/ci.yml splits them too.
+        # One run, GPU crates included: their tests borrow one shared device
+        # under a lock, so they serialise themselves - exactly what
+        # .github/workflows/ci.yml runs too.
         if ($Crate) {
-            if ($Crate -eq 'lumit-gpu') {
-                Run 'cargo test -p lumit-gpu -- --test-threads=1'
-            } else {
-                Run "cargo test -p $Crate"
-            }
+            Run "cargo test -p $Crate"
         } else {
-            Run 'cargo test --workspace --exclude lumit-gpu'
-            Run 'cargo test -p lumit-gpu -- --test-threads=1'
+            Run 'cargo test --workspace'
         }
     }
     Write-Host 'All green.' -ForegroundColor Green

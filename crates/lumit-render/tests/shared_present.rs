@@ -55,7 +55,7 @@ fn a_shared_texture_can_be_made_at_any_size_a_preview_asks_for() {
 /// the whole run uses two.
 #[test]
 fn alternating_sizes_reuse_their_targets_instead_of_minting_handles() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         return; // no adapter
     };
     let mut handles: Vec<u64> = Vec::new();
@@ -92,7 +92,7 @@ fn alternating_sizes_reuse_their_targets_instead_of_minting_handles() {
 /// does, must not accumulate targets without limit.
 #[test]
 fn the_target_pool_is_bounded() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         return;
     };
     for i in 0..24u32 {

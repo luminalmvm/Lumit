@@ -5609,6 +5609,25 @@ and fails on anything it would reject. It needs no card, so it runs everywhere a
 finishes in milliseconds. It checks that a shader is *valid*, not that it is *right* —
 being right is what the CPU-reference comparisons are for, and those do need a card.
 
+**The tests that do need a card share one.** Opening the graphics card takes under a
+second, and compiling the effect engine's hundred-odd shaders takes several more. For a
+long time every GPU test did both for itself, so a test that compares a 32-pixel blur
+against its CPU reference spent six seconds setting up and a few milliseconds testing —
+and two hundred of them had to run one at a time, because a machine without a real card
+(the CI runners) falls over when a dozen tests each open a software one. That was the
+whole of the hour-long CI job and the "hours" local run. Now the first test to ask
+builds one device and one set of compiled engines, and every later test borrows that
+set, one test at a time, with whatever the engines remember (flare bakes, compiled
+custom shaders) wiped between borrowers so no test sees another's leftovers. The renderer
+a test borrows is built fresh around those engines — new caches, new probes, new
+decoders — so tests that assert on cache behaviour see exactly what they always saw. The
+borrow is a lock, which is also what keeps the GPU tests serial while the CPU tests
+around them run in parallel; the `--test-threads=1` runs are gone. A test that needs
+its own card (the device-loss drill, a second renderer beside the first) still opens
+one, and asking for the shared card twice on one thread stops with a message rather
+than deadlocking. It lives in `crates/lumit-gpu/src/test_support.rs`, with the
+renderer half in `crates/lumit-render/src/headless.rs`.
+
 ## 7. Words you'll meet in the code
 
 | Term | Meaning |

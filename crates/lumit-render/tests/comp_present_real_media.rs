@@ -104,7 +104,7 @@ fn a_comp_of_real_media_renders_and_presents_across_a_size_change() {
         eprintln!("set LUMIT_TEST_MEDIA to the clip to render");
         return;
     };
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         eprintln!("no adapter here");
         return;
     };

@@ -208,7 +208,7 @@ mod tests {
     /// validated by building a shader module against a real device.
     #[test]
     fn wgsl_twin_compiles() {
-        let Ok(ctx) = crate::GpuContext::headless() else {
+        let Some(ctx) = crate::test_support::lease() else {
             crate::no_adapter();
             return;
         };

@@ -681,8 +681,8 @@ mod tests {
         out
     }
 
-    fn ctx() -> Option<GpuContext> {
-        GpuContext::headless().ok()
+    fn ctx() -> Option<crate::test_support::Lease> {
+        crate::test_support::lease()
     }
 
     /// A solid grey's luma waveform lands its whole sampled count on one row —
@@ -693,9 +693,9 @@ mod tests {
             crate::no_adapter();
             return;
         };
-        let engine = ScopeEngine::new(&ctx);
+        let engine = ctx.scope();
         let frame = solid(16, 16, 128, 128, 128);
-        let gpu = gpu_counts(&engine, &ctx, ScopeKind::WaveformLuma, &frame, 16, 16);
+        let gpu = gpu_counts(engine, &ctx, ScopeKind::WaveformLuma, &frame, 16, 16);
         let cpu = waveform_luma_counts(&frame, 16, 16);
         assert_eq!(gpu, cpu, "GPU luma bins must equal the CPU oracle");
         // And the CPU maths itself: all 256 samples on the grey's own row.
@@ -713,9 +713,9 @@ mod tests {
             crate::no_adapter();
             return;
         };
-        let engine = ScopeEngine::new(&ctx);
+        let engine = ctx.scope();
         let frame = solid(10, 10, 255, 0, 64);
-        let gpu = gpu_counts(&engine, &ctx, ScopeKind::Histogram, &frame, 10, 10);
+        let gpu = gpu_counts(engine, &ctx, ScopeKind::Histogram, &frame, 10, 10);
         let cpu = histogram_counts(&frame, 10, 10);
         // gpu is [r bins.., g bins.., b bins..]; compare channel by channel.
         for c in 0..3 {
@@ -734,9 +734,9 @@ mod tests {
             crate::no_adapter();
             return;
         };
-        let engine = ScopeEngine::new(&ctx);
+        let engine = ctx.scope();
         let frame = solid(8, 8, 128, 128, 128);
-        let gpu = gpu_counts(&engine, &ctx, ScopeKind::Vectorscope, &frame, 8, 8);
+        let gpu = gpu_counts(engine, &ctx, ScopeKind::Vectorscope, &frame, 8, 8);
         let mid = (g() - 1) / 2;
         let peak_cell = (0..g() * g()).max_by_key(|&c| gpu[c]).unwrap();
         let (px, py) = (peak_cell % g(), peak_cell / g());
@@ -754,7 +754,7 @@ mod tests {
             crate::no_adapter();
             return;
         };
-        let engine = ScopeEngine::new(&ctx);
+        let engine = ctx.scope();
         // 256 wide so every column bins (bx = x·256/256 = x); every column of the
         // grey's row is then fully lit (peak == the per-column count).
         let frame = solid(256, 64, 128, 128, 128);
@@ -800,7 +800,7 @@ mod tests {
             crate::no_adapter();
             return;
         };
-        let engine = ScopeEngine::new(&ctx);
+        let engine = ctx.scope();
         let trace = engine
             .trace_rgba8(&ctx, ScopeKind::WaveformRgb, STANDARD, &[1, 2, 3], 8, 8)
             .expect("trace");

@@ -57,6 +57,9 @@ naga = { version = "24", features = ["wgsl-in"] }
 # property dictionary. The Metal interop is additionally
 # `cfg(target_os = "macos")`-gated, so enabling the feature off macOS is inert.
 [features]
+# The shared test device and engines (src/test_support.rs), for downstream
+# crates' tests. Test-only by construction: no shipped path enables it.
+test-fixtures = []
 shared-texture = ["dep:windows"]
 shared-texture-linux = ["dep:ash"]
 shared-texture-macos = ["dep:metal", "dep:objc", "dep:core-foundation"]
@@ -95,6 +98,10 @@ objc = { version = "0.2", optional = true }
 core-foundation = { version = "0.9", optional = true }
 
 [dev-dependencies]
+# The crate itself, with the shared-device fixture on, so the integration
+# tests under tests/ borrow one device and one set of compiled engines the
+# way the unit tests do (src/test_support.rs).
+lumit-gpu = { path = ".", features = ["test-fixtures"] }
 # The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
 lumit-core = { path = "../lumit-core" }
 # The walking-skeleton proof that the eval executor drives these kernels

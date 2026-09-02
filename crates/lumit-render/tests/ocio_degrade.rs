@@ -363,11 +363,11 @@ fn a_footage_layers_pixels_carry_the_items_colour_space() {
 fn one_input_table_is_uploaded_per_distinct_colour_space() {
     use lumit_render::colour::InputTransforms;
 
-    let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+    let Some(ctx) = lumit_gpu::test_support::lease() else {
         eprintln!("no adapter here");
         return;
     };
-    let engine = lumit_gpu::ColourEngine::new(&ctx);
+    let engine = ctx.colour();
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.ocio");
@@ -394,18 +394,18 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
 
     let mut state = ColourState::default();
     state.sync(&doc);
-    let built = InputTransforms::build(&doc, &state, &ctx, &engine);
+    let built = InputTransforms::build(&doc, &state, &ctx, engine);
     assert!(built.get("srgb_texture").is_some());
     assert!(built.get("no_such_space").is_none());
     assert!(!built.is_empty());
 
     // A project with no config uploads nothing at all.
     let none = ColourState::default();
-    assert!(InputTransforms::build(&doc, &none, &ctx, &engine).is_empty());
+    assert!(InputTransforms::build(&doc, &none, &ctx, engine).is_empty());
 
     // And neither does one whose config went missing — the preview degrades to
     // the built-in interpretation rather than to no picture.
     std::fs::remove_file(&path).unwrap();
     state.sync(&doc);
-    assert!(InputTransforms::build(&doc, &state, &ctx, &engine).is_empty());
+    assert!(InputTransforms::build(&doc, &state, &ctx, engine).is_empty());
 }

@@ -134,7 +134,7 @@ fn grey(rgba: &[u8], w: u32) -> u8 {
 
 #[test]
 fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
@@ -220,7 +220,7 @@ fn the_picture_at_a_node_is_the_stack_cut_off_at_that_node() {
 /// wrong anywhere else.
 #[test]
 fn each_prefix_names_its_own_frame() {
-    let Ok(mut r) = HeadlessRenderer::new() else {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
