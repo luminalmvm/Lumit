@@ -270,13 +270,10 @@ List<GraphChannel> graphChannels({
         if (fx.id.toString() != effectId) continue;
         for (final param in cachedListParameters(fx.name)) {
           if (param.id != paramId) continue;
-          // A Slider is a Float inside a closed range: the kind is the
-          // control, not the storage, so it keeps every float affordance —
-          // docs/08 §1.2 names the graph editor among them.
-          if (param.kind is! BridgeParamKind_Float &&
-              param.kind is! BridgeParamKind_Slider) {
-            continue;
-          }
+          // The kind is the control, not the storage: a Slider, an Int and an
+          // Angle all cross the bridge as one Float scalar, and any of them
+          // keyed is a curve (docs/08 §1.2). So the test is on the value, not
+          // the kind. Naming kinds here dropped Slider once and Angle after it.
           BridgeScalar? scalar;
           for (final v in fx.values) {
             if (v.id == param.id && v.value is BridgeEffectValue_Float) {
