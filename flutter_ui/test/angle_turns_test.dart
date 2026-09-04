@@ -9,8 +9,13 @@
 // split and the recombination ever disagree, a rotation drifts by whole turns
 // every time someone touches its row.
 
+import 'dart:math' as math;
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
   group('turns and degrees', () {
@@ -72,6 +77,83 @@ void main() {
         final v = i * 0.37;
         expect(TurnsAndDegreesField.degreesOf(v).abs(), lessThan(360));
       }
+    });
+  });
+
+  group('the dial winds through full turns', () {
+    const size = 100.0;
+
+    /// A dial at [degrees] in a box at the origin, reporting every value the
+    /// drag hands back.
+    Future<List<double>> mount(WidgetTester tester, double degrees) async {
+      final seen = <double>[];
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: ThemeScope(
+          theme: LumitTheme.dark(),
+          animationLevel: AnimationLevel.none,
+          showTooltips: false,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: AngleDial(
+              size: size,
+              degrees: degrees,
+              onChanged: seen.add,
+              onChangeEnd: seen.add,
+            ),
+          ),
+        ),
+      ));
+      return seen;
+    }
+
+    /// The point on the dial's rim [clockwise] degrees from twelve o'clock.
+    Offset rim(double clockwise) {
+      final a = clockwise * math.pi / 180;
+      return Offset(size / 2 + math.sin(a) * 40, size / 2 - math.cos(a) * 40);
+    }
+
+    /// One drag from twelve o'clock through [turns] whole turns in 45° steps,
+    /// clockwise for a positive count and anticlockwise for a negative one.
+    Future<void> wind(WidgetTester tester, double turns) async {
+      final gesture = await tester.startGesture(rim(0));
+      final steps = (turns.abs() * 8).round();
+      for (var i = 1; i <= steps; i++) {
+        await gesture.moveTo(rim(turns.sign * i * 45));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+    }
+
+    /// Dragging the hand round once used to hand back the angle it started
+    /// from: every move was measured against the start and folded to within
+    /// half a turn, so the turns box never moved off 0x.
+    testWidgets('a clockwise drag past twelve adds a turn', (tester) async {
+      final seen = await mount(tester, 30);
+      await wind(tester, 1);
+      expect(seen.last, closeTo(390, 1e-6));
+      expect(TurnsAndDegreesField.turnsOf(seen.last), 1);
+    });
+
+    testWidgets('an anticlockwise drag takes turns away', (tester) async {
+      final seen = await mount(tester, 30);
+      await wind(tester, -2);
+      expect(seen.last, closeTo(-690, 1e-6));
+      expect(TurnsAndDegreesField.turnsOf(seen.last), -1);
+    });
+
+    testWidgets('the hand still follows the pointer inside a turn',
+        (tester) async {
+      final seen = await mount(tester, 0);
+      final gesture = await tester.startGesture(rim(0));
+      await gesture.moveTo(rim(90));
+      await tester.pump();
+      await gesture.moveTo(rim(45));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+      expect(seen.last, closeTo(45, 1e-6));
     });
   });
 }

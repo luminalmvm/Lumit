@@ -61,12 +61,14 @@ class AngleDial extends StatefulWidget {
 }
 
 class _AngleDialState extends State<AngleDial> {
-  /// The angle the drag started from, and the pointer angle it started at —
-  /// the drag applies the *difference* rather than jumping the hand to wherever
-  /// the pointer went down. Grabbing the hand a little off-centre should not
-  /// snap it.
-  double _startValue = 0;
-  double _startPointer = 0;
+  /// The value as the drag has wound it so far, and the pointer angle of the
+  /// last move. Each move adds the short way round from the last one, so the
+  /// hand follows the pointer rather than jumping to wherever it went down,
+  /// and a drag that keeps going round keeps counting turns in either
+  /// direction. Measuring against the start instead folded every move to
+  /// within half a turn, so one drag could never add a whole one.
+  double _value = 0;
+  double _lastPointer = 0;
   bool _shift = false;
 
   /// Degrees clockwise from twelve o'clock for a point in the dial's box.
@@ -79,19 +81,21 @@ class _AngleDialState extends State<AngleDial> {
   }
 
   void _begin(Offset local) {
-    _startValue = widget.degrees;
-    _startPointer = _pointerDegrees(local);
+    _value = widget.degrees;
+    _lastPointer = _pointerDegrees(local);
   }
 
   double _valueFor(Offset local) {
-    // The shortest way round from where the drag started, so crossing twelve
-    // o'clock counts as a small move rather than a 360° jump.
-    var delta = _pointerDegrees(local) - _startPointer;
+    // The shortest way round from the last move, so crossing twelve o'clock
+    // counts as a small move rather than a 360° jump.
+    final pointer = _pointerDegrees(local);
+    var delta = pointer - _lastPointer;
     if (delta > 180) delta -= 360;
     if (delta < -180) delta += 360;
-    final raw = _startValue + delta;
-    if (!_shift || widget.step <= 0) return raw;
-    return (raw / widget.step).roundToDouble() * widget.step;
+    _lastPointer = pointer;
+    _value += delta;
+    if (!_shift || widget.step <= 0) return _value;
+    return (_value / widget.step).roundToDouble() * widget.step;
   }
 
   @override
