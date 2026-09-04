@@ -5087,9 +5087,17 @@ mod tests {
                     .expect("nameable")
             })
             .collect();
+        // The same "held on the card" test as above, in either byte order, and
+        // only the frames memory actually holds: a frame a refused or dropped
+        // read-back left held nowhere has nothing to park, and the tolerance
+        // above has already counted it.
         let below: Vec<_> = keys
             .into_iter()
-            .filter(|k| !state.renderer.has_frame_texture(*k, bgra))
+            .filter(|k| {
+                !state.renderer.has_frame_texture(*k, bgra)
+                    && !state.renderer.has_frame_texture(*k, !bgra)
+                    && crate::framecache::contains(*k)
+            })
             .collect();
         // The disk tier parks nothing until it has a folder.
         let dir = tempfile::tempdir().expect("a folder for the disk tier");
